@@ -21,11 +21,17 @@
           "description": {
             "type": "string",
             "maxLength": 1024
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
           }
         },
         "required": [
           "name",
-          "description"
+          "description",
+          "path"
         ],
         "additionalProperties": false
       },

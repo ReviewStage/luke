@@ -535,7 +535,11 @@ it.effect(
   "a repository's skills are asked of the plan and read as the service answers them, a refusal included; an answer naming more skills than the wire carries, or none where the plan is not found, reads as nothing",
   () =>
     Effect.gen(function* () {
-      const skill = { name: "release", description: "Cut a release of the web app." };
+      const skill = {
+        name: "release",
+        description: "Cut a release of the web app.",
+        path: ".agents/skills/release/SKILL.md",
+      };
       const read = (answer: JsonValue, status?: number) =>
         Effect.provide(
           client().readSkills(PLAN_ID),

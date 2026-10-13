@@ -1413,11 +1413,63 @@ button.code-card-path:hover {
   white-space: pre-wrap;
 }
 
+/* A chosen skill's pill, the composer's and a sent message's alike
+   (`skill-chip.tsx`): in the composer it lies under the field's words, so
+   its own are clear; in a message it is a button drawing its words in the
+   bubble's type, which opens the skill's file. */
 .skill-chip {
   border-radius: 4px;
   background: var(--raised-strong);
   box-shadow: 0 0 0 2px var(--raised-strong);
+}
+
+.skill-chips .skill-chip {
   color: transparent;
+}
+
+/* Note that the button keeps to its words' height, as the composer's mark
+   does, rather than standing the line's full height as a button would. */
+button.skill-chip {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.25;
+}
+
+button.skill-chip:hover {
+  background: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
+}
+
+/* A skill's hover card: its name, what it is for, and where its file stands. */
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.skill-card > p {
+  margin: 0;
+}
+
+.skill-card-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.skill-card-description {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.skill-card-path {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 /* The list a `/` opens: the window's menu, standing over the caret's line

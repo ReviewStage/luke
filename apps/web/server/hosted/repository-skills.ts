@@ -231,6 +231,11 @@ function readSkill(
   );
 }
 
+/** Where a skill's `SKILL.md` stands in the repository, from its root: `.agents/skills/<name>/SKILL.md`. */
+export function skillFilePath(skill: Pick<RepositorySkill, "folder">): string {
+  return `${skill.folder}/${SKILL_FILE}`;
+}
+
 /**
  * The skills the repository keeps on its default branch as GitHub holds it
  * now, read on a token minted for that one repository, in name order: the

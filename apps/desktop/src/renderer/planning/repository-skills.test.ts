@@ -15,7 +15,13 @@ const READ: PlanningSkillsAnswer = {
   skills: {
     repository: "acme/relay",
     branch: "main",
-    skills: [{ name: "release-notes", description: "Use for release notes." }],
+    skills: [
+      {
+        name: "release-notes",
+        description: "Use for release notes.",
+        path: ".agents/skills/release-notes/SKILL.md",
+      },
+    ],
   },
 };
 

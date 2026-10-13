@@ -12,6 +12,7 @@ import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
+import { SkillFiles } from "../planning/skill-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
@@ -60,6 +61,9 @@ import { useTabViews } from "./strip-tabs";
  * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
  * panel's once the pointer or the focus went into it, else this column's,
  * which a panel shut hands them back to.
+ *
+ * A skill named in a message to a coding agent, in either column, opens
+ * its `SKILL.md` in a File tab of the side panel (`../planning/skill-chip.tsx`).
  *
  * An archived plan reads and takes nothing until it is brought back: its
  * banner under the toolbar says so with Unarchive as its primary button,
@@ -457,10 +461,15 @@ export function DesktopPlans({
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
       return (
-        <>
+        <SkillFiles
+          source={plans.agents.readSkills}
+          // Note that a skill's file is browsed to, as a file the palette finds is,
+          // so its tab stands on this plan though Luke never showed it.
+          onOpen={(skill) => plans.sidePanel.onBrowseFile(skill.path, skill.path, true)}
+        >
           <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />
           {secondCall}
-        </>
+        </SkillFiles>
       );
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:

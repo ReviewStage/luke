@@ -2139,8 +2139,16 @@ it.layer(getTestDB())("the plan routes", (it) => {
             repository: "Acme/Relay",
             branch: "main",
             skills: [
-              { name: "release", description: "Use to cut a release of the relay." },
-              { name: "review", description: "Use to review a pull request." },
+              {
+                name: "release",
+                description: "Use to cut a release of the relay.",
+                path: ".agents/skills/release/SKILL.md",
+              },
+              {
+                name: "review",
+                description: "Use to review a pull request.",
+                path: ".claude/skills/review/SKILL.md",
+              },
             ],
           },
         });
