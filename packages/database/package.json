@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./core/effect-migration-folders": "./src/core/effect-migration-folders.js",
     "./core/migrator": "./src/core/migrator.js",
     "./core/query": "./src/core/query.js",
     "./core/sql-client": "./src/core/sql-client.js",
@@ -61,7 +62,8 @@
   },
   "types": "./src/schemas/index.ts",
   "scripts": {
-    "db:generate": "drizzle-kit generate",
+    "check:migrations": "drizzle-kit check",
+    "db:generate": "NODE_OPTIONS='--import tsx' drizzle-kit generate",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -78,7 +80,6 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/sql-pglite": "catalog:",
     "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.5.8",
@@ -86,6 +87,7 @@
     "@types/pg": "8.21.0",
     "drizzle-kit": "catalog:",
     "pg": "8.23.0",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

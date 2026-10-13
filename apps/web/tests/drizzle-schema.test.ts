@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
 import * as schema from "@sidecar/database/schemas";
 import { getColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -38,11 +38,15 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 /**
- * The migrator's own bookkeeping, owned by `effect/sql` and declared
- * by no module of ours; it is the one table in `public` the barrel should not
- * describe.
+ * The migrators' own bookkeeping, declared by no module of ours: Drizzle's
+ * history table, and the old `effect/sql` runner's, which a database that
+ * runner migrated still holds. They are the tables in `public` the barrel
+ * should not describe.
  */
-const UNDECLARED_TABLES: ReadonlySet<string> = new Set([MIGRATIONS_TABLE]);
+const UNDECLARED_TABLES: ReadonlySet<string> = new Set([
+  DRIZZLE_MIGRATIONS.TABLE,
+  EFFECT_MIGRATIONS_TABLE,
+]);
 
 /**
  * The Postgres types this comparison is exact for: for each, the string

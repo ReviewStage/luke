@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
 import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
@@ -12,7 +11,7 @@ import {
   sqlClientOverPglite,
 } from "@sidecar/database/testing";
 import { atInstant } from "@sidecar/wire/testing";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, type Layer, ManagedRuntime } from "effect";
 
 /**
  * The store's tests run against the real generated migrations on a real
@@ -98,7 +97,7 @@ interface OpenedDatabase {
 async function openPglite(): Promise<OpenedDatabase> {
   const client = new PGlite();
   const sql = sqlClientOverPglite(client);
-  const migrationRuntime = ManagedRuntime.make(Layer.mergeAll(sql, NodeServices.layer));
+  const migrationRuntime = ManagedRuntime.make(sql);
   try {
     await migrationRuntime.runPromise(runWebMigrations());
   } finally {
