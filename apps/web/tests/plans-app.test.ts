@@ -65,7 +65,12 @@ import {
   makeSavedDocumentPlan,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
-import { fakeWorkspaceSeams, joinWorkspace, openWorkspace } from "./support/workspaces";
+import {
+  fakeWorkspaceSeams,
+  joinWorkspace,
+  openInstallationWorkspace,
+  openWorkspace,
+} from "./support/workspaces";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -1029,6 +1034,62 @@ it.layer(getTestDB())("the plan routes", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
         });
+      }),
+  );
+
+  it.effect(
+    "a plan in an installation's workspace takes that installation's repositories and refuses another's, at its start and in a change, while a personal plan takes either",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7101, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+          { id: 7102, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
+        ]);
+        const { owner, ask } = yield* openAccounts(github);
+        const acme = yield* openInstallationWorkspace(owner, {
+          installationId: 7101,
+          accountId: 9101,
+          accountLogin: "acme",
+        });
+        const start = (body: WireBoundaryInput) =>
+          ask(request(PLANS, owner, { method: "POST", body }));
+        const change = (planId: string, repository: string) =>
+          ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { repository } }));
+        const repositoryOf = (status: number, answered: Answer) =>
+          readAnswer(planAnswerSchema, status, answered).plan.repository;
+        const notReachable = refusal(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        );
+
+        const relay = yield* start({ ...RELAY, workspaceId: acme, repository: "acme/relay" });
+        const otherStart = yield* start({
+          ...LEDGER,
+          workspaceId: acme,
+          repository: "octocat/dotfiles",
+        });
+        const unnamed = startedId(yield* start({ ...LEDGER, workspaceId: acme }));
+        const otherChange = yield* change(unnamed, "octocat/dotfiles");
+        const ownChange = yield* change(unnamed, "acme/relay");
+        const personal = startedId(yield* start(LEDGER));
+        const personalChanges = [
+          yield* change(personal, "octocat/dotfiles"),
+          yield* change(personal, "acme/relay"),
+        ];
+
+        assert.equal(repositoryOf(HOSTED_HTTP_STATUS.CREATED, relay), "acme/relay");
+        assert.deepEqual([otherStart, otherChange], [notReachable, notReachable]);
+        assert.equal(repositoryOf(HOSTED_HTTP_STATUS.OK, ownChange), "acme/relay");
+        assert.deepEqual(
+          personalChanges.map((answered) => repositoryOf(HOSTED_HTTP_STATUS.OK, answered)),
+          ["octocat/dotfiles", "acme/relay"],
+        );
+        const listed = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+        assert.equal(listed.plans.length, 3);
       }),
   );
 });

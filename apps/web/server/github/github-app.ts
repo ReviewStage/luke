@@ -262,6 +262,12 @@ interface GitHubUserRepositories {
   readonly repositories: readonly GitHubRepository[];
 }
 
+/** A repository the user reaches, and GitHub's id for the installation it is reached through. */
+interface GitHubReachedRepository {
+  readonly repository: GitHubRepository;
+  readonly installationId: number;
+}
+
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
 export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
@@ -306,6 +312,32 @@ export interface GitHubAppService {
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepository>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * One repository by `owner/name` as `userRepository` reads it, with the id
+   * of the installation it is reached through: the installation on the
+   * owner, the only one that can reach it.
+   */
+  readonly userRepositoryInstallation: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubReachedRepository>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * The repositories one installation reaches for the signed-in user, read on
+   * the user's own token and paged through, most recently updated first;
+   * none for an installation the token does not reach.
+   */
+  readonly userInstallationRepositories: (
+    userId: string,
+    installationId: number,
+  ) => Effect.Effect<
+    readonly GitHubRepository[],
     GitHubUserReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -981,6 +1013,20 @@ function githubAppService(
         reachableRepository(userId, fullName),
         Option.map((reached) => reached.repository),
       ),
+    userRepositoryInstallation: (userId, fullName) =>
+      Effect.map(
+        reachableRepository(userId, fullName),
+        Option.map((reached) => ({
+          repository: reached.repository,
+          installationId: reached.installation.id,
+        })),
+      ),
+    userInstallationRepositories: (userId, installationId) =>
+      Effect.gen(function* () {
+        const token = yield* userToken(userId);
+        const repositories = yield* repositoriesOfInstallation(token, installationId);
+        return [...repositories].sort(byMostRecentlyUpdated);
+      }),
     repositoryReadToken: (userId, fullName) =>
       repositoryToken(userId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
     repositoryCiReadable: (userId, fullName) =>
