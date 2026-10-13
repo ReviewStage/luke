@@ -1587,6 +1587,40 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a plan being read stands one tab-shaped skeleton in its toolbar and names no tab, and its read draws the plan's tab in that place",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const draw = (region: PlansControl["region"]) =>
+        act(() => root.render(onRegistry(registry, createElement(Opening, { region }))));
+      const toolbar = () => {
+        const bar = container.querySelector<HTMLElement>(".desktop-toolbar");
+        assert.ok(bar, "the toolbar is drawn");
+        return bar;
+      };
+      const tabs = () =>
+        [...toolbar().querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => tab.textContent);
+      draw({ kind: DOCUMENT_REGION.READING });
+      assert.equal(toolbar().querySelectorAll(".skeleton").length, 1);
+      assert.deepEqual(tabs(), []);
+      assert.equal(toolbar().textContent, "");
+
+      draw({ kind: DOCUMENT_REGION.READY, plan: PLAN });
+      assert.equal(toolbar().querySelector(".skeleton"), null);
+      assert.deepEqual(tabs(), [PLAN.name]);
+
+      // A plan that could not be read stands no skeleton, since nothing is on its way.
+      draw({ kind: DOCUMENT_REGION.FAILED });
+      assert.equal(toolbar().querySelector(".skeleton"), null);
+      assert.deepEqual(tabs(), []);
+    }),
+);
+
 /** The panel's tabs, in the strip's order. */
 function panelTabs(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')].map(

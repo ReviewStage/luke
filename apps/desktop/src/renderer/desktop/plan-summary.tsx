@@ -2,6 +2,7 @@ import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { shownFiles } from "../planning/code-pane-model";
+import type { InboxBoardView } from "../planning/inbox-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -10,7 +11,7 @@ import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
-import { AGENTS_SECTION, agentEntries, inboxEntries } from "./main-tabs";
+import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import { ADD_SECTION, panelEntries, planWorkers } from "./side-panel";
 import type { AddEntry } from "./strip-tabs";
 
@@ -18,10 +19,10 @@ import type { AddEntry } from "./strip-tabs";
  * plan-summary.tsx -- the open plan's summary at its column's right: everything the plan's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
  *
  * The summary lists what the side panel's "+" and the plan's column's "+"
- * open, in their rows' words and glyphs (`panelEntries`, `inboxEntries`,
- * `agentEntries`), under quiet headings: the panel's kinds the plan has
- * used, its Inbox and coding agents, its subagents, and the files Luke
- * showed on it. An agent or a subagent wears where it stands on its glyph,
+ * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
+ * `agentEntries`), under quiet headings: the plan's Inbox, counting what
+ * waits on the developer, and the panel's kinds the plan has used, its
+ * coding agents, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
  * beside the row to say it, and a file is drawn in a row the
  * file tree's own: its type's coloured icon, height, and type size. A row
@@ -264,11 +265,22 @@ interface SummarySection {
   entries: readonly AddEntry[];
 }
 
-/** What the summary lists, under its headings in their order, each heading only where it has a row. */
-function summarySections(plans: PlansControl): SummarySection[] {
+/**
+ * What the summary lists, under its headings in their order, each heading
+ * only where it has a row. The plan's Inbox leads Tabs, counting what waits
+ * on the developer, while it holds an item, waiting or settled, or its tab
+ * is open, as a panel's kind stands once the plan has used it.
+ */
+function summarySections(plans: PlansControl, inbox: InboxBoardView): SummarySection[] {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
+  const held = inbox.open.length + inbox.settled.length > 0;
+  const inboxRow =
+    held || mainTabs.tabs.includes(MAIN_TAB.INBOX)
+      ? [inboxEntry(() => mainTabs.onChoose(MAIN_TAB.INBOX), inbox.open.length)]
+      : [];
   const entries = [
+    ...inboxRow,
     ...panelEntries({
       panel: sidePanel,
       kinds: sidePanel.used,
@@ -276,7 +288,6 @@ function summarySections(plans: PlansControl): SummarySection[] {
       files: shownFiles(plans.shownCode ?? []),
       standing: true,
     }),
-    ...inboxEntries(agents, () => mainTabs.onChoose(MAIN_TAB.INBOX)),
     ...agentEntries(mainTabs, agents, true),
   ];
   // Coding agents stands while only archived agents are left, so their fold has a heading.
@@ -554,13 +565,19 @@ export function PlanSummary({
   plans,
   layout,
   cardId,
+  inbox,
 }: {
   plans: PlansControl;
   layout: SummaryLayout;
   cardId: string;
+  /** The plan's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
+  inbox: InboxBoardView;
 }): React.JSX.Element {
-  const sections = summarySections(plans);
-  const kinds = sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? [];
+  const sections = summarySections(plans, inbox);
+  // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
+  const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
+    (entry) => entry.row.id !== INBOX_ROW,
+  );
   return (
     <>
       <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>

@@ -2,6 +2,13 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_PART,
@@ -15,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import "../file-tree/index";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { useMainTabs } from "../planning/use-main-tabs";
@@ -124,6 +132,7 @@ function Page({
   resting,
   failed,
   shelved,
+  inbox,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
@@ -133,6 +142,8 @@ function Page({
   failed: boolean;
   /** The plan's archived agents. */
   shelved: readonly CodingAgentSummary[];
+  /** The plan's inbox items, as its first read answers them. */
+  inbox: readonly InboxItem[];
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const work = resting ? RESTING_WORK : WORK;
@@ -147,6 +158,11 @@ function Page({
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
     ...(archived ? { onUnarchive: () => undefined } : undefined),
+    // Each read past the first is held, as the service holds it, until the inbox changes.
+    readInbox: ({ after }) =>
+      after === INBOX_CURSOR_START
+        ? Promise.resolve({ items: inbox, cursor: `1.${inbox.length}` })
+        : new Promise(() => undefined),
   });
   const mainTabs = useMainTabs(false, plan.id, agents.agentIds, undefined, false);
   const sidePanel = useSidePanel(
@@ -184,12 +200,40 @@ function mount(
   resting = false,
   failed = false,
   shelved: readonly CodingAgentSummary[] = [],
+  inbox: readonly InboxItem[] = [],
 ): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived, shownCode, resting, failed, shelved })));
+  act(() =>
+    root.render(createElement(Page, { archived, shownCode, resting, failed, shelved, inbox })),
+  );
   return container;
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** An item the plan's agent posted that waits on the developer's reply. */
+function waitingItem(id: string): InboxItem {
+  return {
+    id,
+    agentId: AGENT.id,
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "What should the email say?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1,
+    updatedAt: 1,
+  };
 }
 
 /** Closes the window, as a quit does, so the next mount is a fresh launch. */
@@ -304,7 +348,7 @@ test("the pinned summary lists what the two pickers open, under their headings, 
 
   assert.deepEqual(listed(summary), [
     ["Tabs", ["Board", "Transcript"]],
-    ["Coding agents", ["Inbox", AGENT.title]],
+    ["Coding agents", [AGENT.title]],
     ["Subagents", [JOB]],
     ["Files", ["invite.ts"]],
   ]);
@@ -313,6 +357,51 @@ test("the pinned summary lists what the two pickers open, under their headings, 
     const glyph: Element | null = rowNamed(summary, label).querySelector('[role="img"]');
     assert.equal(glyph?.getAttribute("aria-label"), "Working");
   }
+});
+
+test("the Inbox leads Tabs while the plan holds an inbox item or its tab is open, counting what waits at its end, and stays off the rail", async () => {
+  const tabsOf = (page: HTMLElement) =>
+    listed(summaryOf(page)).find(([heading]) => heading === "Tabs")?.[1];
+  const items = [
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000001"),
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000002"),
+  ];
+  const waiting = mount(false, SHOWN, false, false, [], items);
+  await settle();
+  assert.deepEqual(tabsOf(waiting), ["Inbox", "Board", "Transcript"]);
+  const counted = rowNamed(summaryOf(waiting), "Inbox");
+  assert.equal(counted.textContent, "Inbox2 waiting");
+  assert.equal(counted.lastElementChild?.textContent, "2 waiting");
+  // Collapsed to its rail, the summary draws the panel's kinds alone.
+  layOutColumn(800);
+  assert.equal(modeOf(waiting), "rail");
+  assert.deepEqual(tabsOf(waiting), ["Board", "Transcript"]);
+  vi.restoreAllMocks();
+  quit();
+
+  // Everything answered, the Inbox still stands, counting nothing.
+  const answered = items.map((item) => ({ ...item, status: INBOX_STATUS.ANSWERED }));
+  const settled = mount(false, SHOWN, false, false, [], answered);
+  await settle();
+  assert.deepEqual(tabsOf(settled), ["Inbox", "Board", "Transcript"]);
+  assert.equal(rowNamed(summaryOf(settled), "Inbox").textContent, "Inbox");
+  quit();
+
+  // On a fresh install, where no Inbox tab stays open from a launch before,
+  // an empty inbox stands no row until its tab is opened.
+  window.localStorage.clear();
+  installScrollIntoView();
+  const empty = mount(false, SHOWN, false, false, [], []);
+  await settle();
+  assert.deepEqual(tabsOf(empty), ["Board", "Transcript"]);
+  press(empty, '.desktop-toolbar [aria-label="Open a tab"]');
+  const open = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Inbox",
+  );
+  assert.ok(open, "the column's + offers the Inbox");
+  act(() => open.click());
+  assert.deepEqual(tabsOf(empty), ["Inbox", "Board", "Transcript"]);
+  assert.equal(rowNamed(summaryOf(empty), "Inbox").textContent, "Inbox");
 });
 
 test("a failed agent's row keeps its harness's mark and says Failed in a mark at its end, to a reader and in its hint, where a working agent's row ends on its label", () => {
@@ -454,7 +543,7 @@ test("the archived agents fold under Archived at the foot of Coding agents, coun
   assert.equal(summary.querySelector('ul[aria-label="Archived agents"]'), null);
   assert.deepEqual(
     listed(summary)[1],
-    ["Coding agents", ["Inbox", AGENT.title]],
+    ["Coding agents", [AGENT.title]],
     "an archived agent is no row of its own",
   );
 
