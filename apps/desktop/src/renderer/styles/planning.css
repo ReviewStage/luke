@@ -465,10 +465,15 @@ button.code-card-path:hover {
   flex-direction: column;
 }
 
+/* The tree slides in past the view's right edge and out over the file, so
+   the body clips what stands past it, with `clip` rather than `hidden`,
+   which would make a scroller a focus could scroll sideways. */
 .file-view-body {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
+  overflow: clip;
 }
 
 .file-view-body > .file-tab {
@@ -506,13 +511,13 @@ button.code-card-path:hover {
   height: var(--control-glyph);
 }
 
-/* A plan with no repository names the file plainly, cut from its left. */
+/* A plan with no repository names the file plainly, cut from its left, in
+   the window's own type as the breadcrumbs are. */
 .file-view-path {
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
   direction: rtl;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -556,7 +561,6 @@ button.code-card-path:hover {
   background: none;
   color: var(--text-secondary);
   font: inherit;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition:
@@ -635,6 +639,16 @@ button.code-card-path:hover {
   flex: 0 0 auto;
   flex-direction: column;
   border-left: 1px solid var(--hairline);
+}
+
+/* A tree on its way out has left the layout, the file already standing in
+   its room, and slides out over the file's edge on its own ground
+   (file-view.tsx). */
+.file-tree-pane[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  background: var(--desktop-well);
 }
 
 /* The tree's search field and its filter, in one row over the tree: the

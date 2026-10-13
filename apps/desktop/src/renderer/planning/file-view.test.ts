@@ -15,7 +15,9 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { finishAll, installAnimations, MOTION, motion, running } from "#testing/animations";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { sheetStyle } from "#testing/css-rules";
 import { installHighlights } from "#testing/find-highlights";
 import { useAppKeymap } from "../app-commands";
 import type { FileTreeProps } from "../file-tree/contract";
@@ -60,6 +62,7 @@ window.lukeFileTree = {
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installAnimations();
   tree.props = undefined;
   tree.reveals = [];
   tree.narrowed = [];
@@ -68,6 +71,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  running.splice(0);
+  document.documentElement.removeAttribute("style");
   vi.unstubAllGlobals();
 });
 
@@ -301,6 +306,106 @@ test("one bar spans the file and its tree: Back and Forward, the path, then GitH
     1,
     "the tree has no bar of its own",
   );
+});
+
+/** The keyframes of the slide running on the tree's pane, as transforms; none while none runs. */
+function treeSlide(container: HTMLElement): readonly (string | undefined)[] | undefined {
+  const pane = container.querySelector(".file-tree-pane");
+  const slide = running.find((each) => each.element === pane);
+  return slide?.keyframes.map((frame) => frame.transform?.toString());
+}
+
+test("the tree slides in from the view's right edge on the pane's motion, and hidden it leaves the layout at once, sliding out over the file out of reach until the slide has played", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+
+  await view.press(view.button("Show files"));
+  assert.deepEqual(treeSlide(view.container), ["translateX(100%)", "none"]);
+  finishAll();
+
+  await view.press(view.button("Hide files"));
+  const leaving = view.container.querySelector<HTMLElement>(".file-tree-pane");
+  assert.ok(leaving, "the tree is held drawn through its slide out");
+  assert.equal(
+    leaving.hasAttribute("data-leaving"),
+    true,
+    "drawn over the file, out of the layout",
+  );
+  assert.equal(leaving.hasAttribute("inert"), true, "and out of reach");
+  assert.deepEqual(treeSlide(view.container), ["none", "translateX(100%)"]);
+  finishAll();
+  assert.equal(
+    view.container.querySelector(".file-tree-pane"),
+    null,
+    "let go once it has slid out",
+  );
+});
+
+test("a tree shown again part way through its slide out comes back from where it had got to, and stays", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  finishAll();
+  await view.press(view.button("Hide files"));
+  const pane = view.container.querySelector<HTMLElement>(".file-tree-pane");
+  assert.ok(pane);
+  // Note that jsdom computes no animation, so the slide's reach is stood in for on the pane itself.
+  pane.style.transform = "translateX(40px)";
+
+  await view.press(view.button("Show files"));
+  assert.equal(
+    view.container.querySelector(".file-tree-pane"),
+    pane,
+    "the same pane, never drawn anew",
+  );
+  assert.equal(pane.hasAttribute("data-leaving"), false);
+  assert.deepEqual(treeSlide(view.container), ["translateX(40px)", "none"]);
+  finishAll();
+  assert.ok(view.container.querySelector(".file-tree-pane"), "the tree stands");
+});
+
+test("a tree shown again once motion was reduced part way through its slide out stands in place, the slide stopped", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  finishAll();
+  await view.press(view.button("Hide files"));
+  assert.notEqual(treeSlide(view.container), undefined, "sliding out");
+
+  motion(MOTION.REDUCED);
+  await view.press(view.button("Show files"));
+  const pane = view.container.querySelector(".file-tree-pane");
+  assert.ok(pane);
+  assert.equal(pane.hasAttribute("data-leaving"), false);
+  assert.equal(treeSlide(view.container), undefined, "no slide left holding it past the edge");
+});
+
+test("under reduced motion the tree shows and hides at once, with nothing played", async () => {
+  motion(MOTION.REDUCED);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  assert.ok(view.container.querySelector(".file-tree-pane"));
+  await view.press(view.button("Hide files"));
+  assert.equal(view.container.querySelector(".file-tree-pane"), null);
+  assert.deepEqual(running, []);
+});
+
+test("the crumbs are in the window's own type, as a tab's name is, while the file's lines stay in code type", async () => {
+  const style = await sheetStyle();
+  const view = mounted();
+  await view.draw(FILE);
+  const crumbs = [...view.container.querySelectorAll(".file-breadcrumb")];
+  assert.ok(crumbs.length > 0);
+  for (const crumb of crumbs) {
+    assert.doesNotMatch(style(crumb, "font-family") ?? "", /monospace/u);
+  }
+  const line = view.container.querySelector(".code-lines");
+  assert.ok(line);
+  assert.match(style(line, "font-family") ?? "", /monospace/u);
 });
 
 test("each crumb hangs the tree over the folder it stands in, through the view's listings, the tab's file revealed and taking the keyboard; the chevrons between are no controls; a file the tree opens is browsed to from the repository's root, and takes the tree down", async () => {
