@@ -209,12 +209,10 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     inboxPlans: [],
     inboxView: {
       open: false,
-      planId: undefined,
-      waitingOnly: false,
+      chosen: undefined,
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
-      onWaitingOnly: ignore,
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,

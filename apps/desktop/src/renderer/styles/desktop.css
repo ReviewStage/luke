@@ -1148,6 +1148,7 @@ body,
 .danger-button,
 .settings-segment,
 .desktop-toolbar-actions,
+.desktop-toolbar .file-breadcrumbs,
 .sidebar-new-plan,
 .sidebar-search,
 .sidebar-plan,
@@ -1661,7 +1662,7 @@ body,
    docked to-do list, and its composer, each keeping to the document's
    measure in the middle of the column, as they keep to it in a wide side
    panel, so the list's card and the composer's share both edges. The
-   plan's Inbox tab is laid out the same way, its cards at that measure. */
+   Inbox's pane is laid out the same way, its thread and box at that measure. */
 .desktop-agent,
 .desktop-inbox {
   --reading-room: calc((100% - var(--reading-width)) / 2);
@@ -1675,7 +1676,8 @@ body,
 .desktop-agent [role="log"],
 .desktop-agent .agent-todos-dock,
 .desktop-agent .agent-composer,
-.desktop-inbox .inbox-board {
+.desktop-inbox .inbox-board,
+.desktop-inbox .agent-composer {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
@@ -2453,10 +2455,10 @@ body:has(.app-stage[data-capture="true"])
 
 /* Inbox ---------------------------------------------------------------------- */
 
-/* The window's Inbox, in the plan's place beside the sidebar: the plans
-   holding items in a column on the sidebar's ground, under a bar the work
-   column's height, and the chosen plan's items beside it, at the Inbox
-   tab's own measure (`.desktop-inbox`). */
+/* The window's Inbox, in the plan's place beside the sidebar, and a plan's
+   own Inbox tab: the items in a column on the sidebar's ground, under a bar
+   the work column's height, and the chosen item beside it, at the Inbox's
+   own measure (`.desktop-inbox`). */
 .inbox-view {
   --inbox-list-width: 280px;
   display: grid;
@@ -2485,65 +2487,23 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--space-8) var(--column-inset) var(--column-inset);
 }
 
-/* The board's two sections, Waiting and Settled, each under the sidebar's
-   own group header (`sidebar-group-header.tsx`), a section's gap apart. */
-.inbox-section + .inbox-section {
-  margin-top: var(--section-gap);
-}
-
-/* A card's head is a summary row inside the card's edge, its hover wash
-   inset from the card's corners as a row's is from the column's. */
-.inbox-card-head {
-  width: calc(100% - 2 * var(--space-4));
-  margin: var(--space-4) var(--space-4) 0;
-}
-
-/* A settled item: its row and, beside it, the chevron that unfolds the
-   note and context under it, lit as one row while either is hovered. */
-.inbox-settled {
-  --sidebar-plan-mark: 22px;
-}
-
-.inbox-settled-line {
-  display: flex;
+/* An item's row is a sidebar row led by its agent's mark, centred on the
+   line as a pinned tab's is, with no Unpin to leave room for. */
+.inbox-row .sidebar-plan-line {
   align-items: center;
-  gap: var(--space-2);
-  padding-right: var(--space-4);
-  border-radius: var(--control-radius);
-  transition: background-color var(--duration-hover) ease;
+  gap: var(--space-6);
 }
 
-.inbox-settled-line:hover {
-  background: var(--raised);
+/* The pane's words under the agent's byline start where its name does, past its mark. */
+.inbox-indent {
+  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
 }
 
-.inbox-settled-line > .plan-summary-row:hover {
-  background: none;
-}
-
-.inbox-settled-more {
-  width: var(--sidebar-plan-mark);
-  flex: none;
-}
-
-.inbox-settled-more .settings-chevron {
-  width: 12px;
-  height: 12px;
-  transition: transform var(--duration-hover) ease;
-}
-
-.inbox-settled-more[aria-expanded="true"] .settings-chevron {
-  transform: rotate(90deg);
-}
-
-/* What unfolds starts where the row's words do, past its glyph. */
-.inbox-settled-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-4) var(--row-inset) var(--space-8)
-    calc(var(--row-inset) + var(--control-glyph) + var(--glyph-gap));
-  font-size: 13px;
+/* The pane's agent crumb leads with the agent's mark, as its tab does. */
+.inbox-crumb-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
 }
 
 .inbox-view-items {

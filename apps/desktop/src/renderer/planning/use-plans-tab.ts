@@ -152,23 +152,27 @@ interface SourceReveal {
   readonly source: Exclude<RevisionSource, { kind: typeof REVISION_SOURCE.AGENT }>;
 }
 
+/** The item chosen in the window's Inbox, and the plan it belongs to. */
+export interface InboxChoice {
+  readonly planId: string;
+  readonly itemId: string;
+}
+
 /**
  * The window's Inbox, standing in the plan's place beside the sidebar: the
- * plans holding inbox items in a column of their own, and the chosen plan's
- * items beside them. It is the window's alone, as a version history is, so
+ * items of every plan holding one in a column of their own, and the chosen
+ * item beside them. It is the window's alone, as a version history is, so
  * it leaves the plan the host has open, and the call bound to it, as they
- * stand; opening any plan, or a new one, leaves it.
+ * stand; opening any plan, or a new one, leaves it. The item chosen is kept
+ * while it stands, so the item answered stays in sight.
  */
 interface InboxViewControl {
   readonly open: boolean;
-  /** The plan chosen in it, none until one is, where the list's first stands in. */
-  readonly planId: string | undefined;
-  /** Whether it lists only the plans with an item waiting on the developer. */
-  readonly waitingOnly: boolean;
+  /** The item chosen in it, none until one is, where the list's first stands in. */
+  readonly chosen: InboxChoice | undefined;
   readonly onOpen: () => void;
   readonly onClose: () => void;
-  readonly onChoose: (planId: string) => void;
-  readonly onWaitingOnly: (waitingOnly: boolean) => void;
+  readonly onChoose: (chosen: InboxChoice) => void;
 }
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -471,9 +475,9 @@ export function usePlansTab(input: {
    * opened on, none for the plan as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
-  /** The window's Inbox while it stands: the plan chosen in it, and whether it lists only the unread. */
+  /** The window's Inbox while it stands, and the item chosen in it. */
   const [inboxView, setInboxView] = useState<
-    { readonly planId: string | undefined; readonly waitingOnly: boolean } | undefined
+    { readonly chosen: InboxChoice | undefined } | undefined
   >(undefined);
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
@@ -647,8 +651,7 @@ export function usePlansTab(input: {
   // neither while the tab is away, the version history stands in the plan's
   // place, the side panel fills the window over the column, or the column
   // shows something else; a fixture's staged agents are no one's to announce.
-  // The window's Inbox shows the plan chosen in it.
-  // The window's Inbox stands in the column's place, showing the plan chosen there.
+  // The window's Inbox stands in the column's place, showing the plan whose item is chosen there.
   const columnShown =
     shown &&
     historyFor === undefined &&
@@ -658,7 +661,7 @@ export function usePlansTab(input: {
   const shownAgent = columnShown && isAgentTab(mainTabs.tab) ? mainTabs.tab.agent : null;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
-      ? (inboxView.planId ?? null)
+      ? (inboxView.chosen?.planId ?? null)
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
         ? (viewed.activePlanId ?? null)
         : null;
@@ -1318,15 +1321,13 @@ export function usePlansTab(input: {
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,
-      planId: inboxView?.planId,
-      waitingOnly: inboxView?.waitingOnly ?? false,
+      chosen: inboxView?.chosen,
       onOpen: () => {
         setHistoryFor(undefined);
-        setInboxView((held) => held ?? { planId: undefined, waitingOnly: false });
+        setInboxView((held) => held ?? { chosen: undefined });
       },
       onClose: () => setInboxView(undefined),
-      onChoose: (planId) => setInboxView((held) => held && { ...held, planId }),
-      onWaitingOnly: (waitingOnly) => setInboxView((held) => held && { ...held, waitingOnly }),
+      onChoose: (chosen) => setInboxView((held) => held && { chosen }),
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a

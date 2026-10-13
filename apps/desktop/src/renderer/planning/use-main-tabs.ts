@@ -44,7 +44,7 @@ import {
  * is on its way, and stays on it where the read fails.
  *
  * The plan's Inbox tab, everything its agents need of the developer,
- * answered in place (`inbox-board.tsx`), stands only once it has something
+ * answered in place (`inbox-pane.tsx`), stands only once it has something
  * to show: it is closed on a plan until an item the developer has not seen
  * waits there (`onInboxRead`), and then opens as a tab the "+" opens does,
  * after every tab standing, chosen. An item has not been seen where it did

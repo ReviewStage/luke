@@ -1,0 +1,419 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerView,
+  type CodingAgentListAnswer,
+} from "@sidecar/hosted/coding-agent-view";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
+import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { act, createElement, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
+import type { AppInboxPlanHolding } from "#shared/messages/app-state";
+import { onRegistry } from "#testing/copy-feedback";
+import { plansControl } from "#testing/plans-control";
+import type { InboxChoice } from "../planning/use-plans-tab";
+import { DesktopInbox } from "./desktop-inbox";
+
+const BILLING: PlanSummary = {
+  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  name: "Billing usage alerts",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+};
+const INVITES: PlanSummary = {
+  ...BILLING,
+  id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  name: "Invites",
+};
+
+const AGENT: CodingAgentSummary = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: BILLING.id,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Alerts",
+  createdAt: 3,
+  status: CODING_AGENT_STATUS.RUNNING,
+  turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
+};
+
+/** An item of the agent's, open and asking a choice, as the service answers one. */
+function item(id: string, title: string, updatedAt: number): InboxItem {
+  return {
+    id,
+    agentId: AGENT.id,
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title,
+    blocks: [],
+    response: {
+      type: INBOX_RESPONSE.CHOICE,
+      options: [
+        { label: "Retry 3 times over an hour", detail: "Backs off 5, 15, then 40 minutes." },
+        { label: "Retry once" },
+      ],
+      recommended: "Retry 3 times over an hour",
+    },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1_000,
+    updatedAt,
+  };
+}
+
+const THRESHOLD = item("a1b2c3d4-0000-4000-8000-000000000001", "Alert at 80%?", 3_000);
+const RETRY: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-000000000002", "How is a failed email retried?", 5_000),
+  status: INBOX_STATUS.ANSWERED,
+  answer: {
+    reply: INBOX_REPLY.CHOSE,
+    choices: ["Retry 3 times over an hour"],
+    note: "And page on-call if all three fail.",
+  },
+};
+const EXPIRY = item("a1b2c3d4-0000-4000-8000-000000000003", "Expire after 7 days?", 4_000);
+
+const HOLDING: readonly AppInboxPlanHolding[] = [
+  { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+  { planId: INVITES.id, items: 1, updatedAt: 4_000 },
+];
+
+let root: Root | undefined;
+/** Each plan's inbox as the service answers a read of it from the start. */
+let inboxes = new Map<string, readonly InboxItem[]>();
+/** Moves main's list of the plans holding items, as its read of the account would. */
+let setHolding: (holding: readonly AppInboxPlanHolding[]) => void = () => undefined;
+/** Moves the account's list of plans, as an archive on another Mac would. */
+let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
+/** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
+interface ReadOutcome {
+  readonly status: typeof ACT_OUTCOME_STATUS.DONE;
+  readonly value: CodingAgentInboxAnswerView;
+}
+
+/** How the next held read of a plan, one past the cursor, answers: held open while nothing changes unless a test says. */
+let heldRead: (planId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
+/** How a read of a plan from the start answers, where a test holds it in its own hands. */
+let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefined;
+
+beforeEach(() => {
+  window.localStorage.clear();
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  heldRead = () => new Promise(() => undefined);
+  startRead = undefined;
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act) => {
+        const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
+          Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: [AGENT] });
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
+          const { planId, after } = request.payload;
+          // A read past the cursor is held open while nothing changes, as the service holds it.
+          if (after !== INBOX_CURSOR_START) return heldRead(planId);
+          return startRead?.(planId) ?? done({ items: inboxes.get(planId) ?? [], cursor: "1" });
+        }
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      },
+    },
+  });
+});
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+});
+
+/** What the Inbox was asked to open, leaving it. */
+interface Asked {
+  readonly shownPlans: string[];
+  readonly shownAgents: [string, string][];
+}
+
+/** The Inbox over the two plans, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
+function mount() {
+  const asked: Asked = { shownPlans: [], shownAgents: [] };
+  function Page() {
+    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    const [holding, setHeld] = useState(HOLDING);
+    const [listed, setListed] = useState<readonly PlanSummary[]>([BILLING, INVITES]);
+    setHolding = setHeld;
+    setPlans = setListed;
+    return createElement(DesktopInbox, {
+      plans: plansControl({
+        plans: listed,
+        inbox: [
+          { planId: BILLING.id, items: [THRESHOLD.id] },
+          { planId: INVITES.id, items: [EXPIRY.id] },
+        ],
+        inboxPlans: holding,
+        inboxView: {
+          open: true,
+          chosen,
+          onOpen: () => undefined,
+          onClose: () => undefined,
+          onChoose: setChosen,
+        },
+        onShowPlan: (planId) => asked.shownPlans.push(planId),
+        onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
+      }),
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  return { page: container, asked };
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+/** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where drawn bold. */
+function listed(page: HTMLElement): string[] {
+  const list = page.querySelector(".inbox-plans");
+  assert.ok(list, "the list is drawn");
+  return [...list.querySelectorAll(".sidebar-repository-name, .sidebar-plan")].map((node) => {
+    if (!(node instanceof HTMLElement) || !node.classList.contains("sidebar-plan")) {
+      return `# ${node.textContent}`;
+    }
+    const name = node.querySelector(".sidebar-plan-name")?.textContent ?? "";
+    return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${node.dataset.unread === "true" ? "*" : ""}${name}`;
+  });
+}
+
+function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
+  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-plan")].find(
+    (each) => each.querySelector(".sidebar-plan-name")?.textContent === title,
+  );
+  assert.ok(row, `no row for ${title}`);
+  return row;
+}
+
+test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and bold while waiting, the first waiting item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
+  let { page } = mount();
+  await settle();
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(options, "the head offers the view's menu");
+  act(() => options.click());
+  const newest = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+  ].find((each) => each.textContent?.includes("Newest first"));
+  assert.equal(newest?.getAttribute("aria-checked"), "false");
+  act(() => newest?.click());
+  assert.deepEqual(listed(page), [
+    "How is a failed email retried?",
+    "*Expire after 7 days?",
+    "▸ *Alert at 80%?",
+  ]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  // Relaunched, nothing is chosen, so the first waiting item of the one run stands chosen.
+  assert.deepEqual(listed(page), [
+    "How is a failed email retried?",
+    "▸ *Expire after 7 days?",
+    "*Alert at 80%?",
+  ]);
+});
+
+test("a settled choice keeps every option its agent offered with the developer's pick marked, then their note as their own bubble, saying what they did and that it reached the agent", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+  assert.ok(pane, "the pane is drawn");
+  assert.deepEqual(
+    [...pane.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
+      option.dataset.picked,
+      option.querySelector(".font-medium")?.textContent,
+      option.querySelector(".inbox-picked")?.textContent ?? null,
+    ]),
+    [
+      ["true", "Retry 3 times over an hour", "Your pick"],
+      ["false", "Retry once", null],
+    ],
+  );
+  assert.equal(pane.querySelector("textarea"), null, "a settled item takes no answer");
+  const reply = pane.querySelector<HTMLElement>(".is-user");
+  assert.ok(reply, "the developer's reply is their own bubble");
+  assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
+  assert.match(
+    reply.textContent ?? "",
+    /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u,
+  );
+});
+
+test("the pane's crumbs open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
+  const { page, asked } = mount();
+  await settle();
+  const crumbs = [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items .file-breadcrumb"),
+  ];
+  assert.deepEqual(
+    crumbs.map((crumb) => crumb.textContent),
+    ["Billing usage alerts", "Alerts"],
+  );
+  assert.equal(page.querySelectorAll(".inbox-view-items .desktop-toolbar button").length, 2);
+  act(() => crumbs[0]?.click());
+  act(() => crumbs[1]?.click());
+  assert.deepEqual(asked.shownPlans, [BILLING.id]);
+  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled, and Waiting then lists only what still waits", async () => {
+  const { page } = mount();
+  await settle();
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+      updatedAt: 6_000,
+    },
+  ]);
+  act(() =>
+    setHolding([
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(listed(page), [
+    "# Invites",
+    "Expire after 7 days?",
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+  ]);
+
+  const waiting = [...page.querySelectorAll<HTMLButtonElement>(".settings-segment")].find(
+    (each) => each.textContent === "Waiting",
+  );
+  act(() => waiting?.click());
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+});
+
+/** An answer the act gives the renderer, the view it carries settled now. */
+function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
+  return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+}
+
+/** A read the test answers when it chooses. */
+interface PendingRead {
+  readonly promise: Promise<ReadOutcome>;
+  readonly settle: (value: CodingAgentInboxAnswerView) => void;
+}
+
+/** A read held until the test settles it. */
+function pending(): PendingRead {
+  let settle: PendingRead["settle"] = () => undefined;
+  const promise = new Promise<ReadOutcome>((resolve) => {
+    settle = (value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  });
+  return { promise, settle };
+}
+
+const UNANSWERED_READ: CodingAgentInboxAnswerView = {
+  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+};
+
+test("a chosen item whose plan leaves the account's list, archived on another Mac, gives way to the first item still waiting", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(
+    listed(page).filter((row) => row.startsWith("▸")),
+    ["▸ *Alert at 80%?"],
+  );
+  act(() => {
+    setPlans([INVITES]);
+    setHolding([{ planId: INVITES.id, items: 1, updatedAt: 4_000 }]);
+  });
+  await settle();
+  assert.deepEqual(listed(page), ["# Invites", "▸ *Expire after 7 days?"]);
+  assert.equal(
+    page.querySelector(".inbox-view-items [data-inbox-title]")?.textContent,
+    "Expire after 7 days?",
+  );
+});
+
+test("once the chosen plan's own held read fails, the list's read of that plan stands again, so an item posted since still lists", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const { page } = mount();
+  await settle();
+  const posted = item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call too?", 7_000);
+  inboxes.set(BILLING.id, [THRESHOLD, RETRY, posted]);
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 3, updatedAt: 7_000 },
+      { planId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  assert.ok(listed(page).includes("*Page on-call too?"), listed(page).join(" | "));
+});
+
+test("an answer to a plan's read that a newer one overtook moves nothing: the newer read's failure still says so with Try again", async () => {
+  const first = pending();
+  const second = pending();
+  const reads = [first, second];
+  startRead = (planId) => (planId === INVITES.id ? reads.shift()?.promise : undefined);
+  const { page } = mount();
+  await settle();
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+    ]),
+  );
+  await settle();
+  second.settle(UNANSWERED_READ);
+  await settle();
+  first.settle({ items: [EXPIRY], cursor: "1" });
+  await settle();
+  const note = page.querySelector<HTMLElement>('.inbox-plans [role="alert"]');
+  assert.match(note?.textContent ?? "", /Some items could not be read\./u);
+  assert.equal(
+    listed(page).includes("*Expire after 7 days?"),
+    false,
+    "the overtaken read lists nothing",
+  );
+});

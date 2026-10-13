@@ -3,8 +3,8 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
-  INBOX_REPLY,
   INBOX_RESPONSE,
+  INBOX_STATUS,
   type InboxBlock,
   type InboxChoice,
   type InboxCodeBlock,
@@ -17,11 +17,11 @@ import {
   knownBlock,
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import type { CodeRef, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { ChevronRightIcon } from "@sidecar/panel";
-import { CircleCheckIcon, ClockIcon, InboxIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ConversationEmptyState } from "../ai-elements/conversation";
+import { Message, MessageContent } from "../ai-elements/message";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -30,14 +30,14 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
-import { useWaitingFold } from "../desktop/folded-groups";
-import { type CountNoun, SidebarGroupHeader } from "../desktop/sidebar-group-header";
-import { EmptyState } from "../empty-state";
+import { agentCardReading } from "../desktop/main-tabs";
+import type { HeldTranscripts } from "../desktop/strip-tabs";
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
-import { AgentGlyph, AgentMark, agentEndMark } from "./agent-tab";
+import { AgentGlyph, AgentMark } from "./agent-tab";
+import { AgentTabCard } from "./agent-tab-card";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
@@ -54,7 +54,10 @@ import {
   fieldValueOf,
   type InboxDraft,
   inboxReply,
-  settledWords,
+  pressesOf,
+  proposedOptions,
+  SETTLED_BY,
+  settlementOf,
   withChoice,
   withValue,
 } from "./inbox-model";
@@ -66,58 +69,49 @@ import { opensAsLink } from "./use-open-link";
 import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
 
 /**
- * inbox-board.tsx -- the plan's Inbox tab: everything its coding agents need of the developer, one card each, answered in place and handed back to the agent that posted it.
+ * inbox-pane.tsx -- one inbox item at reading size: the agent's question as a message of a thread, everything it offered, and its answer, given in place or as it was given.
  *
- * The tab is drawn from the transcript's own pieces, so an item reads as
- * one more card of the agent's: each open item is a card the shape of the
- * transcript's (`ai-elements/plan.tsx`), naming the agent that posted it
- * and when, its title, the blocks of context the agent wrote, Markdown as
- * the transcript draws it, a link as the transcript draws one, opened in
- * the browser where it is a web page, code as the Code tab draws a card
+ * The pane is drawn from the agent tab's own pieces, so an item reads as
+ * one more exchange with its agent: the agent's message
+ * (`ai-elements/message.tsx`), its mark, name, and when it asked, then the
+ * item's title and the blocks of context the agent wrote, Markdown as the
+ * transcript draws it, a link as the transcript draws one, opened in the
+ * browser where it is a web page, code as the Code tab draws a card
  * (`code-pane.tsx`), its lines read from GitHub at the agent's commit
  * through the File tab's own read and opened there in the File tab, and an
- * image the agent took
- * in its sandbox, drawn at the card's own width from the bytes the host
- * fetched under the account (`use-plan-inbox.ts`) and opened larger over
- * the window by a press, in the viewer an attached file opens in
- * (`attachment-viewer.tsx`); and the agent composer's box
- * (`ai-elements/prompt-input.tsx`) for the note. What the item asks for
- * stands between the blocks and the box: a choice's options, one perhaps
- * recommended, pressed one at a time or several where the choice allows; a
- * form's fields, each the control Settings draws for its type; nothing for
- * the rest. An approval, a task, and an item asking nothing are answered
- * by presses in the box's footer, the one that holds back and the one that
- * goes ahead, as a confirm's are; words, a choice, and a form by the box's
- * own Send. A block or a response of a type this build does not know, one
- * a newer service wrote, is drawn as a line naming a newer Luke, so the
- * rest of the inbox still reads. A card whose agent need not hear back
- * says so, since answering it messages nobody. What waits stands first,
- * under Waiting; what is settled, answered or taken back by its agent,
- * under Settled, each a row in the plan summary's shape saying what came
- * of it and when, the note and the item's context unfolding under it. Both headers are the sidebar's own group header
- * (`sidebar-group-header.tsx`), folding their section and, folded,
- * counting it while hovered; Waiting starts open and is kept folded or
- * open across launches as a sidebar group is, and Settled starts folded,
- * as the sidebar's Archived does. Every time shows its moment in the
- * shared tooltip, and an agent this window does not list, one started on
- * another Mac, still leads with a glyph. An inbox that holds nothing at
- * all says so under the tab's own glyph, drawn large (`empty-state.tsx`).
- * A card's head and a settled row each open the agent's tab, the
- * agent's own transcript holding the item as it was posted. Every card
- * shows words an agent wrote, a code block the repository's lines, and an image block a picture of what it rendered, so
- * the board is out of the session recording (`ph-no-capture`), and the
- * viewer, drawn over the window outside the board, is out of it on its own.
+ * image the agent took in its sandbox, drawn at the pane's own width from
+ * the bytes the host fetched under the account (`use-plan-inbox.ts`) and
+ * opened larger over the window by a press, in the viewer an attached file
+ * opens in (`attachment-viewer.tsx`). What the item asks for closes the
+ * message: a choice's options, one perhaps recommended, pressed one at a
+ * time or several where the choice allows; a form's fields, each the
+ * control Settings draws for its type; nothing for the rest. While the item
+ * waits, the agent composer's box (`ai-elements/prompt-input.tsx`) is
+ * docked under the thread for the note: an approval, a task, and an item
+ * asking nothing are answered by presses in its footer, the one that holds
+ * back and the one that goes ahead, as a confirm's are; words, a choice,
+ * and a form by the box's own Send. A card whose agent need not hear back
+ * says so, since answering it messages nobody. Once the item is settled,
+ * nothing it offered goes: the options, or the presses it was answered by,
+ * stand with the developer's pick marked and the rest stepped back, and
+ * the developer's reply follows as their own bubble, what they wrote in it
+ * and under it what they did, when, and whether the answer reached the
+ * agent as a message or was kept for it to read; or the agent's message
+ * says it took the item back, and why. A block or a response of a type
+ * this build does not know, one a newer service wrote, is drawn as a line
+ * naming a newer Luke, so the rest still reads. The pane's bar is its
+ * path, plan › agent, in the File tab's breadcrumbs, each crumb opening
+ * what it names and hanging the card its sidebar row or tab hangs. Every
+ * time shows its moment in the shared tooltip, and an agent this window
+ * does not list, one started on another Mac, still leads with a glyph. The
+ * pane shows words an agent wrote, a code block the repository's lines,
+ * and an image block a picture of what it rendered, so its thread is out
+ * of the session recording (`ph-no-capture`), and the viewer, drawn over
+ * the window outside it, is out of it on its own.
  */
 
 /** What a card says of an image whose read did not answer. */
 const IMAGE_NOT_LOADED = "The image could not be loaded.";
-
-/** What an empty inbox says. */
-const NOTHING_WAITS = "Nothing is waiting on you.";
-
-/** What each section's folded count is read as. */
-const WAITING_NOUN: CountNoun = { one: "item waiting", many: "items waiting" };
-const SETTLED_NOUN: CountNoun = { one: "item settled", many: "items settled" };
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
 const NOTE_PLACEHOLDER = {
@@ -129,22 +123,6 @@ const NOTE_PLACEHOLDER = {
   [INBOX_RESPONSE.NONE]: "Add a note for the agent",
 } as const;
 
-/** The presses each response answered by a press offers: the one that holds back where there is one, then the one that goes ahead. */
-const PRESSES = {
-  [INBOX_RESPONSE.APPROVAL]: {
-    back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
-    ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
-  },
-  [INBOX_RESPONSE.TASK]: {
-    back: { reply: INBOX_REPLY.NOT_DONE, label: "Can't do this" },
-    ahead: { reply: INBOX_REPLY.DONE, label: "Done" },
-  },
-  [INBOX_RESPONSE.NONE]: {
-    back: undefined,
-    ahead: { reply: INBOX_REPLY.ACKNOWLEDGED, label: "Got it" },
-  },
-} as const;
-
 /** What a card says of a block or a response this build does not know. */
 const NEWER_LUKE = {
   BLOCK: "Open this in a newer Luke to see the rest.",
@@ -153,21 +131,6 @@ const NEWER_LUKE = {
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
-
-/** The presses that answer the response in the box's footer, or nothing where its Send does. */
-function pressesOf(
-  response: InboxReadResponse,
-): (typeof PRESSES)[keyof typeof PRESSES] | undefined {
-  if (!knownResponse(response)) return undefined;
-  switch (response.type) {
-    case INBOX_RESPONSE.APPROVAL:
-    case INBOX_RESPONSE.TASK:
-    case INBOX_RESPONSE.NONE:
-      return PRESSES[response.type];
-    default:
-      return undefined;
-  }
-}
 
 /**
  * The mark of the agent that posted an item: its harness's, where this
@@ -187,43 +150,6 @@ function Moment({ at, now }: { at: number; now: number }): React.JSX.Element {
         {sinceText(at, now)}
       </time>
     </Tooltip>
-  );
-}
-
-/**
- * Who posted the item and when, as the card's head: a row in the summary's
- * own shape and hover (`plan-summary.tsx`), the agent's mark, its name, a
- * failure's mark where it failed, and how long ago at its end, the whole row
- * opening the agent's tab.
- */
-function Poster({
-  item,
-  agent,
-  models,
-  now,
-  onOpenAgent,
-}: {
-  item: InboxItem;
-  agent: CodingAgentSummary | undefined;
-  models: CodingAgentsControl["models"];
-  now: number;
-  onOpenAgent: (agentId: string) => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="plan-summary-row inbox-card-head"
-      onClick={() => onOpenAgent(item.agentId)}
-    >
-      <span className="plan-summary-glyph">
-        <AuthorGlyph agent={agent} />
-      </span>
-      <span className="plan-summary-label">
-        {agent === undefined ? "Coding agent" : agentTabLabel(agent, models)}
-      </span>
-      {agent === undefined ? null : agentEndMark(agent, true)}
-      <Moment at={item.postedAt} now={now} />
-    </button>
   );
 }
 
@@ -745,318 +671,344 @@ function ResponseControls({
   }
 }
 
-/** One item waiting on the developer, answered in place. */
-function OpenCard({
+/** What a settled item's line says of where the answer went: to the agent as a message, or kept for it to read. */
+function deliveredWords(item: InboxItem, agentName: string): string {
+  return item.needsReply ? `Sent to ${agentName}` : "Saved for the agent to read";
+}
+
+/**
+ * What a settled item offered, as the Inbox's own option rows: the
+ * developer's pick in the look of a picked option, a check and "Your pick"
+ * beside its label, and the rest stepped back to an outline, so what was
+ * offered and what was chosen read together.
+ */
+function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const options = proposedOptions(item);
+  if (options.length === 0) return null;
+  return (
+    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What the agent offered">
+      {options.map((option) => (
+        <li key={option.label} className="inbox-option" data-picked={String(option.picked)}>
+          <span>
+            <span className="font-medium">{option.label}</span>
+            {option.recommended ? (
+              <span className="text-muted-foreground"> · Recommended</span>
+            ) : null}
+            {option.picked ? (
+              <span className="inbox-picked">
+                <CheckIcon aria-hidden="true" />
+                Your pick
+              </span>
+            ) : null}
+          </span>
+          {option.detail === undefined ? null : (
+            <span className="text-muted-foreground">{option.detail}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Who wrote a message of the thread and when: the agent's mark, its name, and what it did how long ago. */
+function Byline({
+  agent,
+  name,
+  did,
+  at,
+  now,
+}: {
+  agent: CodingAgentSummary | undefined;
+  name: string;
+  did: string;
+  at: number;
+  now: number;
+}): React.JSX.Element {
+  return (
+    <div className="flex min-w-0 items-center gap-(--glyph-gap) text-[12.5px] text-muted-foreground">
+      <span className="plan-summary-glyph">
+        <AuthorGlyph agent={agent} />
+      </span>
+      <span className="truncate font-medium text-foreground">{name}</span>
+      <span className="shrink-0">
+        {did} <Moment at={at} now={now} />
+      </span>
+    </div>
+  );
+}
+
+/** What the developer has said, under their own bubble: what they did, when, and where the answer went. */
+function Answered({
+  item,
+  agentName,
+  now,
+}: {
+  item: InboxItem;
+  agentName: string;
+  now: number;
+}): React.JSX.Element | null {
+  const settled = settlementOf(item);
+  if (settled === undefined) return null;
+  if (settled.by === SETTLED_BY.AGENT) return null;
+  return (
+    <Message from="user" data-inbox-answer="">
+      {settled.words === undefined ? null : (
+        <MessageContent>
+          <p className="m-0 whitespace-pre-line select-text">{settled.words}</p>
+        </MessageContent>
+      )}
+      <p className="m-0 text-[11.5px] text-muted-foreground">
+        {settled.lead} · <Moment at={item.updatedAt} now={now} /> ·{" "}
+        {deliveredWords(item, agentName)}
+      </p>
+    </Message>
+  );
+}
+
+/** The agent taking an item back, as one more message of its own: when, and why where it said. */
+function Withdrawn({
   item,
   agent,
-  models,
+  agentName,
   now,
-  sending,
-  note,
-  draftOf,
-  onDraft,
-  onAnswer,
-  images,
-  onImage,
-  onRetryImage,
-  onOpenAgent,
-  openLink,
-  code,
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
-  models: CodingAgentsControl["models"];
+  agentName: string;
   now: number;
-  sending: boolean;
-  note: string | undefined;
-  draftOf: PlanInboxControl["draftOf"];
-  onDraft: PlanInboxControl["onDraft"];
-  onAnswer: PlanInboxControl["onAnswer"];
-  images: PlanInboxControl["images"];
-  onImage: PlanInboxControl["onImage"];
-  onRetryImage: PlanInboxControl["onRetryImage"];
-  onOpenAgent: (agentId: string) => void;
-  openLink: (url: string) => void;
-  code: InboxCodeDoors;
+}): React.JSX.Element | null {
+  const settled = settlementOf(item);
+  if (settled?.by !== SETTLED_BY.AGENT) return null;
+  return (
+    <Message from="assistant" data-inbox-withdrawn="">
+      <Byline agent={agent} name={agentName} did="withdrew this" at={item.updatedAt} now={now} />
+      {settled.words === undefined ? null : (
+        <MessageContent className="inbox-indent">
+          <p className="m-0 select-text">{settled.words}</p>
+        </MessageContent>
+      )}
+    </Message>
+  );
+}
+
+/** The box an open item is answered in, docked under its thread as an agent's composer is under its transcript. */
+function AnswerBox({
+  item,
+  control,
+}: {
+  item: InboxItem;
+  control: PlanInboxControl;
 }): React.JSX.Element {
-  const draft = draftOf(item);
-  const setDraft = (next: InboxDraft) => onDraft(item, next);
-  const known = knownResponse(item.response);
+  const draft = control.draftOf(item);
+  const sending = control.sending.has(item.id);
+  const note = control.notes.get(item.id);
   const byPress = pressesOf(item.response) !== undefined;
   const placeholder = placeholderOf(item.response);
   return (
-    <article
-      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px]"
-      data-item-id={item.id}
-    >
-      <Poster item={item} agent={agent} models={models} now={now} onOpenAgent={onOpenAgent} />
-      <div className="flex flex-col gap-2 px-3 pt-1 pb-3 text-[13px] leading-normal">
-        <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
-          {cardTitle(item.title)}
-        </h3>
-        <Blocks
-          item={item}
-          images={images}
-          onImage={onImage}
-          onRetryImage={onRetryImage}
-          openLink={openLink}
-          code={code}
-        />
-        <ResponseControls item={item} draft={draft} disabled={sending} onDraft={setDraft} />
-        {known ? (
-          <PromptInput
-            // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
-            onSubmit={() => (byPress ? undefined : onAnswer(item, draft))}
-          >
-            <PromptInputTextarea
-              aria-label={placeholder}
-              placeholder={placeholder}
-              maxLength={INBOX_BOUNDS.MAX_NOTE_CHARS}
-              value={draft.note}
-              disabled={sending}
-              onChange={(event) => setDraft({ ...draft, note: event.currentTarget.value })}
+    <div className="agent-composer">
+      {note === undefined ? null : (
+        <p className="agent-note" role="alert">
+          {note}
+        </p>
+      )}
+      {knownResponse(item.response) ? (
+        <PromptInput
+          // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
+          onSubmit={() => (byPress ? undefined : control.onAnswer(item, draft))}
+        >
+          <PromptInputTextarea
+            aria-label={placeholder}
+            placeholder={placeholder}
+            maxLength={INBOX_BOUNDS.MAX_NOTE_CHARS}
+            value={draft.note}
+            disabled={sending}
+            onChange={(event) =>
+              control.onDraft(item, { ...draft, note: event.currentTarget.value })
+            }
+          />
+          <PromptInputFooter>
+            <PromptInputTools className="px-1 text-[12px] text-muted-foreground">
+              {item.needsReply ? null : (
+                <span data-inbox-quiet="">Answering doesn't message the agent.</span>
+              )}
+            </PromptInputTools>
+            <SendPresses
+              item={item}
+              draft={draft}
+              sending={sending}
+              onAnswer={(press) => control.onAnswer(item, draft, press)}
             />
-            <PromptInputFooter>
-              <PromptInputTools className="px-1 text-[12px] text-muted-foreground">
-                {item.needsReply ? null : (
-                  <span data-inbox-quiet="">Answering doesn't message the agent.</span>
-                )}
-              </PromptInputTools>
-              <SendPresses
-                item={item}
-                draft={draft}
-                sending={sending}
-                onAnswer={(press) => onAnswer(item, draft, press)}
-              />
-            </PromptInputFooter>
-          </PromptInput>
-        ) : (
-          <p className="m-0 text-muted-foreground" data-inbox-unknown="">
-            {NEWER_LUKE.RESPONSE}
-          </p>
-        )}
-        {note === undefined ? null : (
-          <p className="agent-note" role="alert">
-            {note}
-          </p>
-        )}
-      </div>
-    </article>
+          </PromptInputFooter>
+        </PromptInput>
+      ) : (
+        <p className="m-0 text-muted-foreground" data-inbox-unknown="">
+          {NEWER_LUKE.RESPONSE}
+        </p>
+      )}
+    </div>
   );
 }
 
-/** What a settled row's disclosure says, open and shut. */
-const DETAILS = {
-  SHOW: "Show details",
-  HIDE: "Hide details",
-} as const;
+/** What the pane's crumbs open, and the cards they hang. */
+export interface InboxPaneDoors {
+  /** Opens the item's plan. */
+  readonly onOpenPlan: () => void;
+  /** The plan's hover card, as its sidebar row hangs it. */
+  readonly planCard: React.ReactNode;
+  /** Opens the agent's tab on its plan. */
+  readonly onOpenAgent: (agentId: string) => void;
+  /** Opens a link block's web page in the browser (`use-open-link.ts`). */
+  readonly openLink: (url: string) => void;
+  readonly code: InboxCodeDoors;
+}
+
+/** No agent's tab held a transcript for the agent's card to preview, which the Inbox draws none of. */
+const NO_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
 
 /**
- * One item settled, as a row in the summary's own shape: the agent's mark,
- * the item's title with what came of it after, and when at its end. A press
- * on the row opens the agent's tab, as the head of a waiting card does.
- * Where the developer wrote a note or the agent gave context, a chevron at
- * the row's end, beside the row rather than inside it so pressing it opens
- * nothing, unfolds them under the row: the note as it was written, its
- * lines kept and selectable, then the item's blocks, muted, a picture among
- * them read only once unfolded. A row with nothing to unfold keeps the
- * chevron's room, so the times stand in one column.
+ * The pane's path, plan › agent, in the File tab's breadcrumbs: each crumb
+ * opens what it names, the plan or the agent's tab, and hangs the card its
+ * sidebar row or tab hangs. An agent this window does not list, one
+ * started on another Mac, hangs no card but still opens its tab.
  */
-function SettledRow({
+function Crumbs({
+  plan,
   item,
   agent,
-  now,
-  onOpenAgent,
-  images,
-  onImage,
-  onRetryImage,
-  openLink,
-  code,
+  agentName,
+  models,
+  doors,
 }: {
+  plan: PlanSummary;
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
-  now: number;
-  onOpenAgent: (agentId: string) => void;
-  images: PlanInboxControl["images"];
-  onImage: PlanInboxControl["onImage"];
-  onRetryImage: PlanInboxControl["onRetryImage"];
-  openLink: (url: string) => void;
-  code: InboxCodeDoors;
+  agentName: string;
+  models: CodingAgentsControl["models"];
+  doors: InboxPaneDoors;
 }): React.JSX.Element {
-  const [unfolded, setUnfolded] = useState(false);
-  const words = settledWords(item);
-  const holds = words.note !== undefined || item.blocks.length > 0;
-  const details = unfolded ? DETAILS.HIDE : DETAILS.SHOW;
+  const agentCard =
+    agent === undefined ? undefined : (
+      <AgentTabCard
+        name={agentName}
+        models={models ?? []}
+        read={agentCardReading(agent, agentName, NO_HELD, false)}
+      />
+    );
   return (
-    <li className="inbox-settled" data-item-id={item.id}>
-      <div className="inbox-settled-line">
-        <button
-          type="button"
-          className="plan-summary-row"
-          onClick={() => onOpenAgent(item.agentId)}
-        >
-          <span className="plan-summary-glyph">
-            <AuthorGlyph agent={agent} />
-          </span>
-          <span className="plan-summary-label">
-            {cardTitle(item.title)}
-            <span className="plan-summary-detail">{words.lead}</span>
-          </span>
-          {agent === undefined ? null : agentEndMark(agent, true)}
-          <Moment at={item.updatedAt} now={now} />
-        </button>
-        {holds ? (
-          <Tooltip label={details}>
-            <button
-              type="button"
-              className="sidebar-plan-mark inbox-settled-more"
-              aria-label={details}
-              aria-expanded={unfolded}
-              onClick={() => setUnfolded((was) => !was)}
-            >
-              <ChevronRightIcon />
+    <nav className="file-breadcrumbs" aria-label="Path">
+      <ol>
+        <li>
+          <Tooltip label={plan.name} card={doors.planCard}>
+            <button type="button" className="file-breadcrumb" onClick={doors.onOpenPlan}>
+              {plan.name}
             </button>
           </Tooltip>
-        ) : (
-          <span className="inbox-settled-more" aria-hidden="true" />
-        )}
-      </div>
-      {holds && unfolded ? (
-        <div className="inbox-settled-body">
-          {words.note === undefined ? null : (
-            <p className="m-0 whitespace-pre-line select-text">{words.note}</p>
-          )}
-          {item.blocks.length === 0 ? null : (
-            <div className="text-muted-foreground">
-              <Blocks
-                item={item}
-                images={images}
-                onImage={onImage}
-                onRetryImage={onRetryImage}
-                openLink={openLink}
-                code={code}
-              />
-            </div>
-          )}
-        </div>
-      ) : null}
-    </li>
+        </li>
+        <li className="file-breadcrumb-separator" aria-hidden="true">
+          <ChevronRightIcon />
+        </li>
+        <li>
+          <Tooltip label={agentName} card={agentCard}>
+            <button
+              type="button"
+              className="file-breadcrumb inbox-crumb-agent"
+              onClick={() => doors.onOpenAgent(item.agentId)}
+            >
+              <span className="plan-summary-glyph">
+                <AuthorGlyph agent={agent} />
+              </span>
+              <span className="truncate">{agentName}</span>
+            </button>
+          </Tooltip>
+        </li>
+      </ol>
+    </nav>
   );
 }
 
-/** The board: what waits on the developer, then what is settled, each under a header that folds it as a sidebar group's does. */
-export function InboxBoard({
+/**
+ * One item at reading size, as a thread: under the pane's crumbs, the
+ * agent's message, its name and when it asked, the item's title, its
+ * blocks, and what it offers; then what came of it. While the item waits,
+ * a choice's options and a form's fields are pressed in the message, and
+ * the box is docked at the pane's foot. Once it is settled, the options
+ * stand with the developer's pick marked, and the developer's reply follows
+ * as their bubble, with what they did, when, and whether it reached the
+ * agent; or the agent's own message says it took the item back, and why.
+ */
+export function InboxPane({
+  plan,
+  item,
   control,
   agents,
-  onOpenAgent,
-  openLink,
-  code,
+  doors,
 }: {
+  plan: PlanSummary;
+  item: InboxItem;
+  /** The live read of the item's plan, which answers it and holds its draft. */
   control: PlanInboxControl;
   agents: CodingAgentsControl;
-  onOpenAgent: (agentId: string) => void;
-  /** Opens a link block's web page in the browser (`use-open-link.ts`). */
-  openLink: (url: string) => void;
-  code: InboxCodeDoors;
+  doors: InboxPaneDoors;
 }): React.JSX.Element {
   const now = useMinute();
-  const waitingFold = useWaitingFold();
-  // Note that Settled starts folded each time the board is drawn, as the sidebar's Archived does, because what is settled is out of the way.
-  const [settledFolded, setSettledFolded] = useState(true);
-  const { open, settled } = control.board;
-  const agentOf = (item: InboxItem) => agents.agents?.find((agent) => agent.id === item.agentId);
-  if (open.length === 0 && settled.length === 0) {
-    if (!control.failed && !control.reading)
-      return <EmptyState icon={<InboxIcon />}>{NOTHING_WAITS}</EmptyState>;
-    return (
-      <ConversationEmptyState>
-        {control.failed ? (
-          <>
-            <p className="m-0" role="alert">
-              The inbox could not be read.
-            </p>
-            <RetryButton onRetry={control.onRetry} />
-          </>
-        ) : (
-          <Spinner label="Loading inbox" size={SPINNER_SIZE.REGION} />
-        )}
-      </ConversationEmptyState>
-    );
-  }
+  const agent = agents.agents?.find((each) => each.id === item.agentId);
+  const agentName = agent === undefined ? "Coding agent" : agentTabLabel(agent, agents.models);
+  const open = item.status === INBOX_STATUS.OPEN;
+  const draft = control.draftOf(item);
   return (
-    <div className="inbox-board ph-no-capture min-h-0 flex-1 overflow-y-auto pt-(--section-gap) pb-5">
-      <section className="inbox-section" aria-label="Waiting">
-        <SidebarGroupHeader
-          glyph={<ClockIcon />}
-          name="Waiting"
-          folded={waitingFold.folded}
-          count={open.length}
-          noun={WAITING_NOUN}
-          onToggle={waitingFold.toggle}
+    <section className="inbox-view-items" aria-label={cardTitle(item.title)}>
+      <header className="desktop-toolbar">
+        <Crumbs
+          plan={plan}
+          item={item}
+          agent={agent}
+          agentName={agentName}
+          models={agents.models}
+          doors={doors}
         />
-        {waitingFold.folded ? null : open.length === 0 ? (
-          <p className="sidebar-note">{NOTHING_WAITS}</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {open.map((item) => (
-              <OpenCard
-                key={item.id}
+      </header>
+      <div className="desktop-inbox">
+        <div
+          className="inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pt-(--section-gap) pb-5"
+          data-item-id={item.id}
+        >
+          <Message from="assistant">
+            <Byline agent={agent} name={agentName} did="asked" at={item.postedAt} now={now} />
+            <MessageContent className="inbox-indent">
+              <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
+                {cardTitle(item.title)}
+              </h3>
+              <Blocks
                 item={item}
-                agent={agentOf(item)}
-                models={agents.models}
-                now={now}
-                sending={control.sending.has(item.id)}
-                note={control.notes.get(item.id)}
-                draftOf={control.draftOf}
-                onDraft={control.onDraft}
-                onAnswer={control.onAnswer}
                 images={control.images}
                 onImage={control.onImage}
                 onRetryImage={control.onRetryImage}
-                onOpenAgent={onOpenAgent}
-                openLink={openLink}
-                code={code}
+                openLink={doors.openLink}
+                code={doors.code}
               />
-            ))}
-          </div>
-        )}
-      </section>
-      {settled.length === 0 ? null : (
-        <section className="inbox-section" aria-label="Settled">
-          <SidebarGroupHeader
-            glyph={<CircleCheckIcon />}
-            name="Settled"
-            folded={settledFolded}
-            count={settled.length}
-            noun={SETTLED_NOUN}
-            onToggle={() => setSettledFolded((was) => !was)}
-          />
-          {settledFolded ? null : (
-            <ul className="plan-summary-rows">
-              {settled.map((item) => (
-                <SettledRow
-                  key={item.id}
+              {open ? (
+                <ResponseControls
                   item={item}
-                  agent={agentOf(item)}
-                  now={now}
-                  onOpenAgent={onOpenAgent}
-                  images={control.images}
-                  onImage={control.onImage}
-                  onRetryImage={control.onRetryImage}
-                  openLink={openLink}
-                  code={code}
+                  draft={draft}
+                  disabled={control.sending.has(item.id)}
+                  onDraft={(next) => control.onDraft(item, next)}
                 />
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-      {control.failed ? (
-        <div className="agent-note agent-failure" role="alert">
-          <p className="m-0">The inbox could not be read.</p>
-          <RetryButton onRetry={control.onRetry} />
+              ) : (
+                <Proposal item={item} />
+              )}
+            </MessageContent>
+          </Message>
+          <Answered item={item} agentName={agentName} now={now} />
+          <Withdrawn item={item} agent={agent} agentName={agentName} now={now} />
+          {control.failed ? (
+            <div className="agent-note agent-failure" role="alert">
+              <p className="m-0">The inbox could not be read.</p>
+              <RetryButton onRetry={control.onRetry} />
+            </div>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+        {open ? <AnswerBox item={item} control={control} /> : null}
+      </div>
+    </section>
   );
 }
