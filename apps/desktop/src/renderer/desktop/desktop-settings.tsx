@@ -1,6 +1,6 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { BackIcon, LaptopIcon } from "@sidecar/panel";
+import { BackIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -8,7 +8,7 @@ import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { SETTINGS_PAGE } from "../settings/pages";
+import { settingsPageOf } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -27,18 +27,11 @@ import {
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search";
-import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { SETTINGS_PAGE_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
-
-/** The front page's name here, where it is one page among the others rather than their index. */
-const GENERAL_PAGE = { title: "General", icon: <LaptopIcon /> } as const;
-
-function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } {
-  return view === SETTINGS_VIEW.ROOT ? GENERAL_PAGE : SETTINGS_PAGE[view];
-}
 
 /**
  * Settings as a desktop app lays them out: the sidebar turns into the list of
@@ -88,8 +81,7 @@ export function DesktopSettings({
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
-  const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
-  const shown = pageOf(settings.view);
+  const shown = settingsPageOf(settings.view);
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const reset = pageResetControl(settings.view, settings.settings, writes);
@@ -173,8 +165,8 @@ export function DesktopSettings({
             <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
           ) : (
             <ul>
-              {pages.map((view) => {
-                const page = pageOf(view);
+              {SETTINGS_PAGE_LIST.map((view) => {
+                const page = settingsPageOf(view);
                 return (
                   <li key={view}>
                     <button

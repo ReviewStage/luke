@@ -24,6 +24,12 @@ export const SETTINGS_SUBVIEW_LIST = [
 
 export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
 
+/** Every page, the front page first as General: the desktop Settings sidebar's list, and the command palette's. */
+export const SETTINGS_PAGE_LIST: readonly SettingsView[] = [
+  SETTINGS_VIEW.ROOT,
+  ...SETTINGS_SUBVIEW_LIST,
+];
+
 const NAV_ROW_ID = {
   [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
   [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",
