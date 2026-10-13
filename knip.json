@@ -54,11 +54,11 @@
       "project": ["src/**"]
     },
     "apps/web/coder": {
-      "entry": ["instructions/*.ts", "memory/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     },
     "apps/web/eve": {
-      "entry": ["instructions/*.ts", "memory/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     }
   },

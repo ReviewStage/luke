@@ -6,7 +6,6 @@ import {
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
 import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -326,10 +325,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   );
 
   return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
+    <section className="settings-section settings-plain">
       {!signedIn ? (
         <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : choice !== undefined ? (

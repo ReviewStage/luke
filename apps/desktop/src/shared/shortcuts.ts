@@ -95,7 +95,6 @@ const SHORTCUT_KEY = {
   N: { accelerator: "N", glyph: "N", key: "n", code: "KeyN" },
   A: { accelerator: "A", glyph: "A", key: "a", code: "KeyA" },
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
-  R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
   M: { accelerator: "M", glyph: "M", key: "m", code: "KeyM" },
   H: { accelerator: "H", glyph: "H", key: "h", code: "KeyH" },
   Q: { accelerator: "Q", glyph: "Q", key: "q", code: "KeyQ" },

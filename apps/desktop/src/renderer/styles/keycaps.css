@@ -45,7 +45,7 @@
   font-family: inherit;
   font-size: var(--keycap-text);
   font-weight: 500;
-  /* Digits and letters at one advance, so ⌥⌘1 and ⌥⌘5 are caps of one width. */
+  /* Digits and letters at one advance, so ⌘1 and ⌘5 are caps of one width. */
   font-variant-numeric: tabular-nums;
   /* The glyph sits on the cap's own centre line: ⌥ and ⇧ have far more room
      above them than a letter does, and any leading at all would stack the two
