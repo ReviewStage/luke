@@ -67,7 +67,6 @@ export const MessageTooLongRefusal = refusalSchema(HOSTED_API_ERROR.MESSAGE_TOO_
 export const AgentNotReadyRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_NOT_READY);
 export const AgentRetiredRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_RETIRED);
 export const PlanArchivedRefusal = refusalSchema(HOSTED_API_ERROR.PLAN_ARCHIVED);
-export const NotPermittedRefusal = refusalSchema(HOSTED_API_ERROR.NOT_PERMITTED);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
