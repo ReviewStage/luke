@@ -176,13 +176,14 @@ export function heardCalls(input: {
   return standing === undefined ? [...kept, live] : kept;
 }
 
-/** A heard call as a row of the list, or nothing where nothing was said on it: each line a message under the ledger's row id. */
+/** A heard call as a row of the list, or nothing where nothing was said on it: each line a message under the ledger's row id, which names its row as a line on record does. */
 function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
   const messages = heard.transcript.lines.flatMap((line) => {
     const message = settledMessage({
       id: line.rowId,
       role: line.speaker,
       parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.words }],
+      metadata: { rowIds: [line.rowId] },
     });
     return message === undefined ? [] : [message];
   });
@@ -249,6 +250,21 @@ export function transcriptRegion(input: {
   if (stored !== undefined) return { kind: TRANSCRIPT_REGION.EMPTY };
   if (input.transcript?.status === PLANNING_READ.FAILED) return { kind: TRANSCRIPT_REGION.FAILED };
   return { kind: TRANSCRIPT_REGION.READING };
+}
+
+/**
+ * How long before the call standing was first heard it is taken to have
+ * started, in milliseconds. Note that a live call is dated from when this
+ * window first heard its words, which can follow a turn the call began
+ * with, so the call claims the code shown and the work begun a little
+ * before it; the record's own start replaces the guess once the call is
+ * read back.
+ */
+const LIVE_CALL_SLACK_MS = 30_000;
+
+/** When a call started, as what it holds reads it: a live call a little before it was first heard. */
+export function callStart(call: Pick<TranscriptCallRow, "startedAt" | "live">): number {
+  return call.live ? call.startedAt - LIVE_CALL_SLACK_MS : call.startedAt;
 }
 
 /**
