@@ -41,7 +41,7 @@ interface Asked {
   opened: string[];
   /** Each plan whose page Open on GitHub asked for. */
   openedOnGitHub: string[];
-  /** Each plan whose chip Change repository… asked open. */
+  /** Each plan whose chip Change repository asked open. */
   changed: string[];
   deleted: string[];
   /** Each rename asked, as the plan and the name it was given. */
@@ -225,7 +225,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
     "Version history",
     "Pin",
     "Archive",
-    "Change repository…",
+    "Change repository",
     "Permanently delete",
   ]);
   assert.equal(document.querySelector('[aria-label="Close plan"]'), null);
@@ -255,7 +255,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
     "Version history",
     "Pin",
     "Archive",
-    "Change repository…",
+    "Change repository",
     "Open on GitHub",
     "Permanently delete",
   ]);
@@ -286,14 +286,14 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
     "Version history",
     "Pin",
     "Archive",
-    "Change repository…",
+    "Change repository",
     "Open on GitHub",
     "Permanently delete",
   ]);
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   assert.equal(menu?.style.left, "40px");
   assert.equal(menu?.style.top, "60px");
-  choose("Change repository…");
+  choose("Change repository");
 
   rightClick(open, 40, 120);
   assert.deepEqual(labels(), [
@@ -302,10 +302,10 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
     "Version history",
     "Pin",
     "Archive",
-    "Change repository…",
+    "Change repository",
     "Permanently delete",
   ]);
-  choose("Change repository…");
+  choose("Change repository");
 
   assert.deepEqual(asked.changed, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
@@ -389,7 +389,7 @@ test("a right-click on a sidebar plan's Pin or Archive offers the plan's menu, r
     "Version history",
     "Pin",
     "Archive",
-    "Change repository…",
+    "Change repository",
     "Permanently delete",
   ]);
   assert.equal(row.dataset.menuOpen, "true");
@@ -1090,7 +1090,7 @@ test("Start and the ⋯ stand only on the plan's own tab, while the plan's chord
   assert.deepEqual(asked.deleted, [PLAN.id]);
 });
 
-test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {
+test("Change repository from the ⋯ opens the open plan's chip menu over its toolbar", () => {
   const { plans } = openTab({ [PLAN.id]: "acme/relay" });
   const container = mount(
     createElement(DesktopPlans, {
@@ -1103,7 +1103,7 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   assert.ok(more instanceof HTMLButtonElement);
 
   openMenu(more);
-  choose("Change repository…");
+  choose("Change repository");
   // The tab counts the ask; the toolbar's chip opens on it.
   act(() => {
     roots.at(-1)?.render(
@@ -1129,7 +1129,7 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   assert.ok(document.activeElement === more, "focus is back on the plan actions button");
 });
 
-test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
+test("Change repository on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
   const { plans } = openTab();
   const container = mount(
     createElement(DesktopPlans, {
@@ -1143,7 +1143,7 @@ test("Change repository… on a plan that still has its chip hands focus back to
   assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
 
   openMenu(more);
-  choose("Change repository…");
+  choose("Change repository");
   act(() => {
     roots.at(-1)?.render(
       createElement(DesktopPlans, {

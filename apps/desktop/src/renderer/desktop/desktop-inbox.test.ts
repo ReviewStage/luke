@@ -281,7 +281,7 @@ test("a row hangs the plan's card when rested on, offers Pin and Archive at its 
       "Version history",
       "Pin",
       "Archive",
-      "Change repository…",
+      "Change repository",
       "Open on GitHub",
       "Permanently delete",
     ],

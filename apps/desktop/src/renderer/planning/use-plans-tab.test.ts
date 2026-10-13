@@ -765,7 +765,7 @@ test("a plan's repository is set through the host, and a refusal is answered as 
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SET_REPOSITORY);
 });
 
-test("Change repository… asks the open plan's chip to open, opening another plan first; Open on GitHub opens the plan's page", () => {
+test("Change repository asks the open plan's chip to open, opening another plan first; Open on GitHub opens the plan's page", () => {
   const other = {
     ...PLAN,
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",

@@ -41,7 +41,7 @@ import { useTabViews } from "./strip-tabs";
  * rest stand. The toolbar is one row, the side panel's bar's height exactly;
  * the plan's repository is the sidebar's row's to name, so the toolbar draws
  * the repository chip only while the plan has none, and otherwise only the
- * chip's menu, which Change repository… opens.
+ * chip's menu, which Change repository opens.
  *
  * The column's summary stands at its right, under the toolbar and over the
  * call bar, listing what both "+" menus open, with its button last in the
