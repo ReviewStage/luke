@@ -258,22 +258,22 @@ Nothing it reads or answers is kept beyond the plan and its history, said
 aloud, or shown elsewhere; OpenAI keeps the request and its reply under its
 own retention policy.
 
-**Your account.** Luke signs you in with GitHub alone, which gives us your
-name, email address, and the address of your profile picture. Signing in
-authorizes the Luke GitHub App: its token reaches only repositories where you
-installed the App and can already see, with the App's permissions (reading a
-repository's details; reading and writing its contents and pull requests;
-reading its checks, commit statuses, and Actions runs with their logs where
-the installation has accepted them; and reading your email addresses), and
-none until you install it. We keep that token and its refresh token sealed
-under a server-only secret, read them only on our service, and never hand
-them to your Mac, a browser, or anyone else; they go when you delete your
-account, and you can revoke the App in GitHub's settings under Applications,
-where an account that signed in before the App may also hold an unused `repo`
-permission to revoke. An account that signed in with Google, before sign-in
-was GitHub's alone, keeps the Google sign-in tokens it left, on our service
-and used for nothing. Installing the App stores nothing about you: which
-repositories it can see is read from GitHub when you choose one. We also keep the records
+**Your account.** Signing in with Google or GitHub gives us your name, email
+address, the address of your profile picture, and which of the two you used.
+Signing in with GitHub authorizes the Luke GitHub App: its token reaches only
+repositories where you installed the App and can already see, with the App's
+permissions (reading a repository's details; reading and writing its contents
+and pull requests; reading its checks, commit statuses, and Actions runs with
+their logs where the installation has accepted them; and reading your email
+addresses), and none until you install it. We keep that token and its refresh
+token sealed under a server-only secret, read them only on our service, and
+never hand them to your Mac, a browser, or anyone else; they go when you
+delete your account, and you can revoke the App in GitHub's settings under
+Applications, where an account that signed in before the App may also hold
+an unused `repo` permission to revoke. Signing in with Google leaves us
+Google's sign-in tokens, kept on our service and used for nothing after the
+sign-in. Installing the App stores nothing about you: which repositories it
+can see is read from GitHub when you choose one. We also keep the records
 that keep you signed in, each with the network address and the browser or app
 it was signed in from, and a daily count of your use of our service — one for
 each voice session you opened, each model call Luke's planning model or its
@@ -661,10 +661,9 @@ reports by Sentry.
 
 Luke's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
-including the Limited Use requirements. Luke no longer offers sign-in with
-Google. What Google returned to an account that signed in with it before,
-its name, email address, and profile picture, is used only to identify that
-account. It is not transferred, sold, or used for advertising.
+including the Limited Use requirements. We use what Google returns when you
+sign in with it, your name, email address, and profile picture, only to
+identify your account. It is not transferred, sold, or used for advertising.
 
 ## Contact
 

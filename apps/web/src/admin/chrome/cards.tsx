@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GitHubMark } from "../../account-marks";
+import { GitHubMark, GoogleMark } from "../../account-marks";
 import { AUTH_BUTTON } from "../../auth-surface";
 import { LukeMark } from "../../SiteChrome";
 import {
@@ -42,6 +42,17 @@ export function SignInCard(): React.JSX.Element {
           Sign in with the account this dashboard is restricted to.
         </p>
         <div className="mt-8 mb-4 grid gap-3">
+          <button
+            type="button"
+            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
+            disabled={pending !== undefined}
+            onClick={() => void begin(SOCIAL_PROVIDER.GOOGLE)}
+          >
+            <GoogleMark className="size-[15px] shrink-0" />
+            {pending === SOCIAL_PROVIDER.GOOGLE
+              ? "Opening…"
+              : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE]}`}
+          </button>
           <button
             type="button"
             className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
