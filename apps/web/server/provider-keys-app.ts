@@ -1,4 +1,10 @@
 import {
+  type KeyRing,
+  openProviderKey,
+  parseKeyRing,
+  sealProviderKey,
+} from "@sidecar/database/models/provider-key-seal";
+import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
   PROVIDER_KEY_REJECTION,
@@ -37,12 +43,6 @@ import {
   providerKeyHint,
 } from "./hosted/provider-key-check.js";
 import { handleProviderKeyRewrap } from "./hosted/provider-key-rewrap.js";
-import {
-  type KeyRing,
-  openProviderKey,
-  parseKeyRing,
-  sealProviderKey,
-} from "./hosted/provider-key-seal.js";
 import {
   listProviderKeyRows,
   removeProviderKey,

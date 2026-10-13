@@ -1,6 +1,7 @@
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
+import type { SealedProviderKey } from "@sidecar/database/models/provider-key-seal";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -11,7 +12,6 @@ import {
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
-import type { SealedProviderKey } from "./provider-key-seal.js";
 
 /**
  * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.

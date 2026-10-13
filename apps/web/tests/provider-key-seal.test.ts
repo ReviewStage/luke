@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { PROVIDER_KEY_PROVIDER } from "@sidecar/hosted/provider-key-wire";
-import { Redacted, Result } from "effect";
-import { test } from "vitest";
 import {
   KEY_RING_FAULT,
   type KeyRing,
@@ -11,7 +8,10 @@ import {
   rewrapProviderKey,
   type SealOwner,
   sealProviderKey,
-} from "../server/hosted/provider-key-seal";
+} from "@sidecar/database/models/provider-key-seal";
+import { PROVIDER_KEY_PROVIDER } from "@sidecar/hosted/provider-key-wire";
+import { Redacted, Result } from "effect";
+import { test } from "vitest";
 
 /**
  * An account's own provider key sealed and opened as the database holds it:

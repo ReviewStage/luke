@@ -715,7 +715,7 @@ on each instance, so the endpoint is no oracle for keys that are not the
 caller's. Neither the key nor what the provider said of it is logged.
 
 A key is kept in `account_provider_key` (migration 0080), sealed by
-`server/hosted/provider-key-seal.ts`: AES-256-GCM under a data key drawn
+`packages/database/src/models/provider-key-seal.ts`: AES-256-GCM under a data key drawn
 for that save, the data key wrapped under the deployment's key-encryption
 key, with the account and provider bound as additional data on both seals
 and the version on the wrap, so a sealed key copied onto another row does
