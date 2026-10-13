@@ -37,6 +37,8 @@ let standing: IntegrationStatus = INTEGRATION_STATUS.DISCONNECTED;
 let sent: Act[] = [];
 /** Whether the browser could be opened for a sign-in. */
 let opens = true;
+/** Whether the host answers a status read with no answer, the way an unreachable service reads. */
+let readFails = false;
 /** Where a Connect waits before the host answers it, when the test holds it. */
 let connectHeld: Promise<void> | undefined;
 
@@ -50,6 +52,7 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.INTEGRATIONS_STATUS:
+      if (readFails) return Promise.resolve(done({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED }));
       return Promise.resolve(done({ integrations: { linear: standing } }));
     case ACT_KIND.INTEGRATIONS_CONNECT:
       assert.deepEqual(request.payload, LINEAR);
@@ -71,6 +74,7 @@ beforeEach(() => {
   sent = [];
   opens = true;
   connectHeld = undefined;
+  readFails = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -181,6 +185,23 @@ test("a browser that could not be opened says so under the row, and the account 
     "Luke could not open your browser to sign in.",
   );
   assert.ok(button(row, "Connect"));
+});
+
+test("a read that failed still draws every row a search can land on, and reading again offers its action", async () => {
+  readFails = true;
+  const page = await mount();
+  assert.ok(page.querySelector('[data-search-anchor="linear"]'), "Linear's row stands");
+  assert.equal(
+    page.querySelector('[role="alert"]')?.textContent,
+    "Your integrations could not be read.",
+  );
+  assert.ok(![...page.querySelectorAll("button")].some((each) => each.textContent === "Connect"));
+
+  readFails = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+  assert.equal(page.querySelector('[role="alert"]'), null);
+  assert.ok(button(page, "Connect"));
 });
 
 test("signed out, the page asks for a sign-in and asks the host nothing", async () => {

@@ -20,7 +20,6 @@ import { IntegrationMark } from "../integration-marks";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { RetryButton } from "../retry-button";
 import { searchAnchorProps } from "../settings-anchors";
-import { SpinnerRegion } from "../spinner";
 import { useConfirm } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
 
@@ -52,9 +51,10 @@ const PAGE_LINE = {
 } as const;
 
 /** The line under a row's name: what it offers, or what needs the developer's hand. */
-function rowLine(provider: IntegrationProvider, status: IntegrationStatus): string {
+function rowLine(provider: IntegrationProvider, status: IntegrationStatus | undefined): string {
   const name = INTEGRATION_NAME[provider];
   switch (status) {
+    case undefined:
     case INTEGRATION_STATUS.PENDING:
       return `Finish signing in to ${name} in your browser.`;
     case INTEGRATION_STATUS.EXPIRED:
@@ -72,7 +72,8 @@ function IntegrationRow({
   statuses,
 }: {
   provider: IntegrationProvider;
-  status: IntegrationStatus;
+  /** Where the connection stands, or nothing while it has not been read; the row offers nothing until it has. */
+  status: IntegrationStatus | undefined;
   statuses: IntegrationStatuses;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -153,7 +154,7 @@ function IntegrationRow({
           </ConfirmSwap>
         ) : status === INTEGRATION_STATUS.UNAVAILABLE ? (
           <span className="integration-unavailable">{PAGE_LINE.NOT_AVAILABLE}</span>
-        ) : (
+        ) : status === undefined ? null : (
           <button
             type="button"
             className="toolbar-button"
@@ -174,40 +175,35 @@ function IntegrationRow({
   );
 }
 
-/** Every provider's row, once where they stand has been read. */
+/**
+ * Every provider's row, drawn whether or not where they stand has been read,
+ * so a search result always has its row to land on: a row offers its action
+ * once its status is known, and a read that failed says so above the rows,
+ * with the way to read again.
+ */
 function IntegrationRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
-  const standing = INTEGRATION_PROVIDER_LIST.map(
-    (provider) => [provider, statuses.statusOf(provider)] as const,
+  return (
+    <>
+      <p className="settings-note">{PAGE_LINE.NOTE}</p>
+      {statuses.readFailed ? (
+        <>
+          <p className="error-message" role="alert">
+            {PAGE_LINE.READ_FAILED}
+          </p>
+          <RetryButton onRetry={() => void statuses.read()} />
+        </>
+      ) : null}
+      {INTEGRATION_PROVIDER_LIST.map((provider) => (
+        <IntegrationRow
+          key={provider}
+          provider={provider}
+          status={statuses.statusOf(provider)}
+          statuses={statuses}
+        />
+      ))}
+    </>
   );
-  if (standing.every(([, status]) => status !== undefined)) {
-    return (
-      <>
-        <p className="settings-note">{PAGE_LINE.NOTE}</p>
-        {standing.map(([provider, status]) =>
-          status === undefined ? null : (
-            <IntegrationRow
-              key={provider}
-              provider={provider}
-              status={status}
-              statuses={statuses}
-            />
-          ),
-        )}
-      </>
-    );
-  }
-  if (statuses.readFailed) {
-    return (
-      <>
-        <p className="error-message" role="alert">
-          {PAGE_LINE.READ_FAILED}
-        </p>
-        <RetryButton onRetry={() => void statuses.read()} />
-      </>
-    );
-  }
-  return <SpinnerRegion label="Loading your integrations" />;
 }
 
 export function IntegrationsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
