@@ -138,8 +138,10 @@ test("a disconnected account is offered Connect, which sends the browser and rea
 test("a sign-in found expired while Connect was answering stays expired once the browser is sent", async () => {
   standing = INTEGRATION_STATUS.PENDING;
   const row = await mount();
-  const held = Promise.withResolvers<void>();
-  connectHeld = held.promise;
+  let release: (() => void) | undefined;
+  connectHeld = new Promise<void>((resolve) => {
+    release = resolve;
+  });
 
   act(() => button(row, "Connect again").click());
   await settle();
@@ -149,7 +151,7 @@ test("a sign-in found expired while Connect was answering stays expired once the
     window.dispatchEvent(new Event("focus"));
   });
   await settle();
-  held.resolve();
+  release?.();
   await settle();
   assert.match(line(row) ?? "", /expired/);
 });
