@@ -630,12 +630,12 @@
 
 /* The Keyboard shortcuts page: a reference list more than a form, so the
    window's own rows sit at a list's density rather than a form's, each the
-   command's name in regular weight and its chord's caps at the row's end,
-   the way a menu prints its key equivalents. The caps stand at a small
-   control's height wherever a card holds them. */
+   command's name in regular weight and its chord at the row's end. The chord
+   is the row's value, so it is set at the row's own size in the value's ink,
+   the way System Settings lists its keyboard shortcuts. */
 .settings-card {
-  --keycap-size: 22px;
-  --keycap-text: 12px;
+  --shortcut-text: 13px;
+  --shortcut-ink: var(--text-secondary);
 }
 
 .settings-card > .shortcut-row {
@@ -644,25 +644,36 @@
   padding-bottom: var(--space-8);
 }
 
-/* A changeable key's chord is its own field: pressed, it records the next
-   chord in place, so it reads as a control only under the pointer. */
+/* A changeable key's chord is a field, as a text field is drawn, so a key
+   that can be changed reads apart from the fixed list under it: pressed, it
+   records the next chord in place. */
 .shortcut-field {
+  --shortcut-ink: var(--text-primary);
   display: inline-flex;
+  min-width: 104px;
+  height: var(--control-height);
   flex: none;
   align-items: center;
-  height: var(--control-height);
-  padding: 0 var(--space-4);
+  justify-content: center;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--control-radius);
-  background: none;
-  transition: background-color var(--duration-hover) ease;
+  background: var(--input-fill);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: border-color var(--duration-hover) ease;
 }
 
 .shortcut-field:hover:not(:disabled) {
-  background: var(--raised);
+  border-color: var(--selected-edge);
 }
 
-.shortcut-field[aria-pressed="true"]:focus-visible {
-  outline: none; /* no ring: the recording field inside it rings */
+/* Recording is the field ringed in the focus colour, the way a text field
+   being typed into is, and saying what to do: nobody has to guess the next
+   keystroke is being listened for. */
+.shortcut-field[aria-pressed="true"] {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
 }
 
 .shortcut-name {
@@ -671,29 +682,15 @@
   font-weight: 400;
 }
 
-/* What is said where the keys would be, when there are none to draw: the chord
-   being typed, or none having registered. As tall as a cap, so the row keeps
-   its height, and lettered rather than keyed because neither is something to
-   press. */
+/* What the field says where there is no chord to draw: none having
+   registered, or another app owning it. Muted, because neither is a key. */
 .shortcut-state {
-  display: inline-flex;
-  height: var(--keycap-size);
-  align-items: center;
-  padding: 0 var(--space-8);
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
   color: var(--text-tertiary);
-  font-size: var(--keycap-text);
   white-space: nowrap;
 }
 
-/* Recording is the field ringed in the focus colour, the way a text field
-   being typed into is, and saying what to do: nobody has to guess the next
-   keystroke is being listened for. */
-.shortcut-state[data-recording="true"] {
+.shortcut-field[aria-pressed="true"] > .shortcut-state {
   color: var(--text-primary);
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
 /* What leads a row that stands for something of its own, a provider's or a

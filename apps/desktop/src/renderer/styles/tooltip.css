@@ -106,21 +106,9 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
   }
 }
 
-/* A chord as glyphs rather than caps: muted, set close, and in the line of the
-   words beside it, the way a menu prints a key equivalent. */
-.shortcut-glyphs {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.tooltip .shortcut-glyphs {
-  color: var(--tooltip-chord);
+/* The pill's chord, muted against its own dark fill rather than the window's. */
+.tooltip .shortcut {
+  --shortcut-ink: var(--tooltip-chord);
 }
 
 /* A row's own shortcut at its right end, shown while the row is hovered or

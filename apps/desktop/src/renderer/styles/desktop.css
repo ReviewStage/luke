@@ -4449,7 +4449,7 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
-/* An action's chord, drawn as keys at the row's right end. */
+/* An action's chord at the row's right end. */
 .command-palette-hint {
   display: inline-flex;
   flex: 0 0 auto;
@@ -4465,8 +4465,8 @@ body:has(.app-stage[data-capture="true"])
   padding-left: var(--space-16);
 }
 
-/* The keys' hints along the card's foot, in muted keys as a palette's foot
-   says them. */
+/* The keys' hints along the card's foot, each chord a step louder than the
+   words that say what it does, so the eye finds the keys first. */
 .command-palette-footer {
   display: flex;
   flex: 0 0 auto;
@@ -4483,6 +4483,10 @@ body:has(.app-stage[data-capture="true"])
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
+}
+
+.command-palette-footer .shortcut {
+  --shortcut-ink: var(--text-secondary);
 }
 
 .command-palette-empty {
@@ -4655,8 +4659,8 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* Send's chord, muted against its own fill rather than the card's. */
-.feedback-dialog .primary-button .shortcut-glyphs {
-  color: var(--on-accent-muted);
+.feedback-dialog .primary-button .shortcut {
+  --shortcut-ink: var(--on-accent-muted);
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in

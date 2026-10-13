@@ -1,7 +1,8 @@
 import { CheckIcon, ChevronRightIcon, SearchIcon } from "@sidecar/panel";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { KeyedCommand } from "#shared/shortcuts";
-import { ShortcutGlyphs, Tooltip } from "./tooltip";
+import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
+import { Shortcut } from "./shortcut";
+import { Tooltip } from "./tooltip";
 import { useClipped } from "./use-clipped";
 
 /**
@@ -218,7 +219,7 @@ function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
     return <span className="plan-compose-menu-hint">{row.disabled}</span>;
   }
   if (row.command === undefined) return null;
-  return <ShortcutGlyphs command={row.command} className="plan-compose-menu-hint" />;
+  return <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="plan-compose-menu-hint" />;
 }
 
 /** Words in a row cut short by its width, marked so desktop.css fades them out at their end. */

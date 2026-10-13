@@ -9,8 +9,6 @@ import {
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
   voiceHotkeyCandidates,
-  voiceHotkeyKeycaps,
-  voiceHotkeyLabel,
 } from "./voice-hotkey.js";
 
 test("the default is the chord a macOS voice assistant is reached for", () => {
@@ -51,31 +49,6 @@ test("a chosen stop chord goes first, with the default kept behind it", () => {
     stopHotkeyCandidates("Alt+Space", [...DEFAULT_VOICE_HOTKEYS]),
     DEFAULT_STOP_HOTKEYS,
   );
-});
-
-test("an accelerator reads the way macOS writes it", () => {
-  assert.equal(voiceHotkeyLabel("Alt+Space"), "⌥Space");
-  assert.equal(voiceHotkeyLabel("Alt+S"), "⌥S");
-  assert.equal(voiceHotkeyLabel("Command+Shift+K"), "⌘⇧K");
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a chord drawn as keys comes apart into the keys a hand presses", () => {
-  // The same glyphs the label is written with, one entry per key, in the order
-  // macOS prints them — the caps are the label taken apart, never a second
-  // spelling of it.
-  assert.deepEqual(voiceHotkeyKeycaps("Alt+Space"), ["⌥", "Space"]);
-  assert.deepEqual(voiceHotkeyKeycaps("Alt+S"), ["⌥", "S"]);
-  assert.deepEqual(voiceHotkeyKeycaps("Control+Alt+Shift+Command+K"), ["⌃", "⌥", "⇧", "⌘", "K"]);
-  for (const accelerator of ["Alt+Space", "Command+Shift+K"]) {
-    assert.equal(voiceHotkeyKeycaps(accelerator).join(""), voiceHotkeyLabel(accelerator));
-  }
-
-  // Every cap in a chord is distinct, which is what lets a surface draw them
-  // keyed by the glyph itself: a modifier appears once, and the key it ends in
-  // is never one of the modifier glyphs.
-  const caps = voiceHotkeyKeycaps("Control+Alt+Shift+Command+K");
-  assert.equal(new Set(caps).size, caps.length);
 });
 
 test("a chord is read into one canonical spelling", () => {

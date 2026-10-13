@@ -21,7 +21,8 @@ import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
-import { commandKeyshortcuts, ShortcutGlyphs } from "./tooltip";
+import { Shortcut } from "./shortcut";
+import { commandKeyshortcuts } from "./tooltip";
 
 /**
  * Searching the Settings tab.
@@ -446,7 +447,10 @@ export function SettingsSearchField({
             <CloseIcon />
           </button>
         ) : (
-          <ShortcutGlyphs command={APP_COMMAND.FIND} className="settings-search-shortcut" />
+          <Shortcut
+            chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord}
+            className="settings-search-shortcut"
+          />
         )}
       </label>
     </search>

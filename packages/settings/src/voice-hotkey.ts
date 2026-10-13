@@ -205,48 +205,4 @@ export function capturedVoiceHotkey(chord: VoiceHotkeyChord): VoiceHotkeyCapture
   return { outcome: VOICE_HOTKEY_CAPTURE.CAPTURED, accelerator: joinVoiceHotkey(held, key) };
 }
 
-const MODIFIER_SYMBOLS = {
-  Command: "⌘",
-  CommandOrControl: "⌘",
-  Control: "⌃",
-  Alt: "⌥",
-  Option: "⌥",
-  Shift: "⇧",
-} satisfies Record<string, string>;
-
-function modifierSymbol(modifier: string): string {
-  if (!Object.hasOwn(MODIFIER_SYMBOLS, modifier)) return modifier;
-  // SAFETY: Object.hasOwn narrows modifier to a key the symbol table documents.
-  return MODIFIER_SYMBOLS[modifier as keyof typeof MODIFIER_SYMBOLS];
-}
-
-/** Renders an accelerator the way macOS writes it, for the panel to show. */
-export function voiceHotkeyLabel(accelerator: string): string {
-  const parts = accelerator.split("+");
-  const key = parts[parts.length - 1] ?? "";
-  const modifiers = parts
-    .slice(0, -1)
-    .map((modifier) =>
-      Object.hasOwn(MODIFIER_SYMBOLS, modifier) ? modifierSymbol(modifier) : `${modifier}+`,
-    )
-    .join("");
-  return `${modifiers}${key}`;
-}
-
-/**
- * The same chord as the keys a hand actually presses, in the order macOS
- * writes them: one entry per key, so a surface can draw a cap each rather than
- * one chip for the whole chord.
- *
- * The label stays what a sentence, a menu item, or a screen reader gets — a
- * chord read aloud is one thing to press, and only a drawn keyboard needs the
- * keys apart.
- */
-export function voiceHotkeyKeycaps(accelerator: string): readonly string[] {
-  const parts = accelerator.split("+");
-  const key = parts[parts.length - 1] ?? "";
-  const modifiers = parts.slice(0, -1).map((modifier) => modifierSymbol(modifier));
-  return [...modifiers, key];
-}
-
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";

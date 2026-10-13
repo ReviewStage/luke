@@ -58,8 +58,9 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { APP_SHORTCUTS, type KeyedCommand, shortcutAria, shortcutGlyphs } from "#shared/shortcuts";
+import { APP_SHORTCUTS, type KeyedCommand, shortcutAria } from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
+import { Shortcut } from "./shortcut";
 import { useDisclosure } from "./use-disclosure";
 import { useStateWithRef } from "./use-state-with-ref";
 
@@ -199,26 +200,6 @@ function pillPlace(
   };
 }
 
-/** The chord as its muted glyphs, the way a menu prints it. Hidden from readers: the control says it in `aria-keyshortcuts`. */
-export function ShortcutGlyphs({
-  command,
-  className,
-}: {
-  command: KeyedCommand;
-  className?: string;
-}): React.JSX.Element {
-  return (
-    <span
-      className={className ? `shortcut-glyphs ${className}` : "shortcut-glyphs"}
-      aria-hidden="true"
-    >
-      {shortcutGlyphs(APP_SHORTCUTS[command].chord).map((glyph) => (
-        <span key={glyph}>{glyph}</span>
-      ))}
-    </span>
-  );
-}
-
 /** The chord as `aria-keyshortcuts` spells it, for a control that shows its shortcut without a tooltip. */
 export function commandKeyshortcuts(command: KeyedCommand): string {
   return shortcutAria(APP_SHORTCUTS[command].chord);
@@ -313,7 +294,7 @@ function TooltipPill({
       }
     >
       {carded ? card : label}
-      {command === undefined || carded ? null : <ShortcutGlyphs command={command} />}
+      {command === undefined || carded ? null : <Shortcut chord={APP_SHORTCUTS[command].chord} />}
     </div>,
     document.body,
   );

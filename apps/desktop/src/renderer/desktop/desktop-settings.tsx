@@ -3,7 +3,7 @@ import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { BackIcon, LaptopIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
@@ -28,7 +28,8 @@ import {
   settingsSearchEntries,
 } from "../settings-search";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
-import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
+import { Shortcut } from "../shortcut";
+import { commandKeyshortcuts } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -154,7 +155,10 @@ export function DesktopSettings({
         >
           <BackIcon />
           Back
-          <ShortcutGlyphs command={APP_COMMAND.EXIT_SETTINGS} className="row-shortcut" />
+          <Shortcut
+            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord}
+            className="row-shortcut"
+          />
         </button>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField

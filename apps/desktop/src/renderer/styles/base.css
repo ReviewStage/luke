@@ -124,21 +124,6 @@
   --file-icon-pink: #ff678d;
   --file-icon-mauve: #79697b;
 
-  /* A key drawn on screen is a physical thing quoted, so it gets a little of
-     what the hairline withholds: an edge that closes the shape on its own, a
-     face just off the surface, and a dark underside a pixel deep. Quiet on
-     purpose — a page lists thirty chords, and caps that each shouted would
-     outweigh the names they belong to — but the edge still says where one key
-     ends and the next begins. */
-  --keycap-face: rgba(255, 255, 255, 0.06);
-  --keycap-edge: rgba(255, 255, 255, 0.12);
-  --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.35);
-  /* Squares a lone glyph and lets a word key ride out past it on the padding.
-     Both are set per surface: the Keyboard shortcuts page draws the chord at a
-     small control's height. */
-  --keycap-size: 18px;
-  --keycap-text: 10.5px;
-
   /* Springs, durations, delays, and the row fan arrive from motion-tokens.css,
      imported by index.css, so the marketing mock cannot ship a different
      vocabulary. One sampled damped spring drives every travel, at one
@@ -236,12 +221,6 @@
     --file-icon-purple: #a631be;
     --file-icon-pink: #d32a61;
     --file-icon-mauve: #594c5b;
-
-    /* A light key is a white cap with a grey edge and a shadow under it, as
-       a keyboard drawn on white is. */
-    --keycap-face: #fff;
-    --keycap-edge: rgba(0, 0, 0, 0.11);
-    --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.06);
 
     --surface-fill: #fff;
   }
