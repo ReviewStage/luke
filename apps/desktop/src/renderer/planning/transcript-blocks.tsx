@@ -400,7 +400,8 @@ export function TranscriptTodos({
  * item it is at, which opens onto the whole list. Closed by default, as
  * VS Code's collapses to the item in progress, so it costs the log one
  * line. It is a card on the plan card's look, since it stands outside the
- * log, and it is drawn by the caller only while the list is worked.
+ * log, and it is drawn by the caller only while the list is worked. It
+ * opens upward off the composer, as one sheet (planning.css).
  */
 export function TranscriptTodosDock({
   todos,
