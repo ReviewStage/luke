@@ -203,7 +203,8 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   of Start, with the composer's menu: a pick is saved through
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A plan can be
   used without a repository; the planning model then says it has none.
-- **The plan's menu**, from the toolbar's ⋯ and from a right-click on the
+- **The plan's menu**, from the toolbar's ⋯ (drawn while the plan's own tab
+  is chosen, not on an agent's tab or the Inbox) and from a right-click on the
   plan in the sidebar alike: Copy plan (the open plan alone), Rename, Pin or
   Unpin and Archive (an archived plan offers Unarchive alone), Change
   repository… (opens the repository picker, hung from the toolbar, opening
@@ -211,10 +212,11 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   (`https://github.com/owner/repository`, for a plan with a repository), and
   Permanently delete, last and red, which asks first in a dialog that points
   a plan not yet archived at Archive instead. ⇧⌘A archives the open plan and
-  ⌘⌫ asks to delete it.
+  ⌘⌫ asks to delete it, from any of its tabs.
 - An archived plan opened from under Archived reads and works as any other,
   under a quiet line, "This plan is archived", with Unarchive beside it.
-- **Start**, a split button (`desktop/start-agent-button.tsx`). Its main
+- **Start**, a split button (`desktop/start-agent-button.tsx`), drawn
+  while the plan's own tab is chosen, as the ⋯ is. Its main
   part starts a coding agent on the plan with the account's default model and
   effort; its chevron drops the searchable picker over the models the service
   offers, grouped by provider with the newest first, each under its provider's
@@ -225,7 +227,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   the service did not answer carries the same key, so one press is one agent
   ("From a plan to a pull request" below).
 - **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
-  toolbar's. It is always enabled, however much of the plan is written, and
+  toolbar's, heard on every tab of the plan. It is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
 - The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the

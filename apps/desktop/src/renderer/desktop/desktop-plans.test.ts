@@ -2144,16 +2144,17 @@ interface Unarchives {
 }
 
 /**
- * The open plan's page with its column on its running agent's tab, the plan
- * archived or brought back as `archived` says, and every Unarchive press,
- * the banner's and the composer's alike, written down.
+ * The open plan's page with its column on its running agent's tab, or on
+ * the tab `render` is handed, the plan archived or brought back as
+ * `archived` says, and every Unarchive press, the banner's and the
+ * composer's alike, written down.
  */
 function mountArchivable(archived: boolean, unarchives: Unarchives) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (now: boolean) => {
+  const render = (now: boolean, tab: MainTab = { agent: TITLED_AGENT.id }) => {
     const { archivedAt: _archivedAt, ...standing } = ARCHIVED_PLAN;
     const plan = now ? ARCHIVED_PLAN : standing;
     act(() =>
@@ -2176,7 +2177,7 @@ function mountArchivable(archived: boolean, unarchives: Unarchives) {
             mainTabs: {
               ...plansControl().mainTabs,
               tabs: [MAIN_TAB.PLAN, { agent: TITLED_AGENT.id }],
-              tab: { agent: TITLED_AGENT.id },
+              tab,
               openAgents: [TITLED_AGENT.id],
             },
             agents: codingAgentsControl({
@@ -2247,7 +2248,7 @@ test("a plan renamed at its title renames the plan, and a refusal is said beside
 
 test("an archived plan reads but takes nothing: no editor, rename, repository, call, Start, new agent, or message, and its banner and its composer's note offer Unarchive", () => {
   const unarchives: Unarchives = { marked: [], composer: 0 };
-  const { container } = mountArchivable(true, unarchives);
+  const { container, render } = mountArchivable(true, unarchives);
 
   const banner = container.querySelector<HTMLElement>('[aria-label="This plan is archived"]');
   assert.ok(banner, "the banner stands over the document");
@@ -2261,7 +2262,6 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
     "no section opens the editor",
   );
   assert.equal(container.querySelector(".call-start"), null, "no call is started");
-  assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
   assert.equal(container.querySelector('[aria-label="Message to the agent"]'), null);
   const note = container.querySelector<HTMLElement>(".archived-composer");
   assert.ok(note, "the composer's place says why");
@@ -2282,17 +2282,6 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
   act(() => planTab.click());
   assert.equal(container.querySelector(".desktop-toolbar input"), null);
 
-  // The ⋯ menu offers what reads the plan, its history among it, Unarchive, and Permanently delete.
-  press(container, '[aria-label="Plan actions"]');
-  assert.deepEqual(menuLabels(), [
-    "Copy plan",
-    "Version history",
-    "Unarchive",
-    "Open on GitHub",
-    "Permanently delete",
-  ]);
-  key(focused(), "Escape");
-
   // The column's + offers the agents to read and no new agent.
   act(() => columnAddButton(container).click());
   assert.equal(
@@ -2306,6 +2295,19 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
   assert.ok(composerUnarchive);
   act(() => composerUnarchive.click());
   assert.deepEqual(unarchives, { marked: [[PLAN.id, PLAN_MARK.UNARCHIVE]], composer: 1 });
+
+  // On the plan's own tab, Start is not drawn, and the ⋯ menu offers what
+  // reads the plan, its history among it, Unarchive, and Permanently delete.
+  render(true, MAIN_TAB.PLAN);
+  assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
+  press(container, '[aria-label="Plan actions"]');
+  assert.deepEqual(menuLabels(), [
+    "Copy plan",
+    "Version history",
+    "Unarchive",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
 });
 
 test("an Unarchive gives an archived plan back everything at once: its editors, its call, Start, and its agent's composer, and the banner goes", () => {
@@ -2316,9 +2318,10 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
   assert.equal(container.querySelector('[aria-label="This plan is archived"]'), null);
   assert.ok(container.querySelector(".plan-document-block"), "the sections open the editor");
   assert.ok(container.querySelector(".call-start"), "the call starts");
-  assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
   assert.ok(container.querySelector('[aria-label="Message to the agent"]'));
   assert.equal(container.querySelector(".archived-composer"), null);
+  render(false, MAIN_TAB.PLAN);
+  assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
 });
 
 test("the editor still open when the plan is archived elsewhere is let go", () => {

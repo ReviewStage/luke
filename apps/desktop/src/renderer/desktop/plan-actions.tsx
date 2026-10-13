@@ -206,23 +206,29 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
 
 /**
  * One plan's menu and its delete question, held for whichever door offers
- * them. Neither outlives the tab going off screen, and the question does not
- * outlive the plan: each is taken down in the render that finds it gone, so
- * neither is left standing over another surface, over a plan deleted
- * elsewhere, or waiting for the next time the panel opens.
+ * them. Neither outlives the tab going off screen, the menu does not
+ * outlive its door, and the question does not outlive the plan: each is
+ * taken down in the render that finds it gone, so neither is left standing
+ * over another surface, over a plan deleted elsewhere, or waiting for the
+ * next time the panel opens.
  */
-function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: () => void) {
+function usePlanMenu(
+  plans: PlansControl,
+  planId: string,
+  name: string,
+  doors: { rename: () => void; drawn: boolean },
+) {
   const plan = planOf(plans, planId);
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
-  const { open, drawn, show, close } = useActionMenu(plans.shown);
+  const { open, drawn, show, close } = useActionMenu(plans.shown && doors.drawn);
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
         label="Plan actions"
         menu={drawn}
-        groups={planActionGroups(plans, planId, { rename, askDelete: deletion.ask })}
+        groups={planActionGroups(plans, planId, { rename: doors.rename, askDelete: deletion.ask })}
         onClose={close}
       />
     );
@@ -236,22 +242,27 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
 }
 
 /**
- * The open plan's ⋯ button in the toolbar, and the menu it drops. It is also
- * what offers the open plan's Archive and Permanently delete shortcuts, so
- * each runs exactly as its menu item would: Permanently delete still asks
- * first, and an archived plan has no Archive to offer.
+ * The open plan's ⋯ button in the toolbar, and the menu it drops, drawn
+ * while the plan's own tab is chosen, because the menu is the plan's and not
+ * an agent's. It is also what offers the open plan's Archive and Permanently
+ * delete shortcuts, on every tab of the plan, so each runs exactly as its
+ * menu item would: Permanently delete still asks first, and an archived plan
+ * has no Archive to offer.
  */
-export function PlanActionsButton({
+export function PlanActions({
   plans,
   plan,
+  button,
   onRename,
 }: {
   plans: PlansControl;
   plan: PlanSummary;
+  /** Whether the ⋯ button is drawn: the shortcuts and the delete question stand either way. */
+  button: boolean;
   /** Opens the toolbar's title as the plan's name field. */
   onRename: () => void;
 }): React.JSX.Element {
-  const actions = usePlanMenu(plans, plan.id, plan.name, onRename);
+  const actions = usePlanMenu(plans, plan.id, plan.name, { rename: onRename, drawn: button });
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
@@ -261,25 +272,27 @@ export function PlanActionsButton({
   );
   return (
     <>
-      <Tooltip label="Plan actions">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Plan actions"
-          aria-haspopup="menu"
-          aria-expanded={actions.open}
-          disabled={deletion.busy}
-          onClick={(event) => {
-            if (actions.open) {
-              actions.close(true);
-              return;
-            }
-            actions.show(dropBelow(event.currentTarget), event.currentTarget);
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </Tooltip>
+      {button ? (
+        <Tooltip label="Plan actions">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Plan actions"
+            aria-haspopup="menu"
+            aria-expanded={actions.open}
+            disabled={deletion.busy}
+            onClick={(event) => {
+              if (actions.open) {
+                actions.close(true);
+                return;
+              }
+              actions.show(dropBelow(event.currentTarget), event.currentTarget);
+            }}
+          >
+            <EllipsisIcon />
+          </button>
+        </Tooltip>
+      ) : null}
       {actions.menu}
       {actions.dialog}
     </>
@@ -315,7 +328,7 @@ export function SidebarPlan({
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
-  const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
+  const actions = usePlanMenu(plans, plan.id, plan.name, { rename: rename.begin, drawn: true });
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
