@@ -65,6 +65,11 @@ test("a press opens a fold onto its body at once, unrolling it, and closing says
   assert.equal(fold.details.dataset.disclosure, "closing");
   assert.ok(fold.body(), "the body stays through its fade");
   assert.equal(fold.details.open, true);
+  assert.equal(
+    fold.body()?.closest(".disclosure-body")?.hasAttribute("inert"),
+    true,
+    "out of reach while it fades",
+  );
 
   act(() => fades[0]?.finish());
   await settle();
@@ -81,6 +86,7 @@ test("pressing a fold again while it closes opens it back up, and the fade it cu
   act(() => fold.summary.click());
   assert.equal(fold.summary.getAttribute("aria-expanded"), "true");
   assert.equal(fold.details.dataset.disclosure, "opening");
+  assert.equal(fold.body()?.closest(".disclosure-body")?.hasAttribute("inert"), false);
 
   act(() => {
     fades[0]?.cancel();

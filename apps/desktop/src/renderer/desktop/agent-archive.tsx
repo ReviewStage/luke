@@ -204,6 +204,7 @@ export function ArchivedAgents({
         <ul
           ref={fold.ref}
           className="plan-summary-rows disclosure-body"
+          inert={fold.leaving}
           aria-label="Archived agents"
         >
           {archived.map((agent) => (

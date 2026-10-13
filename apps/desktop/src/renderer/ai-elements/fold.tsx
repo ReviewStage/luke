@@ -48,6 +48,8 @@ interface FoldState {
   readonly open: boolean;
   /** Whether its body is drawn: open, or closed and still fading. */
   readonly drawn: boolean;
+  /** Whether its body is fading out, out of reach of the keys and the pointer. */
+  readonly leaving: boolean;
   readonly toggle: () => void;
   readonly body: (element: HTMLElement | null) => void;
 }
@@ -99,7 +101,11 @@ export function Fold({
     },
     [shownRef],
   );
-  const motion = disclosureMotion(open && pressed, shown.leaving);
+  // Note that no motion plays while a find looks through the tab, because a
+  // body held open through its fade would be closed over the match a find
+  // showed there, which opens only a `details` that is closed.
+  const finding = useFindOpen();
+  const motion = finding ? undefined : disclosureMotion(open && pressed, shown.leaving);
   // Note that this runs before the frame the press is drawn on, so the rise
   // is there for the first frame of any motion that reads it.
   useLayoutEffect(() => {
@@ -109,6 +115,7 @@ export function Fold({
   const state: FoldState = {
     open,
     drawn: shown.mounted,
+    leaving: shown.leaving,
     toggle: () => {
       setPressed(true);
       setOpen(!open);
@@ -192,15 +199,16 @@ export function FoldChevron({ className }: { className?: string }): ReactNode {
   );
 }
 
-export type FoldBodyProps = ComponentProps<"div">;
+/** Note that the body's element is the fold's own, to wait on its fade, so it takes no ref. */
+export type FoldBodyProps = Omit<ComponentProps<"div">, "ref">;
 
 /** What the fold holds, drawn only while it is open, on its way out, or a find is looking through it. */
 export function FoldBody({ className, children, ...props }: FoldBodyProps): ReactNode {
-  const { body } = useFold();
+  const { body, leaving } = useFold();
   const drawn = useFoldBodyDrawn();
   if (!drawn) return null;
   return (
-    <div ref={body} className={cn("disclosure-body", className)} {...props}>
+    <div ref={body} className={cn("disclosure-body", className)} inert={leaving} {...props}>
       {children}
     </div>
   );

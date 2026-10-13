@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { installExits, uninstallExits } from "#testing/exits";
 import { installHighlights } from "#testing/find-highlights";
 import { Fold, FoldBody, FoldSummary } from "./ai-elements/fold";
 import { TOOL_BLOCK, TOOL_STATE } from "./ai-elements/tool";
@@ -24,6 +25,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   document.getSelection()?.removeAllRanges();
   vi.unstubAllGlobals();
+  uninstallExits();
 });
 
 /** A tab's words: one line split over inline spans, as a word over a code line's tokens is, then two lines more. */
@@ -249,6 +251,29 @@ test("a match folded away in a closed fold is found, and showing it opens the fo
   key(field(tab.container), { key: "Escape" });
   assert.equal(ran.open, true, "a fold the find opened stays open");
   assert.equal(read.querySelector("pre"), null, "the closed fold draws nothing again");
+});
+
+test("a fold closed while the bar is open closes at once, with no fade a match shown in it could be closed over", () => {
+  installHighlights();
+  installExits('[data-disclosure="closing"] > .disclosure-body');
+  const tab = mounted([
+    createElement(
+      Fold,
+      { key: "ran" },
+      createElement(FoldSummary, null, "Ran 2 commands"),
+      createElement(FoldBody, null, createElement("pre", null, "pnpm test --filter relay")),
+    ),
+  ]);
+  const ran = tab.container.querySelector("details");
+  assert.ok(ran);
+  act(() => ran.querySelector("summary")?.click());
+  chord(FIND);
+
+  act(() => ran.querySelector("summary")?.click());
+  assert.equal(ran.open, false);
+  assert.equal(ran.dataset.disclosure, undefined);
+  typeInto(field(tab.container), "--filter");
+  assert.equal(ran.open, true, "the find opens it again onto the match");
 });
 
 test("a closed thought's or command's words, described or not, are found once, in the body the line previews, and showing them opens its fold", () => {
