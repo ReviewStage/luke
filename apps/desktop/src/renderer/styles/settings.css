@@ -279,6 +279,12 @@
   gap: var(--space-2);
 }
 
+/* A row's words take what the row leaves once its mark and controls stand,
+   so its controls end at the row's edge however many stand beside them. */
+.settings-row > .settings-copy {
+  flex: 1;
+}
+
 .settings-copy strong {
   color: var(--text-primary);
   font-size: 13px;
@@ -793,41 +799,37 @@
   flex: 1 0 100%;
 }
 
-/* The Keyboard shortcuts page: a reference list more than a form, so its rows
-   sit at a list's density rather than a form's, each the command's name in
-   regular weight and its chord's caps in the one column every row's chord
-   ends in, the way a menu prints its key equivalents. The caps stand at a
-   small control's height, and the buttons beside the two keys Luke can
-   change are small controls to match. */
-.shortcut-section {
-  gap: var(--space-2);
-  --control-height: 28px;
+/* The Keyboard shortcuts page: a reference list more than a form, so the
+   window's own rows sit at a list's density rather than a form's, each the
+   command's name in regular weight and its chord's caps at the row's end,
+   the way a menu prints its key equivalents. The caps stand at a small
+   control's height wherever a card holds them. */
+.settings-card {
   --keycap-size: 22px;
   --keycap-text: 12px;
 }
 
-/* The label keeps its own room above the first row, which the list's
-   tighter gap would otherwise take from it. */
-.shortcut-section h2 {
-  margin-bottom: var(--space-4);
+.settings-card > .shortcut-row {
+  min-height: 40px;
+  padding-top: var(--space-8);
+  padding-bottom: var(--space-8);
 }
 
-.shortcut-row {
-  min-height: 32px;
+/* A changeable key's chord is its own field: pressed, it records the next
+   chord in place, so it reads as a control only under the pointer. */
+.shortcut-field {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 var(--space-4);
+  border-radius: var(--control-radius);
+  background: none;
+  transition: background-color var(--duration-hover) ease;
 }
 
-/* A row that carries a description keeps a form row's breathing room. */
-.shortcut-row:has(small) {
-  padding: var(--space-4) 0;
-}
-
-/* The two changeable keys hold their chord in a slot of one width, so their
-   buttons stand level whether the chord is ⌥S or ⌃⌥Space, and the caps still
-   end in the column the rest of the page's do. */
-.shortcut-slot {
-  display: flex;
-  min-width: 84px;
-  justify-content: flex-end;
+.shortcut-field:hover:not(:disabled) {
+  background: var(--raised);
 }
 
 .shortcut-name {
@@ -874,11 +876,6 @@
 .settings-row-mark > :is(svg, img) {
   width: 20px;
   height: 20px;
-}
-
-/* A row's words take what the row leaves once its mark and controls stand. */
-.settings-row-mark + .settings-copy {
-  flex: 1;
 }
 
 /* Where a row's subject stands, under its name: connected with the dot a
