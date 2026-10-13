@@ -2013,6 +2013,32 @@ test("an agent pinned to the sidebar opens its plan on the agent's tab in the pl
   assert.equal(panelOf(tab).open, false);
 });
 
+test("an Inbox pinned to the sidebar opens its plan on the Inbox in the plan's column, though it stood closed, and leaves the side panel shut", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  act(() => tab.control().sidePanel.onPin(MAIN_TAB.INBOX, "Inbox"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  });
+  act(() => tab.control().onOpenPinnedTab(pin));
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.INBOX);
+  assert.equal(panelOf(tab).open, false);
+});
+
 test("a tab pinned to the sidebar opens its plan and the panel on that tab from another plan, and its tab closed leaves the pin", () => {
   const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
   const tab = mount({ shown: true, planning: OPEN });

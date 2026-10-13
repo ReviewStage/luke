@@ -8,6 +8,7 @@ import { agentStateWords } from "../planning/coding-agent-model";
 import { ModelLabel } from "../planning/model-label";
 import { isAgentTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { type PinnedTab, SIDE_PANEL_TAB_KIND } from "../planning/use-side-panel";
 import { Tooltip } from "../tooltip";
@@ -50,6 +51,7 @@ const GONE_NOTE = "No longer on this plan";
 /** What a pin's card calls its kind, beside the fixed tabs' own names (`SIDE_PANEL_TAB_KIND`). */
 const PIN_KIND = {
   AGENT: "Coding agent",
+  INBOX: "Inbox",
   FILE: "File",
 } as const;
 
@@ -110,10 +112,11 @@ function pinActionGroups(
   ];
 }
 
-/** What a pin's card says its kind is: a fixed tab's name, or an agent's or a file's word, with a file's path after it. */
+/** What a pin's card says its kind is: a fixed tab's name, or an agent's, the Inbox's, or a file's word, with a file's path after it. */
 function pinKind(pin: PinnedTab): string {
   const { tab } = pin;
   if (isAgentTab(tab)) return PIN_KIND.AGENT;
+  if (tab === MAIN_TAB.INBOX) return PIN_KIND.INBOX;
   return isFileTab(tab) ? `${PIN_KIND.FILE} · ${tab.file}` : SIDE_PANEL_TAB_KIND[tab].label;
 }
 

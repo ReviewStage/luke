@@ -19,6 +19,7 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
+import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -62,6 +63,7 @@ import {
 } from "../planning/transcript-copy";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import {
   type DrawnTabs,
   drawsSubagent,
@@ -304,8 +306,8 @@ export function planWorkers(
 }
 
 /**
- * The glyph a tab's pin wears in the sidebar: its kind's, a file's, or an
- * agent's as its tab wears it, where it stands included, wherever the
+ * The glyph a tab's pin wears in the sidebar: its kind's, a file's, the
+ * Inbox's tray, or an agent's as its tab wears it, where it stands included, wherever the
  * window last read the agent (`agent`), and otherwise the mark of the
  * harness it ran in when it was pinned.
  */
@@ -318,6 +320,7 @@ export function pinnedTabIcon(
     if (agent !== undefined) return <AgentGlyph agent={agent} />;
     return <AgentMark provider={pin.model === undefined ? undefined : providerOf(pin.model)} />;
   }
+  if (tab === MAIN_TAB.INBOX) return <InboxIcon />;
   return isFileTab(tab) ? <FileTypeIcon name={fileName(tab.file)} /> : TAB_ICON[tab];
 }
 

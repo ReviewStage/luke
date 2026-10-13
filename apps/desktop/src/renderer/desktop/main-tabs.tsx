@@ -33,7 +33,7 @@ import {
 } from "../planning/transcript-copy";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-main-tabs";
-import type { PinnedTab } from "../planning/use-side-panel";
+import type { ColumnPinnableTab, PinnedTab } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
 import { useAgentArchive } from "./agent-archive";
@@ -44,6 +44,7 @@ import {
   DoorsTab,
   type TabDoors,
   type TabLook,
+  type TabPin,
   type TabViews,
   type TranscriptCopier,
   type TranscriptRead,
@@ -72,7 +73,9 @@ import { TabStrip } from "./tab-strip";
  * moves as an agent's tab does (`use-main-tabs.ts`). It counts the items
  * that wait on the developer after its name, dimmed as a model's effort is
  * after the model's, so an item posted while the developer reads elsewhere
- * is seen from any tab.
+ * is seen from any tab. Its menu offers Pin tab as an agent's does; pinned,
+ * it wears no × and offers no Close, so it stands on its plan whether or
+ * not anything new waits, until Unpin tab.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -399,8 +402,8 @@ export function MainTabStrip({
   /** The sidebar's pins, which an agent's tab is pinned among, and their presses. */
   pins: {
     pinned: readonly PinnedTab[];
-    onPin: (tab: { agent: string }, label: string, model: string) => void;
-    onUnpin: (planId: string, tab: { agent: string }) => void;
+    onPin: (tab: ColumnPinnableTab, label: string, model?: string) => void;
+    onUnpin: (planId: string, tab: ColumnPinnableTab) => void;
   };
   /** The plan's rename, which its tab's menu opens; none while the plan is archived. */
   rename: ReturnType<typeof usePlanRename> | undefined;
@@ -412,6 +415,10 @@ export function MainTabStrip({
   inbox: number;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const pinnedOf = (tab: ColumnPinnableTab) =>
+    pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
+  // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
+  const inboxPinned = pinnedOf(MAIN_TAB.INBOX);
   const inboxTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.INBOX)
     ? [
         {
@@ -423,7 +430,7 @@ export function MainTabStrip({
             selected: main.tab === MAIN_TAB.INBOX,
             onSelect: () => main.onChoose(MAIN_TAB.INBOX),
           },
-          close: () => main.onClose(MAIN_TAB.INBOX),
+          close: inboxPinned ? undefined : () => main.onClose(MAIN_TAB.INBOX),
         },
       ]
     : [];
@@ -450,14 +457,24 @@ export function MainTabStrip({
   const strip = [planTab, ...own];
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
+  const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
+    const pinned = pinnedOf(tab);
+    return {
+      pinned,
+      onToggle: () => (pinned ? pins.onUnpin(plan.id, tab) : pins.onPin(tab, label, model)),
+    };
+  };
   const doorsOf = (entry: DrawnTab): TabDoors => {
     const others = strip.flatMap((other) =>
       other === entry || other.close === undefined ? [] : [other.close],
     );
     const { agent } = entry;
-    const pinned =
-      agent !== undefined &&
-      pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, { agent: agent.id }));
+    const pinTab: ColumnPinnableTab | undefined =
+      agent !== undefined
+        ? { agent: agent.id }
+        : entry.tab === MAIN_TAB.INBOX
+          ? MAIN_TAB.INBOX
+          : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -468,16 +485,7 @@ export function MainTabStrip({
               for (const close of others) close();
               main.onChoose(entry.tab);
             },
-      pin:
-        agent === undefined
-          ? undefined
-          : {
-              pinned,
-              onToggle: () =>
-                pinned
-                  ? pins.onUnpin(plan.id, { agent: agent.id })
-                  : pins.onPin({ agent: agent.id }, entry.look.label, agent.model),
-            },
+      pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
     };
   };

@@ -86,6 +86,7 @@ import {
   usePlanHistory,
 } from "./use-plan-history";
 import {
+  inColumn,
   type PinnedTab,
   type PlanHolds,
   SIDE_PANEL_TAB,
@@ -1139,7 +1140,7 @@ export function usePlansTab(input: {
       setChosen({ pin, over: openPlanId });
       if (pin.plan !== planning.activePlanId) select(pin.plan);
       setHistoryFor(undefined);
-      if (!isAgentTab(tab)) {
+      if (!inColumn(tab)) {
         sidePanel.onShow(pin.plan, tab);
         return;
       }
