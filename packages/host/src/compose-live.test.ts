@@ -277,6 +277,22 @@ it.effect("a grant whose room is not a secure socket is read as the avatar unava
   }),
 );
 
+it.effect("a refusal whose reason is unreadable still ends the start", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const socket = yield* f.openCall;
+
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE, reason: 42 });
+    yield* settle();
+
+    assert.deepEqual(f.states.at(-1), {
+      status: LIVE_AVATAR_STATUS.ENDED,
+      end: { by: LIVE_AVATAR_END.UNAVAILABLE, reason: AVATAR_UNAVAILABLE_REASON.ERROR },
+    });
+  }),
+);
+
 it.effect("the call's end withdraws the grant and sends no stop of its own", () =>
   Effect.gen(function* () {
     const f = yield* subject();

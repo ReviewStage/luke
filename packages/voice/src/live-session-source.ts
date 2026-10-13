@@ -1027,8 +1027,8 @@ const isServiceFrame = Schema.is(
   }),
 );
 
-/** What an `avatar.started` its schema refuses is told as: the avatar did not come up, rather than a start left waiting forever. */
-const UNREADABLE_AVATAR_GRANT: AvatarUnavailableFrame = {
+/** What an avatar answer its schema refuses is told as: the avatar did not come up, rather than a start left waiting forever. */
+const UNREADABLE_AVATAR_ANSWER: AvatarUnavailableFrame = {
   type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
   reason: AVATAR_UNAVAILABLE_REASON.ERROR,
 };
@@ -1039,8 +1039,8 @@ const UNREADABLE_AVATAR_GRANT: AvatarUnavailableFrame = {
  * `avatar.unavailable`, taken off its arrivals and told to their listeners,
  * so the sideband over it reads only what the session said. A frame is
  * routed by the type it decodes to and then checked by that type's own
- * schema. An `avatar.started` the schema refuses is still taken off, since
- * it may carry a token, and is told as the avatar unavailable. The substring test ahead of the decode only keeps a transcript
+ * schema. An avatar answer the schema refuses is still taken off, since an
+ * `avatar.started` may carry a token, and is told as the avatar unavailable. The substring test ahead of the decode only keeps a transcript
  * delta from being decoded twice; note that it never picks the frame's kind,
  * because a frame's own text, a command a turn ran or a draft's words, can
  * name another kind's type, and a frame read as the wrong kind would be
@@ -1071,9 +1071,12 @@ function withoutServiceFrames(
       told(planCallEndingFrameFromWire(value), listeners.onPlanCallEnding),
     [VOICE_SERVICE_FRAME.AVATAR_STARTED]: (value: UnparsedWireValue) =>
       told(avatarStartedFrameFromWire(value), listeners.onAvatarStarted) ||
-      told(UNREADABLE_AVATAR_GRANT, listeners.onAvatarUnavailable),
+      told(UNREADABLE_AVATAR_ANSWER, listeners.onAvatarUnavailable),
     [VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE]: (value: UnparsedWireValue) =>
-      told(avatarUnavailableFrameFromWire(value), listeners.onAvatarUnavailable),
+      told(
+        avatarUnavailableFrameFromWire(value) ?? UNREADABLE_AVATAR_ANSWER,
+        listeners.onAvatarUnavailable,
+      ),
   };
   return {
     send: (data) => socket.send(data),
