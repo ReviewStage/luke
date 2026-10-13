@@ -35,6 +35,7 @@ import { lapsedServer } from "./agent-servers-model";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { DictateButton, DictationStrip } from "./dictation-strip";
+import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
@@ -94,7 +95,7 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * A `/` at the start of a word opens the list of the skills the plan's
  * repository keeps, at the caret, and the one chosen is written into the
  * words as `/name`, drawn as a chip, which the agent loads before it acts
- * (`skill-picker.tsx`).
+ * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
  */
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
@@ -225,12 +226,14 @@ export function AgentComposer({
     onNote: setRefusal,
   });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
+  const openSkill = useSkillOpener();
   const skillPicker = useSkillPicker({
     field,
     draft: composer.draft,
     setDraft: (next) => latest.current.setDraft(next),
     source: skills,
     maxLength: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
+    onOpen: openSkill,
   });
 
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
@@ -325,6 +328,9 @@ export function AgentComposer({
             onSelect={skillPicker.onCaret}
             onBlur={skillPicker.onBlur}
             onScroll={skillPicker.onScroll}
+            onClick={skillPicker.onClick}
+            onPointerMove={skillPicker.onPointerMove}
+            onPointerLeave={skillPicker.onPointerLeave}
             onPaste={(event) => {
               // Only images are taken from the clipboard; text pastes as it always does.
               const pasted = imageFiles(event.clipboardData.files);

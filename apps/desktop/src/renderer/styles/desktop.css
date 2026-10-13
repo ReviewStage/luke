@@ -4906,8 +4906,8 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
    and corner, so the wash on the repository, an agent, or a pull request
    under the pointer sits off the card's edge as a menu item's does. A line
    a press does nothing on keeps a row's place, so every word starts on the
-   rows' column. A pinned tab's card (`sidebar-pinned-tab.tsx`) is this
-   card. */
+   rows' column. A pinned tab's card (`sidebar-pinned-tab.tsx`) and a
+   skill chip's (`skill-chip.tsx`) are this card. */
 .tooltip-card:has(> .plan-card) {
   padding: var(--menu-inset);
 }
@@ -5035,6 +5035,23 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-number {
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
+}
+
+/* A card's words under its name, a skill's description, on the name's
+   column and wrapped to four lines, since they are read whole rather than
+   glanced at. Note that the gap under them is a margin, because a padding
+   would show the start of a fifth line the clamp hid. */
+.plan-card-note {
+  display: -webkit-box;
+  margin: 0 var(--row-inset) var(--space-4)
+    calc(var(--row-inset) + var(--menu-glyph) + var(--glyph-gap));
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .plan-card-more {

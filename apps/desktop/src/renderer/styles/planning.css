@@ -1415,8 +1415,9 @@ button.code-card-path:hover {
 
 /* A chosen skill's pill, the composer's and a sent message's alike
    (`skill-chip.tsx`): in the composer it lies under the field's words, so
-   its own are clear; in a message it is a button drawing its words in the
-   bubble's type, which opens the skill's file. */
+   its own are clear, and a press on it opens the skill's file; in a
+   message it is a button drawing its words in the bubble's type, which
+   opens the same file. */
 .skill-chip {
   border-radius: 4px;
   background: var(--raised-strong);
@@ -1438,38 +1439,16 @@ button.skill-chip {
   line-height: 1.25;
 }
 
-button.skill-chip:hover {
+button.skill-chip:hover,
+.skill-chips .skill-chip[data-hovered] {
   background: var(--selected);
   box-shadow: 0 0 0 2px var(--selected);
 }
 
-/* A skill's hover card: its name, what it is for, and where its file stands. */
-.skill-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.skill-card > p {
-  margin: 0;
-}
-
-.skill-card-name {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.skill-card-description {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.skill-card-path {
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  overflow-wrap: anywhere;
+/* The box over the composer's chips hears the pointer for them, so it
+   turns to a hand over one, as the sent message's button does. */
+.agent-composer-input[data-over-chip="true"] {
+  cursor: pointer;
 }
 
 /* The list a `/` opens: the window's menu, standing over the caret's line
