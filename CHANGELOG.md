@@ -1620,6 +1620,18 @@ workspaces without leaving Luke.
 [#312](https://github.com/ReviewStage/luke/pull/312),
 [#316](https://github.com/ReviewStage/luke/pull/316))
 
+### Usage data
+
+Luke counts how his own features are used — a launch, a provider connected,
+sessions observed, a call opened — and sends those counts to his own service,
+tied to your account, so we can see what is worth building next. It is on by
+default, and the switch is Share usage data in the new Usage data section on
+the Settings tab's front page. Every event name and value is fixed by the
+build, so nothing about a session and nothing you type or say can travel in
+one, and nothing is sent while you are signed out. [Privacy](PRIVACY.md) lists
+every event and property by name.
+([#289](https://github.com/ReviewStage/luke/pull/289))
+
 ### Improvements
 
 - You can search Settings ([#305](https://github.com/ReviewStage/luke/pull/305))
@@ -1655,23 +1667,10 @@ workspaces without leaving Luke.
 
 ### Misc
 
-- Added PostHog analytics setup
-  ([#289](https://github.com/ReviewStage/luke/pull/289))
 - Added anti-slop Oxlint rules across the repository
   ([#286](https://github.com/ReviewStage/luke/pull/286))
 
 ## 0.2.0 — 2026-08-18
-
-### Usage data
-
-Luke counts how his own features are used — a launch, a provider connected,
-sessions observed, a call opened — and sends those counts to his own service,
-tied to your account, so we can see what is worth building next. It is on by
-default, and the switch is Share usage data in the new Usage data section on
-the Settings tab's front page. Every event name and value is fixed by the
-build, so nothing about a session and nothing you type or say can travel in
-one, and nothing is sent while you are signed out. [Privacy](PRIVACY.md) lists
-every event and property by name.
 
 ### Codex cloud tasks
 
