@@ -11,7 +11,13 @@ import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { AgentGlyph, AgentMark, AgentTab, agentEndMark } from "../planning/agent-tab";
-import { AgentTabCard, cardCorner, heldLatest, lastFinished } from "../planning/agent-tab-card";
+import {
+  AgentTabCard,
+  type CardReading,
+  cardCorner,
+  heldLatest,
+  lastFinished,
+} from "../planning/agent-tab-card";
 import {
   agentStateWords,
   agentStillWriting,
@@ -42,6 +48,7 @@ import {
   type AddEntry,
   AddTabButton,
   DoorsTab,
+  type HeldTranscripts,
   type TabDoors,
   type TabLook,
   type TabViews,
@@ -106,7 +113,7 @@ const NEW_AGENT_ROW = "new-coding-agent";
 const NEW_AGENT_STARTING = "Starting…";
 
 /** What the plan's Inbox tab is called. */
-const INBOX_LABEL = "Inbox";
+export const INBOX_LABEL = "Inbox";
 
 /** The row that opens the plan's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
@@ -213,6 +220,39 @@ interface DrawnTab {
 }
 
 /**
+ * What an agent's card says, read from what its tab last held as the card
+ * is hung (`heldLatest`): where it stands and when it last moved, its pair,
+ * and its latest step. Its tab's card and its row's in the plan's summary
+ * both say it, `chosen` telling whether its tab is the one shown, whose
+ * transcript follows the run. Note that an agent with no turn finished in
+ * what its tab holds last moved when its newest run began, the latest
+ * moment its summary knows.
+ */
+export function agentCardReading(
+  agent: CodingAgentSummary,
+  label: string,
+  held: HeldTranscripts,
+  chosen: boolean,
+): () => CardReading {
+  return () => {
+    const writing = agentStillWriting(agent.status);
+    const now = { writing, runStartedAt: agent.runStartedAt };
+    const messages = heldLatest(held.agents.get(agent.id), now, chosen);
+    const movedAt = lastFinished(messages) ?? agent.runStartedAt ?? agent.createdAt;
+    return {
+      corner: cardCorner({
+        writing,
+        startedAt: agent.runStartedAt,
+        movedAt,
+        state: agentStateWords(agent.status),
+      }),
+      choice: { model: agent.model, effort: agent.effort },
+      transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
+    };
+  };
+}
+
+/**
  * The agents' tabs and the draft's, in the order started, each closing
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
@@ -239,24 +279,7 @@ function agentTabs(input: {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
     const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
-    // Note that an agent with no turn finished in what its tab holds last
-    // moved when its newest run began, the latest moment its summary knows.
-    const readCard = () => {
-      const writing = agentStillWriting(agent.status);
-      const now = { writing, runStartedAt: agent.runStartedAt };
-      const messages = heldLatest(views.held.agents.get(agent.id), now, chosen(tab));
-      const movedAt = lastFinished(messages) ?? agent.runStartedAt ?? agent.createdAt;
-      return {
-        corner: cardCorner({
-          writing,
-          startedAt: agent.runStartedAt,
-          movedAt,
-          state: agentStateWords(agent.status),
-        }),
-        choice: { model: agent.model, effort: agent.effort },
-        transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
-      };
-    };
+    const readCard = agentCardReading(agent, label, views.held, chosen(tab));
     return {
       tab,
       agent,

@@ -409,6 +409,45 @@ test("the Inbox leads Tabs while the plan holds an inbox item or its tab is open
   assert.equal(rowNamed(summaryOf(empty), "Inbox").textContent, "Inbox");
 });
 
+test("the summary's rows hang the cards the rest of the window hangs for the same thing: an agent's its tab's card, a worker's its tab's, a file's its path and Luke's note, the Inbox's what waits; the panel's kinds hang none", async () => {
+  const noted: PlansControl["shownCode"] = [
+    { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+    {
+      callId: "show-2",
+      turnId: "turn-1",
+      shownAt: 2,
+      code: { ...CODE, note: "Where an invite is accepted." },
+    },
+  ];
+  const items = [
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000001"),
+    { ...waitingItem("a1b2c3d4-0000-4000-8000-000000000002"), title: "Which roles may invite?" },
+  ];
+  const page = mount(false, noted, false, false, [], items);
+  await settle();
+  const summary = summaryOf(page);
+  const cardOf = (label: string) => {
+    hover(rowNamed(summary, label));
+    return document.querySelector<HTMLElement>('.tooltip-card[role="tooltip"]');
+  };
+
+  assert.equal(hover(rowNamed(summary, "Board")), undefined, "a kind's name says all there is");
+
+  const agent = cardOf(AGENT.title ?? "");
+  assert.ok(agent?.querySelector("[data-tab-card]"), "the agent's tab's card");
+  assert.ok(agent?.textContent?.startsWith(`${AGENT.title}Opus 5.5 High`));
+  assert.ok(agent?.textContent?.includes("Working"));
+
+  const worker = cardOf(JOB);
+  assert.ok(worker?.querySelector("[data-tab-card]"), "the worker's tab's card");
+  assert.ok(worker?.textContent?.startsWith(JOB));
+  assert.ok(worker?.textContent?.includes("Working"));
+
+  assert.equal(cardOf("invite.ts")?.textContent, "src/invite.tsWhere an invite is accepted.");
+
+  assert.equal(cardOf("Inbox")?.textContent, "Inbox2 waitingWhich roles may invite?");
+});
+
 test("a failed agent's row keeps its harness's mark and says Failed in a mark at its end, to a reader and in its hint, where a working agent's row ends on its label", () => {
   const endOf = (row: HTMLElement) => {
     const end = row.lastElementChild;
@@ -729,6 +768,22 @@ test("the card's own chevron collapses it back to the rail", () => {
   assert.equal(modeOf(page), "rail");
   assert.equal(chevron.getAttribute("aria-expanded"), "false");
   assert.ok(document.activeElement === chevron, "the rail's chevron takes the focus");
+});
+
+test("a press on the hover card a row of the summary's card hangs leaves the summary's card standing", () => {
+  const page = mount();
+  layOutColumn(900);
+  act(() => summaryButton(page).click());
+  const summary = card();
+  assert.ok(summary, "the card hangs");
+
+  hover(rowNamed(summary, AGENT.title ?? ""));
+  const rowCard = document.querySelector('.tooltip-card[role="tooltip"]');
+  assert.ok(rowCard, "the agent's row hangs its card");
+  act(() => {
+    rowCard.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+  });
+  assert.ok(card(), "the summary's card stands");
 });
 
 test("a press in the column takes the card down and still lands where it was pressed", () => {

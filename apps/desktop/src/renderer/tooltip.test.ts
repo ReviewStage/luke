@@ -418,6 +418,35 @@ test("a card hung beside its control stands past the control's end, level with i
   assert.equal(pill()?.style.top, `${window.innerHeight - 200 - 6}px`);
 });
 
+test("a card hung beside a control at the window's right edge turns to stand before the control's start, never over it", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => {
+    root?.render(
+      createElement(Tooltip, {
+        label: "Invite flow",
+        card: createElement("p", null, "Invite flow"),
+        cardBeside: true,
+        children: button({}, "Invite flow"),
+      }),
+    );
+  });
+  const left = window.innerWidth - 240;
+  vi.spyOn(control("Invite flow"), "getBoundingClientRect").mockReturnValue(
+    new DOMRect(left, 100, 232, 28),
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "tooltip" ? 280 : 0;
+  });
+
+  hover("Invite flow");
+  assert.equal(pill()?.dataset.side, "start");
+  assert.equal(pill()?.style.left, `${left - 6 - 280}px`);
+  assert.equal(pill()?.style.top, "100px");
+});
+
 it.effect(
   "a card stays while the pointer crosses from its control onto it, and goes a moment after the pointer leaves it",
   () =>

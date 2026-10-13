@@ -29,6 +29,7 @@ import { FindScope } from "../find-in-tab";
 import { AgentGlyph, AgentMark, AgentSubagentTab, SubagentMark } from "../planning/agent-tab";
 import {
   AgentTabCard,
+  type CardReading,
   cardCorner,
   delegatedChoice,
   heldLatest,
@@ -385,19 +386,7 @@ function stripTabs(input: {
         : (delegated?.model ?? parent?.model);
     // A worker runs one turn, so the run its tab last read is its run for good.
     const readCard = () => {
-      if (delegation === undefined) {
-        const session = worker?.session;
-        return {
-          corner: cardCorner({
-            writing: running,
-            startedAt: session?.startedAt,
-            movedAt: session?.endedAt,
-            state: stateWords,
-          }),
-          choice: worker && workerChoice(worker),
-          transcript: worker && workerTranscript(worker),
-        };
-      }
+      if (delegation === undefined) return workerCardReading(worker);
       const drawn = held.workers.get(tab.subagent);
       const now = { writing: running, runStartedAt: drawn?.runStartedAt };
       const messages = heldLatest(drawn, now, chosen(tab));
@@ -623,6 +612,30 @@ function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | 
   }
   const stopped = worker.call.state === PLAN_WORK_STATE.FAILED;
   return { state: GLYPH_STATE.REST, stateWords: stopped ? "Stopped" : undefined };
+}
+
+/**
+ * What a planning worker's card says: where it stands and when it last
+ * moved, the model it ran on, and its latest step, from the session the
+ * plan's work holds. Its tab's card and its row's in the plan's summary both
+ * say it. A worker the work no longer holds says nothing, as its tab is
+ * then not drawn (`drawnSubagents`).
+ */
+export function workerCardReading(worker: WorkWorkerBlock | undefined): CardReading {
+  const { state, stateWords } =
+    worker === undefined
+      ? { state: GLYPH_STATE.REST, stateWords: undefined }
+      : workerStanding(worker);
+  return {
+    corner: cardCorner({
+      writing: state === GLYPH_STATE.WORKING,
+      startedAt: worker?.session?.startedAt,
+      movedAt: worker?.session?.endedAt,
+      state: stateWords,
+    }),
+    choice: worker && workerChoice(worker),
+    transcript: worker && workerTranscript(worker),
+  };
 }
 
 /** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
