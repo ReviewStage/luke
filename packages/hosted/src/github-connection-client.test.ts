@@ -67,3 +67,7 @@ it.effect("a refusal or a malformed answer is unanswered rather than a connectio
     assert.deepEqual(yield* Effect.provide(client().status(), malformed.layer), unanswered);
   }),
 );
+
+it("names the disconnect page on the service's own origin", () => {
+  assert.equal(client().disconnectUrl(), "https://tryluke.dev/connect-github.html?disconnect=1");
+});

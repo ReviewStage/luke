@@ -4,6 +4,7 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
+  GITHUB_CONNECT_PAGE,
   type GitHubConnectAnswer,
   type GitHubConnection,
   githubConnectAnswerSchema,
@@ -57,8 +58,10 @@ export interface HostedGitHubConnectionClientOptions extends AccountToken {
 
 export class HostedGitHubConnectionClient {
   readonly #call: AccountCallEffects;
+  readonly #serviceBaseUrl: string;
 
   constructor(options: HostedGitHubConnectionClientOptions) {
+    this.#serviceBaseUrl = options.serviceBaseUrl;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
@@ -90,5 +93,16 @@ export class HostedGitHubConnectionClient {
       { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_CONNECTION },
       githubConnectionAnswerSchema,
     );
+  }
+
+  /**
+   * The page that disconnects the account's GitHub, on the browser's own
+   * session: asking the service nothing, since unlinking is Better Auth's
+   * `unlinkAccount` and needs that session rather than the bearer.
+   */
+  disconnectUrl(): string {
+    const url = new URL(GITHUB_CONNECT_PAGE.PATH, this.#serviceBaseUrl);
+    url.searchParams.set(GITHUB_CONNECT_PAGE.DISCONNECT_PARAM, GITHUB_CONNECT_PAGE.FLAG);
+    return url.toString();
   }
 }
