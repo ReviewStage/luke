@@ -58,6 +58,30 @@ const LANDING_CARD = {
     title: "Luke could not reach GitHub",
     body: "Return to Luke and try again in a moment.",
   },
+  [GITHUB_INSTALL_STATUS.CONNECTED]: {
+    badge: "Connected",
+    settled: true,
+    title: "The GitHub organization is connected to your workspace",
+    body: "Its repositories are available to everyone in the workspace. Return to Luke. You can close this tab.",
+  },
+  [GITHUB_INSTALL_STATUS.ALREADY_CONNECTED]: {
+    badge: "Not connected",
+    settled: false,
+    title: "That GitHub organization is connected to another workspace",
+    body: "One GitHub organization connects to one workspace. Disconnect it there first, or choose another.",
+  },
+  [GITHUB_INSTALL_STATUS.EXPIRED]: {
+    badge: "Not connected",
+    settled: false,
+    title: "This connection link has expired",
+    body: "Return to Luke and choose Connect GitHub org again.",
+  },
+  [GITHUB_INSTALL_STATUS.GITHUB_SIGN_IN_REQUIRED]: {
+    badge: "Not connected",
+    settled: false,
+    title: "Luke could not confirm it with your GitHub account",
+    body: "Connect GitHub in Luke's Settings, then choose Connect GitHub org again.",
+  },
 } as const satisfies Readonly<Record<GitHubInstallStatus, LandingCard>>;
 
 function statusFromAddress(): GitHubInstallStatus {
