@@ -785,6 +785,13 @@
       "when": 1791908483262,
       "tag": "20261013162123_github_installation",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1791919859480,
+      "tag": "20261013193059_github_install_intent",
+      "breakpoints": true
     }
   ]
 }

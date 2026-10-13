@@ -8,6 +8,7 @@ import { test } from "vitest";
 import { GitHubApp, type GitHubAppSettings } from "../server/github/github-app.js";
 import { githubInstallApp } from "../server/github-install-app.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
+import { noDatabase } from "./support/no-database.js";
 
 /**
  * The install group over the real `GitHubApp` with GitHub a fake behind the
@@ -68,6 +69,7 @@ function answer(
         Layer.mergeAll(
           github.layer,
           GitHubApp.layer(configured ? SETTINGS : undefined, ["GITHUB_APP_SLUG"]),
+          noDatabase,
         ),
       ),
     ),
