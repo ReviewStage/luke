@@ -635,3 +635,29 @@ test("a part says what its wire read its call as, and one naming a kind this bui
   assert.equal(unknown.said, undefined);
   assert.equal(coding.said, undefined);
 });
+
+test("a planning transcript's raw parts read as the agent tab reads them: eve's own worker call is a delegation, and a start names the agent it began once it answered one", () => {
+  const [worker, started] = agentParts({
+    id: "turn-raw",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      {
+        type: "tool-worker",
+        toolCallId: "w",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: { message: "Compare the queues." },
+        output: "Started task worker-ha1bbn.",
+      },
+      {
+        type: "tool-start_coding_agent",
+        toolCallId: "s",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: { task: "Fix the invite emails." },
+        output: { status: "accepted", agent: { id: "agent-9" } },
+      },
+    ],
+  });
+  assert.ok(worker?.kind === AGENT_PART.TOOL && started?.kind === AGENT_PART.TOOL);
+  assert.equal(delegates(worker), true);
+  assert.equal(startedAgentOf(started), "agent-9");
+});

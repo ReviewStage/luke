@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   type CodingAgentMessage,
   TURN_ENDING,
@@ -15,7 +16,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { AGENT_TOOL, cardTitle } from "./tool-call-model";
+import { cardTitle } from "./tool-call-model";
 import {
   CALL_KIND,
   CALL_WORDS,

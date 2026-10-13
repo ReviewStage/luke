@@ -7,6 +7,7 @@
     ".": "./src/index.js",
     "./account-inbox-wire": "./src/account-inbox-wire.js",
     "./board-text": "./src/board-text.js",
+    "./agent-tools": "./src/agent-tools.js",
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",
     "./coding-agent-view": "./src/coding-agent-view.js",
