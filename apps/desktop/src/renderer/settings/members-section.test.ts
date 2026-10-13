@@ -46,14 +46,14 @@ const ACME: Workspace = {
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  github: null,
 };
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Personal",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
-  active: true,
+  github: null,
 };
 
 /** The members the test's service holds. */
@@ -84,6 +84,7 @@ function answer(request: Act): Promise<ActOutcome> {
       stored = stored.filter((member) => member.userId !== request.payload.userId);
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_LEAVE:
+    case ACT_KIND.WORKSPACE_GITHUB_DISCONNECT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -113,13 +114,16 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The section over `workspace`, keeping how often it asked to fall back. */
+/** The section over `workspace`, keeping how often it asked to fall back and to connect GitHub. */
 async function mount(workspace: Workspace | undefined) {
-  const pressed = { left: 0 };
+  const pressed = { left: 0, connected: 0 };
   const control: WorkspaceSettingsControl = {
     workspace,
     onLeft: () => {
       pressed.left += 1;
+    },
+    onConnectGitHub: () => {
+      pressed.connected += 1;
     },
   };
   const container = document.createElement("div");
@@ -229,4 +233,35 @@ test("the personal workspace, having no team, draws no section and reads nothing
 
   assert.deepEqual(sent, []);
   assert.equal(page.textContent, "");
+});
+
+test("an admin sees the team's GitHub organization and disconnects it after confirming", async () => {
+  const { page } = await mount({
+    ...ACME,
+    role: WORKSPACE_ROLE.ADMIN,
+    github: { login: "acme", active: true },
+  });
+  const row = page.querySelector(".workspace-github") ?? assert.fail("no GitHub row");
+
+  act(() => button(row, "Disconnect").click());
+  const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT);
+  await confirm("Disconnect");
+
+  assert.equal(row.querySelector("strong")?.textContent, "GitHub: acme");
+  assert.equal(askedFirst, true);
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id }],
+  );
+});
+
+test("an owner of a workspace with no GitHub organization is offered Connect, and a member sees no GitHub row", async () => {
+  const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  act(() => button(owner.page, "Connect GitHub org…").click());
+  const member = await mount({ ...ACME, github: { login: "acme", active: true } });
+
+  assert.equal(owner.pressed.connected, 1);
+  assert.equal(member.page.querySelector(".workspace-github"), null);
 });

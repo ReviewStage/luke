@@ -504,6 +504,7 @@ export function App(): React.JSX.Element {
             workspace: {
               workspace: plans.workspace,
               onLeft: plans.onLeftWorkspace,
+              onConnectGitHub: plans.onConnectGitHub,
             },
           }}
         />

@@ -175,6 +175,12 @@ export interface PlansControl {
   onChooseWorkspace: (workspaceId: string) => void;
   /** Lists the personal workspace again, once the one listed is left. */
   onLeftWorkspace: () => void;
+  /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
+  onCreateWorkspace: (name: string) => Promise<string | undefined>;
+  /** Opens the service's invite page for the listed workspace in the browser, or says in a toast why not. */
+  onInviteToWorkspace: () => void;
+  /** Opens GitHub to connect an organization to the listed workspace, or says in a toast why not. */
+  onConnectGitHub: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -995,6 +1001,32 @@ export function usePlansTab(input: {
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A fixture's workspaces are made, shared, and connected nowhere. A
+  // workspace made is listed at once, main's view holding it after; the
+  // invite and the connect open the browser, and a refusal of either says
+  // why in a toast, since the menu that asked has closed.
+  const createWorkspace = (name: string): Promise<string | undefined> => {
+    if (fixture !== undefined) return Promise.resolve(undefined);
+    return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
+      (created) => {
+        workspace.choose(created.id);
+        return undefined;
+      },
+      (refused: Error) => refused.message,
+    );
+  };
+  const refusedInToast = (refused: Error) =>
+    toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+  const inviteToWorkspace = () => {
+    if (fixture !== undefined || listedWorkspace === undefined) return;
+    act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: listedWorkspace.id }).catch(refusedInToast);
+  };
+  const connectGitHub = () => {
+    if (fixture !== undefined || listedWorkspace === undefined) return;
+    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: listedWorkspace.id }).catch(
+      refusedInToast,
+    );
+  };
 
   // A fixture's plans are given no repository, as they are read from nowhere.
   const setRepository = (
@@ -1154,6 +1186,9 @@ export function usePlansTab(input: {
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
     onChooseWorkspace: workspace.choose,
+    onCreateWorkspace: createWorkspace,
+    onInviteToWorkspace: inviteToWorkspace,
+    onConnectGitHub: connectGitHub,
     onLeftWorkspace: () => {
       const personal = viewed.workspaces.find((each) => each.personal);
       if (personal !== undefined) workspace.choose(personal.id);

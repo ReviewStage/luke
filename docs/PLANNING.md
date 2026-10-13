@@ -142,13 +142,16 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
 - A workspace is the account's personal plans or a team's shared plans. A
   signed-in account sees the list headed by the workspace it lists, the
   personal one until another is chosen. Its menu lists every workspace the
-  account is a member of, the listed one checked, then, for a team's
-  workspace, "Members…", which opens Settings on that workspace's members
+  account is a member of, the listed one checked, then "New workspace…",
+  which asks a name and lists the workspace made. For a team's workspace it
+  adds "Invite people…", which opens the service's invite page in the
+  browser, "Members…", which opens Settings on that workspace's members
   (`settings/members-section.tsx`), where an owner or admin removes a member
-  and anyone but an owner leaves. The list, Pinned, Archived, and the
-  command palette hold the chosen workspace's plans alone, New plan starts in
-  it, the repository chip lists its repositories, and the choice is
-  remembered on this Mac.
+  and anyone but an owner leaves, and, for an owner or admin, "Connect
+  GitHub org…" or the connected organization's login, disconnected in
+  Settings. The list, Pinned, Archived, and the command palette hold the
+  chosen workspace's plans alone, New plan starts in it, the repository chip
+  lists its repositories, and the choice is remembered on this Mac.
 - Clicking a row opens that plan on the document page (see "Leaving and
   resuming").
 - `New plan` at the head of the list leaves any open plan for the new-plan
@@ -1200,7 +1203,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace's members read and removed, and one left (`workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace made, its invite page opened, its GitHub organization connected and disconnected, its members read and removed, and one left (`workspace.create`, `workspace.invite`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/hosted/src/plan-markdown.ts`). |

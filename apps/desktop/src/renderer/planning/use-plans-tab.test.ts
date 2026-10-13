@@ -1257,14 +1257,14 @@ const PERSONAL = {
   name: "Personal",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
-  active: true,
+  github: null,
 };
 const ACME = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  github: null,
 };
 
 /** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
@@ -1285,6 +1285,9 @@ const TWO_WORKSPACES: PlanningView = {
 const readWorkspaceNamed = Schema.decodeUnknownOption(
   Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
 );
+
+/** A create's payload, read back as the act's own schema admits it. */
+const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
@@ -1414,6 +1417,81 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
     ACME.id,
     PLAN.workspaceId,
   ]);
+});
+
+const PLATFORM = {
+  id: "workspace-platform",
+  name: "Platform",
+  personal: false,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+
+test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
+  let refuse = false;
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.WORKSPACE_CREATE]: () =>
+        refuse
+          ? Promise.reject(new Error("Could not make that workspace on this system."))
+          : Promise.resolve(PLATFORM),
+    },
+  );
+
+  const made = await tab.control().onCreateWorkspace("Platform");
+  await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } });
+  refuse = true;
+  const refused = await tab.control().onCreateWorkspace("Platform");
+
+  assert.equal(made, undefined);
+  assert.equal(refused, "Could not make that workspace on this system.");
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_CREATE)
+      .map((asked) => Option.getOrUndefined(readCreate(asked.payload))?.name),
+    ["Platform", "Platform"],
+  );
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+});
+
+test("Invite people and Connect GitHub org name the listed workspace, a refusal says why in a toast, and a fixture asks nothing", async () => {
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.WORKSPACE_INVITE]: () => Promise.resolve(undefined),
+      [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: () =>
+        Promise.reject(new Error("Could not connect GitHub to that workspace on this system.")),
+    },
+  );
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().onInviteToWorkspace());
+  act(() => tab.control().onConnectGitHub());
+  await settle();
+  act(() => fixture.control().onInviteToWorkspace());
+  act(() => fixture.control().onConnectGitHub());
+
+  assert.deepEqual(
+    tab.payloads
+      .filter(
+        (asked) =>
+          asked.kind === ACT_KIND.WORKSPACE_INVITE ||
+          asked.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT,
+      )
+      .map((asked) => [
+        asked.kind,
+        Option.getOrUndefined(readWorkspaceNamed(asked.payload))?.workspaceId,
+      ]),
+    [
+      [ACT_KIND.WORKSPACE_INVITE, ACME.id],
+      [ACT_KIND.WORKSPACE_GITHUB_CONNECT, ACME.id],
+    ],
+  );
+  assert.equal(toast(), "Could not connect GitHub to that workspace on this system.");
+  assert.deepEqual(fixture.told, []);
 });
 
 test("a workspace left lists the personal one again", () => {

@@ -717,14 +717,14 @@ const ACROSS_WORKSPACES: PlanningView = {
       name: "Personal",
       personal: true,
       role: WORKSPACE_ROLE.OWNER,
-      active: true,
+      github: null,
     },
     {
       id: "workspace-acme",
       name: "acme",
       personal: false,
       role: WORKSPACE_ROLE.MEMBER,
-      active: true,
+      github: null,
     },
   ],
   plans: [
