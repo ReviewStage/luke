@@ -49,8 +49,12 @@
   /* A button held down: a step past its hover, so the press is seen. */
   --pressed: rgba(255, 255, 255, 0.26);
   /* The keyboard's ring around whatever control it is on, in the system's
-     own default accent. */
+     own default accent, and how thick it is and how far it stands off the
+     control's edge. A control that clips what it holds sets the offset to
+     less the width, so the ring is drawn inside it. */
   --focus-ring: var(--message-sent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
   --hairline: rgba(255, 255, 255, 0.08);
   /* The edge of what floats over the window, a menu or a dialog, and the one
      an edge brightens to while it is taking a chord. */
@@ -300,6 +304,43 @@
     background: none;
     color: inherit;
     font: inherit;
+  }
+
+  /* One ring for every control. `:focus-visible` alone guesses wrong in a
+     window Luke focuses for itself and rings a button after a plain press,
+     so until the keyboard has actually moved focus (`keyboard-modality.ts`)
+     nothing but a field rings. In the base layer, so a sheet's own rule for
+     a control still wins: a menu row marks its focus with a fill, and says
+     so where it is drawn. */
+  :is(
+    button,
+    a[href],
+    summary,
+    input[type="checkbox"],
+    [role="button"],
+    [role="tab"],
+    [role="switch"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"]
+  ):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  :root:not([data-keyboard="true"])
+    :focus-visible:not(textarea, [contenteditable], input:not([type="checkbox"])) {
+    outline: none; /* no ring: a press moved focus, not the keyboard */
+  }
+
+  /* A field holding the caret wears the same ring however the caret got
+     there, centred on its own edge the way a macOS text field takes the
+     keyboard. A field that sits borderless in a well of its own, a search's
+     or a composer's, rings the well instead (`.field-well`). */
+  :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
+  .field-well:has(:is(textarea, [contenteditable], input):focus-visible) {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: calc(var(--focus-ring-width) / -2);
   }
 }
 

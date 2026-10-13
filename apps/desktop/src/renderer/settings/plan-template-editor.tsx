@@ -84,7 +84,7 @@ export function PlanTemplateEditor(props: PlanTemplateEditorProps): React.JSX.El
   return (
     // biome-ignore lint/a11y/useSemanticElements: the box holds an editor, not a form's controls, so it is no `<fieldset>`.
     <div
-      className="plan-template-editor"
+      className="plan-template-editor field-well"
       role="group"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) onLeave();

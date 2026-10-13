@@ -49,7 +49,7 @@ export function PlanHeader({ className, children, ...props }: PlanHeaderProps): 
   return (
     <FoldSummary
       className={cn(
-        "flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:-outline-offset-2",
+        "flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]",
         className,
       )}
       {...props}

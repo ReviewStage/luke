@@ -202,7 +202,7 @@ function FindBar({
   const line = tallyLine(query, tally);
   return (
     <search className="find-bar" aria-label="Find" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-      <label className="settings-search-well find-bar-well">
+      <label className="settings-search-well field-well find-bar-well">
         <SearchIcon />
         <input
           ref={field}

@@ -355,12 +355,6 @@
   color: var(--text-tertiary);
 }
 
-/* The ring the input draws, because this is the same kind of landing place. */
-.settings-picker .settings-picker-chip:focus-visible {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  outline: none;
-}
-
 .settings-picker .settings-picker-chip:disabled {
   opacity: 0.4;
 }
@@ -628,9 +622,7 @@
 }
 
 .settings-input:focus {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
   background: var(--input-fill-focus);
-  outline: none;
 }
 
 .settings-input:disabled {
@@ -724,9 +716,7 @@
 }
 
 .plan-template-input:focus {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
   background: var(--input-fill-focus);
-  outline: none;
 }
 
 /* The template in the plan's own editor, in the box the plain one stands in,
@@ -741,7 +731,6 @@
 }
 
 .plan-template-editor:focus-within {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
   background: var(--input-fill-focus);
 }
 
@@ -814,7 +803,7 @@
    being typed into is, and saying what to do: nobody has to guess the next
    keystroke is being listened for. */
 .shortcut-state[data-recording="true"] {
-  border-color: var(--focus-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 25%, transparent);
   color: var(--text-primary);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
 }

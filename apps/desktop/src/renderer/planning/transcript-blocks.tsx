@@ -384,7 +384,7 @@ export function TranscriptTodosDock({
       data-todos-dock=""
       aria-label="To-dos"
     >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:-outline-offset-2">
+      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]">
         <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="shrink-0 text-muted-foreground">{summary}</span>
         {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}

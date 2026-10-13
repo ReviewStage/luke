@@ -17,8 +17,8 @@ import { cn } from "./utils";
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
  * restyled to the card the New Plan page established, on the corner and the
  * hairline the window's menus and cards share: one card on the sidebar's
- * ground, its edge brightening to the selected one while the card holds
- * focus, and nothing drawn behind it, so no shadow darkens the page or the
+ * ground, ringed as every field is while its textarea holds the caret
+ * (base.css), and nothing drawn behind it, so no shadow darkens the page or the
  * transcript around the card. The textarea
  * sizing itself to its words from one line to about eight and scrolling
  * past that, and under it a footer with whatever the owner puts at its
@@ -89,7 +89,7 @@ export function PromptInput({
     <form
       className={cn(
         COMPOSER_TYPE.DEFAULT,
-        "flex w-full flex-col rounded-xl border border-border bg-card transition-colors focus-within:border-selected-edge",
+        "field-well flex w-full flex-col rounded-xl border border-border bg-card",
         className,
       )}
       onSubmit={handleSubmit}

@@ -510,7 +510,6 @@ body,
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  outline: none;
 }
 
 /* A row's first line: the plan's name, cut short where it must, and how long
@@ -618,9 +617,9 @@ body,
   opacity: 0.45;
 }
 
+/* The sidebar clips at its edges, so its rows' rings are drawn inside them. */
 .sidebar-plan-mark:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px; /* off-scale */
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .sidebar-plan-mark svg {
@@ -697,8 +696,7 @@ body,
 }
 
 .sidebar-repository-toggle:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px; /* off-scale */
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .sidebar-repository-name {
@@ -821,8 +819,7 @@ body,
 }
 
 .sidebar-repository-action:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px; /* off-scale */
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .sidebar-repository-action svg {
@@ -1210,11 +1207,6 @@ body,
   opacity: 0.45;
 }
 
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 /* A small act beside a line of words, a failure's retry
    (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
    the muted voice of the words it follows, lit like any other on hover, and
@@ -1323,7 +1315,7 @@ body,
 
 .plan-menu-item:hover,
 .plan-menu-item:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the row's fill marks it */
   background: var(--raised-strong);
 }
 
@@ -1821,11 +1813,6 @@ body,
   opacity: 0.7;
 }
 
-.call-end:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 /* The new-plan page -------------------------------------------------------- */
 
 /* The window's home, drawn as a devtool's new-task page: a heading over one
@@ -1942,7 +1929,7 @@ body,
   min-width: 0;
   height: 100%;
   border: 0;
-  outline: none;
+  outline: none; /* no ring: a menu's filter, which always holds the caret */
   background: none;
   color: var(--text-primary);
   font: inherit;
@@ -1965,7 +1952,7 @@ body,
 }
 
 .plan-compose-menu-list:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the highlighted row marks it */
 }
 
 .plan-compose-menu-foot {
@@ -2204,7 +2191,7 @@ body,
 .plan-compose-menu-row:hover,
 .plan-compose-menu-row:focus-visible {
   background: var(--raised-strong);
-  outline: none;
+  outline: none; /* no ring: the row's fill marks it */
 }
 
 .plan-compose-menu-name {
@@ -2328,10 +2315,6 @@ body,
   transition: border-color var(--duration-hover) ease;
 }
 
-.settings-search-well:focus-within {
-  border-color: var(--selected-edge);
-}
-
 .settings-search-well .search-glyph {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -2348,7 +2331,7 @@ body,
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  outline: none;
+  outline: none; /* no ring: its well rings */
 }
 
 .settings-search-input::placeholder {
@@ -2496,11 +2479,9 @@ body,
 
 /* Note that the ring is restated at the zoom it is drawn under, because the
    engine rounds an outline's width at the control's own zoom and would draw
-   the 2px ring a pixel thin. */
-.settings-page-scroll
-  .settings
-  :is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
-  outline-width: calc(2px * var(--settings-zoom));
+   the ring a pixel thin. */
+.settings-page-scroll .settings :focus-visible {
+  outline-width: calc(var(--focus-ring-width) * var(--settings-zoom));
 }
 
 /* The list on the left is the way between pages and the toolbar names the
@@ -2959,7 +2940,7 @@ body,
   border-radius: 12px;
   background: var(--surface-overlay);
   box-shadow: 0 16px 40px var(--shadow);
-  outline: none;
+  outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
   animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
 }
@@ -3274,7 +3255,7 @@ body,
   bottom: 0;
   width: 6px;
   cursor: col-resize;
-  outline: none;
+  outline: none; /* no ring: the edge fills in the focus colour */
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
@@ -3761,7 +3742,7 @@ body,
   background: none;
   color: inherit;
   font: inherit;
-  outline: none;
+  outline: none; /* no ring: its tab rings */
 }
 
 /* The × keeps none of a button's own padding, which would leave its glyph
@@ -3924,7 +3905,7 @@ body,
 }
 
 .confirm-dialog:focus {
-  outline: none;
+  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .confirm-dialog-title {
@@ -4010,7 +3991,7 @@ body,
 
 .command-palette:focus,
 .command-palette [cmdk-root]:focus {
-  outline: none;
+  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .command-palette [cmdk-root] {
@@ -4041,7 +4022,7 @@ body,
   min-width: 0;
   height: 100%;
   border: 0;
-  outline: none;
+  outline: none; /* no ring: a menu's filter, which always holds the caret */
   background: none;
   color: var(--text-primary);
   font: inherit;
@@ -4098,7 +4079,7 @@ body,
 }
 
 .command-palette-list:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the highlighted row marks it */
 }
 
 .command-palette [cmdk-group-heading] {
@@ -4304,11 +4285,6 @@ body,
 
 .feedback-dialog-message::placeholder {
   color: var(--text-tertiary);
-}
-
-.feedback-dialog-message:focus {
-  border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
-  outline: none;
 }
 
 .feedback-dialog-images {

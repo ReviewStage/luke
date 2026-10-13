@@ -147,6 +147,18 @@ says why where it is drawn: the call bar's round mutes, its solid End call
 disc, and its start pill, the new-plan composer's round start, and a tab's ×,
 which brightens without a fill.
 
+The keyboard's ring is one rule in `base.css`. Every button, link, tab,
+switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,
+`--focus-ring-offset` off its edge, and only once the keyboard has moved focus
+(`keyboard-modality.ts`), so a press never rings a control. One that clips what
+it holds sets the offset to less the width, so the ring is drawn inside it. A
+field holding the caret wears the same ring centred on its edge however the
+caret arrived, and a field set borderless in a well, a search's or the
+composer's, rings the well (`.field-well`). A rule that takes the ring away
+marks it `/* no ring: … */` with what shows focus instead; menus mark a row
+with its fill. `check-design-contract.mjs` refuses an unmarked one, and a ring
+drawn off the tokens.
+
 ## The keys Luke takes from the machine
 
 A key Luke registers takes its chord away from every other app on the Mac, so
