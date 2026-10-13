@@ -339,25 +339,6 @@ test("a stored account that signed in with Google still loads", async (t) => {
 });
 
 /**
- * A file as a build that kept provider keys, calendar grants, the vault's
- * account, and preferences this build draws no row for wrote it.
- */
-const EARLIER_BUILD_FIELDS = {
-  apiKeys: { conductor: sealed("conductor-key") },
-  calendarAccounts: [
-    { id: "dev@example.com", token: sealed("1//grant"), calendars: ["dev@example.com"] },
-  ],
-  appleCalendar: { calendars: ["home"] },
-  vaultSyncAccount: "developer@example.com",
-  announceSessions: false,
-  quietDuringMeetings: false,
-  showOnAllDisplays: true,
-  showInDock: true,
-  formFactor: "bubble",
-  sessionFilters: ["waiting"],
-} as const satisfies WireRecord;
-
-/**
  * The store's own face, yielded rather than awaited: what every caller above
  * reads through one run apiece is one fiber here, and a write and the read
  * after it settle in the order the effects are sequenced in.

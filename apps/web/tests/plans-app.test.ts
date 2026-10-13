@@ -20,6 +20,7 @@ import {
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
 } from "@sidecar/hosted/coding-agent-wire";
+import { catalogIdOf } from "@sidecar/hosted/model-label";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
@@ -799,7 +800,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
               endedAt: 2_060_000,
               ending: VOICE_CLOSE_REASON.CONNECTION_LOST,
               usage: { seconds: 60, confirmed: false },
-              model: LIVE_DEFAULTS.MODEL,
+              model: catalogIdOf(LIVE_DEFAULTS.MODEL),
             },
           ],
           earlierOmitted: false,

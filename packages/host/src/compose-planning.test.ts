@@ -13,10 +13,7 @@ import {
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted";
-import {
-  BOARD_ELEMENT_TYPE,
-} from "@sidecar/hosted/board-vocabulary";
-import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
+import type { Board } from "@sidecar/hosted/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
@@ -30,7 +27,6 @@ import {
 import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import type { PageLine, PageVersion } from "@sidecar/hosted/page-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
-import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_ACTOR,
   type Plan,
@@ -43,7 +39,6 @@ import {
   type PlanTreeAnswer,
   type RepositoryPin,
 } from "@sidecar/hosted/plan-wire";
-import type { PlanShownCode } from "@sidecar/hosted/planning-view";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -1130,64 +1125,6 @@ it.effect("the repository chip's read names the workspace it is for to the servi
     assert.deepEqual(service.reads, [`repositories:${ACME.id}`, "repositories"]);
   }),
 );
-
-/** A box as the canvas holds one. */
-function box(id: string): BoardElement {
-  return { id, type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 };
-}
-
-/** Luke's drawing of one box, as the service holds it under its number. */
-function drawing(number: number) {
-  return {
-    number,
-    elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
-  };
-}
-
-/** Code as the service sends it on the call about the open plan. */
-function shownCode(ref: ShownCode["ref"]): ShownCode {
-  return {
-    ref,
-    repository: "acme/relay",
-    firstLine: 1,
-    lineCount: 3,
-    lines: ["export function acceptInvite(token: string) {", "  return token;", "}"],
-  };
-}
-
-/** One code shown on a plan, by the `show_code` call that showed it and its turn. */
-function shownOn(turnId: string, code: ShownCode, callId = `${turnId}-show`): PlanShownCode {
-  return { callId, turnId, shownAt: 0, code };
-}
-
-/** The open plan with its code loop running. */
-function openPlan(service: FakeService) {
-  return Effect.gen(function* () {
-    const opened = yield* subject(service);
-    yield* opened.call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-    yield* opened.planning.lifetime;
-    return opened;
-  });
-}
-
-/** Each code a view holds, as its call, path, and lines pointed at. */
-function shownPlaces(view: PlanningView | undefined) {
-  return (view?.shownCode ?? []).map(({ callId, code: { ref } }) => ({ callId, ...ref }));
-}
-
-/** A plan's transcript of one call on which the developer said `words`. */
-function transcriptSaying(words: string): PlanTranscript {
-  return {
-    calls: [
-      {
-        id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
-        startedAt: 1_000,
-        messages: [{ id: "0", role: "user", parts: [{ type: "text", text: words }] }],
-      },
-    ],
-    earlierOmitted: false,
-  };
-}
 
 it.effect(
   "opening a plan reads its conversation's newest page onto the view, and an idle one is not asked again",

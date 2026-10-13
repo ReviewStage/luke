@@ -6,7 +6,6 @@ import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
-  INBOX_BLOCK,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -62,17 +61,6 @@ const openAgentIn = Effect.gen(function* () {
 });
 
 const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
-
-const QUEUE: InboxPost = {
-  key: "invite-queue",
-  title: "Which queue sends the invitation emails?",
-  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "The repo already runs **Postgres**." }],
-  response: {
-    type: INBOX_RESPONSE.CHOICE,
-    options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
-    recommended: "Postgres outbox",
-  },
-};
 
 const SETTINGS: InboxPost = {
   key: "branch-protection",

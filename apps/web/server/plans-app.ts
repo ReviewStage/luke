@@ -58,7 +58,6 @@ import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
-import { installationOfWorkspace } from "./hosted/github-installations.js";
 import {
   CURSOR_START,
   cursorOfWire,
@@ -66,6 +65,7 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
+import { installationOfWorkspace } from "./hosted/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,

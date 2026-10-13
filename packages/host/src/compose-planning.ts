@@ -7,8 +7,8 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type {
-  HostedGitHubConnectionClient,
   HostedCodingAgentClient,
+  HostedGitHubConnectionClient,
   HostedPlanClient,
   HostedWorkspaceClient,
   PlanActivityFrame,

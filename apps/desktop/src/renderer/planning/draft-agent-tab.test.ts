@@ -156,7 +156,7 @@ async function answerSignIn(signedIn: boolean): Promise<void> {
 test("a Start GitHub refused offers the GitHub sign-in, and once it lands the message is sent again by itself", async () => {
   const tab = mount([SIGN_IN_REFUSAL, undefined]);
   await tab.send();
-  assert.match(tab.note() ?? "", /^Sign in with GitHub again to start an agent\./u);
+  assert.match(tab.note() ?? "", /^Connect GitHub in Settings to start an agent\./u);
   assert.equal(tab.button("Retry"), undefined, "Retry cannot mend it");
 
   await tab.press("Sign in with GitHub");
@@ -179,7 +179,7 @@ test("a GitHub sign-in withdrawn, or one that did not land, leaves the refusal w
   await tab.press("Sign in with GitHub");
   await tab.press("Cancel");
   assert.ok(sent.some((each) => each.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN));
-  assert.match(tab.note() ?? "", /^Sign in with GitHub again to start an agent\./u);
+  assert.match(tab.note() ?? "", /^Connect GitHub in Settings to start an agent\./u);
   assert.ok(tab.button("Sign in with GitHub"), "the press is offered again");
   // The withdrawn sign-in's own answer, arriving late, is spent.
   await answerSignIn(true);

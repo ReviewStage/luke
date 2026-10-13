@@ -98,20 +98,13 @@ interface WorkerCall {
 }
 
 /** The id of the parked turn's call, whose child conversation records the worker's session. */
-export const STARTING_WORKER_CALL = "call-delegate";
+const STARTING_WORKER_CALL = "call-delegate";
 
 /** The parked turn's call, which starts the worker's task. */
 const STARTING_CALL: WorkerCall = {
   callId: STARTING_WORKER_CALL,
   input: { message: "Compare the two queue libraries." },
   receipt: `Started task ${WORKER_TASK}. Its result will arrive in a <task_result> message.`,
-};
-
-/** The steered turn's call, which sends more work to the task the parked turn started. */
-const STEERING_CALL: WorkerCall = {
-  callId: "call-steer",
-  input: { message: "Also check whether either library batches.", taskId: WORKER_TASK },
-  receipt: `Sent to task ${WORKER_TASK}. Its reply will arrive in a <task_result> message.`,
 };
 
 /**

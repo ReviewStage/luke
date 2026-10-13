@@ -44,7 +44,6 @@ const GRACE = {
   email: "grace@luke.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
-const REQUEST = { name: "Teammate invitations", repository: "acme/relay" };
 const CONNECT_PAGE = "https://tryluke.dev/connect-github.html?intent=intent-1";
 const DISCONNECT_PAGE = "https://tryluke.dev/connect-github.html?disconnect=1";
 

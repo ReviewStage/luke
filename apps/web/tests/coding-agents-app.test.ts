@@ -358,23 +358,6 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/**
- * A forked ask driven to its answer, the clock moved a step at a time so
- * each wait it holds elapses, then joined. The steps are bounded, because
- * a step lands while a query of the ask's is still on its way, and an ask
- * that is meant to answer inside its hold must not have the hold stepped
- * out from under it: a bound under the hold leaves the join to the query.
- */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration, steps = 1_000) =>
-  Effect.gen(function* () {
-    for (let attempt = 0; attempt < steps; attempt += 1) {
-      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
-      yield* TestClock.adjust(step);
-      yield* Effect.yieldNow;
-    }
-    return yield* Fiber.join(fiber);
-  });
-
 /** The steps a read held while its agent starts is driven by: past its hold, and under the grace an agent with no turn reads as starting within. */
 const STARTING_READ_STEPS =
   Math.floor(
