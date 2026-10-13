@@ -1772,7 +1772,13 @@ the next sweep, unless the session started more than
 `VOICE_SESSION_LIMIT_MS` (60 minutes, OpenAI's own duration limit) ago, when it
 is closed as `expired`. The sweep answers how many it `closed`, how many were
 `lost`, how many stand `pending` for the next sweep, and how many `failed` a
-write. A deployment without the voice key sweeps nothing. Every connection
+write. Before it ends an orphan's call, the sweep stops each avatar session
+still open on it at LiveAvatar (a 404 there is a session already ended) and
+closes its row as `media_lost`, counted in `avatarsClosed`; a stop LiveAvatar
+refused or never answered within five seconds leaves the row open, counted in
+`avatarsLeftOpen`, for LiveAvatar's own cap to end. A deployment without
+`LIVEAVATAR_API_KEY` closes the rows without a stop. A deployment without the
+voice key sweeps nothing. Every connection
 that ends without `session.closed` stamps the row the way a detach does, so
 the sweep closes the session and records its seconds unless a device comes
 back: a hang-up whose close OpenAI never confirmed within the 15 seconds, a

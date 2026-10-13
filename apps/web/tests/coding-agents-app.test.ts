@@ -248,6 +248,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogIngestHost: undefined,
   cronSecret: undefined,
   githubWebhookSecret: undefined,
+  liveAvatarKey: undefined,
   providerKeyEncryptionKeys: undefined,
 };
 

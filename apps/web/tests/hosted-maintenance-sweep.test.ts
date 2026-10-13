@@ -13,7 +13,14 @@ import { noDatabase } from "./support/no-database";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
 /** What the sweep over the detached voice sessions answers. */
-const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
+const VOICED: VoiceOrphanSweepOutcome = {
+  closed: 2,
+  lost: 1,
+  pending: 1,
+  failed: 0,
+  avatarsClosed: 1,
+  avatarsLeftOpen: 0,
+};
 /** What the sweep over the queued sessions' sandboxes answers. */
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 
