@@ -2002,6 +2002,40 @@ test("a tab pinned to the sidebar opens its plan and the panel on that tab from 
   assert.deepEqual(tab.control().sidePanel.pins, [pin]);
 });
 
+test("a plan opened from its pin keeps the pin chosen through its other tabs, until a plan is opened by its row or another plan opens", () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onPin(SIDE_PANEL_TAB.BOARD, "Board"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+  const elsewhere = {
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  };
+  assert.equal(tab.control().chosenPin, undefined);
+
+  act(() => tab.control().onOpenPinnedTab(pin));
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.INBOX));
+  assert.equal(tab.control().chosenPin, pin, "the plan's other tabs leave the pin chosen");
+
+  act(() => tab.control().onSelect(PLAN.id));
+  assert.equal(tab.control().chosenPin, undefined, "the plan's own row takes it back");
+
+  act(() => tab.control().onOpenPinnedTab(pin));
+  tab.stand(elsewhere);
+  tab.stand({ planning: OPEN });
+  assert.equal(tab.control().chosenPin, undefined, "another plan opening lets it go");
+
+  tab.stand(elsewhere);
+  act(() => tab.control().onOpenPinnedTab(pin));
+  tab.stand({ planning: OPEN });
+  assert.equal(tab.control().chosenPin, pin, "a pin opens its plan chosen from another");
+});
+
 test("an agent main says ended unseen dots its tab beside the arrivals", () => {
   const tab = mount({ shown: true, planning: OPEN, unseenAgents: [AGENT_ID] });
   assert.deepEqual(tab.control().unreadTabs, [{ agent: AGENT_ID }]);

@@ -205,6 +205,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     inbox: [],
     inboxShown: null,
     onOpenPinnedTab: ignore,
+    chosenPin: undefined,
     repositories: {
       recent: [],
       read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),

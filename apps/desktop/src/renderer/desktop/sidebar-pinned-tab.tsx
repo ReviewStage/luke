@@ -28,7 +28,10 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  * name, its kind under its glyph, the plan it is of, and an agent's model
  * and where it stands. A press opens the plan, where it is not the open one, and the tab
  * in its column: an agent's in the plan's column, any other in the side
- * panel, opening either where it is closed. Its Unpin stands at the row's end while it is hovered or
+ * panel, opening either where it is closed. The row it opened from is
+ * then the one the sidebar marks, in its plan's row's place, for as long
+ * as the plan stays open, whichever of the plan's tabs is shown, until the
+ * plan's own row is pressed or another plan opens. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the plan rows' Pin and Archive style, and
  * a right-click offers Unpin, beside an agent's two copies of its
  * transcript while its plan is open.
@@ -201,11 +204,14 @@ export function SidebarPinnedTab({
   plans,
   pin,
   plan,
+  current,
   inSight,
   onOpen,
 }: {
   plans: PlansControl;
   pin: PinnedTab;
+  /** Whether the open plan was opened from this pin, which the sidebar marks in the plan's place. */
+  current: boolean;
   /** The plan the tab is of, whose name the row's card carries. */
   plan: PlanSummary;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
@@ -243,6 +249,7 @@ export function SidebarPinnedTab({
           ref={row}
           type="button"
           className="sidebar-plan"
+          aria-current={current ? "page" : undefined}
           aria-disabled={gone}
           data-menu-open={String(menu.open !== undefined)}
           onClick={() => {
