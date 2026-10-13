@@ -702,7 +702,7 @@
 
 .error-message {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 10px;
 }
 
@@ -732,7 +732,7 @@
 }
 
 .api-key-trouble {
-  color: var(--error-text);
+  color: var(--danger-text);
 }
 
 .api-key-error {
