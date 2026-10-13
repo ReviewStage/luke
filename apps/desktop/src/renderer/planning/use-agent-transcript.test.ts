@@ -261,3 +261,31 @@ test("each page's run start and the workers its turn waits on are what the tab c
   assert.equal(tab.control().runStartedAt, undefined);
   assert.deepEqual([...tab.control().delegations], []);
 });
+
+test("an agent that ended while a worker of its own still read as working is read on until that worker settles, and then left alone", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, shown: true });
+  const standing = (status: CodingAgentStatus) => ({
+    callId: "call-worker",
+    status,
+    model: "openai/gpt-6.1-sol",
+    effort: "low",
+    startedAt: 9_000,
+  });
+  await tab.answer({
+    ...page([message("m1", "Stopped.")], "1:1", CODING_AGENT_STATUS.CANCELLED),
+    subagents: [standing(CODING_AGENT_STATUS.RUNNING)],
+  });
+  await tab.answer({
+    ...page([], "1:1", CODING_AGENT_STATUS.CANCELLED),
+    subagents: [standing(CODING_AGENT_STATUS.RUNNING)],
+  });
+  assert.equal(tab.reads.length, 3, "read on while the worker still reads as working");
+
+  await tab.answer({
+    ...page([], "1:1", CODING_AGENT_STATUS.CANCELLED),
+    subagents: [standing(CODING_AGENT_STATUS.CANCELLED)],
+  });
+  await settle();
+  assert.equal(tab.reads.length, 3);
+  assert.equal(tab.control().subagents.get("call-worker")?.status, CODING_AGENT_STATUS.CANCELLED);
+});

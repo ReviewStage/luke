@@ -190,8 +190,17 @@ export function useAgentTranscript(input: {
         latest.current.onTitle(agentId, answer.title);
         // A page with nothing on it from an agent that may still write is
         // the hold letting go: ask again. One from an agent that ended is
-        // the end of the transcript.
-        if (answer.messages.length === 0 && !agentStillWriting(answer.status)) {
+        // the end of the transcript, once no worker of its own session still
+        // reads as working, since a worker stopped with its agent may settle
+        // a look after it and its row would stand running.
+        const workerStillWriting = (answer.subagents ?? []).some((standing) =>
+          agentStillWriting(standing.status),
+        );
+        if (
+          answer.messages.length === 0 &&
+          !agentStillWriting(answer.status) &&
+          !workerStillWriting
+        ) {
           readThrough.current = agentId;
           return;
         }
