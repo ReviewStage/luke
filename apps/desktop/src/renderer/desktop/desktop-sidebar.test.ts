@@ -1466,6 +1466,33 @@ test("with every plan archived, the list says nothing of having none, and with n
   assert.match(empty.textContent ?? "", /No plans yet/u);
 });
 
+test("before the list is first read the sidebar stands skeleton rows rather than claiming no plans, and its read draws what it holds", () => {
+  const container = mount(DEAN, { plans: { listRead: false } });
+  const group = () => container.querySelector<HTMLElement>("nav[aria-label='Plans']");
+  const busy = () => group()?.querySelector("[role=status][aria-busy=true]") ?? null;
+
+  assert.ok(busy(), "the list says it is being read");
+  assert.ok((busy()?.querySelectorAll(".skeleton").length ?? 0) > 0);
+  assert.doesNotMatch(group()?.textContent ?? "", /No plans yet/u);
+
+  restages.get(container)?.({ plans: { listRead: true } });
+  assert.equal(busy(), null);
+  assert.match(group()?.textContent ?? "", /No plans yet/u);
+
+  restages.get(container)?.({ plans: { listRead: true, plans: [listedPlan("Billing")] } });
+  assert.equal(busy(), null);
+  assert.doesNotMatch(group()?.textContent ?? "", /No plans yet/u);
+});
+
+test("a first read that failed stands neither skeleton rows nor a claim of no plans", () => {
+  const container = mount(DEAN, { plans: { listRead: false, listFailed: true } });
+  const group = container.querySelector<HTMLElement>("nav[aria-label='Plans']");
+
+  assert.ok(group?.querySelector("[role=alert]"));
+  assert.equal(group?.querySelector(".skeleton"), null);
+  assert.doesNotMatch(group?.textContent ?? "", /No plans yet/u);
+});
+
 test("a list that could not be read says so in a sentence of its own, with Retry after it reading the list again", () => {
   let retries = 0;
   const container = mount(DEAN, {
