@@ -780,7 +780,8 @@ approval step: Linear (`https://mcp.linear.app/mcp`), Notion
 Slack (`https://mcp.slack.com/mcp`), which is read-only: its entry allows
 Slack's search and read tools alone (`ALLOWED_TOOLS`, eve's tool filter). A connection belongs to the account, so it reaches every plan and
 project the account has. `server/hosted/integrations.ts` is the one table of
-providers: the variable each connector's UID is read from, its MCP server
+providers: the variable each connector's UID is read from, the one naming
+the accounts it is offered to, its MCP server
 and what the model is told of it, and the name its nested calls are stored
 under. Everything below is the same for every provider.
 
@@ -891,9 +892,9 @@ own Vercel OIDC token, which the SDK reads from the request
 (`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
 project. For local development, `vercel env pull` writes a
 short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
-runs every agent without that provider, and Settings shows its row as
-unavailable. Every token request is billed by Connect and rate-limited per
-team.
+runs every agent without that provider, and neither Settings nor the
+composer's MCP servers popover draws a row for it. Every token request is
+billed by Connect and rate-limited per team.
 
 **Slack's connector.** Slack's MCP server serves user tokens alone, and only
 ones issued by its own authorization server
@@ -959,6 +960,29 @@ as in the offer. `SLACK_CONNECTOR_UID` is the UID this create prints
 (`mcp.slack.com/slack-mcp`). A developer who connected under another
 connector disconnects and connects again, because a grant belongs to the
 connector it was made under.
+
+**Offering a provider to some accounts.** An internal Slack app works for
+its own workspace alone, so production offers Slack only to the accounts
+that workspace's people sign in with. Each provider has an optional
+allowlist variable beside its connector's (`LINEAR_ALLOWED_ACCOUNTS`,
+`NOTION_ALLOWED_ACCOUNTS`, `SENTRY_ALLOWED_ACCOUNTS`,
+`SLACK_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
+every account whose email is at that domain, or one exact email, matched
+without regard to case against the email on the account's user row.
+Unset, the provider is offered to every account. The list lives in the
+project's Vercel environment alone, never in code:
+
+```
+vercel env add SLACK_ALLOWED_ACCOUNTS production   # e.g. @example.com,someone@example.org
+```
+
+The server enforces it for every read and agent
+(`accountIntegrationConnect` in `integration-connect.ts`): an account the
+list leaves out is answered `unavailable` by the statuses read, refused by
+Connect and the tools read as a provider with no connector is, lands a
+sign-in it began earlier on `unavailable`, and no agent of its is handed
+the provider's server (`agent-runtime/servers.ts`); the desktop draws no row
+for it. Disconnect and deleting the account still revoke its grant.
 
 ## The models group
 

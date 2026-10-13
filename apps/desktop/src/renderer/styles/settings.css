@@ -754,10 +754,3 @@
 .settings-copy .settings-state[data-state="attention"] {
   color: var(--state-attention);
 }
-
-/* What a row says where a button would be, when there is nothing to offer. */
-.settings-unavailable {
-  flex: none;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}

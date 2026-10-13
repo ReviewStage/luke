@@ -3,9 +3,12 @@
  *
  * Every agent is handed its account's integrations through one dynamic
  * connection resolved at `turn.started` (`connections.ts`), and what it is
- * handed is its role's connection policy (`role.ts`). The planning agents
- * are handed every integration. A coding agent is handed every one but
- * those the developer switched off for it from its composer, which writes
+ * handed is its role's connection policy (`role.ts`), among the
+ * integrations this deployment offers the account
+ * (`accountIntegrationConnect`): one not set up here, or withheld from the
+ * account, is handed to none of its agents. The planning agents are handed
+ * every one offered. A coding agent is handed every one but those the
+ * developer switched off for it from its composer, which writes
  * the agent's `disabled_servers` (`coding-agent-store.ts`); its worker's
  * session is admitted for its parent's conversation, so it follows its
  * parent agent's switches. A turn already running keeps what it was handed,
@@ -29,6 +32,7 @@ import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
+import { accountIntegrationConnect, type IntegrationConnect } from "../integration-connect.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
 /** Which servers a turn is handed, under the account they are credentialed for, or none. */
@@ -53,29 +57,29 @@ type ServerAdmission = Effect.Effect<
 export type ServerStandingRead = (auth: SessionAuth, sessionId: string) => Promise<ServerStanding>;
 
 /**
- * The servers the turn starting is handed under the policy: every
- * integration for a session admitted at all, and for a coding agent every
- * one its row does not list; none for a session the host does not admit,
- * one admitted for no agent where the policy reads an agent's switches, or
- * a read that failed.
+ * The servers the turn starting is handed under the policy, among those
+ * offered to the account: every one for a session admitted at all, and for
+ * a coding agent every one its row does not list; none for a session the
+ * host does not admit, one admitted for no agent where the policy reads an
+ * agent's switches, or a read that failed.
  */
 export function turnServers(
   admission: ServerAdmission,
   policy: ConnectionPolicy,
-): Effect.Effect<ServerStanding, never, DatabaseServices> {
+): Effect.Effect<ServerStanding, never, DatabaseServices | IntegrationConnect> {
   return Effect.gen(function* () {
     const admitted = yield* admission;
     if (Result.isFailure(admitted)) return SERVERS_OFF;
     const { userId, conversationId } = admitted.success.target;
+    const connect = yield* accountIntegrationConnect(userId);
+    const offered = INTEGRATION_PROVIDER_LIST.filter((provider) => connect[provider].configured);
     if (policy === CONNECTION_POLICY.ALWAYS_ON) {
-      return { on: true, account: userId, providers: INTEGRATION_PROVIDER_LIST } as const;
+      return { on: true, account: userId, providers: offered } as const;
     }
     const agent = yield* readCodingAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
-    const providers = INTEGRATION_PROVIDER_LIST.filter(
-      (provider) => !disabledServers.includes(provider),
-    );
+    const providers = offered.filter((provider) => !disabledServers.includes(provider));
     return { on: true, account: userId, providers } as const;
   }).pipe(
     Effect.catchCause((cause) =>

@@ -218,3 +218,18 @@ test("a server the agent has on whose sign-in expired is offered to reconnect un
   await settle();
   assert.equal(off.button("Reconnect Slack"), undefined);
 });
+
+test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
+  const tab = mount([]);
+  await settle();
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  assert.ok(servers, "the MCP button is drawn");
+  act(() => servers.click());
+  await settle();
+
+  const rows = [...document.querySelectorAll(".agent-servers-row")].map(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent,
+  );
+  assert.deepEqual(rows, ["Slack"]);
+  assert.equal(tab.button("Connect"), undefined, "nothing offers a server not offered");
+});

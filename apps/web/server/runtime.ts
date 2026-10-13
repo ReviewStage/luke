@@ -44,8 +44,8 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  * `GitHubApp` the one place the Luke GitHub App's id, slug, client, and
  * private key are.
  *
- * `IntegrationConnect` is the one place each integration's connector UID is
- * read, for the account routes that connect and disconnect an account and
+ * `IntegrationConnect` is the one place each integration's connector UID and
+ * allowlist are read, for the account routes that connect and disconnect an account and
  * the agents that read its tokens alike.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's

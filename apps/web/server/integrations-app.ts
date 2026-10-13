@@ -8,7 +8,9 @@
  *   connection stands. A sign-in still under way is settled here too, by
  *   asking Connect for a token afresh, so a desktop that reads again after
  *   the browser closed learns the outcome whatever address the browser was
- *   returned to.
+ *   returned to. A provider the deployment does not offer the account
+ *   (`accountIntegrationConnect`) stands unavailable, and every route below
+ *   refuses it as one with no connector here.
  * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
  *   to begin a browser sign-in to the provider for the account, records the
  *   sign-in's one-time state, and answers the address the desktop opens.
@@ -70,8 +72,10 @@ import {
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import {
+  accountIntegrationConnect,
+  type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
-  IntegrationConnect,
+  type IntegrationConnect,
   revokeIntegrationGrant,
 } from "./hosted/integration-connect.js";
 import {
@@ -211,10 +215,10 @@ function signInStands(seams: IntegrationsAppSeams, issuedAt: Date | undefined): 
  */
 const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
+  connector: ConnectorService,
   row: IntegrationConnectionRow,
   state: string,
-): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | IntegrationConnect> {
-  const connector = (yield* IntegrationConnect)[row.provider];
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
   const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
   if (Result.isFailure(issued)) {
     if (issued.failure.reason !== INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
@@ -228,16 +232,17 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider, state));
 });
 
-/** The status a stored row stands for, settling a sign-in still under way. */
+/** The status a stored row stands for, settling a sign-in still under way with the provider's connector. */
 const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
+  connector: ConnectorService,
   row: IntegrationConnectionRow | undefined,
-): Effect.fn.Return<IntegrationStatus, HostedRefusal, DatabaseServices | IntegrationConnect> {
+): Effect.fn.Return<IntegrationStatus, HostedRefusal, DatabaseServices> {
   if (row === undefined) return INTEGRATION_STATUS.DISCONNECTED;
   if (row.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
   // The state of a sign-in still under way, which is the one a settlement may complete.
   const underWay = signInStands(seams, row.stateIssuedAt) ? row.state : undefined;
-  if (underWay !== undefined && (yield* settledSignIn(seams, row, underWay))) {
+  if (underWay !== undefined && (yield* settledSignIn(seams, connector, row, underWay))) {
     return INTEGRATION_STATUS.CONNECTED;
   }
   if (row.status === INTEGRATION_ROW_STATUS.EXPIRED) return INTEGRATION_STATUS.EXPIRED;
@@ -245,7 +250,7 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   return underWay !== undefined ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.DISCONNECTED;
 });
 
-/** GET: where every one of the caller's connections stands; a provider with no connector here is unavailable. */
+/** GET: where every one of the caller's connections stands; a provider with no connector here, or not offered to the caller, is unavailable. */
 const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndpoint")(function* (
   seams: IntegrationsAppSeams,
 ): Effect.fn.Return<
@@ -255,7 +260,7 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
 > {
   yield* hostedMethod(HTTP_METHOD.GET);
   const userId = yield* resolvedUserId(seams);
-  const connect = yield* IntegrationConnect;
+  const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId));
   // A deployment with no connector at all answers from its configuration alone, whatever the store.
   const anyConfigured = INTEGRATION_PROVIDER_LIST.some((provider) => connect[provider].configured);
   const rows = anyConfigured ? yield* hostedStoreOrUnavailable(seams.readConnections(userId)) : [];
@@ -265,6 +270,7 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
         connect[provider].configured
           ? standingStatus(
               seams,
+              connect[provider],
               rows.find((row) => row.provider === provider),
             )
           : Effect.succeed(INTEGRATION_STATUS.UNAVAILABLE),
@@ -293,11 +299,11 @@ function toolsProblem(failure: McpToolsFailure) {
 
 /**
  * GET: the tools one provider's server offers the account's agents. A
- * provider with no connector here, one the account has not connected, and a
- * Connect that could not be asked are the one unavailable refusal. A grant
- * Connect no longer holds, and a server that listed none, are an answer
- * rather than a refusal: why, which the desktop draws in place of the
- * connection's "Connected", and never held.
+ * provider with no connector here or not offered to the account, one the
+ * account has not connected, and a Connect that could not be asked are the
+ * one unavailable refusal. A grant Connect no longer holds, and a server
+ * that listed none, are an answer rather than a refusal: why, which the
+ * desktop draws in place of the connection's "Connected", and never held.
  */
 const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(function* (
   seams: IntegrationsAppSeams,
@@ -313,7 +319,7 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   yield* hostedMethod(HTTP_METHOD.GET);
   const provider = yield* requestedProvider();
   const userId = yield* resolvedUserId(seams);
-  const connector = (yield* IntegrationConnect)[provider];
+  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
   if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
   const row = rows.find((each) => each.provider === provider);
@@ -391,7 +397,7 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
   yield* hostedMethod(HTTP_METHOD.POST);
   const provider = yield* requestedProvider();
   const userId = yield* resolvedUserId(seams);
-  const connector = (yield* IntegrationConnect)[provider];
+  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
   if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
@@ -458,7 +464,11 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     status,
   });
   if (!signInStands(seams, row.stateIssuedAt)) return landed(INTEGRATION_LANDING_STATUS.EXPIRED);
-  const connector = (yield* IntegrationConnect)[row.provider];
+  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(row.userId)))[
+    row.provider
+  ];
+  // A provider no longer offered to the account completes nothing for it.
+  if (!connector.configured) return landed(INTEGRATION_LANDING_STATUS.UNAVAILABLE);
   const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
   if (Result.isFailure(issued)) {
     if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
