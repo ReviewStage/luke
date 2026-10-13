@@ -57,6 +57,7 @@ import {
 } from "#shared/shortcuts";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { changesLabelOf } from "../planning/agent-changes-tab";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
@@ -70,7 +71,7 @@ import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../s
 import type { SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
-import { panelEntries, planWorkers, TAB_ICON } from "./side-panel";
+import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -329,11 +330,13 @@ function shownOverHistory(plans: PlansControl, show: () => void): void {
 
 /**
  * The open plan's Inbox and coding agents, as the column's "+" lists them,
- * then its subagents, as the side panel's "+" lists them, each beside the
- * plan's name; none while no plan is open. An agent opens as its
- * notification's click opens it, the Inbox the same way, and a subagent's
- * tab as the "+" opens it, the version history giving way to each, so none
- * opens behind what covers it.
+ * then its subagents and its agents' Changes tabs, as the side panel's "+"
+ * lists them, each beside the plan's name; none while no plan is open. A
+ * Changes row is named as its tab is, since no heading here says what the
+ * agent's name stands for. An agent opens as its notification's click
+ * opens it, the Inbox the same way, and a subagent's or a Changes tab as
+ * the "+" opens it, the version history giving way to each, so none opens
+ * behind what covers it.
  */
 function agentRows(plans: PlansControl, show: (pick: () => void) => void): readonly PaletteRow[] {
   const planId = plans.activePlanId;
@@ -350,9 +353,14 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     kinds: [],
     workers,
     files: [],
+    changes: changesOffers(plans.agents),
     standing: true,
   }).map((entry) => ({
     ...entry,
+    row:
+      entry.row.section === ADD_SECTION.CHANGES
+        ? { ...entry.row, label: changesLabelOf(entry.row.label) }
+        : entry.row,
     onPick: () => shownOverHistory(plans, entry.onPick),
   }));
   const entries = [...inbox, ...agents, ...subagents];

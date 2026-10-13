@@ -53,8 +53,8 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
  * nowhere, so a launch opens none. An agent's Changes tab, opened from the
- * Changes chip at its tab's foot, is held to its agent's tab on the same
- * terms, one per agent, and is pinned nowhere. A file's tab, opened from a
+ * Changes chip at its tab's foot or from the "+", is held to the plan's
+ * agents on the same terms, one per agent, and is pinned nowhere. A file's tab, opened from a
  * snippet in the Code tab or from the "+", is the one kind that stands many
  * times, one per file: it is held to the files Luke showed on the open plan
  * the same way, closes, and is kept nowhere. A page's tab, opened from the
@@ -414,7 +414,7 @@ export interface SidePanelControl {
   subagents: readonly SubagentStripTab[];
   /** The open file tabs, in the strip's order; they follow the subagent tabs, and only those of files shown on the open plan are drawn. */
   files: readonly OpenFile[];
-  /** The open Changes tabs in the order opened, after the file tabs; only those whose agent's tab stands open are drawn. */
+  /** The open Changes tabs in the order opened, after the file tabs; only those of the plan's agents are drawn. */
   changes: readonly ChangesStripTab[];
   /** The open page tabs in the order opened, after the Changes tabs; only those of the open plan's pages are drawn. */
   pages: readonly PageStripTab[];
@@ -494,6 +494,8 @@ export interface DrawnTabs {
   files: readonly string[];
   /** The plan's pages, by id, whose open tabs the strip draws. */
   pages: readonly string[];
+  /** The plan's agents, by id, whose Changes tabs the strip draws, or nothing while unread. */
+  planAgents: readonly string[] | undefined;
 }
 
 /** The developer's own choices of fixed tab on the plan. */
@@ -808,12 +810,13 @@ export function drawsSubagent(
 }
 
 /**
- * Whether the plan draws the agent's Changes tab: while the agent has its
- * tab open in the plan's column, or until the agents are read, as a
- * delegated worker's tab stands.
+ * Whether the plan draws the agent's Changes tab: while the agent is the
+ * plan's, its own tab open in the plan's column or not, since the "+"
+ * opens it either way, or until the agents are read, as a delegated
+ * worker's tab stands.
  */
-export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "agents">): boolean {
-  return drawn.agents === undefined || drawn.agents.includes(tab.changes);
+export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "planAgents">): boolean {
+  return drawn.planAgents === undefined || drawn.planAgents.includes(tab.changes);
 }
 
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
@@ -1200,6 +1203,7 @@ export function useSidePanel(
   subagents: readonly string[] = [],
   files: readonly string[] = [],
   pages: readonly string[] = NO_PAGES,
+  planAgents?: readonly string[] | undefined,
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -1229,7 +1233,14 @@ export function useSidePanel(
     [stage],
   );
   const shownFor = (holds: PlanHolds) =>
-    shownIn(state, { plan: { id: planId, holds }, agents, subagents, files: planFiles, pages });
+    shownIn(state, {
+      plan: { id: planId, holds },
+      agents,
+      subagents,
+      files: planFiles,
+      pages,
+      planAgents,
+    });
 
   // Note that something arriving on the plan adds its tab without taking
   // the shown one's place, because a tab ahead of it in the strip would
@@ -1254,7 +1265,7 @@ export function useSidePanel(
     }
     const arrivals = seen.id === planId ? firstHeld(seen.holds, plan.holds) : [];
     if (arrivals.length > 0) {
-      const was = { plan: seen, agents, subagents, files: planFiles, pages };
+      const was = { plan: seen, agents, subagents, files: planFiles, pages, planAgents };
       update((held) => withArrived(held, arrivals, was));
     }
   }
@@ -1267,8 +1278,8 @@ export function useSidePanel(
     [tabs, seen],
   );
   const drawn = useMemo(
-    () => ({ plan: seen, agents, subagents, files: planFiles, pages }),
-    [seen, agents, subagents, planFiles, pages],
+    () => ({ plan: seen, agents, subagents, files: planFiles, pages, planAgents }),
+    [seen, agents, subagents, planFiles, pages, planAgents],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.

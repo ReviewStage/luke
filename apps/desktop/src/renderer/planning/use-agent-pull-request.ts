@@ -1,10 +1,12 @@
 import type { CodingAgentPullRequestAnswerView } from "@sidecar/hosted/coding-agent-view";
 import type {
   CodingAgentMessage,
+  CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
   CodingAgentStatus,
+  CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model";
 
 /**
@@ -18,6 +20,10 @@ import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model";
  * whatever the gap, since that is when the pull request it opened is most
  * worth showing. An answer the service could not give leaves what was
  * drawn standing; another agent's tab starts from nothing of this one's.
+ *
+ * The plan keeps every answer beside its agents (`usePlanPullRequests`), so
+ * the side panel's "+", the plan's summary, and ⌘K offer an agent's Changes
+ * tab exactly while it has a pull request, its tab open or not.
  */
 
 /** How one read is asked: the agent, answered as the view hears it. */
@@ -80,4 +86,63 @@ export function useAgentPullRequest(input: {
   }, [agentId, shown, ended, messages]);
 
   return held.agentId === agentId ? held.published : undefined;
+}
+
+/** The plan's agents' pull requests, and the reader that keeps them as its answers land. */
+export interface PlanPullRequests {
+  /** Each agent's pull request, by agent, of those whose last read named one. */
+  readonly pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
+  /** One read of what an agent published, its answer kept here as it lands. */
+  readonly read: PullRequestReader;
+}
+
+/** No agent has a pull request, one map so a render that has none hands down the same one. */
+const NO_PULL_REQUESTS: ReadonlyMap<string, CodingAgentPullRequest> = new Map();
+
+/**
+ * Which of the plan's agents have a pull request, as the side panel's "+",
+ * the plan's summary, and ⌘K offer its Changes tab by: every answer `read`
+ * lands is kept, an agent's own tab's reads included, and each agent is
+ * read once as the list first holds it and once more as it ends, since that
+ * is when what it published settles. Nothing reads on a clock. An answer the
+ * service could not give leaves what was kept standing.
+ */
+export function usePlanPullRequests(
+  agents: readonly Pick<CodingAgentSummary, "id" | "status">[] | undefined,
+  readOnce: PullRequestReader,
+): PlanPullRequests {
+  const [pullRequests, setPullRequests] = useState(NO_PULL_REQUESTS);
+  const latest = useRef(readOnce);
+  latest.current = readOnce;
+  // Each agent read, by whether it had ended when it was asked.
+  const asked = useRef(new Map<string, boolean>());
+
+  const read = useCallback<PullRequestReader>(
+    (agentId) =>
+      latest.current(agentId).then((answer) => {
+        if ("failure" in answer) return answer;
+        const opened = answer.pullRequest;
+        setPullRequests((was) => {
+          if (opened === null && !was.has(agentId)) return was;
+          const next = new Map(was);
+          if (opened === null) next.delete(agentId);
+          else next.set(agentId, opened);
+          return next;
+        });
+        return answer;
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    for (const agent of agents ?? []) {
+      const ended = !agentStillWriting(agent.status);
+      const before = asked.current.get(agent.id);
+      if (before === true || before === ended) continue;
+      asked.current.set(agent.id, ended);
+      read(agent.id).catch(() => undefined);
+    }
+  }, [agents, read]);
+
+  return { pullRequests, read };
 }

@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import "../file-tree/index";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
+import { listingOf } from "./folder-listings";
 
 /**
  * A File tab's breadcrumbs over the file tree bundle the window loads: a
@@ -69,7 +70,9 @@ function mounted(path: string, folders: ReadonlyMap<string, PlanningTreeAnswer> 
         path,
         listFolder: (asked) => {
           listed.push(asked);
-          return Promise.resolve(folders.get(asked) ?? { failure: "unanswered" as const });
+          return Promise.resolve(
+            listingOf(folders.get(asked) ?? { failure: "unanswered" as const }),
+          );
         },
         onOpen: (chosen, newTab) => opened.push(newTab ? `${chosen} in a new tab` : chosen),
       }),

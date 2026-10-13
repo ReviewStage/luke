@@ -4,8 +4,8 @@ import { ChevronRightIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MENU_DROP } from "../desktop/action-menu";
+import type { ReadFolder } from "../file-tree/contract";
 import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
-import { type ListFolder, listingOf } from "./folder-listings";
 
 /**
  * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that opens the tree where it stands.
@@ -66,7 +66,7 @@ function CrumbTree({
 }: {
   label: string;
   opened: Opened;
-  listFolder: ListFolder;
+  listFolder: ReadFolder;
   onOpen: (path: string, newTab: boolean) => void;
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
@@ -109,7 +109,7 @@ function CrumbTree({
     const element = host.current;
     if (module === undefined || element === null) return undefined;
     const tree = module.mount(element, {
-      readFolder: (path) => latest.current.listFolder(fromRoot(folder, path)).then(listingOf),
+      readFolder: (path) => latest.current.listFolder(fromRoot(folder, path)),
       onOpen: (path, newTab) => {
         latest.current.onClose(false);
         latest.current.onOpen(fromRoot(folder, path), newTab);
@@ -177,7 +177,7 @@ export function FileBreadcrumbs({
   repository: string;
   /** The tab's file, from the repository's root. */
   path: string;
-  listFolder: ListFolder;
+  listFolder: ReadFolder;
   /** Opens a file chosen in a crumb's tree in the tab, or in a tab of its own where `newTab` asks. */
   onOpen: (path: string, newTab: boolean) => void;
 }): React.JSX.Element {

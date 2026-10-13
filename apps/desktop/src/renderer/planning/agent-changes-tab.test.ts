@@ -13,14 +13,18 @@ import {
   type CodingAgentSummary,
   PATCH_OMITTED,
 } from "@sidecar/hosted/coding-agent-wire";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { installActBridge } from "#testing/act-bridge";
+import { installAnimations } from "#testing/animations";
 import { selectedText, sheetStyle } from "#testing/css-rules";
+import { installHighlights } from "#testing/find-highlights";
 import { codingAgentsControl } from "#testing/plans-control";
-import type { FileTreeProps } from "../file-tree/contract";
+import { useAppKeymap } from "../app-commands";
+import { FILE_MARK, type FileTreeProps } from "../file-tree/contract";
+import { FindScope } from "../find-in-tab";
 import { AgentChangesTab } from "./agent-changes-tab";
 import { CHANGES_WORDS } from "./changes-model";
 
@@ -35,6 +39,7 @@ const AGENT: CodingAgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 const PULL_REQUEST = "https://github.com/acme/relay/pull/41";
+const REPOSITORY = "acme/relay";
 
 /** What the tree bundle was handed and asked, as a stand-in for the bundle the window loads. */
 interface TreeSeen {
@@ -53,6 +58,8 @@ window.lukeFileTree = {
       search: () => undefined,
       only: (paths) => tree.asked.push(`only ${paths?.join(", ") ?? "all"}`),
       within: () => undefined,
+      mark: (marks) =>
+        tree.asked.push(`mark ${marks.map((each) => `${each.path} ${each.status}`).join(", ")}`),
       unmount: () => undefined,
     };
   },
@@ -119,6 +126,7 @@ function changed(
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installAnimations();
   tree.props = undefined;
   tree.asked = [];
 });
@@ -127,6 +135,8 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   delete document.documentElement.dataset.keyboard;
   document.body.innerHTML = "";
+  window.localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 /** The tab as the panel draws it, over a service whose every read is held until the test answers it. */
@@ -144,17 +154,25 @@ function mount() {
     act(async () => {
       for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
     });
-  const draw = async (status: CodingAgentStatus = CODING_AGENT_STATUS.RUNNING) => {
-    const agents = [{ ...AGENT, status }];
-    act(() =>
-      root.render(
-        createElement(AgentChangesTab, {
-          agentId: AGENT.id,
-          control: { ...control, agents },
-          shown: true,
-        }),
-      ),
+  // The tab as the panel stands it: in the panel's find, beside the tree's
+  // open state the panel holds for every File and Changes tab.
+  function Panel({ status }: { status: CodingAgentStatus }) {
+    const [open, setOpen] = useState(true);
+    useAppKeymap(true);
+    return createElement(
+      FindScope,
+      { active: true, subject: { plan: AGENT.planId, tab: { changes: AGENT.id } } },
+      createElement(AgentChangesTab, {
+        agentId: AGENT.id,
+        control: { ...control, agents: [{ ...AGENT, status }] },
+        shown: true,
+        repository: REPOSITORY,
+        tree: { open, onToggle: () => setOpen((was) => !was) },
+      }),
     );
+  }
+  const draw = async (status: CodingAgentStatus = CODING_AGENT_STATUS.RUNNING) => {
+    act(() => root.render(createElement(Panel, { status })));
     await settle();
   };
   const answer = async (view: CodingAgentChangesAnswerView) => {
@@ -164,8 +182,8 @@ function mount() {
     await settle();
   };
   const press = async (label: string) => {
-    const button = [...container.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === label || each.textContent?.includes(label),
+    const button = [...document.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label") === label || each.textContent === label,
     );
     assert.ok(button, `no ${label} button`);
     act(() => button.click());
@@ -174,13 +192,18 @@ function mount() {
   const text = () => container.textContent ?? "";
   /** Each hunk header and diff row as the pane draws it: its old number, its new number, and its text. */
   const rows = () =>
-    [...container.querySelectorAll(".diff-hunk-header, .diff-line")].map((row) =>
+    [...container.querySelectorAll(".code-line")].map((row) =>
       [...row.children].map((cell) => cell.textContent).join("|"),
     );
-  return { container, reads, sent, draw, answer, press, text, rows };
+  /** Chooses the item of the bar's ⋯ that reads `label`, opening the menu first. */
+  const chooseInMenu = async (label: string) => {
+    await press("Changes actions");
+    await press(label);
+  };
+  return { container, reads, sent, draw, answer, press, text, rows, chooseInMenu };
 }
 
-test("the tab reads as it shows and draws the first file's hunks, each row numbered on its side, beside the tree of every changed file", async () => {
+test("the tab reads as it shows and draws the first file's hunks, each row numbered on its side, beside the tree of every changed file, each marked with what became of it", async () => {
   const tab = mount();
   await tab.draw();
   assert.equal(tab.reads.length, 1);
@@ -188,7 +211,7 @@ test("the tab reads as it shows and draws the first file's hunks, each row numbe
 
   await tab.answer(changed([INVITE, LOGO]));
 
-  assert.match(tab.text(), /2 files/);
+  assert.match(tab.text(), /2 files changed \+2 −1/);
   assert.deepEqual(tab.rows(), [
     "||@@ -7,2 +7,3 @@ export function invite() {",
     "7||send(team);",
@@ -200,8 +223,26 @@ test("the tab reads as it shows and draws the first file's hunks, each row numbe
     "40|41|return;",
     "|42|--done;",
   ]);
-  assert.deepEqual(tree.asked, ["only src/invite.ts, public/logo.png", "reveal src/invite.ts"]);
-  assert.equal(await tree.props?.readFolder(""), await tree.props?.readFolder("src"));
+  assert.deepEqual(
+    [...new Set(tree.asked)],
+    [
+      "only src/invite.ts, public/logo.png",
+      `mark src/invite.ts ${FILE_MARK.MODIFIED}, public/logo.png ${FILE_MARK.ADDED}`,
+      "reveal src/invite.ts",
+    ],
+  );
+  // The tree, and the crumbs' trees, list the changed files alone.
+  assert.deepEqual(await tree.props?.readFolder(""), {
+    entries: [
+      { name: "src", folder: true },
+      { name: "public", folder: true },
+    ],
+    truncated: false,
+  });
+  assert.deepEqual(await tree.props?.readFolder("src"), {
+    entries: [{ name: "invite.ts", folder: false }],
+    truncated: false,
+  });
 
   await tab.press("Open on GitHub");
   assert.deepEqual(tab.sent.at(-1), {
@@ -240,7 +281,11 @@ test("a diff's lines select and copy as text, both gutters' numbers left out and
   await tab.draw();
   await tab.answer(changed([{ ...INVITE, patch: "@@ -1,2 +1,3 @@\n a();\n+\n b();" }]));
 
-  const lines = [...tab.container.querySelectorAll(".diff-line")];
+  const lines = [
+    ...tab.container.querySelectorAll(
+      ".code-line[data-diff='context'], .code-line[data-diff='added']",
+    ),
+  ];
   // Note that each line leaves text in the copy, because a line that leaves
   // none is closed up by the browser's copy.
   assert.deepEqual(
@@ -266,7 +311,7 @@ test("choosing a binary file, one too large to show, or one only moved says so i
 
   act(() => tree.props?.onOpen(MOVED.path, false));
   assert.match(tab.text(), new RegExp(CHANGES_WORDS.UNCHANGED_CONTENTS));
-  assert.match(tab.text(), /src\/send\.ts → src\/invites\/send\.ts/);
+  assert.match(tab.text(), /Renamed from src\/send\.ts/);
 });
 
 test("a patch that does not read as a diff says so rather than drawing nothing", async () => {
@@ -288,7 +333,7 @@ test("a read that failed offers a retry, which shows the wait and draws what lan
   assert.doesNotMatch(tab.text(), new RegExp(CHANGES_WORDS.FAILED));
 
   await tab.answer(changed([INVITE]));
-  assert.match(tab.text(), /1 file/);
+  assert.match(tab.text(), /1 file changed/);
 });
 
 test("no pull request yet and a pull request with no files each say so, not as a failure, and the agent ending reads again", async () => {
@@ -305,16 +350,118 @@ test("no pull request yet and a pull request with no files each say so, not as a
   assert.match(tab.text(), new RegExp(CHANGES_WORDS.EMPTY));
 });
 
-test("a refresh keeps the files drawn until its answer lands, then draws the new list", async () => {
+test("a refresh from the ⋯ keeps the files drawn until its answer lands, then draws the new list", async () => {
   const tab = mount();
   await tab.draw();
   await tab.answer(changed([INVITE]));
 
-  await tab.press("Refresh changes");
+  await tab.chooseInMenu("Refresh changes");
   assert.equal(tab.reads.length, 1);
-  assert.match(tab.text(), /1 file/);
+  assert.match(tab.text(), /1 file changed/);
 
   await tab.answer(changed([INVITE, LOGO]));
-  assert.match(tab.text(), /2 files/);
-  assert.equal(tree.asked.at(-1), "only src/invite.ts, public/logo.png");
+  assert.match(tab.text(), /2 files changed/);
+  assert.equal(
+    tree.asked.findLast((asked) => asked.startsWith("only")),
+    "only src/invite.ts, public/logo.png",
+  );
+});
+
+test("the tab stands under a File tab's bar: the chosen file's path as breadcrumbs, what became of it beside, GitHub, the ⋯, and the tree's toggle, which hides the tree", async () => {
+  const tab = mount();
+  await tab.draw();
+  await tab.answer(changed([INVITE, LOGO]));
+
+  const bar = tab.container.querySelector(".file-view-bar");
+  assert.deepEqual(
+    [...(bar?.querySelectorAll("button[aria-label]") ?? [])].map((button) =>
+      button.getAttribute("aria-label"),
+    ),
+    ["Open on GitHub", "Changes actions", "Hide files"],
+  );
+  assert.deepEqual(
+    [...tab.container.querySelectorAll(".file-breadcrumb")].map((crumb) => crumb.textContent),
+    [REPOSITORY, "src", "invite.ts"],
+  );
+  assert.equal(bar?.querySelector(".file-view-status")?.textContent, "M");
+  assert.match(bar?.textContent ?? "", /\+2 −1/);
+
+  // A file chosen in the tree takes the bar's path with it.
+  act(() => tree.props?.onOpen(LOGO.path, false));
+  assert.deepEqual(
+    [...tab.container.querySelectorAll(".file-breadcrumb")].map((crumb) => crumb.textContent),
+    [REPOSITORY, "public", "logo.png"],
+  );
+
+  await tab.press("Hide files");
+  assert.equal(tab.container.querySelector('aside[aria-label="Changed files"]'), null);
+  await tab.press("Show files");
+  assert.ok(tab.container.querySelector('.file-view-body > aside[aria-label="Changed files"]'));
+});
+
+test("the ⋯ copies the file's name and its patch, headed as git writes one, and offers no patch for a file that carries none, over the File tabs' two settings", async () => {
+  const tab = mount();
+  await tab.draw();
+  await tab.answer(changed([INVITE, LOGO]));
+
+  await tab.chooseInMenu("Copy patch");
+  assert.deepEqual(tab.sent.at(-1), {
+    kind: ACT_KIND.WINDOW_COPY_TEXT,
+    payload: {
+      words: `diff --git a/src/invite.ts b/src/invite.ts\n--- a/src/invite.ts\n+++ b/src/invite.ts\n${INVITE.patch}\n`,
+    },
+  });
+
+  act(() => tree.props?.onOpen(LOGO.path, false));
+  await tab.press("Changes actions");
+  const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')].map(
+    (item) => `${item.textContent}${item.disabled ? " (dimmed)" : ""}`,
+  );
+  assert.deepEqual(items, [
+    "Copy file name",
+    "Copy patch (dimmed)",
+    "Download patch (dimmed)",
+    "Refresh changes",
+    "Line numbers",
+    "Word wrap",
+  ]);
+});
+
+test("the diff follows the File tabs' Line numbers and Word wrap, both its gutters going with the numbers", async () => {
+  const tab = mount();
+  await tab.draw();
+  await tab.answer(changed([INVITE]));
+  const lines = () => tab.container.querySelector<HTMLElement>(".file-tab-lines");
+  assert.equal(lines()?.dataset.lineNumbers, "true");
+  assert.equal(lines()?.dataset.wrap, "true");
+
+  await tab.chooseInMenu("Line numbers");
+  await tab.chooseInMenu("Word wrap");
+  assert.equal(lines()?.dataset.lineNumbers, "false");
+  assert.equal(lines()?.dataset.wrap, "false");
+});
+
+test("⌘F over the diff finds its words and never its line numbers, as over a File tab", async () => {
+  const highlights = installHighlights();
+  const tab = mount();
+  await tab.draw();
+  await tab.answer(changed([INVITE]));
+
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
+  });
+  const input = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
+  assert.ok(input, "the find bar stands over the tab");
+  const find = (words: string) => {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    act(() => {
+      setValue?.call(input, words);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return highlights.matches();
+  };
+
+  assert.deepEqual(find("sendAll"), ["sendAll"]);
+  // 42 is the last row's number on its new side, and stands in no line's words.
+  assert.deepEqual(find("42"), []);
 });
