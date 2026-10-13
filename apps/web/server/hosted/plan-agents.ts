@@ -10,6 +10,7 @@ import {
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type CodingAgentLastReport,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
@@ -24,8 +25,13 @@ import {
   ROLLOUT_BASE,
   type RolloutItem,
 } from "@sidecar/hosted/plan-wire";
+import { WORKER_REPORT_KIND } from "@sidecar/hosted/rollout-wire";
 import { Clock, Effect, Result } from "effect";
-import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
+import {
+  codingAgentRunStartedAt,
+  codingAgentStatusOf,
+  standingReportOf,
+} from "./coder-host/status.js";
 
 /**
  * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.
@@ -158,16 +164,24 @@ export interface RolloutWorker {
   /** Whether it holds its position, by the rule a Start at the position is refused under (`isLiveWorkerTurn`). */
   readonly live: boolean;
   readonly published: CodingAgentPullRequest | null;
+  /** What it last reported of itself since its newest turn started; null where nothing stands. */
+  readonly lastReport: CodingAgentLastReport | null;
+}
+
+/** The stack keeper as its line reads it: where it stands, and what it last reported of itself since its newest turn started, null where nothing stands. */
+interface RolloutKeeper {
+  readonly status: CodingAgentStatus;
+  readonly lastReport: CodingAgentLastReport | null;
 }
 
 /**
  * A rollout's agents as its state reads them: the builders, one or more a
- * position, and the plan's newest keeper's status, undefined where no keeper
- * was started.
+ * position, and the plan's newest keeper, undefined where no keeper was
+ * started.
  */
 export interface RolloutAgents {
   readonly builders: readonly RolloutWorker[];
-  readonly keeper: CodingAgentStatus | undefined;
+  readonly keeper: RolloutKeeper | undefined;
 }
 
 /** A builder or the keeper in a word: none started, at work, or how its newest turn ended. */
@@ -242,6 +256,33 @@ function workerWord(status: CodingAgentStatus | undefined): string {
   return status === undefined ? WORKER_WORD.NONE : WORKER_WORD_OF_STATUS[status];
 }
 
+/** The word a standing report is shown under on its agent's line, for the kinds the agent waits on Luke's answer after: a question, a block, and a keeper's conflict that is a judgment's. */
+function waitingWord(kind: CodingAgentLastReport["kind"]): string | undefined {
+  switch (kind) {
+    case WORKER_REPORT_KIND.QUESTION:
+      return "asks";
+    case WORKER_REPORT_KIND.BLOCKED:
+      return "blocked";
+    case WORKER_REPORT_KIND.CONFLICT:
+      return "conflict";
+    default:
+      return undefined;
+  }
+}
+
+/** An agent's standing question with the answers it offered, its block, or its conflict, each on the pull request it names, as its line's last part; nothing for a milestone or no report. */
+function waitingWords(report: CodingAgentLastReport | null): string {
+  if (report === null) return "";
+  const words = waitingWord(report.kind);
+  if (words === undefined) return "";
+  const options =
+    report.options === undefined
+      ? ""
+      : ` (options: ${report.options.map((option) => JSON.stringify(option)).join(", ")})`;
+  const on = report.pullRequest === undefined ? "" : ` on #${report.pullRequest}`;
+  return ` · ${words}${on}: ${JSON.stringify(report.text)}${options}`;
+}
+
 /** Positions in a line, or none. */
 function positionsWords(positions: readonly number[]): string {
   return positions.length === 0 ? "none" : positions.join(", ");
@@ -249,11 +290,15 @@ function positionsWords(positions: readonly number[]): string {
 
 /**
  * The rollout's state, one line per position counted from one: its title,
- * its base, its newest worker, and the newest pull request a worker at it
- * published; then the stack keeper, by the newest started, so a keeper that
- * failed reads as failed rather than as none; then the positions ready to start (base on main or its pull
- * request pushed, no live worker holding it, and its own not merged) and
- * those ready to merge (open and green, its base on main already).
+ * its base, its newest worker, the newest pull request a worker at it
+ * published, and the question, block, or conflict its newest worker waits
+ * on, read off the worker's row and never off the reports in the
+ * transcript; then the stack keeper, by the newest started, so a keeper
+ * that failed reads as failed rather than as none, with what it waits on
+ * read the same way; then the positions ready to start (base on
+ * main or its pull request pushed, no live worker holding it, and its own
+ * not merged) and those ready to merge (open and green, its base on main
+ * already).
  */
 export function rolloutStateOf(
   rollout: readonly RolloutItem[],
@@ -264,7 +309,7 @@ export function rolloutStateOf(
   );
   const lines = rollout.map((item, at) => {
     const state = states[at];
-    return `${at + 1}. ${JSON.stringify(item.title)} · base: ${item.base} · worker: ${workerWord(state?.newest?.status)} · pull request: ${pullRequestWords(state?.published ?? null)}`;
+    return `${at + 1}. ${JSON.stringify(item.title)} · base: ${item.base} · worker: ${workerWord(state?.newest?.status)} · pull request: ${pullRequestWords(state?.published ?? null)}${waitingWords(state?.newest?.lastReport ?? null)}`;
   });
   const toStart: number[] = [];
   const toMerge: number[] = [];
@@ -288,7 +333,7 @@ export function rolloutStateOf(
   });
   return [
     ...lines,
-    `Stack keeper: ${workerWord(agents.keeper)}`,
+    `Stack keeper: ${workerWord(agents.keeper?.status)}${waitingWords(agents.keeper?.lastReport ?? null)}`,
     `Ready to start: ${positionsWords(toStart)}`,
     `Ready to merge: ${positionsWords(toMerge)}`,
   ];
@@ -368,11 +413,24 @@ export function rolloutWorkersOf(
                 new Date(now),
               ),
               published,
+              lastReport: standingReportOf(agent.lastReport, turns.get(agent.conversationId)),
             },
           ],
     );
     // The agents read in the order started, so the newest keeper is the last.
     const keeper = held.findLast(({ agent }) => agent.role === ROLLOUT_ROLE.KEEPER);
-    return { builders, keeper: keeper === undefined ? undefined : statusOf(keeper.agent) };
+    return {
+      builders,
+      keeper:
+        keeper === undefined
+          ? undefined
+          : {
+              status: statusOf(keeper.agent),
+              lastReport: standingReportOf(
+                keeper.agent.lastReport,
+                turns.get(keeper.agent.conversationId),
+              ),
+            },
+    };
   });
 }

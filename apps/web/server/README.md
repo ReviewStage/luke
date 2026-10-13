@@ -2559,6 +2559,14 @@ A Start's position implies a builder, names a pull request of the plan's
 rollout or is refused as `invalid-request`, and a builder needs one; a keeper's
 Start names no position or base and, until the keeper has a brief of its
 own, carries a task, or it is refused as `invalid-request`.
+A worker's own last report through its `report` tool is kept on its row
+(`coding_agent.last_report`, migration `20261014181816_coding_agent_last_report`) beside the report turn it opens
+on the plan's conversation, with the turn its call was made in. Only the call
+that handed the report to Luke writes it, so a call eve replays never moves it,
+and it stands only while that turn is the agent's newest, so the agent's summary and the `[rollout]` section, on a builder's line and the
+stack keeper's alike, read a standing question, block, or keeper's conflict
+off the row rather than off Luke's transcript; the ends the host reports
+for a worker are not kept there, so a question its turn ended on stands.
 
 The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
 the planning worker's shape (`eve/subagents/worker/`): read-only in the

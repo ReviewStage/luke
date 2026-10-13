@@ -5,6 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import {
   createCodingAgent,
   recordCodingAgentPublished,
+  recordCodingAgentReport,
 } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation, readPlan, savePlanText } from "@sidecar/database/models/plan-store";
@@ -15,6 +16,7 @@ import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type CodingAgentLastReport,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
@@ -28,6 +30,7 @@ import {
   type RolloutItem,
   rolloutSchema,
 } from "@sidecar/hosted/plan-wire";
+import { WORKER_REPORT_KIND } from "@sidecar/hosted/rollout-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import {
   generateText,
@@ -157,9 +160,10 @@ function worker(
   position: number,
   status: CodingAgentStatus,
   published: CodingAgentPullRequest | null = null,
+  lastReport: CodingAgentLastReport | null = null,
 ): RolloutWorker {
   const ended = status === CODING_AGENT_STATUS.FAILED || status === CODING_AGENT_STATUS.CANCELLED;
-  return { position, status, live: !ended, published };
+  return { position, status, live: !ended, published, lastReport };
 }
 
 /** The two ready lines of a rollout's state. */
@@ -624,12 +628,47 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           pullRequest(415, PULL_REQUEST_STATE.OPEN),
         );
         const plain = yield* start(undefined);
-        yield* start(ROLLOUT_ROLE.KEEPER);
+        const keeper = yield* start(ROLLOUT_ROLE.KEEPER);
         yield* recordCodingAgentPublished(
           userId,
           plain.agent.id,
           pullRequest(9, PULL_REQUEST_STATE.MERGED),
         );
+        // Each report stands for the turn that made it, which is its agent's newest.
+        const running = (conversationId: string) =>
+          Effect.map(
+            Database.use((db) =>
+              db
+                .insert(turns)
+                .values({
+                  userId,
+                  conversationId,
+                  origin: TURN_ORIGIN.TYPED,
+                  status: TURN_STATUS.RUNNING,
+                  queuedAt: new Date(NOW),
+                })
+                .returning({ id: turns.id }),
+            ),
+            ([row]) => (row === undefined ? assert.fail("no turn was written") : row.id),
+          );
+        yield* recordCodingAgentReport(userId, first.agent.id, {
+          report: {
+            kind: WORKER_REPORT_KIND.QUESTION,
+            text: "Should an expired invite be resent?",
+            options: ["Resend", "Refuse"],
+            at: 1,
+          },
+          turnId: yield* running(first.agent.conversationId),
+        });
+        yield* recordCodingAgentReport(userId, keeper.agent.id, {
+          report: {
+            kind: WORKER_REPORT_KIND.CONFLICT,
+            pullRequest: 416,
+            text: "Both sides rename the invite table.",
+            at: 2,
+          },
+          turnId: yield* running(keeper.agent.conversationId),
+        });
 
         yield* cutRollout(planId, SIBLINGS);
         const lines = (yield* host.standingContext(standing)).split("\n");
@@ -637,10 +676,10 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         assert.notEqual(at, -1);
         assert.deepEqual(readRollout(lines[at + 1]), SIBLINGS);
         assert.deepEqual(lines.slice(at + 2, at + 8), [
-          '1. "Schema" · base: main · worker: working · pull request: #415 open',
+          '1. "Schema" · base: main · worker: working · pull request: #415 open · asks: "Should an expired invite be resent?" (options: "Resend", "Refuse")',
           '2. "Route" · base: 1 · worker: none · pull request: none',
           '3. "Screen" · base: 1 · worker: none · pull request: none',
-          "Stack keeper: working",
+          'Stack keeper: working · conflict on #416: "Both sides rename the invite table."',
           "Ready to start: 2, 3",
           "Ready to merge: none",
         ]);
@@ -713,7 +752,7 @@ describe("the rollout's state as the planning model reads it", () => {
           worker(2, CODING_AGENT_STATUS.RUNNING),
           worker(3, CODING_AGENT_STATUS.CANCELLED),
         ],
-        keeper: CODING_AGENT_STATUS.RUNNING,
+        keeper: { status: CODING_AGENT_STATUS.RUNNING, lastReport: null },
       }),
       [
         '1. "Schema" · base: main · worker: finished · pull request: #415 merged',
@@ -723,6 +762,63 @@ describe("the rollout's state as the planning model reads it", () => {
         "Ready to start: none",
         "Ready to merge: none",
       ],
+    );
+  });
+
+  it("ends a position's line with the question or block its newest worker waits on, and with nothing for a milestone or an earlier worker's ask", () => {
+    const report = (kind: CodingAgentLastReport["kind"], text: string): CodingAgentLastReport => ({
+      kind,
+      text,
+      at: 1,
+    });
+    assert.deepEqual(
+      rolloutStateOf(CHAIN, {
+        builders: [
+          worker(1, CODING_AGENT_STATUS.COMPLETED, pullRequest(415, PULL_REQUEST_STATE.OPEN), {
+            ...report(WORKER_REPORT_KIND.QUESTION, "Resend or refuse?"),
+            options: ["Resend", "Refuse"],
+          }),
+          worker(
+            2,
+            CODING_AGENT_STATUS.FAILED,
+            null,
+            report(WORKER_REPORT_KIND.QUESTION, "Which?"),
+          ),
+          worker(
+            2,
+            CODING_AGENT_STATUS.COMPLETED,
+            null,
+            report(WORKER_REPORT_KIND.BLOCKED, "No key."),
+          ),
+          worker(
+            3,
+            CODING_AGENT_STATUS.RUNNING,
+            null,
+            report(WORKER_REPORT_KIND.CI_GREEN, "Green."),
+          ),
+        ],
+        keeper: undefined,
+      }).slice(0, 3),
+      [
+        '1. "Schema" · base: main · worker: finished · pull request: #415 open · asks: "Resend or refuse?" (options: "Resend", "Refuse")',
+        '2. "Route" · base: 1 · worker: finished · pull request: none · blocked: "No key."',
+        '3. "Accept flow" · base: 2 · worker: working · pull request: none',
+      ],
+    );
+    assert.equal(
+      rolloutStateOf(CHAIN, {
+        builders: [
+          worker(
+            1,
+            CODING_AGENT_STATUS.FAILED,
+            null,
+            report(WORKER_REPORT_KIND.QUESTION, "Which?"),
+          ),
+          worker(1, CODING_AGENT_STATUS.STARTING),
+        ],
+        keeper: undefined,
+      })[0],
+      '1. "Schema" · base: main · worker: working · pull request: none',
     );
   });
 
@@ -799,8 +895,11 @@ describe("the rollout's state as the planning model reads it", () => {
   });
 
   it("names the stack keeper by the newest started: none, at work, or how it ended", () => {
-    const keeperLine = (keeper: CodingAgentStatus | undefined) =>
-      rolloutStateOf(SIBLINGS, { builders: [], keeper }).at(-3);
+    const keeperLine = (status: CodingAgentStatus | undefined) =>
+      rolloutStateOf(SIBLINGS, {
+        builders: [],
+        keeper: status === undefined ? undefined : { status, lastReport: null },
+      }).at(-3);
     assert.deepEqual(
       [
         undefined,
@@ -834,6 +933,42 @@ describe("the rollout's state as the planning model reads it", () => {
         "Stack keeper: none",
         "Ready to start: 1",
         "Ready to merge: none",
+      ],
+    );
+  });
+
+  it("ends the stack keeper's line with the question, block, or conflict it waits on, on the pull request it names, and with nothing for a restack or a merge", () => {
+    const keeperLine = (lastReport: CodingAgentLastReport) =>
+      rolloutStateOf(SIBLINGS, {
+        builders: [],
+        keeper: { status: CODING_AGENT_STATUS.COMPLETED, lastReport },
+      }).at(-3);
+    assert.deepEqual(
+      [
+        {
+          kind: WORKER_REPORT_KIND.QUESTION,
+          text: "Merge #415 now?",
+          options: ["Merge", "Wait"],
+          at: 1,
+        },
+        { kind: WORKER_REPORT_KIND.BLOCKED, text: "No push access.", at: 1 },
+        { kind: WORKER_REPORT_KIND.CONFLICT, text: "Both rename the table.", at: 1 },
+        {
+          kind: WORKER_REPORT_KIND.CONFLICT,
+          pullRequest: 416,
+          text: "Both rename the table.",
+          at: 1,
+        },
+        { kind: WORKER_REPORT_KIND.RESTACKED, text: "Restacked 2 and 3.", at: 1 },
+        { kind: WORKER_REPORT_KIND.MERGED, text: "Merged #415.", at: 1 },
+      ].map(keeperLine),
+      [
+        'Stack keeper: finished · asks: "Merge #415 now?" (options: "Merge", "Wait")',
+        'Stack keeper: finished · blocked: "No push access."',
+        'Stack keeper: finished · conflict: "Both rename the table."',
+        'Stack keeper: finished · conflict on #416: "Both rename the table."',
+        "Stack keeper: finished",
+        "Stack keeper: finished",
       ],
     );
   });

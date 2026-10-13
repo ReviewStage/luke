@@ -135,11 +135,13 @@ type AskRefused =
   | { readonly refusal: typeof ASK_REFUSAL.NOT_FOUND }
   | { readonly refusal: typeof ASK_REFUSAL.UPSTREAM; readonly status: number };
 
-/** What an accepted ask answers: the id the caller follows this ask by, the conversation it runs in, and when it was taken. */
+/** What an accepted ask answers: the id the caller follows this ask by, the conversation it runs in, when it was first taken, and whether this call is the one that handed it to eve. */
 interface AcceptedAsk {
   readonly id: string;
   readonly conversationId: string;
   readonly queuedAt: number;
+  /** Whether this call handed the ask to eve; false for a retry that found it handed already, which is how a caller tells a repeat of its key from the first. */
+  readonly dispatched: boolean;
 }
 
 export type AskOutcome = Result.Result<AcceptedAsk, AskRefused>;
@@ -235,12 +237,8 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
     createdAt: now,
     ...(input.voice === undefined ? undefined : { voice: input.voice }),
   });
-  const accepted: AskOutcome = Result.succeed({
-    id: ask.id,
-    conversationId,
-    queuedAt: ask.createdAt.getTime(),
-  });
-  if (ask.sessionId !== undefined) return accepted;
+  const taken = { id: ask.id, conversationId, queuedAt: ask.createdAt.getTime() };
+  if (ask.sessionId !== undefined) return Result.succeed({ ...taken, dispatched: false });
   const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
 
   // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
@@ -258,6 +256,8 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
   // A dispatch past its deadline is refused as an eve that could not be reached is, the row left
   // standing for a retry.
   let failed: AskOutcome | undefined;
+  // Note that a retry the conversation's lock holds back finds the ask handed and runs no dispatch, so only the call eve took sets this.
+  let handed = false;
   const dispatch = seams.asks.dispatchOnce(
     { userId, conversationId },
     ask.id,
@@ -267,6 +267,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
           .send(sessionId, message)
           .pipe(Effect.catchTag("EveUnreachable", unreachableSend));
         if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
+          handed = true;
           return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
         }
         if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
@@ -281,6 +282,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
         failed = Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: opened.status });
         return undefined;
       }
+      handed = true;
       return {
         sessionId: opened.sessionId,
         turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
@@ -295,7 +297,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
   if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
     return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
   }
-  return failed ?? accepted;
+  return failed ?? Result.succeed({ ...taken, dispatched: handed });
 });
 
 /** Why a Stop was not carried: nothing of the caller's stands under the id, no session runs the turn, or eve did not take the cancel. */

@@ -1,5 +1,6 @@
 import {
   CONTEXT_WINDOW,
+  type CodingAgentLastReport,
   type CodingAgentPullRequest,
   type ContextWindow,
   type RolloutRole,
@@ -66,6 +67,12 @@ import { conversations } from "./storage.js";
  * the stack's git structure and has no position. There is no rollout table: the plan's field is the
  * graph, and these rows are its state. A position may hold more than one row
  * over time, since a worker that failed or was stopped is started again.
+ * `last_report` is what the agent last reported of itself through its
+ * report tool, with the turn it was made in, and it stands only while that
+ * turn is the agent's newest, so a question, a block, or a conflict reads
+ * off the row while the agent waits on its answer and leaves once the
+ * answer opens its next turn; the report itself lands on the plan's
+ * conversation either way.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
@@ -90,6 +97,18 @@ export interface StoredAgentStep {
   readonly toolDefinitionTokens: number;
   readonly briefTokens: number;
   readonly at: number;
+}
+
+/**
+ * A rollout agent's last report as its row keeps it: the report as the
+ * summary carries it, and the service's id for the turn whose call made it,
+ * which is how long it stands: while that turn is the agent's newest, and
+ * no longer once the next one starts. Only the call that handed the report
+ * to Luke writes it, so a call eve replays never moves it.
+ */
+export interface StoredAgentReport {
+  readonly report: CodingAgentLastReport;
+  readonly turnId: string;
 }
 
 export const codingAgent = pgTable(
@@ -139,6 +158,8 @@ export const codingAgent = pgTable(
     baseBranch: text("base_branch"),
     /** What the agent does for the plan's rollout; null for an agent started outside one. */
     rolloutRole: text("rollout_role").$type<RolloutRole>(),
+    /** What the agent last reported of itself, with the turn it was made in; null before its first report. */
+    lastReport: jsonb("last_report").$type<StoredAgentReport>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

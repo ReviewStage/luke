@@ -2,6 +2,7 @@ import type { TurnEnding } from "@sidecar/database/models/message-reads";
 import {
   CODING_AGENT_FAILURE,
   CODING_AGENT_REPORT_TOOL,
+  type CodingAgentLastReport,
   ROLLOUT_ROLE,
   type RolloutRole,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -48,7 +49,10 @@ import { codingAgentFailureOf } from "./status.js";
  * after a conflict included, since its other stacks still want it. Beside
  * the tool, the host reports how each builder's and keeper's turn ended,
  * finished, failed with its failure word, or stopped, so Luke hears of one that
- * died without reporting.
+ * died without reporting. The agent's own last report is kept on its row
+ * as well, standing until its next turn starts, so a standing question or block
+ * reads without Luke's transcript; the host's ends are not, so a question
+ * the turn ended on still stands.
  */
 
 /** The words the tool is shown, for both roles, since each reads them every step. */
@@ -164,6 +168,17 @@ export function reportBy(
   return Result.succeed(
     "keeper" in reporter ? { ...input, keeper: true } : { ...input, position: reporter.position },
   );
+}
+
+/** The agent's own report as its summary carries it while it stands, the pull request it names among it, stamped with the epoch milliseconds Luke took it. */
+export function lastReportOf(input: WorkerReportInput, at: number): CodingAgentLastReport {
+  return {
+    kind: input.kind,
+    ...(input.pullRequest === undefined ? undefined : { pullRequest: input.pullRequest }),
+    text: input.text,
+    ...(input.options === undefined ? undefined : { options: input.options }),
+    at,
+  };
 }
 
 /** The answer to a report taken: the line Luke reads, and whether to end the turn for his answer. */

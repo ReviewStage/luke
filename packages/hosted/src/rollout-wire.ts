@@ -1,6 +1,17 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { ROLLOUT_BOUNDS } from "./plan-wire.js";
+import {
+  BUILDER_REPORT_KIND,
+  KEEPER_REPORT_KIND,
+  REPORT_KIND,
+  type ReportKind,
+  reportOptionsSchema,
+  reportTextSchema,
+  WORKER_REPORT_KIND,
+} from "./report-vocabulary.js";
+
+export { BUILDER_REPORT_KIND, KEEPER_REPORT_KIND, REPORT_KIND, WORKER_REPORT_KIND };
 
 /**
  * rollout-wire.ts -- a report on one pull request of a plan's rollout, as it lands on the plan's conversation.
@@ -17,65 +28,11 @@ import { ROLLOUT_BOUNDS } from "./plan-wire.js";
  * own words, then the options a question offers.
  */
 
-const REPORT_BOUNDS = {
-  /** The most characters a report's own words may spell: a status or a question, not a log. */
-  MAX_TEXT_CHARS: 4_000,
-  /** The most options a question may offer. */
-  MAX_OPTIONS: 6,
-  /** The most characters one option may spell. */
-  MAX_OPTION_CHARS: 200,
-} as const;
-
-/** What a report says happened: a builder's milestones and asks, the keeper's restacks, merges, and conflicts, then the ends the host reports for either. */
-export const REPORT_KIND = {
-  PR_OPENED: "pr_opened",
-  CI_GREEN: "ci_green",
-  RESTACKED: "restacked",
-  MERGED: "merged",
-  CONFLICT: "conflict",
-  BLOCKED: "blocked",
-  QUESTION: "question",
-  FINISHED: "finished",
-  FAILED: "failed",
-  STOPPED: "stopped",
-} as const;
-
-type ReportKind = (typeof REPORT_KIND)[keyof typeof REPORT_KIND];
-
 /** The tags a first line names a reporter by, where it is not a builder at a position. */
 const REPORTER = {
   KEEPER: "keeper",
   GITHUB: "github",
 } as const;
-
-/**
- * The kinds a builder reports itself, through its report tool: its pull
- * request's milestones and its asks. It never restacks, retargets, or
- * merges, so none of those is its to report.
- */
-export const BUILDER_REPORT_KIND = {
-  PR_OPENED: REPORT_KIND.PR_OPENED,
-  CI_GREEN: REPORT_KIND.CI_GREEN,
-  BLOCKED: REPORT_KIND.BLOCKED,
-  QUESTION: REPORT_KIND.QUESTION,
-} as const;
-
-/** The kinds the stack keeper reports itself: a restack done, a conflict that is a judgment's, a merge, and its asks. */
-export const KEEPER_REPORT_KIND = {
-  RESTACKED: REPORT_KIND.RESTACKED,
-  CONFLICT: REPORT_KIND.CONFLICT,
-  MERGED: REPORT_KIND.MERGED,
-  BLOCKED: REPORT_KIND.BLOCKED,
-  QUESTION: REPORT_KIND.QUESTION,
-} as const;
-
-/**
- * The kinds a rollout's agent reports through its report tool, a builder's
- * and the keeper's together, since the two share one tool; the host holds
- * each to its own role's. How a turn ended is the host's to report, so no
- * agent can claim to have finished.
- */
-export const WORKER_REPORT_KIND = { ...BUILDER_REPORT_KIND, ...KEEPER_REPORT_KIND } as const;
 
 /**
  * Each kind's words on the first line, and how a pull request's number
@@ -101,10 +58,6 @@ const REPORT_POSITION = EffectSchema.Int.check(
   EffectSchema.isLessThanOrEqualTo(ROLLOUT_BOUNDS.MAX_PULL_REQUESTS),
 );
 
-function trimmedText(maximumChars: number) {
-  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
-}
-
 /** What every report says, whoever reports it. */
 const REPORT_FIELDS = {
   kind: EffectSchema.Literals(Object.values(REPORT_KIND)),
@@ -112,14 +65,9 @@ const REPORT_FIELDS = {
   pullRequest: EffectSchema.optionalKey(
     EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
   ),
-  text: trimmedText(REPORT_BOUNDS.MAX_TEXT_CHARS),
+  text: reportTextSchema,
   /** The answers a question offers, where it offers any. */
-  options: EffectSchema.optionalKey(
-    EffectSchema.Array(trimmedText(REPORT_BOUNDS.MAX_OPTION_CHARS)).check(
-      EffectSchema.isNonEmpty(),
-      EffectSchema.isMaxLength(REPORT_BOUNDS.MAX_OPTIONS),
-    ),
-  ),
+  options: EffectSchema.optionalKey(reportOptionsSchema),
 };
 
 /**
