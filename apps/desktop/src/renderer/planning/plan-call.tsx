@@ -62,6 +62,9 @@ import { WorkingLine } from "./working-time";
 /** What a call's checkpoint says while the call stands. */
 const LIVE_LABEL = "Live";
 
+/** What the tab says where the transcript could not be read. */
+const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
+
 /** What a turn that ended without answering ends on, by whether it failed (`workFailed`), as an agent's turn ends. */
 const ENDED_WORD = {
   STOPPED: "Stopped",
@@ -176,10 +179,12 @@ function TurnWork({
 }): React.JSX.Element | null {
   const message = spoken ? unsaid(turn.message) : turn.message;
   const ended = turn.moving || turn.state !== PLAN_WORK_STATE.FAILED ? undefined : turn.record;
-  if (message.parts.length === 0 && !turn.moving && ended === undefined) return null;
+  const mark = turn.key === doors.revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null;
+  // A turn that only answered in words Luke said aloud has nothing left to draw but where a version's Open lands.
+  if (message.parts.length === 0 && !turn.moving && ended === undefined) return mark;
   return (
     <>
-      {turn.key === doors.revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
+      {mark}
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
       <AgentMessage
         message={message}
@@ -421,10 +426,17 @@ export function PlanCall({
   const drawn = calls.length > 0 || rows.length > 0 || earlier !== undefined;
   return (
     <section ref={root} className="plan-call ph-no-capture" aria-label="Call">
-      {drawn && region.kind !== TRANSCRIPT_REGION.FAILED ? (
+      {drawn ? (
         <Conversation>
           {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
           <ConversationContent className="pt-0">
+            {/* A transcript that could not be read leaves the work standing, and says so above it. */}
+            {region.kind === TRANSCRIPT_REGION.FAILED ? (
+              <div className="flex items-center gap-2 pt-(--section-gap)">
+                <TranscriptNote role="alert">{TRANSCRIPT_FAILED_LINE}</TranscriptNote>
+                <RetryButton onRetry={onRetry} />
+              </div>
+            ) : null}
             {region.kind === TRANSCRIPT_REGION.READY && region.earlierOmitted ? (
               <TranscriptNote>Earlier lines are not shown.</TranscriptNote>
             ) : null}
@@ -446,7 +458,7 @@ export function PlanCall({
       ) : region.kind === TRANSCRIPT_REGION.FAILED ? (
         <ConversationEmptyState>
           <p className="m-0" role="alert">
-            The transcript could not be read.
+            {TRANSCRIPT_FAILED_LINE}
           </p>
           <RetryButton onRetry={onRetry} />
         </ConversationEmptyState>

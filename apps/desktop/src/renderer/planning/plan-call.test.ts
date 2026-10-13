@@ -791,3 +791,52 @@ test("a turn no line asked for keeps its words, since nothing said them aloud, a
   assert.equal(drawn.at(-1), "luke's work");
   assert.ok(container.textContent?.includes("Removal already checks for an admin."));
 });
+
+test("a transcript that could not be read leaves Luke's work standing, saying so above it with Retry", () => {
+  let retried = 0;
+  const container = mounted(
+    callTab({
+      region: { kind: TRANSCRIPT_REGION.FAILED },
+      turns: [readingTurn("turn-typed", PLAN_WORK_STATE.DONE, [])],
+      onRetry: () => {
+        retried += 1;
+      },
+    }),
+  );
+  assert.equal(
+    container.querySelector('[role="alert"]')?.textContent,
+    "The transcript could not be read.",
+  );
+  assert.deepEqual(readDown(container), ["luke's work"]);
+  const retry = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+});
+
+test("a turn that only answered in words Luke said aloud draws nothing of its own, yet a version's Open still lands where it stood", () => {
+  const spokenOnly: PlanWorkTurn = {
+    turnId: "turn-words",
+    startedAt: 2_000,
+    endedAt: 3_000,
+    state: PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    asked: ["row-ask"],
+    parts: [{ type: PLAN_WORK_PART.TEXT, text: "It already checks for an admin." }],
+  };
+  const container = mounted(
+    callTab({
+      region: askingCall(false),
+      turns: [spokenOnly],
+      reveal: { at: 2_500, onRevealed: () => undefined },
+    }),
+  );
+  assert.deepEqual(readDown(container), [
+    "you: Check how removal works.",
+    "luke: It already checks for an admin.",
+  ]);
+  const mark = container.querySelector("[data-reveal]");
+  assert.ok(mark, "the turn's place is still marked");
+  assert.equal(mark.nextElementSibling?.classList.contains("is-assistant"), true);
+});
