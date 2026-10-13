@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Fiber, Layer, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import type { WireValue } from "../server/core";
 import {
   type AvatarGrant,
@@ -139,5 +140,22 @@ it.effect("a session that reaches no Keyframe is upstream with no status", () =>
     assert.equal(error.failure, KEYFRAME_FAILURE.UPSTREAM);
     assert.equal(error.status, undefined);
     assertWordless(error);
+  });
+});
+
+it.effect("a success whose body never ends is upstream with no status, at the deadline", () => {
+  const upstream = keyframe(
+    () =>
+      new Response(new ReadableStream(), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  return Effect.gen(function* () {
+    const pending = yield* Effect.forkChild(Effect.flip(upstream.createSession));
+    yield* TestClock.adjust("15 seconds");
+    const error = yield* Fiber.join(pending);
+    assert.equal(error.failure, KEYFRAME_FAILURE.UPSTREAM);
+    assert.equal(error.status, undefined);
   });
 });

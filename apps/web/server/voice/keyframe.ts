@@ -14,7 +14,7 @@
 
 import { readEither } from "@sidecar/wire/effect";
 import { Context, Data, Effect, Layer, Redacted, Result, Schema } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import {
   accountCall,
   callAnswered,
@@ -100,12 +100,16 @@ function refusalOf(status: number): KeyframeFailure {
 
 /** The one call over the ambient client. */
 function keyframeService(options: KeyframeOptions, client: HttpClient.HttpClient): KeyframeService {
+  const requestTimeoutMs = options.requestTimeoutMs ?? KEYFRAME_DEFAULTS.REQUEST_TIMEOUT_MS;
   const call = accountCall({
     baseUrl: options.baseUrl ?? KEYFRAME_DEFAULTS.BASE_URL,
     credential: fixedBearer(Redacted.value(options.apiKey)),
-    requestTimeoutMs: options.requestTimeoutMs ?? KEYFRAME_DEFAULTS.REQUEST_TIMEOUT_MS,
+    requestTimeoutMs,
   });
 
+  // Note that the deadline is taken again around the whole session, because
+  // the call's own ends when the headers arrive and a body that stalls after
+  // them would otherwise hold the call's voice-only fallback indefinitely.
   const createSession: KeyframeService["createSession"] = () =>
     Effect.gen(function* () {
       const sent = yield* call.send({
@@ -137,7 +141,13 @@ function keyframeService(options: KeyframeOptions, client: HttpClient.HttpClient
         participantToken: read.success.participant_token,
         agentIdentity: read.success.agent_identity,
       };
-    }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    }).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.timeoutOrElse({
+        duration: requestTimeoutMs,
+        orElse: () => Effect.fail(new KeyframeError({ failure: KEYFRAME_FAILURE.UPSTREAM })),
+      }),
+    );
 
   return { createSession };
 }
