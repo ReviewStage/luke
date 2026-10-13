@@ -25,19 +25,20 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
  *
  * The template is a plan's text before it is a plan, so the page is a plan's
- * page beside Settings' page list: the toolbar names it and opens its
- * version history, as the "Edited by" line over the document does
- * (`plan-template-history.tsx`), and the document is
- * the plan's own (`../planning/plan-body.tsx`), at the plan's width and in
- * its type, read as sections until a click or Return opens the same editor
- * on the same words with the same keyboard. Its title is the page's name,
- * which is no name of the account's to change, so it is drawn and never
- * edited. A quiet note over the document, placed as an archived plan's
- * banner is, says what the template is for, and offers Reset to default
- * while the account holds a template of its own; the reset asks first,
- * since it replaces every word of the account's, kept since only in the
- * template's history, and waits for a save already out so the default
- * lands last.
+ * page beside Settings' page list, with no top bar: the document is the
+ * plan's own (`../planning/plan-body.tsx`), at the plan's width and in its
+ * type, read as sections until a click or Return opens the same editor on
+ * the same words with the same keyboard, and its words dissolve as they
+ * scroll up under the note over them. Its title is the page's name, which is
+ * no name of the account's to change, so it is drawn and never edited, and
+ * the page's actions stand at the end of its line: the version history
+ * (`plan-template-history.tsx`), which the "Edited by" line over the
+ * document opens too, and Reset to default while the account holds a
+ * template of its own. The reset asks first, since it replaces every word of
+ * the account's, kept since only in the template's history, and waits for a
+ * save already out so the default lands last. A quiet note over the
+ * document, placed as an archived plan's banner is, says what the template
+ * is for.
  *
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
@@ -68,7 +69,7 @@ const PAGE_LINE = {
 /** The id the template is drawn under as a plan's document, which names no plan of the account's. */
 export const TEMPLATE_DOCUMENT_ID = "plan-template";
 
-/** What the toolbar's button that opens the template's version history says, as a plan's menu item says it. */
+/** What the title line's button that opens the template's version history says, as a plan's menu item says it. */
 const HISTORY_LABEL = "Version history";
 
 /** Where the page stands with the service's template. */
@@ -185,19 +186,21 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     if (!signedIn) return;
     let live = true;
     setRead(TEMPLATE_READ.READING);
-    // The newest revision is read beside the template, so its "Edited by" line stands as the document does rather than a beat after.
-    const newest = act(ACT_KIND.PLAN_TEMPLATE_REVISIONS, {})
+    act(ACT_KIND.PLAN_TEMPLATE_READ)
+      .catch((): PlanTemplateAnswerView | undefined => undefined)
+      .then((answer) => {
+        if (!live) return;
+        const failed = answer === undefined || "failure" in answer;
+        if (!failed) take(answer, undefined);
+        setRead(failed ? TEMPLATE_READ.FAILED : TEMPLATE_READ.READ);
+      });
+    // The newest revision names the "Edited by" line, read beside the template and never waited on, unless an edit here has named it since.
+    act(ACT_KIND.PLAN_TEMPLATE_REVISIONS, {})
       .then((page) => ("failure" in page ? undefined : page.revisions[0]?.lastEdit))
-      .catch((): PlanLastEdit | undefined => undefined);
-    const template = act(ACT_KIND.PLAN_TEMPLATE_READ).catch(
-      (): PlanTemplateAnswerView | undefined => undefined,
-    );
-    Promise.all([template, newest]).then(([answer, edited]) => {
-      if (!live) return;
-      const failed = answer === undefined || "failure" in answer;
-      if (!failed) take(answer, edited);
-      setRead(failed ? TEMPLATE_READ.FAILED : TEMPLATE_READ.READ);
-    });
+      .catch((): PlanLastEdit | undefined => undefined)
+      .then((edited) => {
+        if (live && edited !== undefined) setLastEdit((held) => held ?? edited);
+      });
     return () => {
       live = false;
     };
@@ -275,16 +278,10 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
 
 /**
  * The note over the template, placed as an archived plan's banner is: what
- * the template is for, and its reset while the account holds its own. It is
- * what a settings search for the template lands on.
+ * the template is for. It is what a settings search for the template lands
+ * on.
  */
-function TemplateNote({
-  custom,
-  onReset,
-}: {
-  custom: boolean;
-  onReset: () => void;
-}): React.JSX.Element {
+function TemplateNote(): React.JSX.Element {
   return (
     <section
       className="document-banner template-note"
@@ -298,13 +295,43 @@ function TemplateNote({
         <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
         <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
       </div>
+    </section>
+  );
+}
+
+/**
+ * The page's actions at the right end of its title line, as every Settings
+ * page carries its own: the version history, and Reset to default while the
+ * account holds a template of its own.
+ */
+function TitleActions({
+  custom,
+  onShowHistory,
+  onReset,
+}: {
+  custom: boolean;
+  onShowHistory: () => void;
+  onReset: () => void;
+}): React.JSX.Element {
+  return (
+    <span className="plan-title-actions">
+      <Tooltip label={HISTORY_LABEL}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={HISTORY_LABEL}
+          onClick={onShowHistory}
+        >
+          <HistoryIcon />
+        </button>
+      </Tooltip>
       {custom ? (
-        <button type="button" className="toolbar-button" onClick={onReset}>
+        <button type="button" className="toolbar-button bordered-button" onClick={onReset}>
           <ResetIcon />
           Reset to default
         </button>
       ) : null}
-    </section>
+    </span>
   );
 }
 
@@ -319,13 +346,20 @@ function TemplateDocument({
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <>
-      <TemplateNote custom={template.custom} onReset={reset.ask} />
-      <div className="desktop-document ph-no-capture">
+      <TemplateNote />
+      <div className="desktop-document template-document ph-no-capture">
         <PlanBody
           plan={templateDocument(template.text, template.lastEdit)}
           live={false}
           onEdit={template.edit}
           onShowHistory={onShowHistory}
+          titleEnd={
+            <TitleActions
+              custom={template.custom}
+              onShowHistory={onShowHistory}
+              onReset={reset.ask}
+            />
+          }
         />
       </div>
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
@@ -364,9 +398,8 @@ function TemplateState({
 }
 
 /**
- * Settings › Plan template beside Settings' page list: its toolbar, with
- * the button that opens the template's version history where there is a
- * template to have one, then the template as a plan's document.
+ * Settings › Plan template beside Settings' page list: the template as a
+ * plan's document, its title line carrying the page's actions.
  * `onShowHistory` opens the history, from the button or the "Edited by"
  * line, a section's opening it on the template as it stands.
  */
@@ -382,25 +415,8 @@ export function PlanTemplatePage({
   const drawn = signedIn && template.read === TEMPLATE_READ.READ;
   return (
     <section className="settings-page" aria-label={TEMPLATE_TITLE}>
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">{TEMPLATE_TITLE}</h1>
-        </div>
-        {drawn ? (
-          <div className="desktop-toolbar-actions">
-            <Tooltip label={HISTORY_LABEL}>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={HISTORY_LABEL}
-                onClick={onShowHistory}
-              >
-                <HistoryIcon />
-              </button>
-            </Tooltip>
-          </div>
-        ) : null}
-      </header>
+      {/* Settings has no top bar: the page's title and its actions stand in the page. */}
+      <div className="desktop-drag-strip" />
       {drawn ? (
         <TemplateDocument template={template} onShowHistory={() => onShowHistory()} />
       ) : (

@@ -258,6 +258,23 @@
   }
 }
 
+/* The same fade at a scroll container's top edge, where something stands
+   pinned over it, as the plan template's banner does: content scrolled up
+   past the edge dissolves into the surface over `--scroll-fade` rather than
+   being sliced against the banner. A container runs it on its own scroll
+   timeline over its first `--scroll-fade` of scrolling, so a page at rest at
+   its top is left whole and the fade has fully risen by the time a line
+   could reach the edge. */
+@keyframes scroll-top-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade));
+  }
+}
+
 .app-stage {
   position: relative;
   width: 100%;

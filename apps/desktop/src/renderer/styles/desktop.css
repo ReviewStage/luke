@@ -1228,6 +1228,11 @@ body,
   font-size: 12px;
 }
 
+/* A row or page action drawn with the edge Start's split button draws. */
+.bordered-button {
+  border: 1px solid var(--hairline);
+}
+
 .quiet-button svg {
   width: 13px;
   height: 13px;
@@ -2505,6 +2510,15 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+}
+
+/* The plan template drawn as a plan, scrolling under the note pinned over
+   it: its words dissolve into the page at the scroller's top edge, through
+   the shared top fade, once the page has left its top. */
+.template-document .plan-document-scroll {
+  animation: scroll-top-fade linear both;
+  animation-timeline: scroll(self block);
+  animation-range: 0 var(--scroll-fade);
 }
 
 .settings-page-scroll {

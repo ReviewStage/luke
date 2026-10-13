@@ -25,10 +25,12 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
+import { runAppCommand } from "../app-commands";
 import { useSidebarCollapse } from "../desktop/sidebar-collapse";
 import { ToastHost } from "../toast";
 import { TemplateVersionHistory } from "./plan-template-history";
@@ -126,9 +128,13 @@ let root: Root | undefined;
 /** How many times the history left for the template page. */
 let exits = 0;
 
+/** How many times the window's own history went back, which would leave Settings. */
+let windowBacks = 0;
+
 beforeEach(() => {
   sent = [];
   exits = 0;
+  windowBacks = 0;
   installScrollIntoView();
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -151,7 +157,12 @@ function mount(registry: AtomRegistry) {
       null,
       createElement(TemplateVersionHistory, {
         sidebar,
-        history: navigationHistory(),
+        history: navigationHistory({
+          canGoBack: true,
+          onBack: () => {
+            windowBacks += 1;
+          },
+        }),
         account: READER,
         onExit: () => {
           exits += 1;
@@ -272,4 +283,40 @@ it.effect("Back leaves for the template, restoring nothing", () =>
     assert.equal(exits, 1);
     assert.deepEqual(restores(), []);
   }),
+);
+
+it.effect(
+  "the window's Back, from the arrow at the list's head, its chord, or the mouse's back button, goes to the template rather than out of Settings",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const page = yield* mount(registry);
+      yield* settled;
+      const arrow = page.querySelector<HTMLButtonElement>(
+        '.title-bar-controls [aria-label="Back"]',
+      );
+      assert.ok(arrow);
+      assert.equal(arrow.disabled, false);
+
+      yield* Effect.promise(() => act(async () => arrow.click()));
+      yield* Effect.promise(() =>
+        act(async () => {
+          runAppCommand(APP_COMMAND.BACK);
+        }),
+      );
+      // The mouse's back button, which the window's own history hears on the window too.
+      const heard: number[] = [];
+      const hear = (event: MouseEvent) => heard.push(event.button);
+      window.addEventListener("mouseup", hear);
+      yield* Effect.promise(() =>
+        act(async () => {
+          document.body.dispatchEvent(new MouseEvent("mouseup", { button: 3, bubbles: true }));
+        }),
+      );
+      window.removeEventListener("mouseup", hear);
+
+      assert.equal(exits, 3);
+      assert.equal(windowBacks, 0);
+      assert.deepEqual(heard, [], "the window's history never hears the press");
+    }),
 );

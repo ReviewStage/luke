@@ -1,12 +1,14 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
+import { useAppCommand } from "../app-commands";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse";
-import type { NavigationHistory } from "../navigation-history";
+import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history";
 import { revisionSummary } from "../planning/plan-history-model";
 import { type PlanHistorySource, usePlanHistory } from "../planning/use-plan-history";
 import { sayRestored } from "../planning/version-view";
@@ -18,7 +20,7 @@ import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page";
  *
  * A template is a plan's text before it is a plan, so its history is drawn
  * exactly as a plan's is (`../desktop/desktop-version-history.tsx`), over
- * the whole window, from the template page's toolbar or its "Edited by"
+ * the whole window, from the template's title line or its "Edited by"
  * line: every revision listed where the sidebar stands, newest first, each
  * the developer's under their picture as You, or the template as it stood
  * before its history began; the one chosen drawn beside them under the
@@ -54,6 +56,29 @@ function templateRevisionSummary(line: PlanRevisionLine & { default?: true }): s
 }
 
 /**
+ * The history as one step over the template page, which the window's own
+ * history does not hold: Back, from the arrow at the list's head, its chord,
+ * or the mouse's back button, goes to the page rather than out of Settings.
+ * Note that the mouse's press is taken as it starts down the window, before
+ * the window's history hears it, because both listen on the window.
+ */
+function useStepOverTemplate(history: NavigationHistory, onExit: () => void): NavigationHistory {
+  const exit = useRef(onExit);
+  exit.current = onExit;
+  useAppCommand(APP_COMMAND.BACK, onExit);
+  useEffect(() => {
+    const takeBack = (event: MouseEvent) => {
+      if (event.button !== MOUSE_BUTTON.BACK) return;
+      event.stopImmediatePropagation();
+      exit.current();
+    };
+    window.addEventListener("mouseup", takeBack, { capture: true });
+    return () => window.removeEventListener("mouseup", takeBack, { capture: true });
+  }, []);
+  return { ...history, canGoBack: true, onBack: onExit };
+}
+
+/**
  * The account's plan template's version history over the whole window.
  * `onExit` goes back to the template page, which a restore that lands does
  * too, where the template is read afresh.
@@ -72,6 +97,7 @@ export function TemplateVersionHistory({
 }): React.JSX.Element {
   const { act } = useAct();
   const toast = useToast();
+  const steps = useStepOverTemplate(history, onExit);
   // The history's reads name a plan, and the template is the account's one, so the id they carry is no one's.
   const source = useMemo(
     (): PlanHistorySource => ({
@@ -111,7 +137,7 @@ export function TemplateVersionHistory({
   return (
     <DesktopVersionHistory
       sidebar={sidebar}
-      history={history}
+      history={steps}
       subject={subject}
       account={account}
       onExit={onExit}

@@ -82,6 +82,8 @@ export function DesktopSettings({
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
+  // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
+  if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
@@ -124,14 +126,18 @@ export function DesktopSettings({
   const edge = useSidebarEdge(sidebar);
 
   // The template's version history takes the whole window as a plan's does, and leaves for the template.
-  if (templateHistory && settings.view === SETTINGS_VIEW.PLAN_TEMPLATE) {
+  // Note that the call card floats while it does, as over a plan's history, since the page list it rides is gone.
+  if (templateHistory) {
     return (
-      <TemplateVersionHistory
-        sidebar={sidebar}
-        history={history}
-        account={settings.account}
-        onExit={() => setTemplateHistory(false)}
-      />
+      <>
+        <TemplateVersionHistory
+          sidebar={sidebar}
+          history={history}
+          account={settings.account}
+          onExit={() => setTemplateHistory(false)}
+        />
+        <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
+      </>
     );
   }
   return (
