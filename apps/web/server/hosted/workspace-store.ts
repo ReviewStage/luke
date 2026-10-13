@@ -1,5 +1,5 @@
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/hosted/workspace-wire";
-import { and, asc, eq, exists, isNull, or, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, isNull, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
@@ -172,6 +172,36 @@ export function roleOf(text: string): WorkspaceRole {
 }
 
 /**
+ * The account's personal workspace: the one its row names, and whatever
+ * stands under its personal slug, in case an ensure made the organization
+ * and never wrote the row. Its member rows and the account's row go with
+ * it through their own cascades.
+ */
+const deletePersonalOrganization = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) =>
+    db
+      .delete(organization)
+      .where(
+        or(
+          inArray(
+            organization.id,
+            db
+              .select({ id: personalWorkspace.organizationId })
+              .from(personalWorkspace)
+              .where(eq(personalWorkspace.userId, userId)),
+          ),
+          eq(organization.slug, personalSlugOf(userId)),
+        ),
+      ),
+});
+
+/** The slug an account's personal workspace is made under. */
+function personalSlugOf(userId: string): string {
+  return `${PERSONAL_SLUG_PREFIX}${userId}`;
+}
+
+/**
  * The workspace the plugin holds under the slug asked for: the one this call
  * just made, with the account as its owner, or, where the plugin refused
  * because the slug was taken, the one a racing call made first. Nothing
@@ -233,7 +263,7 @@ export function ensurePersonalWorkspace(
     const organizationId = yield* createOrAdoptOrganization(
       {
         name: account.value.name,
-        slug: `${PERSONAL_SLUG_PREFIX}${userId}`,
+        slug: personalSlugOf(userId),
         userId,
         metadata: PERSONAL_WORKSPACE_METADATA,
       },
@@ -271,4 +301,15 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
       ...workspaces.filter((workspace) => !workspace.personal),
     ];
   });
+}
+
+/**
+ * Deletes the account's personal workspace, which carries its name and its
+ * id in the slug. The account's own row would take only the row naming the
+ * workspace with it, leaving the organization standing, so an account's
+ * erasure deletes it first (`account-store.ts`). A shared workspace the
+ * account was a member of stands; only its member row goes, with the account.
+ */
+export function deletePersonalWorkspace(userId: string): WorkspaceStoreEffect<void> {
+  return deletePersonalOrganization(userId);
 }
