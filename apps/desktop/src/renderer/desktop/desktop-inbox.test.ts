@@ -8,6 +8,7 @@ import type {
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -22,6 +23,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { type SheetStyle, sheetStyle } from "#testing/css-rules";
 import { plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
 import { PLAN_MARK, type PlanMark } from "../planning/planning-model";
@@ -60,6 +62,7 @@ const AGENT: CodingAgentSummary = {
 const ITEM_A = "a1b2c3d4-0000-4000-8000-000000000001";
 const ITEM_B = "a1b2c3d4-0000-4000-8000-000000000002";
 const ITEM_C = "a1b2c3d4-0000-4000-8000-000000000003";
+const ITEM_D = "a1b2c3d4-0000-4000-8000-000000000004";
 
 /** An item of a plan's agent, open, as the service answers one. */
 function item(id: string, title: string): InboxItem {
@@ -94,7 +97,16 @@ const HOLDING: readonly AppInboxPlanHolding[] = [
 const INBOXES = new Map<string, readonly InboxItem[]>([
   [BILLING.id, [item(ITEM_A, "Alert at 80%?"), item(ITEM_B, "Email or Slack?")]],
   [INVITES.id, [item(ITEM_C, "Expire after 7 days?")]],
-  [AUDIT.id, []],
+  [
+    AUDIT.id,
+    [
+      {
+        ...item(ITEM_D, "Ship it behind a flag?"),
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.APPROVED },
+      },
+    ],
+  ],
 ]);
 
 let root: Root | undefined;
@@ -212,6 +224,19 @@ function buttonNamed(page: HTMLElement, words: string): HTMLButtonElement {
   return button;
 }
 
+/**
+ * The drag region a press on the control lands in, as the window frame reads
+ * it: the nearest value the sheet gives, from the control up, since a box
+ * the sheet says nothing of stands in whatever region holds it.
+ */
+function dragRegion(style: SheetStyle, control: Element): string | undefined {
+  for (let at: Element | null = control; at; at = at.parentElement) {
+    const region = style(at, "-webkit-app-region");
+    if (region !== undefined) return region;
+  }
+  return undefined;
+}
+
 /** The item titles the chosen plan's board draws, in order. */
 function titles(page: HTMLElement): string[] {
   return [...page.querySelectorAll("[data-inbox-title]")].map((title) => title.textContent ?? "");
@@ -313,7 +338,7 @@ test("Open plan and an item's agent leave the Inbox for the plan, and the window
 
   act(() => buttonNamed(page, "Open plan").click());
   assert.deepEqual(asked.shownPlans, [BILLING.id]);
-  act(() => buttonNamed(page, "Alerts").click());
+  act(() => page.querySelector<HTMLButtonElement>(".inbox-card-head")?.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 
   let ran = false;
@@ -340,4 +365,36 @@ test("with no plan holding an item the Inbox says nothing is waiting under its g
   await settle();
   act(() => buttonNamed(settled.page, "Waiting").click());
   assert.deepEqual(column(settled.page), ["▸ Audit log"], "the chosen plan stays");
+});
+
+test("All and Waiting take their own press rather than the window's drag beneath them in the column's bar, and Waiting then lists only the plans with an item waiting", async () => {
+  const style = await sheetStyle();
+  const { page } = mount();
+  await settle();
+  const bar = page.querySelector(".inbox-plans-bar");
+  assert.ok(bar);
+  assert.equal(dragRegion(style, bar), "drag", "the bar drags the window");
+  for (const words of ["All", "Waiting"]) {
+    assert.equal(dragRegion(style, buttonNamed(page, words)), "no-drag", words);
+  }
+
+  act(() => buttonNamed(page, "Waiting").click());
+  assert.equal(buttonNamed(page, "Waiting").getAttribute("aria-pressed"), "true");
+  assert.deepEqual(column(page), ["▸ *Invites1 waiting", "*Billing usage alerts2 waiting"]);
+});
+
+test("a settled item opens its agent on its plan's own page, as a waiting item's head does", async () => {
+  const { page, asked } = mount();
+  act(() => rowNamed(page, "Audit log").click());
+  await settle();
+
+  const settled = page.querySelector<HTMLButtonElement>(
+    '.inbox-section[aria-label="Settled"] .sidebar-repository-toggle',
+  );
+  assert.ok(settled);
+  act(() => settled.click());
+  const row = page.querySelector<HTMLButtonElement>(`[data-item-id="${ITEM_D}"] .plan-summary-row`);
+  assert.ok(row);
+  act(() => row.click());
+  assert.deepEqual(asked.shownAgents, [[AUDIT.id, AGENT.id]]);
 });

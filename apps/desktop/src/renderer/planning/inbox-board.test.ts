@@ -220,11 +220,16 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
   opened.splice(0);
+  openedAgents.splice(0);
 });
 
 /** The pages a link block was pressed to open on GitHub, in order. */
 const opened: string[] = [];
+
+/** The agents whose tab the board was pressed to open, in order. */
+const openedAgents: string[] = [];
 
 /**
  * The plan's agents over a service whose inbox answers each read with the
@@ -299,7 +304,7 @@ function Tab({
     ? createElement(InboxBoard, {
         control: inbox,
         agents,
-        onOpenAgent: () => undefined,
+        onOpenAgent: (agentId) => openedAgents.push(agentId),
         openLink: (url) => opened.push(url),
         code,
       })
@@ -351,6 +356,15 @@ function card(page: HTMLElement, id: string): HTMLElement {
   const found = page.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
   assert.ok(found, `no card for ${id}`);
   return found;
+}
+
+/** The header a section of the board folds under, by the section's name. */
+function sectionToggle(page: HTMLElement, name: string): HTMLButtonElement {
+  const toggle = page.querySelector<HTMLButtonElement>(
+    `.inbox-section[aria-label="${name}"] .sidebar-repository-toggle`,
+  );
+  assert.ok(toggle, `no ${name} header`);
+  return toggle;
 }
 
 /** The button a reader hears by these words: its own, or its label where it is a glyph. */
@@ -494,7 +508,7 @@ it.effect(
 );
 
 it.effect(
-  "a pick sent answers the item with the option and the note under a key of its own, and the card settles saying what was said, the note selectable",
+  "a pick sent answers the item with the option and the note under a key of its own, and the item settles saying what was said, the note unfolding under it, selectable",
   () =>
     Effect.gen(function* () {
       const { agents, sent } = service([{ items: [QUEUE], cursor: "1000.1" }], [taking(QUEUE)]);
@@ -522,16 +536,15 @@ it.effect(
       );
       assert.ok((answer?.clientKey ?? "").length > 0);
       assert.equal(page.querySelectorAll("article[data-item-id]").length, 0);
-      const settledFold = page.querySelector<HTMLElement>("[data-inbox-settled] > summary");
-      assert.equal(settledFold?.textContent, "Settled · 1");
-      press(settledFold);
+      press(sectionToggle(page, "Settled"));
       const settled = card(page, QUEUE.id);
       assert.equal(
-        settled.querySelector("summary")?.textContent,
-        "Chose Redis · Which queue sends the invitation emails?now",
+        settled.querySelector(".plan-summary-label")?.textContent,
+        "Which queue sends the invitation emails?Chose Redis",
       );
-      press(settled.querySelector("summary"));
-      assert.ok(settled.textContent?.includes("Keep it simple."), "the note inside");
+      assert.ok(!settled.textContent?.includes("Keep it simple."), "the note folded at first");
+      press(buttonNamed(settled, "Show details"));
+      assert.ok(settled.textContent?.includes("Keep it simple."), "the note under the row");
       const style = yield* Effect.promise(() => sheetStyle());
       assert.ok(selectedText(style, settled).includes("Keep it simple."), "the note selects");
     }),
@@ -728,10 +741,7 @@ it.effect(
       press(buttonNamed(card(page, SETTINGS.id), "Done"));
       yield* settle;
       assert.equal(page.querySelectorAll("article[data-item-id]").length, 0);
-      assert.equal(
-        page.querySelector("[data-inbox-settled] > summary")?.textContent,
-        "Settled · 1",
-      );
+      assert.equal(sectionToggle(page, "Settled").textContent, "Settled1 item settled");
       assert.ok(!page.textContent?.includes(INBOX_NOT_TAKEN_NOTE.CHANGED));
     }),
 );
@@ -1026,38 +1036,6 @@ it.effect(
 );
 
 it.effect(
-  "an image inside a settled card is not read until the card is opened, and then once",
-  () =>
-    Effect.gen(function* () {
-      const settled = item({
-        ...SHOT,
-        id: "a1b2c3d4-0000-4000-8000-000000000009",
-        key: "favicon",
-        status: INBOX_STATUS.ANSWERED,
-        answer: { reply: INBOX_REPLY.APPROVED },
-        updatedAt: 5_000,
-      });
-      const { agents, imageReads } = service(
-        [{ items: [settled, QUEUE], cursor: "1" }],
-        [],
-        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
-      );
-      const page = mount(agents, yield* registryOnTestClock);
-      yield* settle;
-      assert.deepEqual(imageReads, [], "a folded picture is not asked for");
-
-      press(page.querySelector("[data-inbox-settled] > summary"));
-      press(card(page, settled.id).querySelector("summary"));
-      yield* settle;
-      assert.deepEqual(imageReads, [{ itemId: settled.id, attachmentId: ATTACHMENT }]);
-      assert.ok(
-        card(page, settled.id).querySelector("[data-inbox-image] img"),
-        "the picture is drawn",
-      );
-    }),
-);
-
-it.effect(
   "an image whose read did not answer says so with Retry, which reads it again and draws it",
   () =>
     Effect.gen(function* () {
@@ -1086,6 +1064,40 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an image inside a settled item is not read until its details are unfolded, and then once, and unfolding opens no agent",
+  () =>
+    Effect.gen(function* () {
+      const settled = item({
+        ...SHOT,
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "favicon",
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.APPROVED },
+        updatedAt: 5_000,
+      });
+      const { agents, imageReads } = service(
+        [{ items: [settled, QUEUE], cursor: "1" }],
+        [],
+        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(sectionToggle(page, "Settled"));
+      yield* settle;
+      assert.deepEqual(imageReads, [], "a folded picture is not asked for");
+
+      press(buttonNamed(card(page, settled.id), "Show details"));
+      yield* settle;
+      assert.deepEqual(imageReads, [{ itemId: settled.id, attachmentId: ATTACHMENT }]);
+      assert.ok(
+        card(page, settled.id).querySelector("[data-inbox-image] img"),
+        "the picture is drawn",
+      );
+      assert.deepEqual(openedAgents, []);
+    }),
+);
+
 /** The window's one tooltip once the pointer comes over the element: what it says, while one stands. */
 function tooltipOver(element: Element | null | undefined): string | undefined {
   assert.ok(element, "nothing to point at");
@@ -1110,7 +1122,10 @@ it.effect(
 
       const queue = card(page, QUEUE.id);
       assert.ok(queue.querySelector(".state-glyph svg"), "a glyph for the unlisted agent");
-      assert.ok(buttonNamed(queue, "Coding agent"));
+      assert.equal(
+        queue.querySelector(".inbox-card-head .plan-summary-label")?.textContent,
+        "Coding agent",
+      );
       const time = queue.querySelector("time");
       assert.equal(time?.getAttribute("title"), null, "no native tooltip");
       assert.match(tooltipOver(time) ?? "", /Jun 15, 2026/u);
@@ -1118,31 +1133,114 @@ it.effect(
 );
 
 it.effect(
-  "a settled card says when it settled, and one with nothing inside is a line rather than a fold that opens on nothing",
+  "a settled item is a row saying what came of it and when, and a press on it opens its agent's tab, as a waiting card's head does",
   () =>
     Effect.gen(function* () {
       const closed = item({
         id: "a1b2c3d4-0000-4000-8000-000000000009",
+        agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b99",
         response: { type: INBOX_RESPONSE.TEXT },
         title: "Which email provider?",
         status: INBOX_STATUS.CLOSED,
         updatedAt: Date.UTC(2026, 5, 15, 12),
       });
-      const answered = {
-        ...QUEUE,
-        status: INBOX_STATUS.ANSWERED,
-        answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis"], note: "Keep it simple." },
-      };
-      const { agents } = service([{ items: [answered, closed], cursor: "1000.2" }], []);
+      const { agents } = service([{ items: [SETTINGS, closed], cursor: "1000.2" }], []);
       const page = mount(agents, yield* registryOnTestClock);
       yield* settle;
-      press(page.querySelector("[data-inbox-settled] > summary"));
+      press(card(page, SETTINGS.id).querySelector(".inbox-card-head"));
+      press(sectionToggle(page, "Settled"));
 
-      const line = card(page, closed.id);
-      assert.ok(line.querySelector("summary") === null, "no fold");
-      assert.match(line.textContent ?? "", /Which email provider\?/u);
-      assert.match(tooltipOver(line.querySelector("time")) ?? "", /Jun 15, 2026/u);
-      assert.ok(card(page, QUEUE.id).querySelector("summary time"), "a fold names its time too");
+      const row = card(page, closed.id);
+      assert.equal(
+        row.querySelector(".plan-summary-label")?.textContent,
+        "Which email provider?Closed by the agent",
+      );
+      assert.match(tooltipOver(row.querySelector("time")) ?? "", /Jun 15, 2026/u);
+      assert.equal(
+        row.querySelector(".inbox-settled-more[aria-expanded]"),
+        null,
+        "nothing to unfold",
+      );
+      press(row.querySelector(".plan-summary-row"));
+      assert.deepEqual(openedAgents, [SETTINGS.agentId, closed.agentId]);
+    }),
+);
+
+it.effect(
+  "Settled folds under the sidebar's own group header: folded, its count follows its name with no dot and shows only while the header is hovered, and open, it counts nothing",
+  () =>
+    Effect.gen(function* () {
+      const styled = yield* Effect.promise(() => sheetStyle());
+      const settledItem = (id: string, title: string) =>
+        item({
+          id,
+          title,
+          response: { type: INBOX_RESPONSE.TASK },
+          status: INBOX_STATUS.ANSWERED,
+          answer: { reply: INBOX_REPLY.DONE },
+        });
+      const { agents } = service(
+        [
+          {
+            items: [
+              settledItem("a1b2c3d4-0000-4000-8000-000000000011", "Rotate the key"),
+              settledItem("a1b2c3d4-0000-4000-8000-000000000012", "Add the secret"),
+            ],
+            cursor: "1",
+          },
+        ],
+        [],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+
+      const toggle = sectionToggle(page, "Settled");
+      const header = toggle.closest<HTMLElement>(".sidebar-repository-header");
+      assert.ok(header, "the sidebar's group header");
+      assert.equal(toggle.getAttribute("aria-expanded"), "false", "folded at first");
+      const count = toggle.querySelector(".sidebar-repository-count");
+      assert.ok(count);
+      assert.equal(count.textContent, "2 items settled");
+      assert.ok(!toggle.textContent?.includes("·"), "no dot");
+      assert.equal(styled(count, "opacity"), "0", "hidden at rest");
+      header.dataset.hovered = "";
+      assert.equal(styled(count, "opacity"), "1", "shown on hover");
+
+      press(toggle);
+      assert.equal(toggle.querySelector(".sidebar-repository-count"), null);
+      assert.equal(page.querySelectorAll('.inbox-section[aria-label="Settled"] li').length, 2);
+    }),
+);
+
+it.effect(
+  "Waiting is a section of its own under the sidebar's group header, open at first; folded, it counts what waits, and it stays folded on the next board drawn until unfolded",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const first = mount(
+        service([{ items: [QUEUE, SETTINGS], cursor: "1" }], []).agents,
+        registry,
+      );
+      yield* settle;
+      const waiting = sectionToggle(first, "Waiting");
+      assert.equal(waiting.getAttribute("aria-expanded"), "true");
+      assert.equal(first.querySelectorAll("article[data-item-id]").length, 2);
+
+      press(waiting);
+      assert.equal(first.querySelectorAll("article[data-item-id]").length, 0);
+      assert.equal(waiting.textContent, "Waiting2 items waiting");
+      for (const root of roots.splice(0)) act(() => root.unmount());
+
+      const again = mount(
+        service([{ items: [QUEUE, SETTINGS], cursor: "1" }], []).agents,
+        registry,
+      );
+      yield* settle;
+      const kept = sectionToggle(again, "Waiting");
+      assert.equal(kept.getAttribute("aria-expanded"), "false", "kept folded");
+      assert.equal(again.querySelectorAll("article[data-item-id]").length, 0);
+      press(kept);
+      assert.equal(again.querySelectorAll("article[data-item-id]").length, 2);
     }),
 );
 

@@ -1144,6 +1144,7 @@ body,
 .icon-button,
 .primary-button,
 .danger-button,
+.settings-segment,
 .desktop-toolbar-actions,
 .sidebar-new-plan,
 .sidebar-search,
@@ -2457,6 +2458,67 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+/* The board's two sections, Waiting and Settled, each under the sidebar's
+   own group header (`sidebar-group-header.tsx`), a section's gap apart. */
+.inbox-section + .inbox-section {
+  margin-top: var(--section-gap);
+}
+
+/* A card's head is a summary row inside the card's edge, its hover wash
+   inset from the card's corners as a row's is from the column's. */
+.inbox-card-head {
+  width: calc(100% - 2 * var(--space-4));
+  margin: var(--space-4) var(--space-4) 0;
+}
+
+/* A settled item: its row and, beside it, the chevron that unfolds the
+   note and context under it, lit as one row while either is hovered. */
+.inbox-settled {
+  --sidebar-plan-mark: 22px;
+}
+
+.inbox-settled-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+  border-radius: var(--control-radius);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-settled-line:hover {
+  background: var(--raised);
+}
+
+.inbox-settled-line > .plan-summary-row:hover {
+  background: none;
+}
+
+.inbox-settled-more {
+  width: var(--sidebar-plan-mark);
+  flex: none;
+}
+
+.inbox-settled-more .settings-chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--duration-hover) ease;
+}
+
+.inbox-settled-more[aria-expanded="true"] .settings-chevron {
+  transform: rotate(90deg);
+}
+
+/* What unfolds starts where the row's words do, past its glyph. */
+.inbox-settled-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--row-inset) var(--space-8)
+    calc(var(--row-inset) + var(--control-glyph) + var(--glyph-gap));
+  font-size: 13px;
 }
 
 .inbox-view-items {
