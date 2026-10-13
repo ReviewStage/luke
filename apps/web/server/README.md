@@ -244,7 +244,11 @@ the two reads reaches nothing rather than failing the whole.
 passes before it is kept: only the installation on the owner can reach it,
 so only that one is paged, and only as far as the page the repository is on,
 the name is matched the way GitHub folds case, and what is answered is the
-full name as GitHub spells it. `repositoryReadToken(userId, "owner/name")`
+full name as GitHub spells it; `userRepositoryInstallation` answers the
+same with the id of the installation it was reached through.
+`userInstallationRepositories(userId, installationId)` pages one
+installation's repositories on the user's token, most recently updated
+first. `repositoryReadToken(userId, "owner/name")`
 is the same check followed by the one token the App mints: `POST
 /app/installations/{id}/access_tokens` under the App's JWT, naming that one
 repository and `contents: read`, answered sealed beside the repository as
@@ -260,7 +264,12 @@ listing under the account bearer, answered as
 `packages/hosted/src/github-repositories-wire.ts` declares it: `installed`,
 `repositories` (owner, name, full name, default branch, private, and when
 GitHub last saw it change), and `installationUrl`, which is where the desktop
-sends an account with nothing installed. Nothing is stored. An account whose
+sends an account with nothing installed. Nothing is stored. A
+`workspaceId` query names the workspace the listing is for: a workspace of
+an installation lists that installation's repositories alone, `installed`
+true, to a member of it; one the account is not in is `not-found` (404),
+and the query given twice is `invalid-request`. A personal workspace, or
+none named, lists everything as before. An account whose
 token the service cannot use, having never signed in with GitHub, signed in
 before the App, or had the token refused or revoked, is `github-sign-in-required`
 (403); a GitHub or a store the service could not reach is `unavailable`.
@@ -1211,7 +1220,7 @@ A plan id another account owns reads as an empty history and restores as
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is
-kept only once `userRepository` on the `GitHubApp` confirms the account
+kept only once `userRepositoryInstallation` on the `GitHubApp` confirms the account
 reaches it, read from GitHub on the account's own token before the row is
 written, so a plan never names a repository its owner could not reach
 through the Luke GitHub App at the moment it was named; the stored spelling
@@ -1221,6 +1230,12 @@ the App reaches no installation of for the account is
 included; an account that must sign in with GitHub again is
 `github-sign-in-required` (403); and a GitHub the service could not read is
 `unavailable`, the plan standing as it was. A change naming null clears it.
+A plan in the workspace of a GitHub App installation (one with a
+`github_installation` row) may name only a repository reached through that
+installation, compared by GitHub's installation id rather than the owner's
+login; one of another installation is `repository-not-reachable` too, since
+the workspace does not reach it. A personal workspace's plan may name any
+repository the account reaches.
 
 A plan's text has one write, `server/hosted/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
