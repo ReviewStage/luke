@@ -155,7 +155,7 @@ function WaitingCount({ count }: { count: number }): React.JSX.Element | null {
  * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
  * changed from any plan and opened on GitHub where there is one; Permanently
  * delete is last and alone. An archived plan takes nothing until it is
- * brought back, so it offers neither Rename nor Change repository…, only
+ * brought back, so it offers neither Rename nor Change repository, only
  * what reads it, its version history (which restores nothing), Unarchive,
  * and Permanently delete.
  */
@@ -176,7 +176,7 @@ function planActionGroups(
     onSelect: () => plans.history.onOpen(planId),
   };
   const change: MenuAction = {
-    label: "Change repository…",
+    label: "Change repository",
     icon: <GitHubMark />,
     onSelect: () => plans.onChangeRepository(planId),
   };

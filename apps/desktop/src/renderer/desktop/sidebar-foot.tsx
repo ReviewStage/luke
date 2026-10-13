@@ -134,12 +134,12 @@ function accountMenuGroups(
     [
       { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
       {
-        label: "Send feedback…",
+        label: "Send feedback",
         icon: <MessageSquareIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
       },
       {
-        label: "Suggest a feature…",
+        label: "Suggest a feature",
         icon: <LightbulbIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SUGGEST_FEATURE),
       },

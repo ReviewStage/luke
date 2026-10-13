@@ -348,8 +348,8 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
     "Settings ⌘,",
     "—",
     "Changelog",
-    "Send feedback…",
-    "Suggest a feature…",
+    "Send feedback",
+    "Suggest a feature",
     "Keyboard shortcuts ⌘/",
     "Contact us",
     "—",
@@ -365,7 +365,7 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
 test("the account's menu offers the Help menu's own commands and opens the changelog, each closing the menu", () => {
   const ran: string[] = [];
   const container = mount(DEAN, { beside: createElement(HelpOffers, { ran }) });
-  for (const label of ["Send feedback…", "Suggest a feature…", "Keyboard shortcuts", "Changelog"]) {
+  for (const label of ["Send feedback", "Suggest a feature", "Keyboard shortcuts", "Changelog"]) {
     act(() => accountButton(container).click());
     act(() => accountItem(label).click());
     assert.equal(accountMenu(), null);
@@ -490,8 +490,8 @@ test("signed out, the account says so and its menu names no one and offers no Lo
     "Settings ⌘,",
     "—",
     "Changelog",
-    "Send feedback…",
-    "Suggest a feature…",
+    "Send feedback",
+    "Suggest a feature",
     "Keyboard shortcuts ⌘/",
     "Contact us",
   ]);
