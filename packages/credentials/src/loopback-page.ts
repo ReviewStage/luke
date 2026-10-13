@@ -1,4 +1,4 @@
-import { FACE_ART, GITHUB_PATH } from "@sidecar/surface";
+import { FACE_ART, GITHUB_PATH, GOOGLE_MARK_LAYERS } from "@sidecar/surface";
 
 /**
  * The page the browser is left on after the OAuth redirect lands on the
@@ -22,6 +22,7 @@ export const LOOPBACK_PAGE_TONE = {
 export type LoopbackPageTone = (typeof LOOPBACK_PAGE_TONE)[keyof typeof LOOPBACK_PAGE_TONE];
 
 export const LOOPBACK_CONNECTION_SOURCE = {
+  GOOGLE: "google",
   GITHUB: "github",
 } as const;
 
@@ -54,6 +55,14 @@ function markSvg(ink = "currentColor", className = "mark"): string {
   );
 }
 
+function googleMarkSvg(): string {
+  return (
+    `<svg class="provider-mark provider-mark-google" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" aria-hidden="true">` +
+    GOOGLE_MARK_LAYERS.map((layer) => `<path fill="${layer.fill}" d="${layer.path}"/>`).join("") +
+    `</svg>`
+  );
+}
+
 function githubMarkSvg(): string {
   return (
     `<svg class="provider-mark provider-mark-github" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true">` +
@@ -64,6 +73,8 @@ function githubMarkSvg(): string {
 
 function providerMarkSvg(source: LoopbackConnectionSource): string {
   switch (source) {
+    case LOOPBACK_CONNECTION_SOURCE.GOOGLE:
+      return googleMarkSvg();
     case LOOPBACK_CONNECTION_SOURCE.GITHUB:
       return githubMarkSvg();
   }
@@ -112,6 +123,7 @@ const PAGE_STYLE = `
     margin: 0 auto 20px;
   }
   .provider-mark { display: block; width: 38px; height: 38px; flex: 0 0 auto; color: rgba(255, 255, 255, 0.92); }
+  .provider-mark-google { width: 38px; height: 38px; }
   .provider-mark-github { width: 38px; height: 38px; }
   .mark-connection { width: 48px; flex: 0 0 auto; }
   .arrow { width: 24px; height: 24px; color: rgba(255, 255, 255, 0.56); flex: 0 0 auto; }

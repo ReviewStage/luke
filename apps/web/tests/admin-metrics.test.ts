@@ -412,14 +412,15 @@ test("integration health reads presence, in a fixed order, never a value", () =>
     hostedTier: true,
     analyticsRecording: false,
     analyticsErasure: false,
+    googleSignIn: true,
     githubSignIn: true,
   });
   assert.equal(rows[0]?.key, ADMIN_INTEGRATION.HOSTED_TIER.key);
   assert.equal(rows[0]?.configured, true);
   assert.equal(rows[1]?.key, ADMIN_INTEGRATION.ANALYTICS_RECORDING.key);
   assert.equal(rows[1]?.configured, false);
-  assert.equal(rows.length, 4);
-  assert.equal(rows.filter((row) => row.configured).length, 2);
+  assert.equal(rows.length, 5);
+  assert.equal(rows.filter((row) => row.configured).length, 3);
   for (const row of rows) {
     assert.ok(row.label.length > 0);
     assert.ok(row.key.length > 0);
