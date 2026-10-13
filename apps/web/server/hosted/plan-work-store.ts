@@ -68,7 +68,7 @@ export const plannerDelegationJournalsOf = Effect.fnUntraced(function* (
 const workerJournalsOf = plannerDelegationJournalsOf;
 
 /** One turn's journal and the sessions of the subagents it started or sent work to, with the title of each that has one and what each ran on and spent, or nothing where the turn wrote none or it does not read. */
-const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
+export const turnJournalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
   const read = yield* readMessageByClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
   const message = read.ok ? read.value[0]?.message : undefined;
   if (message === undefined) return undefined;
@@ -143,7 +143,7 @@ export function readPlanWork(
       return Option.some({ turns: [], ...(newest ? { code: [] } : undefined) });
     }
     const page = yield* turnsBefore(userId, conversationId, PLAN_WORK_BOUNDS.TURNS, before);
-    const read = yield* Effect.forEach(page.turns, (turn) => journalOf(userId, turn));
+    const read = yield* Effect.forEach(page.turns, (turn) => turnJournalOf(userId, turn));
     const journaled = read.filter((each) => each !== undefined);
     const asked = yield* spokenAskRowsOf(
       userId,
@@ -166,5 +166,19 @@ export function readPlanWork(
       ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),
       ...(code === undefined ? undefined : { code }),
     });
+  });
+}
+
+/** Every code shown on the plan, oldest first, as the Code tab draws it; nothing where the account owns no such plan, and none for a plan whose planning model never ran. */
+export function readPlanCode(
+  userId: string,
+  planId: string,
+): PlanStoreEffect<Option.Option<{ readonly code: readonly PlanShownCode[] }>> {
+  return Effect.gen(function* () {
+    const plan = yield* readPlan(userId, planId);
+    if (Option.isNone(plan)) return Option.none();
+    const { conversationId } = plan.value;
+    if (conversationId === undefined) return Option.some({ code: [] });
+    return Option.some({ code: yield* allShownCode(userId, conversationId) });
   });
 }

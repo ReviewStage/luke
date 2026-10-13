@@ -398,6 +398,70 @@ export function listMessagesPast(
   });
 }
 
+const findHighestSeq = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: (options) =>
+    db
+      .select({ seq: sql<number>`coalesce(max(${messages.seq}), 0)`.mapWith(Number) })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+        ),
+      ),
+});
+
+/**
+ * Where a reader who has every message as it now stands is: the highest
+ * sequence the conversation holds and its journal revision, the revision
+ * read first so an amendment that lands between the two is heard again
+ * rather than missed. A reader that read a conversation's newest rows some
+ * other way follows on from here (`listMessagesPast`). A conversation that
+ * no longer stands, or another account's, is the start.
+ */
+export function messageCursorNow(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<MessageCursor, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const standing = yield* findJournalRevision({ conversationId, userId });
+    if (Option.isNone(standing)) return { seq: 0, revision: 0 };
+    const [highest] = yield* findHighestSeq({ conversationId, userId });
+    return { seq: highest?.seq ?? 0, revision: standing.value.journalRevision };
+  });
+}
+
+const findRunningChildTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ parentConversationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (options) =>
+    db
+      .select({ id: turns.id })
+      .from(turns)
+      .innerJoin(conversations, eq(turns.conversationId, conversations.id))
+      .where(
+        and(
+          eq(conversations.parentConversationId, options.parentConversationId),
+          eq(conversations.userId, options.userId),
+          isNull(conversations.deletedAt),
+          inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+        ),
+      )
+      .orderBy(asc(turns.id)),
+});
+
+/** The queued or running turns of every child conversation of the one named, a subagent's session each, by id; none of another account's. */
+export function runningChildTurns(
+  userId: string,
+  parentConversationId: string,
+): Effect.Effect<readonly string[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(findRunningChildTurns({ parentConversationId, userId }), (rows) =>
+    rows.map((row) => row.id),
+  );
+}
+
 const findNewestJournals = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,

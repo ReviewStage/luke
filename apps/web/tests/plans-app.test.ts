@@ -13,6 +13,10 @@ import {
   type VoiceSegmentRole,
 } from "@sidecar/database/voice-vocabulary";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import {
+  CODING_AGENT_STATUS,
+  codingAgentMessagesAnswerSchema,
+} from "@sidecar/hosted/coding-agent-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
@@ -42,6 +46,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "../server/hosted/board-tool";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
 import {
@@ -79,6 +84,9 @@ const ONE_PLAN = "/api/plans/plan";
 const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
 const WORK = "/api/plans/work";
+const MESSAGES = "/api/plans/messages";
+const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
+const CODE = "/api/plans/code";
 const FILE = "/api/plans/file";
 const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
@@ -135,6 +143,7 @@ const answer = (
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
+      modelCatalogOf([]),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       plansApp({
@@ -359,7 +368,42 @@ it.layer(getTestDB())("the plan routes", (it) => {
         (yield* ask(request(ONE_PLAN, owner, { id: planId }))).status,
         HOSTED_HTTP_STATUS.OK,
       );
+      for (const path of [MESSAGES, CODE]) {
+        assert.deepEqual(yield* ask(request(path, other, { id: planId })), notFound);
+      }
+      assert.deepEqual(
+        yield* ask(request(SUBAGENT_MESSAGES, other, { id: planId, query: { call: "call-0-0" } })),
+        notFound,
+      );
     }),
+  );
+
+  it.effect(
+    "a plan never planned on reads as an empty conversation on the agent tab's wire, and as no code shown",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+
+        const read = yield* ask(request(MESSAGES, owner, { id: planId }));
+        const page = readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, read);
+        assert.deepEqual(
+          [page.messages, page.status, page.earlier],
+          [[], CODING_AGENT_STATUS.COMPLETED, undefined],
+        );
+        assert.deepEqual(yield* ask(request(CODE, owner, { id: planId })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { code: [] },
+        });
+        assert.equal(
+          (yield* ask(
+            request(MESSAGES, owner, { id: planId, query: { after: "0:0", before: planId } }),
+          )).status,
+          HOSTED_HTTP_STATUS.BAD_REQUEST,
+        );
+      }),
   );
 
   it.effect(
