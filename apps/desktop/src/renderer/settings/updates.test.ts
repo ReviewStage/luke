@@ -7,7 +7,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
+import { type RunningBuild, UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY } from "#testing/spinner";
 import { UpdatesSection } from "./updates";
@@ -30,8 +30,8 @@ afterEach(() => {
 
 const ignore = () => undefined;
 
-/** The section over `update`, on the test's clock, and a redraw over the next snapshot. */
-const mountSection = (update: UpdateSnapshot) =>
+/** The section over `update` from `build`, on the test's clock, and a redraw over the next snapshot. */
+const mountSection = (update: UpdateSnapshot, build: RunningBuild = { packaged: true }) =>
   Effect.gen(function* () {
     const registry = yield* registryOnTestClock;
     const container = document.createElement("div");
@@ -41,6 +41,7 @@ const mountSection = (update: UpdateSnapshot) =>
     const restand = (next: UpdateSnapshot) => {
       const control = {
         update: next,
+        build,
         onCheck: () => Promise.resolve(),
         onInstall: ignore,
         onOpenLatest: ignore,
@@ -117,4 +118,22 @@ it.effect(
       restand(checking);
       assert.equal(container.querySelector("[role=alert]"), null, "a check again is no alert");
     }),
+);
+
+it.effect("a development build names its commit in place of a version and offers no button", () =>
+  Effect.gen(function* () {
+    const { container } = yield* mountSection(
+      {
+        status: UPDATE_STATUS.IDLE,
+        currentVersion: "0.11.0",
+        installSupported: false,
+        upToDate: false,
+      },
+      { packaged: false, commit: { sha: "a1b2c3d", dirty: false, branch: "main" } },
+    );
+    const row = container.querySelector(".settings-row");
+    assert.equal(row?.querySelector("strong")?.textContent, "Development build");
+    assert.equal(row?.querySelector("small")?.textContent, "main @ a1b2c3d");
+    assert.equal(row?.querySelector("button"), null);
+  }),
 );

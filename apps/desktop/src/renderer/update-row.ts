@@ -1,4 +1,9 @@
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
+import {
+  type BuildCommit,
+  type RunningBuild,
+  UPDATE_STATUS,
+  type UpdateSnapshot,
+} from "#shared/messages/update";
 
 /** The one action the row's button offers in each state. */
 export const UPDATE_ROW_ACTION = {
@@ -12,12 +17,16 @@ export const UPDATE_ROW_ACTION = {
   RESTART: "restart",
   /** Open the latest release's page in the browser. */
   GET: "get",
+  /** Nothing to press: a development build is newer than any release. */
+  NONE: "none",
 } as const;
 
 export type UpdateRowAction = (typeof UPDATE_ROW_ACTION)[keyof typeof UPDATE_ROW_ACTION];
 
 /** What the update row says, and what its button does. */
 export interface UpdateRow {
+  /** Which build is running: its version, or that it is a development build. */
+  title: string;
   detail: string;
   action: UpdateRowAction;
   /** Whether the running build is positively the latest, for the check mark. */
@@ -70,23 +79,35 @@ export function fixtureUpdate(
   };
 }
 
+/** The commit as `git describe --dirty` would mark it. */
+function commitLabel(commit: BuildCommit): string {
+  return commit.dirty ? `${commit.sha}-dirty` : commit.sha;
+}
+
+/** The version, with the commit beside it quietly, for a bug report to quote. */
+function versionTitle(update: UpdateSnapshot, build: RunningBuild): string {
+  const version = `Version ${update.currentVersion}`;
+  return build.commit ? `${version} (${commitLabel(build.commit)})` : version;
+}
+
+/** Where a development build was cut from: the branch and commit, as far as the build knew. */
+function developmentDetail(commit: BuildCommit | undefined): string {
+  if (!commit) return "Run from source.";
+  return commit.branch ? `${commit.branch} @ ${commitLabel(commit)}` : commitLabel(commit);
+}
+
 function downloadingDetail(update: UpdateSnapshot & { status: "downloading" }): string {
   const percent = update.progress ? ` (${Math.round(update.progress.percent)}%)` : "";
   return `Downloading version ${update.latestVersion}…${percent}`;
 }
 
-/**
- * Reads the row from the last learned answer. The row only ever says where
- * the build stands and offers the next honest step: check again, wait for
- * the check or download already out, restart into a build already fetched —
- * or, where installing in place is impossible or has failed, go get it in
- * the browser instead. A build that cannot install itself never offers a
- * check it could do nothing with.
- */
-export function updateRow(update: UpdateSnapshot): UpdateRow {
+/** A packaged build's row, from where its updater stands. */
+function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
+  // Note that a packaged build only lacks an updater when it runs on no
+  // network or off macOS; the browser is still its way to the latest.
   if (!update.installSupported) {
     return {
-      detail: "This build updates by hand: the releases page has the latest.",
+      detail: "This build can't update itself. Download the latest release instead.",
       action: UPDATE_ROW_ACTION.GET,
       current: false,
       failed: false,
@@ -147,4 +168,27 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
             failed: false,
           };
   }
+}
+
+/**
+ * Reads the row from the last learned answer. The row only ever says where
+ * the build stands and offers the next honest step: check again, wait for
+ * the check or download already out, restart into a build already fetched —
+ * or, where installing in place is impossible or has failed, go get it in
+ * the browser instead. A build that cannot install itself never offers a
+ * check it could do nothing with. A development build — run from source,
+ * so newer than any release — names its commit and offers nothing, since a
+ * release would only be older.
+ */
+export function updateRow(update: UpdateSnapshot, build: RunningBuild): UpdateRow {
+  if (!update.installSupported && !build.packaged) {
+    return {
+      title: "Development build",
+      detail: developmentDetail(build.commit),
+      action: UPDATE_ROW_ACTION.NONE,
+      current: false,
+      failed: false,
+    };
+  }
+  return { title: versionTitle(update, build), ...releaseRow(update) };
 }

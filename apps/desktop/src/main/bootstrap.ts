@@ -2,6 +2,7 @@ import path from "node:path";
 import { type RunMode, runModeFor } from "@sidecar/host";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
+import { buildCommit } from "./build-commit";
 import type { DesktopConfig } from "./services/desktop-config";
 
 /**
@@ -72,6 +73,8 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
   dependencies.initializeCrashReporting(runMode);
 
+  const commit = buildCommit();
+
   // The account service's one development override stops at packaging.
   const accountBaseUrl =
     (app.isPackaged ? undefined : environment.LUKE_ACCOUNT_BASE_URL) ??
@@ -81,6 +84,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     stateRoot,
     runMode,
     appVersion: app.getVersion(),
+    ...(commit ? { commit } : undefined),
     packaged: app.isPackaged,
     environment,
     platform: process.platform,

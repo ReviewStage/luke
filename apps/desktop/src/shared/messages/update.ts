@@ -19,6 +19,28 @@ export const UPDATE_STATUS = {
 
 export type UpdateStatus = (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
 
+/**
+ * The commit a build was cut from, stamped by `scripts/build.mjs` from the
+ * checkout it ran in: the short SHA, whether the tree held uncommitted
+ * changes, and the branch when one was checked out (a tag's detached head
+ * has none). A build made where git could not answer carries no commit.
+ */
+export interface BuildCommit {
+  sha: string;
+  dirty: boolean;
+  branch?: string;
+}
+
+/**
+ * What the running build is, beside where the updater stands: a packaged
+ * release or a development build run from source, and the commit it was cut
+ * from, so the update row can name a build no release version describes.
+ */
+export interface RunningBuild {
+  packaged: boolean;
+  commit?: BuildCommit;
+}
+
 /** How far along a download is, as electron-updater reports it. */
 export interface UpdateProgress {
   percent: number;

@@ -10,10 +10,13 @@ import { SettingsGroup } from "./settings-group";
 /**
  * The row's one act, in the bordered face every Settings row's act wears:
  * fetch the release, restart into it, reach its page in the browser, or
- * check for one. The accent is kept for a form's Save alone.
+ * check for one — or none at all, for a development build no release is
+ * newer than. The accent is kept for a form's Save alone.
  */
-function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
+function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element | null {
   switch (action) {
+    case UPDATE_ROW_ACTION.NONE:
+      return null;
     case UPDATE_ROW_ACTION.DOWNLOADING:
       return (
         <button type="button" className="toolbar-button bordered-button" disabled>
@@ -64,13 +67,13 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
  */
 export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const { tell } = useAct();
-  const row = updateRow(control.update);
+  const row = updateRow(control.update, control.build);
   return (
     <SettingsGroup title="Updates">
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
         <span className="settings-copy">
           <span className="settings-name">
-            <strong>Version {control.update.currentVersion}</strong>
+            <strong>{row.title}</strong>
             {row.current ? <CheckIcon /> : null}
           </span>
           {/* Note that a failure mounts an element of its own, an alert, so
