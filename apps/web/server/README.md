@@ -783,8 +783,8 @@ answers the route over a scripted OpenAI at its HTTP door.
 Every agent Luke runs — the planning assistant, the coding agent, and each
 one's declared worker — can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists and no
-approval step. Linear (`https://mcp.linear.app/mcp`) is the one integration
-today. A connection belongs to the account, so it reaches every plan and
+approval step: Linear (`https://mcp.linear.app/mcp`) and Notion
+(`https://mcp.notion.com/mcp`). A connection belongs to the account, so it reaches every plan and
 project the account has. `server/hosted/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, its MCP server
 and what the model is told of it, and the name its nested calls are stored
@@ -797,8 +797,8 @@ on whether its agents may use the grant: `connected` lets them, anything else
 or no row does not. Connect has no way to ask whether a sign-in finished and
 its SDK caches tokens in process, so this row is also what makes a Disconnect
 take effect regardless of any cache. The migration that made the table copied
-every `linear_connection` row in as Linear's; that table is read by nothing
-and is dropped by the next migration.
+every row of Linear's own table in as Linear's, and the one after it dropped
+that table.
 
 **The routes** (`server/integrations-app.ts`, `fixtures/integrations-route/`):
 
@@ -856,7 +856,7 @@ Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
 with what the provider answered, before the wrapper's own result. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
-content (Linear's issue titles, descriptions, comments); no token reaches a
+content (Linear's issues and comments, Notion's pages); no token reaches a
 row. A turn cancelled while a provider was answering leaves the call's
 outcome unknown ("it may have run"), never a failure to retry.
 
@@ -865,17 +865,20 @@ project's directory:
 
 ```
 vercel link
-vercel connect create mcp.linear.app --name <name>   # prints the connector UID
+vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
+vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
-Then set the provider's variable (`LINEAR_CONNECTOR_UID` for Linear) to that
-UID in the web project and in both eve projects (`eve`, `coder`), because
-the agents read tokens too. Asking Connect about an arbitrary user id needs
-the deployment's own Vercel OIDC token, which the SDK reads from the request
-(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for all
-three projects, and make sure each one is linked to the connector for the
-environments it runs in. For local development, `vercel env pull` writes a
+Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
+`NOTION_CONNECTOR_UID`) to that UID in the `luke-web` project for production,
+preview, and development. The web, `eve`, and `coder` are services of that
+one project (`vercel.json`'s `services`), so its variables and the
+connector's link reach all three, which matters because the agents read
+tokens too. Asking Connect about an arbitrary user id needs the deployment's
+own Vercel OIDC token, which the SDK reads from the request
+(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
+project. For local development, `vercel env pull` writes a
 short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
 runs every agent without that provider, and Settings shows its row as
 unavailable. Every token request is billed by Connect and rate-limited per

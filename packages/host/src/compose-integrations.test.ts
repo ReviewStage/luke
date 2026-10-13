@@ -34,7 +34,10 @@ function fakeService(script: ServiceScript) {
   const opened: string[] = [];
   const asked: IntegrationProvider[] = [];
   const client: IntegrationsClient = {
-    statuses: () => Effect.sync(() => ({ integrations: { linear: script.status } })),
+    statuses: () =>
+      Effect.sync(() => ({
+        integrations: { linear: script.status, notion: INTEGRATION_STATUS.UNAVAILABLE },
+      })),
     connect: (provider) =>
       Effect.sync(() => {
         asked.push(provider);
@@ -117,13 +120,19 @@ it.effect("the statuses and a Disconnect are the service's answers, whole", () =
     const { call } = yield* subject({ status: INTEGRATION_STATUS.CONNECTED });
 
     assert.deepEqual(yield* call(GATEWAY_METHOD.INTEGRATIONS_STATUS), {
-      integrations: { linear: INTEGRATION_STATUS.CONNECTED },
+      integrations: {
+        linear: INTEGRATION_STATUS.CONNECTED,
+        notion: INTEGRATION_STATUS.UNAVAILABLE,
+      },
     });
     assert.deepEqual(yield* call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, LINEAR), {
       status: INTEGRATION_STATUS.DISCONNECTED,
     });
     assert.deepEqual(yield* call(GATEWAY_METHOD.INTEGRATIONS_STATUS), {
-      integrations: { linear: INTEGRATION_STATUS.DISCONNECTED },
+      integrations: {
+        linear: INTEGRATION_STATUS.DISCONNECTED,
+        notion: INTEGRATION_STATUS.UNAVAILABLE,
+      },
     });
   }),
 );

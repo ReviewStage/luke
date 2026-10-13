@@ -294,6 +294,27 @@ for (const { agent, tools } of TOOL_SETS) {
 }
 
 it.effect(
+  "a nested call of a Notion tool stands in the record under Notion's own stored name",
+  () =>
+    Effect.promise(async () => {
+      const recording = await recorder(HOSTED_TOOL_SET);
+      const target = await play(
+        recording,
+        linearTurn("turn_0", { toolName: "notion__notion-search" }),
+      );
+
+      assert.deepEqual(recording.refusals, []);
+      const nested = (await answeredCalls(recording, target))[2];
+      assert.equal(nested?.type, `tool-${INTEGRATION.notion.REMOTE_TOOL}`);
+      assert.deepEqual(nested?.input, {
+        remoteTool: "notion-search",
+        parentCallId: EXECUTE_CALL,
+        input: ISSUE_INPUT,
+      });
+    }),
+);
+
+it.effect(
   "a nested call of no Linear tool is left out with its result, and the turn around it is recorded whole",
   () =>
     Effect.promise(async () => {
