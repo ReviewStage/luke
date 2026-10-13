@@ -13,6 +13,7 @@ import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "./hosted/session-sandboxes.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
+import { LiveAvatar } from "./voice/liveavatar.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import {
   NOTHING_ORPHANED,
@@ -28,7 +29,8 @@ import {
  * seams and the database queries behind them, each answering an Effect over
  * the group's own `SqlClient.SqlClient`. A deployment without the voice key
  * sweeps no detached voice session, since it opened none; one with it ends
- * them on the same upstream the voice functions attach through.
+ * them on the same upstream the voice functions attach through, and stops
+ * their avatars on Luke's LiveAvatar key where the deployment holds one.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
@@ -38,10 +40,22 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
   SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
 > {
   const environment = yield* HostedEnvironment;
-  const sandboxes = Layer.provide(
-    sessionSandboxesLayer,
-    Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
-  );
+  const httpClient = Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient);
+  const sandboxes = Layer.provide(sessionSandboxesLayer, httpClient);
+  // The avatar is left unnamed: the sweep only stops, and a stop names the session alone.
+  const avatar = environment.liveAvatarKey
+    ? yield* Effect.provide(
+        Effect.service(LiveAvatar),
+        Layer.provide(
+          LiveAvatar.layer({
+            apiKey: environment.liveAvatarKey,
+            avatarId: "",
+            requestTimeoutMs: VOICE_ORPHAN_SWEEP.AVATAR_STOP_TIMEOUT_MS,
+          }),
+          httpClient,
+        ),
+      )
+    : undefined;
   const voiceUpstream = environment.openAiKey
     ? createLiveUpstream({
         apiKey: Redacted.value(environment.openAiKey),
@@ -69,6 +83,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
               record: voiceSessionRecord(),
               recordSeconds: (input) =>
                 Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
+              avatar,
             },
             { now },
           ),

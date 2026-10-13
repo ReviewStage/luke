@@ -128,6 +128,8 @@ interface VoiceSessionLost {
 export interface DetachedVoiceSession {
   readonly userId: string;
   readonly sessionId: string;
+  /** The store's own id for the row, the one the session's avatar rows name. */
+  readonly voiceSessionId: string;
   /** Epoch milliseconds. */
   readonly startedAt: number;
 }
@@ -383,6 +385,7 @@ const DetachedRequestSchema = Schema.Struct({ before: Schema.Date, limit: Schema
 const DetachedRowSchema = Schema.Struct({
   userId: Schema.String,
   sessionId: Schema.String,
+  voiceSessionId: Schema.String,
   startedAt: InstantColumnSchema,
 });
 
@@ -394,6 +397,7 @@ const findDetached = SqlSchema.findAll({
       .select({
         userId: voiceSessions.userId,
         sessionId: voiceSessions.liveSessionId,
+        voiceSessionId: voiceSessions.id,
         startedAt: voiceSessions.startedAt,
       })
       .from(voiceSessions)

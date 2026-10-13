@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
+import {
+  closeAvatarSession,
+  openAvatarSessionsOf,
+} from "@sidecar/database/models/voice-avatar-sessions";
 import type {
   DetachedVoiceSession,
   VoiceSessionRecord,
 } from "@sidecar/database/models/voice-session-record";
-import { VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
+import { AVATAR_END_REASON, VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
 import {
   closeGracefully,
   type LiveSideband,
@@ -15,6 +19,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import { LIVE_SERVER_EVENT } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";
+import { LIVEAVATAR_STOP_REASON, type LiveAvatarService } from "./liveavatar.js";
 import type { LiveUpstream } from "./openai.js";
 
 /**
@@ -38,9 +43,19 @@ import type { LiveUpstream } from "./openai.js";
  * OpenAI's own duration limit, which has ended whatever it answers, is
  * closed as expired instead.
  *
+ * Before its call is ended, an orphan's avatar is let go of: the host that
+ * spoke Luke's audio into it went with the device, so each avatar session
+ * still open on the call is stopped at LiveAvatar, one LiveAvatar no longer
+ * knows counting as already ended, and its row closed as its media lost. A
+ * stop LiveAvatar refused or never answered leaves the row open, since the
+ * session may still run; LiveAvatar's own cap ends it. A deployment without
+ * the LiveAvatar key closes the rows without a stop, as it has nothing to
+ * stop them with.
+ *
  * Each sweep takes at most `MAX_SESSIONS` of the oldest, `CONCURRENCY` at a
- * time, each bounded by the attach's own wait and the close's, so the sweep
- * takes at most two rounds of both out of the function's duration.
+ * time, each bounded by its avatar's stop, the attach's own wait, and the
+ * close's, so the sweep takes at most two rounds of the three out of the
+ * function's duration.
  */
 
 /** How long a detached session waits for its device before the sweep ends it: past the Mac's own re-attach of some ten seconds. */
@@ -59,6 +74,8 @@ export const VOICE_ORPHAN_SWEEP = {
   ATTACH_TIMEOUT_MS: 5_000,
   /** How long `session.closed` is waited on once `session.close` went up. */
   CLOSE_TIMEOUT_MS: 5_000,
+  /** How long LiveAvatar is given to answer an avatar's stop, which the sweep's client is built with. */
+  AVATAR_STOP_TIMEOUT_MS: 5_000,
 } as const;
 
 /** How one orphan ended: its own `session.closed` read and its seconds recorded, closed as gone, or left stamped for the next sweep. */
@@ -73,13 +90,16 @@ type OrphanEnding = (typeof ORPHAN_ENDING)[keyof typeof ORPHAN_ENDING];
 /**
  * What one sweep came to: sessions closed with their seconds, sessions closed
  * as gone, sessions that answered nothing conclusive and stand for the next
- * sweep, and sessions whose write failed and stand for it as well.
+ * sweep, and sessions whose write failed and stand for it as well; then the
+ * orphans' avatar sessions closed, and those whose stop failed and stand open.
  */
 export interface VoiceOrphanSweepOutcome {
   closed: number;
   lost: number;
   pending: number;
   failed: number;
+  avatarsClosed: number;
+  avatarsLeftOpen: number;
 }
 
 export const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = {
@@ -87,7 +107,15 @@ export const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = {
   lost: 0,
   pending: 0,
   failed: 0,
+  avatarsClosed: 0,
+  avatarsLeftOpen: 0,
 };
+
+/** What one orphan's avatars came to. */
+interface AvatarEnding {
+  readonly closed: number;
+  readonly leftOpen: number;
+}
 
 export interface VoiceOrphanSweepSeams {
   /** Luke's own upstream, the one the voice functions attach through. */
@@ -95,6 +123,8 @@ export interface VoiceOrphanSweepSeams {
   readonly record: VoiceSessionRecord;
   /** The seconds ledger the service records a closed session through. */
   readonly recordSeconds: VoiceAccounts["recordSeconds"];
+  /** Luke's own LiveAvatar client, the one the voice service starts avatars on; absent without the key. */
+  readonly avatar: LiveAvatarService | undefined;
 }
 
 /** The sideband's last word handed to the graceful close: its `session.closed`, or the socket's close before one. */
@@ -134,6 +164,39 @@ const unanswered = (
         seams.record.closeLost({ sessionId: orphan.sessionId, reason: VOICE_CLOSE_REASON.EXPIRED }),
         ORPHAN_ENDING.LOST,
       );
+
+/**
+ * Stops each avatar session still open on the orphan's call and closes its
+ * row as its media lost; a stop that failed leaves its row open and counted.
+ */
+const stopOrphanAvatars = /* @__PURE__ */ Effect.fn("web/stopOrphanAvatars")(function* (
+  seams: VoiceOrphanSweepSeams,
+  orphan: DetachedVoiceSession,
+  now: number,
+): Effect.fn.Return<AvatarEnding, unknown, SqlClient.SqlClient> {
+  const { avatar } = seams;
+  const open = yield* openAvatarSessionsOf({
+    userId: orphan.userId,
+    voiceSessionId: orphan.voiceSessionId,
+  });
+  let closed = 0;
+  for (const { liveAvatarSessionId } of open) {
+    const stopped =
+      avatar === undefined
+        ? Exit.void
+        : yield* Effect.exit(
+            avatar.stop(liveAvatarSessionId, LIVEAVATAR_STOP_REASON.ZOMBIE_SESSION_REAP),
+          );
+    if (Exit.isFailure(stopped)) continue;
+    yield* closeAvatarSession({
+      liveAvatarSessionId,
+      endedAt: new Date(now),
+      reason: AVATAR_END_REASON.MEDIA_LOST,
+    });
+    closed += 1;
+  }
+  return { closed, leftOpen: open.length - closed };
+});
 
 /** One orphan ended through a sideband of its own, written down as a connection that read the same ending would. */
 const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
@@ -179,15 +242,30 @@ export const sweepVoiceOrphans = /* @__PURE__ */ Effect.fn("web/sweepVoiceOrphan
     detachedBefore: options.now - VOICE_DETACH_GRACE_MS,
     limit: VOICE_ORPHAN_SWEEP.MAX_SESSIONS,
   });
+  // Note that the avatars go first, because an orphan whose call was ended
+  // is not read again, and a read of its avatars that failed must stand for
+  // the next sweep with the call.
   const endings = yield* Effect.forEach(
     orphans,
-    (orphan) => Effect.exit(Effect.scoped(endOrphan(seams, orphan, options.now))),
+    (orphan) =>
+      Effect.exit(
+        Effect.gen(function* () {
+          const avatars = yield* stopOrphanAvatars(seams, orphan, options.now);
+          const call = yield* Effect.scoped(endOrphan(seams, orphan, options.now));
+          return { avatars, call };
+        }),
+      ),
     { concurrency: VOICE_ORPHAN_SWEEP.CONCURRENCY },
   );
   const outcome = { ...NOTHING_ORPHANED };
   for (const ending of endings) {
-    if (Exit.isFailure(ending)) outcome.failed += 1;
-    else outcome[ending.value] += 1;
+    if (Exit.isFailure(ending)) {
+      outcome.failed += 1;
+      continue;
+    }
+    outcome[ending.value.call] += 1;
+    outcome.avatarsClosed += ending.value.avatars.closed;
+    outcome.avatarsLeftOpen += ending.value.avatars.leftOpen;
   }
   return outcome;
 });
