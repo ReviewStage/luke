@@ -71,7 +71,6 @@ import {
   type CallKind,
   callLine,
   callPlace,
-  groupSummary,
   isCommandKind,
   TURN_ROW,
   type TurnRow,
@@ -642,12 +641,7 @@ function TurnRowView<B>({
       return children(row.block);
     case TURN_ROW.GROUP:
       return (
-        <TurnFold
-          icon={<WrenchIcon />}
-          summary={groupSummary(row.blocks.length)}
-          running={row.running}
-          open={row.open}
-        >
+        <TurnFold icon={<WrenchIcon />} summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}

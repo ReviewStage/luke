@@ -692,6 +692,10 @@ test("a worker's line in the Call tab is one button saying where the subagent st
   act(() => tabNamed(page, "Call").click());
   const work = page.querySelector('section[aria-label="Call"]');
   assert.ok(work);
+  // The two workers are one run, folded under its line once the turn went on to its words, which a reader opens.
+  const run = work.querySelector<HTMLDetailsElement>("[data-turn-fold]");
+  assert.equal(run?.querySelector("summary")?.textContent, "2 subagents");
+  act(() => run?.querySelector("summary")?.click());
   const lines = [...work.querySelectorAll<HTMLElement>("[data-subagent-row]")];
   // Each line is the one button: its job, and the state mark a call's row wears while it runs.
   assert.deepEqual(

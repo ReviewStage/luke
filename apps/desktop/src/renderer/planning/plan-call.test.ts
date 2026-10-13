@@ -891,3 +891,62 @@ test("a turn that only answered in words Luke said aloud draws nothing of its ow
   assert.ok(mark, "the turn's place is still marked");
   assert.equal(mark.nextElementSibling?.classList.contains("is-assistant"), true);
 });
+
+/** A finished planning turn that thought, read the repository, handed a worker a task, and answered, asked for by the rows named. */
+function researchingTurn(asked: readonly string[]): PlanWorkTurn {
+  const read = (id: string, command: string) => ({
+    type: PLAN_WORK_PART.TOOL,
+    id,
+    tool: PLAN_WORK_TOOL.REPOSITORY,
+    name: "run_in_repository",
+    state: PLAN_WORK_STATE.DONE,
+    subject: command,
+    input: JSON.stringify({ command }),
+    output: "export function removeMember() {}",
+  });
+  return {
+    turnId: "turn-1",
+    startedAt: 2_000,
+    endedAt: 9_000,
+    state: PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    ...(asked.length === 0 ? undefined : { asked }),
+    parts: [
+      { type: PLAN_WORK_PART.REASONING, text: "Find where removal lives." },
+      read("call-ls", "ls src/members"),
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: "call-worker",
+        tool: PLAN_WORK_TOOL.WORKER,
+        name: "delegate",
+        state: PLAN_WORK_STATE.DONE,
+        subject: "Find who may remove a member.",
+        input: JSON.stringify({ message: "Find who may remove a member." }),
+      },
+      { type: PLAN_WORK_PART.REASONING, text: "Read the one file." },
+      read("call-read", "cat src/members/remove.ts"),
+      { type: PLAN_WORK_PART.TEXT, text: "Removal already checks for an admin." },
+    ],
+  };
+}
+
+test("a finished spoken turn folds its thoughts, calls, and subagents behind one line, the line the same turn folds behind where its words are drawn, as an agent's tab folds it", () => {
+  const folds = (asked: readonly string[]) => {
+    const container = mounted(
+      callTab({ region: askingCall(false), turns: [researchingTurn(asked)] }),
+    );
+    return {
+      lines: [...container.querySelectorAll("[data-turn-fold] > summary")].map(
+        (summary) => summary.textContent,
+      ),
+      rows: container.querySelectorAll("[data-call-id]").length,
+      answer: container.textContent?.includes("Removal already checks for an admin.") === true,
+    };
+  };
+  assert.deepEqual(folds(["row-ask"]), {
+    lines: ["2 tool calls, 1 subagent"],
+    rows: 0,
+    answer: false,
+  });
+  assert.deepEqual(folds([]), { lines: ["2 tool calls, 1 subagent"], rows: 0, answer: true });
+});

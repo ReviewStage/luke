@@ -99,7 +99,7 @@ function agentCall(
   };
 }
 
-/** One finished turn drawn on each tab: the words, the reasoning, then one call, described where asked; or two calls ahead of the words. */
+/** One finished turn drawn on each tab: the reasoning, the words, then one call, described where asked; or two calls ahead of the words. */
 function surfaces(
   callsFirst: boolean,
   description?: string,
@@ -126,8 +126,8 @@ function surfaces(
               { type: PLAN_WORK_PART.TEXT, text: "One file." },
             ]
           : [
-              { type: PLAN_WORK_PART.TEXT, text: "Looking at the sources." },
               { type: PLAN_WORK_PART.REASONING, text: REASONING_SENT },
+              { type: PLAN_WORK_PART.TEXT, text: "Looking at the sources." },
               workCall("call-1", COMMAND, description),
             ],
       },
@@ -146,8 +146,8 @@ function surfaces(
               { type: "text", text: "One file." },
             ]
           : [
-              { type: "text", text: "Looking at the sources." },
               { type: "reasoning", text: REASONING_SENT },
+              { type: "text", text: "Looking at the sources." },
               agentCall("call-1", COMMAND, description),
             ],
       },

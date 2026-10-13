@@ -965,14 +965,17 @@ const SPOKEN_CALL = "3f6a1c2e-8b4d-4e7f-9a1b-5c2d3e4f6a7b";
 
 /**
  * A spoken ask on the plan's conversation, as the voice leaves it: the ask
- * under its delegation's id, dispatched into the standing's eve session, and
- * the developer's lines the delegation was about, written and attached to it.
+ * under its delegation's id, made at `at`, dispatched into the standing's
+ * eve session, and the developer's lines the delegation was about, written
+ * and attached to it. Answers the delegation's id, which eve names the ask's
+ * delivery by.
  */
-async function spokenAsk(
+async function delegatedAsk(
   target: ConversationTarget,
   standing: RelayStanding,
   lines: readonly (readonly [rowId: string, text: string, fromMs: number])[],
-): Promise<void> {
+  at: number,
+): Promise<string> {
   const delegationId = `dl_${randomUUID()}`;
   const record = askRecord();
   const ask = await database.run(
@@ -980,7 +983,7 @@ async function spokenAsk(
       ...target,
       clientId: delegationId,
       origin: ASK_ORIGIN.SPOKEN,
-      createdAt: new Date(NOW),
+      createdAt: new Date(at),
     }),
   );
   await database.run(
@@ -1007,6 +1010,16 @@ async function spokenAsk(
   await database.run(
     writer.attachSpokenAsk(target, { delegationId, rowIds: lines.map(([rowId]) => rowId) }),
   );
+  return delegationId;
+}
+
+/** A spoken ask, as `delegatedAsk` leaves it, and the whole turn eve runs for it. */
+async function spokenAsk(
+  target: ConversationTarget,
+  standing: RelayStanding,
+  lines: readonly (readonly [rowId: string, text: string, fromMs: number])[],
+): Promise<void> {
+  const delegationId = await delegatedAsk(target, standing, lines, NOW);
   await play(spokenTurn(FIRST_EVE_TURN, NOW, [delegationId]), standing);
 }
 
@@ -1019,9 +1032,9 @@ test("a plan's work read back names the developer's spoken lines each turn took 
     ["row-check", "Check how removal works.", 4_000],
     ["row-who", "Who can withdraw an invite?", 1_000],
   ]);
-  await askedAt(spoken, NOW - 60_000);
+  await askedAt(spoken, NOW);
   await play([...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Done.")], typed);
-  await askedAt(typed, NOW);
+  await askedAt(typed, NOW + 60_000);
 
   const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
   assert.ok(Option.isSome(read));
@@ -1045,6 +1058,49 @@ test("a plan's work read back names the developer's spoken lines each turn took 
     database.store.messages.spokenAskRows(stranger, target.conversationId, [turnId]),
   );
   assert.equal(theirs.size, 0, "another account reads none of the plan's lines");
+});
+
+test("a turn steered with a spoken follow-up while it runs names only the lines of the ask that opened it, so its work stays under them on the call and the follow-up stands below", async () => {
+  const target = await planConversation();
+  const standing = standingFor(target);
+  const opened = await delegatedAsk(
+    target,
+    standing,
+    [["row-ask", "Look into how invites expire.", 1_000]],
+    NOW - 2_000,
+  );
+  const received = { turnId: FIRST_EVE_TURN, sequence: SEQUENCE, message: "q" };
+  await play(
+    [
+      stampedEveEvent({ type: "turn.started", data: received }, NOW, [opened]),
+      stampedEveEvent({ type: "message.received", data: received }, NOW, [opened]),
+    ],
+    standing,
+  );
+  // A minute in, while the turn waits on its subagent, the developer says more, and eve steers it into the turn.
+  const followUp = await delegatedAsk(
+    target,
+    standing,
+    [["row-follow", "And who can resend one?", 62_000]],
+    NOW + 60_000,
+  );
+  await play(
+    [
+      stampedEveEvent({ type: "message.received", data: received }, NOW + 61_000, [
+        opened,
+        followUp,
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 0, "Seven days, and the inviter."),
+    ],
+    standing,
+  );
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.deepEqual(
+    read.value.turns.map((turn) => [turn.asked, turn.askedAt]),
+    [[["row-ask"], [{ voiceSessionId: SPOKEN_CALL, fromMs: 1_000 }]]],
+  );
 });
 
 test("a plan of more turns than a page reads its newest first, then each older page before the oldest turn read, every code coming with the newest", async () => {
