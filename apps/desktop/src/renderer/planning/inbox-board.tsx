@@ -18,7 +18,6 @@ import {
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import { TerminalIcon } from "@sidecar/panel";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
@@ -39,7 +38,7 @@ import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
-import { AgentGlyph, agentEndMark } from "./agent-tab";
+import { AgentGlyph, AgentMark, agentEndMark } from "./agent-tab";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
@@ -163,12 +162,12 @@ function pressesOf(
 
 /**
  * The mark of the agent that posted an item: its harness's, where this
- * window lists it, else the Coding agents glyph a pin of one wears, so an
+ * window lists it, else the mark an agent of no known harness wears, so an
  * item an agent of another Mac posted keeps the glyph's column.
  */
 function AuthorGlyph({ agent }: { agent: CodingAgentSummary | undefined }): React.JSX.Element {
   if (agent !== undefined) return <AgentGlyph agent={agent} />;
-  return <StateGlyph glyph={<TerminalIcon />} state={GLYPH_STATE.REST} />;
+  return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
 }
 
 /** How long ago, muted in even figures, the moment itself in the shared tooltip, as a file note's time is. */
