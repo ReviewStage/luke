@@ -29,6 +29,7 @@ import { createHash } from "node:crypto";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
+import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
 import { CODER } from "../coder-host/bounds.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
@@ -102,25 +103,33 @@ function credentialIsOld(record: SandboxRecord, now: number): boolean {
   return setAt !== undefined && now - setAt >= Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
 }
 
+/** What the image is prepared with, once per build, on the snapshot every session starts from. */
+async function prepareImage(sandbox: SandboxSession): Promise<void> {
+  await installCodeTooling(sandbox);
+  const prepared = await sandbox.run({ command: PREPARE_SCRIPT });
+  if (prepared.exitCode !== 0) {
+    throw new Error(`the sandbox image could not be prepared: ${prepared.stderr}`);
+  }
+}
+
 /**
  * The image every session starts from. Note that eve keys the prepared
  * snapshot by the bytes of each root's own `sandbox.ts` and by the
- * environment's options, never by `prepare`'s source, so the script's
- * digest rides in `env`: without it, an edit to the script here would leave
- * both roots starting from the snapshot the old script made.
+ * environment's options, never by `prepare`'s source. So the digest of
+ * everything authored here that prepares the image, the script and the
+ * function that runs it, rides in `env`. Without it, an edit here would
+ * leave both roots starting from the snapshot the old preparation made.
  */
 export const environment = VercelSandbox.environment({
   env: {
     NO_COLOR: "1",
-    LUKE_SANDBOX_IMAGE: createHash("sha256").update(PREPARE_SCRIPT).digest("hex").slice(0, 16),
+    LUKE_SANDBOX_IMAGE: createHash("sha256")
+      .update(PREPARE_SCRIPT)
+      .update(prepareImage.toString())
+      .digest("hex")
+      .slice(0, 16),
   },
-  prepare: async (sandbox) => {
-    await installCodeTooling(sandbox);
-    const prepared = await sandbox.run({ command: PREPARE_SCRIPT });
-    if (prepared.exitCode !== 0) {
-      throw new Error(`the sandbox image could not be prepared: ${prepared.stderr}`);
-    }
-  },
+  prepare: prepareImage,
 });
 
 /** The role's own sandbox, opened as its policy says; call it inside the root's `defineSandbox` selector. A worker's role opens none. */
