@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
