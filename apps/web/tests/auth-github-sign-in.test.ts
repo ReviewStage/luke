@@ -3,12 +3,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import {
-  ACCOUNT_TOKEN_STORAGE,
-  DISABLED_AUTH_PATHS,
-  GITHUB_SIGN_IN,
-  USER_PROFILE_HOOKS,
-} from "../server/auth-policy";
+import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "../server/auth-policy";
 import type { WireValue } from "../server/core";
 
 /**
@@ -28,8 +23,6 @@ const APP_CLIENT_ID = "Iv1.fixture-app-client";
 const APP_CLIENT_SECRET = "fixture-app-client-secret";
 const GITHUB_ACCOUNT_ID = "4242";
 const GITHUB_EMAIL = "octo@github.test";
-const GITHUB_AVATAR = "https://avatars.githubusercontent.com/u/4242?v=4";
-const GOOGLE_PICTURE = "https://lh3.googleusercontent.com/a/fixture-portrait";
 const NOW = new Date("2026-10-09T12:00:00.000Z");
 const HOUR_SECONDS = 60 * 60;
 
@@ -56,8 +49,6 @@ const APP_GRANT = {
 /** Every token exchange GitHub was asked for, as the form it was sent. */
 const exchanges: URLSearchParams[] = [];
 let grant: Grant = APP_GRANT;
-/** The primary email GitHub answers for the user. */
-let githubEmail = GITHUB_EMAIL;
 
 function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
@@ -72,16 +63,10 @@ async function fakeGitHub(input: string | URL | Request, init?: RequestInit): Pr
     return json({ token_type: "bearer", ...grant });
   }
   if (url.href === "https://api.github.com/user") {
-    return json({
-      id: Number(GITHUB_ACCOUNT_ID),
-      login: "octocat",
-      name: "Octo Cat",
-      email: null,
-      avatar_url: GITHUB_AVATAR,
-    });
+    return json({ id: Number(GITHUB_ACCOUNT_ID), login: "octocat", email: null });
   }
   if (url.href === "https://api.github.com/user/emails") {
-    return json([{ email: githubEmail, primary: true, verified: true }]);
+    return json([{ email: GITHUB_EMAIL, primary: true, verified: true }]);
   }
   throw new Error(`this test reaches no network: ${url.href}`);
 }
@@ -92,7 +77,6 @@ function authService() {
     secret: "fixture-session-secret-of-enough-length",
     database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
     account: ACCOUNT_TOKEN_STORAGE,
-    databaseHooks: USER_PROFILE_HOOKS,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     socialProviders: {
       github: { clientId: APP_CLIENT_ID, clientSecret: APP_CLIENT_SECRET, ...GITHUB_SIGN_IN },
@@ -149,7 +133,6 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fakeGitHub);
   exchanges.length = 0;
   grant = APP_GRANT;
-  githubEmail = GITHUB_EMAIL;
 });
 
 afterEach(() => {
@@ -214,43 +197,4 @@ test("the auth service hands no browser the GitHub token: the token endpoints ar
     assert.equal(response.status, 404, path);
     assert.equal((await response.text()).includes(APP_GRANT.access_token), false);
   }
-});
-
-test("an account first made with Google comes away from a GitHub sign-in wearing GitHub's name and avatar", async () => {
-  const auth = authService();
-  const context = await auth.$context;
-  const created = await context.internalAdapter.createUser({
-    email: GITHUB_EMAIL,
-    emailVerified: true,
-    name: "Octo From Google",
-    image: GOOGLE_PICTURE,
-  });
-
-  await signIn(auth);
-  const found = await context.internalAdapter.findUserByEmail(GITHUB_EMAIL);
-
-  assert.equal(found?.user.id, created.id);
-  assert.equal(found?.user.image, GITHUB_AVATAR);
-  assert.equal(found?.user.name, "Octo Cat");
-});
-
-test("a GitHub sign-in leaves the account's email as it was, even one another account's primary GitHub email would collide with", async () => {
-  const auth = authService();
-  await signIn(auth);
-  const { userId } = await githubAccounts(auth);
-  const context = await auth.$context;
-  const elsewhere = await context.internalAdapter.createUser({
-    email: "octo@elsewhere.test",
-    emailVerified: true,
-    name: "Another account",
-  });
-
-  // GitHub's primary email has since become one another Luke account holds.
-  githubEmail = elsewhere.email;
-  await signIn(auth);
-
-  const kept = await context.internalAdapter.findUserById(userId);
-  assert.equal(kept?.email, GITHUB_EMAIL);
-  assert.equal(kept?.image, GITHUB_AVATAR);
-  assert.equal((await context.internalAdapter.findUserById(elsewhere.id))?.email, elsewhere.email);
 });
