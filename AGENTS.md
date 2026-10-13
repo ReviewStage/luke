@@ -64,7 +64,7 @@ reads no account's words and runs no model.
 ```
 ./scripts/check.sh                       # CI's checks, bar the Postgres migration
 pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:store       # store tests on a real Postgres, by hand
+pnpm --filter @luke/web test:store       # store tests on a real Postgres (CI's postgres job runs it)
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
@@ -78,7 +78,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
-  process (`test:store`, which CI does not run), then `verify.sh` evidence for a Mac, a window, or
+  process (`test:store`, which CI's postgres job runs), then `verify.sh` evidence for a Mac, a window, or
   a live provider.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
