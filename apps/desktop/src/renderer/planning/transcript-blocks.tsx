@@ -191,7 +191,7 @@ const CALL_ICON = {
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
-    /** For a command, the plain words the model said it is for, which the row says alone; the command is the body's. */
+    /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
@@ -201,10 +201,10 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 
 /**
  * One tool call: its row saying what it did, closed until clicked, and its
- * input and answer under it once opened. An undescribed command is the
- * closed row's preview, dropped once the body under it shows the command
- * whole behind its prompt; a description stays, since the body does not say
- * it.
+ * input and answer under it once opened. A command is the closed row's
+ * preview, dropped once the body under it shows the command whole behind
+ * its prompt, or by a find, which draws that body hidden; a description
+ * stays, since the body does not say it.
  */
 export function TranscriptTool({
   state,
@@ -227,7 +227,7 @@ export function TranscriptTool({
         label={line.verb}
         subject={line.subject}
         subjectIsCode={line.code}
-        subjectInBody={command && description === undefined && input.kind === TOOL_BLOCK.COMMAND}
+        subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
       />
       <ToolContent>
         <ToolInput block={input} />
@@ -439,8 +439,9 @@ function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode 
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
  * or finished: one line drawn as a call's row is, in its muted ink, wearing
  * the mark of the harness its model runs in (the worker's robot where the
- * model is unknown), the job, fading where the line cuts it, the model and
- * effort it runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
+ * model is unknown), the job in the full ink as a call's verb is, fading
+ * where the line cuts it, the model and effort it runs on as every pair is
+ * drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands, with how long it has worked beside the
  * working mark while it runs (`working-time.tsx`). The whole line is
  * the one button that opens the subagent's tab, which is where its steps
@@ -462,7 +463,11 @@ export function TranscriptSubagent({
   const line = (
     <>
       <SubagentGlyph pair={pair} />
-      <span ref={words} className="subagent-job min-w-0 flex-1" data-overflow={String(clipped)}>
+      <span
+        ref={words}
+        className="subagent-job min-w-0 flex-1 text-foreground"
+        data-overflow={String(clipped)}
+      >
         {job}
       </span>
       {pair === undefined ? null : (
@@ -508,7 +513,7 @@ export function TranscriptSubagent({
   );
 }
 
-/** A line that folds the rows beneath it: a run of calls, or a finished turn's lead. */
+/** A line that folds the rows beneath it: a run of calls, or a finished turn's lead, its icon muted and its summary in the full ink, as a call's line, or shimmering while the run works. */
 function TurnFold({
   icon,
   summary,
@@ -531,7 +536,11 @@ function TurnFold({
         >
           {icon}
         </span>
-        {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
+        {running ? (
+          <Shimmer>{summary}</Shimmer>
+        ) : (
+          <span className="text-foreground">{summary}</span>
+        )}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
     </Fold>

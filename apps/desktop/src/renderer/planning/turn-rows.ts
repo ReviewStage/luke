@@ -80,26 +80,41 @@ export const CALL_WORDS = {
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
-/** What a call's line says: the verb, if any, then the subject, and whether the subject is code. */
+/** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
 export interface CallLine {
-  readonly verb: string | undefined;
+  readonly verb: string;
   readonly subject: string | undefined;
   readonly code: boolean;
 }
 
 /**
  * How a call's line reads: its kind's verb before its subject; or, for a
- * command the model said the purpose of, those plain words alone, as Claude
- * Code and Cursor name a command, with the command itself in the row's body.
+ * command the model said the purpose of, those plain words in the verb's
+ * place, as Claude Code and Cursor name a command, and the command's first
+ * line after them as its preview, the whole of it in the row's body.
  */
 export function callLine(
   kind: CallKind,
   subject: string | undefined,
   description: string | undefined,
 ): CallLine {
-  if (description !== undefined) return { verb: undefined, subject: description, code: false };
   const words = CALL_WORDS[kind];
-  return { verb: words.verb, subject, code: words.code };
+  if (description === undefined) return { verb: words.verb, subject, code: words.code };
+  return {
+    verb: description,
+    subject: subject === undefined ? undefined : firstLine(subject),
+    code: true,
+  };
+}
+
+/** A command's first line of words, as a line too short for the rest previews it. */
+function firstLine(text: string): string {
+  return (
+    text
+      .split("\n")
+      .find((line) => line.trim() !== "")
+      ?.trim() ?? ""
+  );
 }
 
 /**
