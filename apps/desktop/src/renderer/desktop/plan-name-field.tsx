@@ -81,8 +81,9 @@ export function PlanNameField({
  * next edit. Both are held for the one they were about, so a surface that
  * moves on to another draws neither over it. Note that the field closes as soon as it ends,
  * because the new name is drawn at once and a refusal puts the old one back
- * by itself. Each edit is counted, so the refusal of one an edit since has
- * replaced says nothing about the name drawn now.
+ * by itself. Each edit is counted, and so is each name it asks for, since
+ * the title asks again at every pause in the typing, so the refusal of one
+ * a later edit or name has replaced says nothing about the name drawn now.
  */
 export function usePlanRename(
   planId: string | undefined,
@@ -96,14 +97,18 @@ export function usePlanRename(
     setRefused(undefined);
     setEditing(planId);
   };
-  const end = ({ name }: NameEdit) => {
+  // Answers whether the name asked for was taken; an edit that asks for none has nothing refused.
+  const end = ({ name }: NameEdit): Promise<boolean> => {
     setEditing(undefined);
-    if (planId === undefined || name === undefined) return;
+    if (planId === undefined || name === undefined) return Promise.resolve(true);
+    edits.current += 1;
+    setRefused(undefined);
     const edit = edits.current;
     const refuse = () => {
       if (edit === edits.current) setRefused(planId);
+      return false;
     };
-    onRename(planId, name).then((renamed) => (renamed ? undefined : refuse()), refuse);
+    return onRename(planId, name).then((renamed) => renamed || refuse(), refuse);
   };
   const shown = planId !== undefined;
   return {

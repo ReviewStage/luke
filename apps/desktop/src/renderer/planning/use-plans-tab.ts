@@ -255,6 +255,11 @@ export interface PlansControl {
    */
   onRenamePlan: (planId: string, name: string) => Promise<boolean>;
   /**
+   * Draws a name being typed for a plan everywhere the plan is named, before
+   * any of it is saved, or none, which draws its saved name again.
+   */
+  onDraftName: (planId: string, name: string | undefined) => void;
+  /**
    * Pins or unpins a plan, archives it or brings it back, drawn at once and
    * put back with a note if the service refuses. Archiving the open plan
    * leaves it for the new-plan page, as deleting it does.
@@ -419,6 +424,18 @@ export function usePlansTab(input: {
   // landed never flickers back while main's copy of the view catches up.
   const [renames, setRenames] = useState<PendingRenames>(new Map());
   useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
+  // A name being typed is drawn over both, held here rather than read back
+  // from main, so every surface naming the plan follows the typing at once.
+  const [drafts, setDrafts] = useState<PendingRenames>(new Map());
+  const draftName = useCallback((planId: string, name: string | undefined) => {
+    setDrafts((held) => {
+      if (held.get(planId) === name) return held;
+      const next = new Map(held);
+      if (name === undefined) next.delete(planId);
+      else next.set(planId, name);
+      return next;
+    });
+  }, []);
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
@@ -435,7 +452,7 @@ export function usePlansTab(input: {
       ),
     [viewed, accountSignedIn],
   );
-  const planning = markedView(renamedView(viewed, renames), marks);
+  const planning = markedView(renamedView(renamedView(viewed, renames), drafts), marks);
   const sidebar = sidebarPlans(planning.plans);
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
@@ -1156,6 +1173,7 @@ export function usePlansTab(input: {
     },
     onLeavePlan: leavePlan,
     onRenamePlan: renamePlan,
+    onDraftName: draftName,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),
     onArchivePlans: archivePlans,
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),

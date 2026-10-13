@@ -1,21 +1,38 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
+import { Duration, Effect, Option, Schema } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
+import { RUN_PROFILE } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { captionStripProps } from "#testing/captions";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import type { CallCardInput } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { DOCUMENT_REGION, PLANS_PAGE, type PlansPage } from "../planning/planning-model";
+import {
+  DOCUMENT_REGION,
+  PLANS_PAGE,
+  type PlansPage,
+  RENAME_FAILED_NOTE,
+} from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { type PlansControl, usePlansTab } from "../planning/use-plans-tab";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./sidebar-collapse";
@@ -719,3 +736,211 @@ test("a toolbar leaves the panel's toggle room only where the toggle stands", ()
   assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
   assert.equal(clears(), false, "so its toolbar ends as far in as it starts");
 });
+
+/** The open plan as main's view carries it: listed in the sidebar and drawn in the column. */
+const NAMED_VIEW: PlanningView = {
+  plans: [
+    {
+      id: DOCUMENT_PLAN.id,
+      name: DOCUMENT_NAME,
+      createdAt: DOCUMENT_PLAN.createdAt,
+      updatedAt: DOCUMENT_PLAN.updatedAt,
+      repository: null,
+    },
+  ],
+  listStatus: PLANNING_READ.READY,
+  activePlanId: DOCUMENT_PLAN.id,
+  document: { status: PLANNING_READ.READY, plan: DOCUMENT_PLAN },
+};
+
+/** Well past any pause the typing is given before its words are saved. */
+const PAST_PAUSE = Duration.seconds(1);
+
+/** The service's answers, by the act they answer. */
+type ActAnswers = { [Kind in ActKind]?: () => Promise<ActResultFor<Kind>> };
+
+/** Where the window names the open plan. */
+interface PlanNaming {
+  readonly tab: string;
+  readonly row: string;
+  readonly title: string;
+}
+
+/** A rename's payload, read back as the act's own schema admits it. */
+const readRename = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
+
+/**
+ * The window as `App` stands it, over the plans hook itself on that plan,
+ * keeping each name the service was asked to rename it to and answering
+ * each rename with `answer`, by how many were asked so far; every other act
+ * is refused.
+ */
+function NamedWindow({
+  asked,
+  answer,
+}: {
+  asked: string[];
+  answer: (asks: number) => Promise<boolean>;
+}) {
+  const sidebar = useSidebarCollapse(false);
+  useAppKeymap(true);
+  const answers: ActAnswers = {
+    [ACT_KIND.PLANNING_RENAME]: () => answer(asked.length),
+  };
+  const plans = usePlansTab({
+    acts: {
+      act: <Kind extends ActKind>(kind: Kind, ...args: unknown[]): Promise<ActResultFor<Kind>> => {
+        const answered = answers[kind];
+        if (answered === undefined) return Promise.reject(new Error("Not answered in this test."));
+        const rename = Option.getOrUndefined(readRename(args[0]));
+        if (rename !== undefined) asked.push(rename.name);
+        return answered();
+      },
+      tell: ignore,
+    },
+    planning: NAMED_VIEW,
+    run: { fixtureMode: false, profile: RUN_PROFILE.IDLE },
+    signedIn: true,
+    voiceAvailable: true,
+    microphoneStatus: MICROPHONE_STATUS.GRANTED,
+    shown: true,
+    unseenAgents: [],
+    inboxWaiting: [],
+    voice: { view: IDLE_VOICE_VIEW, listening: false, requestMicrophoneAccess: ignore },
+  });
+  return createElement(DesktopShell, {
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
+    tab: PANEL_TAB.PLANS,
+    onTabChange: ignore,
+    plans,
+    history: navigationHistory(),
+    sidebar,
+    call: undefined,
+    captions: captionStripProps(),
+    settings: settingsPanelProps(),
+  });
+}
+
+/** Opens the window on the named plan under `registry`, the service answering its renames with `answer`. */
+function showNamed(registry: AtomRegistry, answer: (asks: number) => Promise<boolean>): string[] {
+  installScrollIntoView();
+  const asked: string[] = [];
+  act(() => {
+    root ??= createRoot(document.body.appendChild(document.createElement("div")));
+    root.render(onRegistry(registry, createElement(NamedWindow, { asked, answer })));
+  });
+  return asked;
+}
+
+/** Where the window names the open plan: its tab in the column's strip, its row in the sidebar, and the title over its text. */
+function namedAs(): PlanNaming {
+  const tab = document.body.querySelector('.desktop-plan-main [role="tab"]');
+  const row = sidebar().querySelector(".sidebar-plan-name");
+  const title = document.body.querySelector('[aria-label="Plan name"]');
+  assert.ok(tab && row && title, "the plan is named on its tab, its row, and its title");
+  return { tab: tab.textContent ?? "", row: row.textContent ?? "", title: title.textContent ?? "" };
+}
+
+/** Words typed into the title, as the keyboard leaves them there. */
+function typeTitle(words: string): void {
+  const title = document.body.querySelector<HTMLElement>('[aria-label="Plan name"]');
+  assert.ok(title, "the title's words");
+  act(() => {
+    title.focus();
+    title.textContent = words;
+    title.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  });
+}
+
+/** Lets every promise settled so far run its continuations. */
+const landed = Effect.promise(() =>
+  act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  }),
+);
+
+it.effect(
+  "the title's words name the plan on its tab and its sidebar row as they are typed, before anything is saved, and a pause saves them with one rename",
+  () =>
+    Effect.gen(function* () {
+      const asked = showNamed(yield* registryOnTestClock, () => Promise.resolve(true));
+
+      typeTitle("Teammate");
+      typeTitle("Teammate invites");
+      assert.deepEqual(namedAs(), {
+        tab: "Teammate invites",
+        row: "Teammate invites",
+        title: "Teammate invites",
+      });
+      assert.deepEqual(asked, [], "nothing is saved while the typing goes on");
+
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      assert.deepEqual(asked, ["Teammate invites"]);
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      assert.deepEqual(asked, ["Teammate invites"], "a pause saves its words once");
+      assert.equal(
+        namedAs().row,
+        "Teammate invites",
+        "the name saved stands while the view catches up",
+      );
+    }),
+);
+
+it.effect(
+  "a rename refused at a pause puts the saved name back on the tab, the sidebar row, and the title, and says so beside the toolbar until a later pause saves",
+  () =>
+    Effect.gen(function* () {
+      const asked = showNamed(yield* registryOnTestClock, (asks) => Promise.resolve(asks > 1));
+
+      typeTitle("Teammate invites");
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+
+      assert.deepEqual(asked, ["Teammate invites"]);
+      assert.deepEqual(namedAs(), { tab: DOCUMENT_NAME, row: DOCUMENT_NAME, title: DOCUMENT_NAME });
+      const note = () => document.body.querySelector(".desktop-toolbar-note")?.textContent;
+      assert.equal(note(), RENAME_FAILED_NOTE);
+
+      typeTitle("Team invites");
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      assert.deepEqual(asked, ["Teammate invites", "Team invites"]);
+      assert.equal(namedAs().tab, "Team invites");
+      assert.equal(note(), undefined, "the refusal no longer says anything of the name drawn");
+    }),
+);
+
+it.effect(
+  "a rename refused after the title was typed away and back keeps the newest words, which the next pause asks for again",
+  () =>
+    Effect.gen(function* () {
+      let refuse: ((renamed: boolean) => void) | undefined;
+      const held = new Promise<boolean>((answer) => {
+        refuse = answer;
+      });
+      const asked = showNamed(yield* registryOnTestClock, (asks) =>
+        asks === 1 ? held : Promise.resolve(true),
+      );
+
+      typeTitle("Teammate invites");
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      typeTitle("Teammate invites!");
+      typeTitle("Teammate invites");
+      yield* Effect.promise(() => act(async () => refuse?.(false)));
+      yield* landed;
+
+      const newest = "Teammate invites";
+      assert.deepEqual(namedAs(), { tab: newest, row: newest, title: newest });
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      assert.deepEqual(asked, [newest, newest]);
+    }),
+);

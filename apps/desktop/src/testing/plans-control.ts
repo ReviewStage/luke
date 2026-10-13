@@ -232,6 +232,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     onLeavePlan: ignore,
     onRenamePlan: () => Promise.resolve(true),
+    onDraftName: ignore,
     onMarkPlan: ignore,
     onArchivePlans: ignore,
     pinnedRepositories: [],

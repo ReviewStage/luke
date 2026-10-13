@@ -86,7 +86,10 @@ function mount(answers: readonly PlanningEditAnswer[] = []) {
     sent.push(request);
     return Promise.resolve(answers[sent.length - 1] ?? saved);
   };
-  const onRename = (name: string) => renamed.push(name);
+  const onRename = (name: string) => {
+    renamed.push(name);
+    return Promise.resolve(true);
+  };
   const render = (plan: Plan, door: typeof onEdit = onEdit) =>
     act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit: door, onRename })));
   render(DOCUMENT_PLAN);
@@ -404,6 +407,19 @@ test("the title renamed by Esc renames once, not again as the focus leaves it; a
   assert.equal(text.textContent, long.slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim());
 });
 
+test("words typed into the title past the bound are held to it as they are typed, as the name field's are", () => {
+  const { container } = mount();
+  const text = title(container);
+  const long = "Invites ".repeat(40);
+  act(() => {
+    text.focus();
+    text.textContent = long;
+    text.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  });
+
+  assert.equal(text.textContent, long.slice(0, PLAN_BOUNDS.MAX_NAME_CHARS));
+});
+
 test("a rename refused, which puts the plan's old name back, puts the title's words back too", () => {
   const { container, render } = mount();
   const text = title(container);
@@ -417,6 +433,21 @@ test("a rename refused, which puts the plan's old name back, puts the title's wo
   render(DOCUMENT_PLAN);
 
   assert.equal(text.textContent, DOCUMENT_NAME);
+});
+
+test("words typed into the title as another plan opens are saved to the plan they were typed for, and the other's title is its own name", () => {
+  const { container, renamed, render } = mount();
+  const text = title(container);
+  act(() => {
+    text.focus();
+    text.textContent = "Teammate invites";
+    text.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  });
+
+  render({ ...DOCUMENT_PLAN, id: "0c4f9e2b-8a71-4d36-b5e0-7f13a92c6d58", name: "Billing export" });
+
+  assert.deepEqual(renamed, ["Teammate invites"]);
+  assert.equal(title(container).textContent, "Billing export");
 });
 
 test("↑ on the text's first line saves it and goes into the title", async () => {
