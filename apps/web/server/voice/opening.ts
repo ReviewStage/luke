@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import type {
+  EarlierCallLine,
+  VoiceSessionRecord,
+} from "@sidecar/database/models/voice-session-record";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
@@ -33,7 +37,6 @@ import {
 import type { VoiceAccounts } from "./accounts.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
-import type { EarlierCallLine, VoiceSessionRecord } from "./session-record.js";
 import { frameText, type VoiceSocket } from "./socket.js";
 
 /**

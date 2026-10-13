@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import {
   VOICE_WRITE_REFUSAL,
   type VoiceTarget,
@@ -49,7 +50,6 @@ import {
 } from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 import { settled } from "./support/settle";
