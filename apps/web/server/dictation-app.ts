@@ -1,3 +1,4 @@
+import { spendDictationMeter } from "@sidecar/database/models/quota";
 import { base64Bytes, base64Chars } from "@sidecar/hosted/coding-agent-wire";
 import {
   DICTATION_BOUNDS,
@@ -25,7 +26,6 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { spendDictationMeter } from "./hosted/quota.js";
 import { logStoreFailure } from "./hosted/store-failure.js";
 import { transcribeClip } from "./hosted/transcription.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";

@@ -1664,7 +1664,7 @@ row's `usage` with `{ seconds, confirmed: false }`, a snapshot and never a
 sum. `session.closed` is finalization. Whichever connection sees it forwards
 it, writes the row's `closed_at`, `close_reason`, and
 `usage { seconds, confirmed: true }`, records `usage.seconds` through
-`recordVoiceSeconds` in `server/hosted/quota.ts`
+`recordVoiceSeconds` in `packages/database/src/models/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, so a report seen by two connections adds nothing — and closes both
 ends. The session's one `session.close` is the exchange's, as the

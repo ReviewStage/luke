@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { recordVoiceSeconds } from "@sidecar/database/models/quota";
 import { voiceSessionUsage } from "@sidecar/database/schemas/usage";
 import { VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterAll } from "vitest";
-import { recordVoiceSeconds } from "../server/hosted/quota";
 import { LIVE_CLIENT_EVENT, LIVE_CLOSE_REASON, LIVE_SERVER_EVENT } from "../server/live";
 import { createLiveUpstream } from "../server/voice/openai";
 import {

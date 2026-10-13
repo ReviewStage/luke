@@ -1,3 +1,4 @@
+import { spendHostedMeter } from "@sidecar/database/models/quota";
 import {
   applyNotesToText,
   type PlanNote,
@@ -33,7 +34,6 @@ import { SqlClient } from "effect/unstable/sql";
 import { DEVELOPER_FIELDS_MARKER, SCRIBE_INSTRUCTIONS } from "../hosted/brain-host/planning.js";
 import { PLAN_SAVE_STATUS, saveNotes } from "../hosted/plan-notes.js";
 import { readPlan, type StoredPlan } from "../hosted/plan-store.js";
-import { spendHostedMeter } from "../hosted/quota.js";
 
 /**
  * plan-scribe.ts -- a planning call's notetaker: it listens to the call and writes the plan while Luke and the developer talk.

@@ -1,7 +1,7 @@
+import { utcDayKey } from "@sidecar/database/models/quota";
 import { Clock, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { DAY_MS } from "../core.js";
-import { utcDayKey } from "../hosted/quota.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
