@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import type {
-  AvatarEndReason,
   VOICE_DELEGATION_MODE,
   VoiceCloseReason,
   VoiceSegmentRole,
@@ -120,36 +119,4 @@ export const voiceTranscriptSegments = pgTable(
     endMs: integer("end_ms").notNull(),
   },
   (table) => [primaryKey({ columns: [table.voiceSessionId, table.seq] })],
-);
-
-/**
- * One LiveAvatar session shown on a call: the avatar face a voice session
- * streamed Luke's voice to. `liveavatar_session_id` is LiveAvatar's own id
- * for it and unique, so the stop the service sends and the sweep's stop of
- * an orphan close the one row. A row is open while `ended_at` is null; the
- * close writes when and why it ended and the seconds it ran, which is what
- * LiveAvatar bills by. A row cascades with its voice session and its account.
- */
-export const voiceAvatarSessions = pgTable(
-  "voice_avatar_sessions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    voiceSessionId: uuid("voice_session_id")
-      .notNull()
-      .references(() => voiceSessions.id, { onDelete: "cascade" }),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    liveAvatarSessionId: text("liveavatar_session_id").notNull().unique(),
-    startedAt: timestamptz("started_at").notNull(),
-    endedAt: timestamptz("ended_at"),
-    /** Whole seconds from start to end, rounded up; written once, by the first close. */
-    seconds: integer("seconds"),
-    endReason: text("end_reason").$type<AvatarEndReason>(),
-  },
-  (table) => [
-    index("voice_avatar_sessions_open")
-      .on(table.voiceSessionId)
-      .where(sql`${table.endedAt} is null`),
-  ],
 );
