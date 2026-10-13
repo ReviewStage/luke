@@ -1,4 +1,4 @@
-import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import { TURN_ENDING, type TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
@@ -162,6 +162,18 @@ function recordOf({ model, effort, tokens, ending }: TurnRecord): TurnRecord {
     ...(tokens === undefined ? undefined : { tokens }),
     ...(ending === undefined ? undefined : { ending }),
   };
+}
+
+/**
+ * Whether a turn or a subagent's task that ended without answering failed,
+ * which is said "Failed" as an agent's failed turn is, rather than
+ * "Stopped": where the service recorded that it failed or ran past its
+ * bound. Note that one recorded as stopped, one the call it ran on ended
+ * under (`workRowsOf`), and one from a service older than the record all
+ * stopped, since none of them failed of its own that anyone said.
+ */
+export function workFailed(record: TurnRecord | undefined): boolean {
+  return record?.ending === TURN_ENDING.FAILED || record?.ending === TURN_ENDING.ABANDONED;
 }
 
 /** The effort a worker's pair says where its session's row recorded none, as a turn recorded before efforts were, which the label leaves unsaid. */

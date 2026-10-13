@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { TURN_ENDING, type TurnEnding } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
@@ -105,6 +106,113 @@ test("a worker's line and its task card name the task by its first line as plain
     card.querySelector("li code")?.textContent,
     "apps/desktop/src/renderer/desktop/desktop-plans.tsx",
   );
+});
+
+/** A worker whose call is in `state` on a turn in the same state, its session drawn from `session` where it has one. */
+function workerTurn(
+  state: PlanWorkState,
+  session?: {
+    parts: readonly { type: typeof PLAN_WORK_PART.TEXT; text: string }[];
+    ending?: TurnEnding;
+  },
+) {
+  const [turn] = TURNS;
+  const [part] = turn?.parts ?? [];
+  assert.ok(turn && part);
+  return [
+    {
+      ...turn,
+      state,
+      parts: [
+        {
+          ...part,
+          state,
+          ...(session === undefined
+            ? undefined
+            : { session: { earlierOmitted: false, ...session } }),
+        },
+      ],
+    },
+  ];
+}
+
+test("a subagent still starting says so once, on the working line at its tab's end, and says it is working once its session draws a row", () => {
+  const tabOf = (turns: ReturnType<typeof workerTurn>) => {
+    const worker = workerOf(workRowsOf(turns, true), "call-worker");
+    assert.ok(worker);
+    return mounted(createElement(SubagentTab, { worker, shown: false }));
+  };
+  const said = (tab: HTMLElement) => ({
+    lines: [...tab.querySelectorAll("[data-working]")].map((line) => line.textContent),
+    marks: tab.querySelectorAll(".working-mark").length,
+  });
+
+  assert.deepEqual(said(tabOf(workerTurn(PLAN_WORK_STATE.RUNNING))), {
+    lines: ["Starting…"],
+    marks: 0,
+  });
+  assert.deepEqual(said(tabOf(workerTurn(PLAN_WORK_STATE.RUNNING, { parts: [] }))), {
+    lines: ["Starting…"],
+    marks: 0,
+  });
+  const drawing = tabOf(
+    workerTurn(PLAN_WORK_STATE.RUNNING, {
+      parts: [{ type: PLAN_WORK_PART.TEXT, text: "Reading the plan routes." }],
+    }),
+  );
+  assert.deepEqual(said(drawing).lines, ["Working…"]);
+});
+
+test("a turn or a subagent the service says failed reads Failed, as an agent's failed turn does, and one stopped, left by its call, or from a service that said neither reads Stopped", () => {
+  const [turn] = TURNS;
+  assert.ok(turn);
+  const ended = (ending: TurnEnding | undefined) => ({
+    ...turn,
+    turnId: `turn-${ending ?? "unsaid"}`,
+    state: PLAN_WORK_STATE.FAILED,
+    endedAt: 2,
+    ...(ending === undefined ? undefined : { ending }),
+  });
+  const turns = [
+    ended(TURN_ENDING.FAILED),
+    ended(TURN_ENDING.ABANDONED),
+    ended(TURN_ENDING.STOPPED),
+    ended(undefined),
+    { ...turn, turnId: "turn-left", state: PLAN_WORK_STATE.RUNNING },
+  ];
+  const work = mounted(
+    createElement(PlanWork, {
+      turns,
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: async () => undefined,
+      onOpenSubagent: () => undefined,
+      shown: true,
+    }),
+  );
+  assert.deepEqual(
+    [...work.querySelectorAll("[data-state]")].map((state) => state.textContent),
+    ["Failed", "Failed", "Stopped", "Stopped", "Stopped"],
+  );
+
+  const endLine = (ending: TurnEnding | undefined) => {
+    const worker = workerOf(
+      workRowsOf(
+        workerTurn(PLAN_WORK_STATE.FAILED, {
+          parts: [{ type: PLAN_WORK_PART.TEXT, text: "Reading the plan routes." }],
+          ...(ending === undefined ? undefined : { ending }),
+        }),
+        false,
+      ),
+      "call-worker",
+    );
+    assert.ok(worker);
+    const tab = mounted(createElement(SubagentTab, { worker, shown: true }));
+    return tab.querySelector("[data-ended]")?.textContent;
+  };
+  assert.equal(endLine(TURN_ENDING.FAILED), "Failed");
+  assert.equal(endLine(TURN_ENDING.STOPPED), "Stopped");
+  assert.equal(endLine(undefined), "Stopped");
 });
 
 test("a worker's job cut short by its line is marked to fade at its end, while a job shown whole is not", () => {

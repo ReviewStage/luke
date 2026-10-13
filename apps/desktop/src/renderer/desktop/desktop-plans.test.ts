@@ -12,6 +12,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
+  TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
@@ -965,6 +966,42 @@ test("a planning worker whose call ended under it wears its glyph at rest and sa
   assert.ok(tab.querySelector("svg.lucide-bot"), "the worker's glyph");
   hover(tab);
   assert.deepEqual(cardParts(), [job, "Stopped", "Queue A lets an admin revoke."]);
+});
+
+test("a planning worker whose own task failed wears an alert at its tab's end and says it failed, as an agent whose turn failed does", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session);
+  const failed: PlansControl["work"] = {
+    ...live,
+    callLive: false,
+    turns: [
+      {
+        ...turn,
+        state: PLAN_WORK_STATE.FAILED,
+        ending: TURN_ENDING.FAILED,
+        parts: [
+          {
+            ...worker,
+            state: PLAN_WORK_STATE.FAILED,
+            session: { ...worker.session, ending: TURN_ENDING.FAILED },
+          },
+        ],
+      },
+    ],
+  };
+  const page = mountOpenPlan({ work: failed });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const tab = tabNamed(page, job);
+
+  assert.equal(tabEndState(tab), "Failed");
+  assert.ok(tab.lastElementChild?.querySelector("svg.lucide-circle-alert"), "the alert glyph");
+  hover(tab);
+  assert.deepEqual(cardParts(), [job, "Failed", "Queue A lets an admin revoke."]);
 });
 
 test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {

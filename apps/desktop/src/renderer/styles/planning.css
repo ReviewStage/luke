@@ -1109,7 +1109,7 @@ button.code-card-path:hover {
 
 .agent-note {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 12px;
 }
 

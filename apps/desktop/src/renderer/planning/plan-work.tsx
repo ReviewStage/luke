@@ -1,3 +1,4 @@
+import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_STATE,
@@ -21,7 +22,7 @@ import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { EmptyState } from "../empty-state";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel } from "../spinner";
-import { WorkingMark } from "../working-mark";
+import { WORKING_PHASE, WORKING_PHASE_WORDS } from "./coding-agent-model";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import {
   TranscriptNote,
@@ -43,6 +44,7 @@ import {
   type WorkWorkerBlock,
   workerChoice,
   workerJob,
+  workFailed,
   workRowsOf,
 } from "./work-model";
 import { WorkedFor, WorkingLine, WorkingTime } from "./working-time";
@@ -62,7 +64,7 @@ import { WorkedFor, WorkingLine, WorkingTime } from "./working-time";
  * tab draws the session as an agent's tab draws its transcript: the task a
  * card at the top that opens onto the whole message the subagent was
  * handed, a shimmering line at the end while the subagent runs, a quiet one
- * where it was stopped, and follows it while the subagent runs. The tab
+ * where it stopped or failed, and follows it while the subagent runs. The tab
  * holds the plan's newest turns first, and the turns before them are read a
  * page at a time as the developer scrolls up to the oldest (`EarlierWork`).
  * Everything here is the planning model's or the developer's repository's,
@@ -74,8 +76,18 @@ import { WorkedFor, WorkingLine, WorkingTime } from "./working-time";
 const TURN_STATE_WORD = {
   [PLAN_WORK_STATE.RUNNING]: "Working",
   [PLAN_WORK_STATE.DONE]: "Done",
-  [PLAN_WORK_STATE.FAILED]: "Stopped",
 } as const;
+
+/** What a turn or a subagent's session that ended without answering says, by whether it failed (`workFailed`). */
+const ENDED_WORD = {
+  STOPPED: "Stopped",
+  FAILED: "Failed",
+} as const;
+
+/** What work that ended without answering says it did, as its record says it ended. */
+function endedWord(record: TurnRecord | undefined): string {
+  return workFailed(record) ? ENDED_WORD.FAILED : ENDED_WORD.STOPPED;
+}
 
 /** A call's state as the Tool row marks it, in the AI SDK's words: running only while it still moves. */
 function toolStateOf(call: WorkCallRow): ToolState {
@@ -160,27 +172,22 @@ function WorkerLine({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element 
   );
 }
 
-/** A subagent's session's rows, drawn as a turn's are, or the note standing in their place. */
-function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
+/**
+ * A subagent's session's rows, drawn as a turn's are, or a note in their
+ * place where it ended with none; one still starting draws none, since the
+ * working line at the tab's end says so.
+ */
+function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element | null {
   const { call, session } = worker;
+  if (session === undefined || session.rows.length === 0) {
+    return call.running ? null : <TranscriptNote>Nothing recorded.</TranscriptNote>;
+  }
   return (
     <>
-      {session?.earlierOmitted ? (
+      {session.earlierOmitted ? (
         <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
       ) : null}
-      {session === undefined || session.rows.length === 0 ? (
-        <TranscriptNote>
-          {call.running ? (
-            <span role="status" className="inline-flex">
-              <WorkingMark label="Starting" />
-            </span>
-          ) : (
-            "Nothing recorded."
-          )}
-        </TranscriptNote>
-      ) : (
-        <WorkTurnRows rows={session.rows} />
-      )}
+      <WorkTurnRows rows={session.rows} />
     </>
   );
 }
@@ -188,21 +195,15 @@ function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Elemen
 /** The word before a subagent's task card's title. */
 const TASK_CARD_LABEL = "Task";
 
-/** What stands at the end of a subagent's session where it was stopped; one that runs ends on the working line. */
-const SUBAGENT_END_LINE = {
-  [PLAN_WORK_STATE.RUNNING]: undefined,
-  [PLAN_WORK_STATE.DONE]: undefined,
-  [PLAN_WORK_STATE.FAILED]: "Stopped",
-} as const satisfies Record<PlanWorkState, string | undefined>;
-
 /**
  * A subagent's session in a tab of the panel's own, drawn as an agent's
  * tab draws its transcript: the task it was handed as a card at the top,
  * its job on the card's line and the whole message once opened, scrolling
  * with the rest; its blocks as the Work tab draws them; and at
- * the end a shimmering line while it runs, counting from when its task
+ * the end a shimmering line while it runs, "Starting…" until its session
+ * draws its first row and "Working…" after, counting from when its task
  * began, or once it has finished a quiet line saying how long it worked
- * and when it ended, and one saying so where it was stopped. The tab's own
+ * and when it ended, and one saying so where it stopped or failed. The tab's own
  * label names the task, so no head repeats it. The
  * worker is read from the plan's work on every frame, so the tab follows
  * the session while the subagent runs, and the log keeps to its newest
@@ -221,7 +222,13 @@ export function SubagentTab({
 }): React.JSX.Element {
   const { call, task, session } = worker;
   const job = workerJob(call);
-  const ended = call.running ? undefined : SUBAGENT_END_LINE[call.state];
+  const ended =
+    call.running || call.state !== PLAN_WORK_STATE.FAILED ? undefined : endedWord(session?.record);
+  // A session that has drawn no row yet is the subagent starting, as an agent's working line says it.
+  const phase =
+    session === undefined || session.rows.length === 0
+      ? WORKING_PHASE.STARTING
+      : WORKING_PHASE.WORKING;
   const worked =
     call.running || session?.startedAt === undefined || session.endedAt === undefined
       ? undefined
@@ -241,7 +248,12 @@ export function SubagentTab({
             </PlanContent>
           </Plan>
           <SubagentRows worker={worker} />
-          {call.running ? <WorkingLine startedAt={shown ? session?.startedAt : undefined} /> : null}
+          {call.running ? (
+            <WorkingLine
+              startedAt={shown ? session?.startedAt : undefined}
+              words={WORKING_PHASE_WORDS[phase]}
+            />
+          ) : null}
           {worked === undefined ? null : (
             <WorkedFor {...worked} record={session?.record} models={models} />
           )}
@@ -289,10 +301,12 @@ function WorkTurnRows({ rows }: { rows: readonly TurnRow<WorkBlock>[] }): React.
  */
 function TurnState({
   state,
+  record,
   startedAt,
   counting,
 }: {
   state: PlanWorkState;
+  record: TurnRecord;
   startedAt: number;
   counting: boolean;
 }): React.JSX.Element {
@@ -303,8 +317,10 @@ function TurnState({
           <Shimmer>{TURN_STATE_WORD[state]}</Shimmer>
           {counting ? <WorkingTime startedAt={startedAt} /> : null}
         </>
-      ) : (
+      ) : state === PLAN_WORK_STATE.DONE ? (
         TURN_STATE_WORD[state]
+      ) : (
+        endedWord(record)
       )}
     </span>
   );
@@ -324,7 +340,14 @@ function WorkTurn({
   return (
     <>
       <Checkpoint
-        trailing={<TurnState state={turn.state} startedAt={turn.startedAt} counting={counting} />}
+        trailing={
+          <TurnState
+            state={turn.state}
+            record={turn.record}
+            startedAt={turn.startedAt}
+            counting={counting}
+          />
+        }
       >
         {callHeading(turn.startedAt, now)}
       </Checkpoint>

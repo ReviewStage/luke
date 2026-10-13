@@ -1105,7 +1105,7 @@ body,
 
 .desktop-toolbar-note {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 12px;
 }
 
@@ -1278,7 +1278,7 @@ body,
 }
 
 .copy-glyph > [data-glyph="failed"] {
-  color: var(--error-text);
+  color: var(--danger-text);
 }
 
 /* Plan actions ---------------------------------------------------------- */
@@ -3932,7 +3932,7 @@ body,
 
 .confirm-dialog-error {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 12px;
 }
 
@@ -4474,7 +4474,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 }
 
 .toast[data-tone="failed"] > svg {
-  color: var(--error-text);
+  color: var(--danger-text);
 }
 
 /* An ask is the developer's to answer, not news of something done, so its

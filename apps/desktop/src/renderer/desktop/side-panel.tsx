@@ -85,6 +85,7 @@ import {
   workerChoice,
   workerJob,
   workerOf,
+  workFailed,
   workRowsOf,
 } from "../planning/work-model";
 import type { MenuRow } from "../searchable-menu";
@@ -610,17 +611,24 @@ interface DrawnSubagent {
 
 /**
  * Where a planning worker stands as its tab wears it: working while its
- * call still moves, and at rest once it ended. Note that a worker whose call
- * failed is said to have stopped rather than failed, because that is a
- * worker whose planning call ended under it, as its own transcript's end
- * line says (`plan-work.tsx`), and no failure of its own.
+ * call still moves, failed where its session's own task failed, as an
+ * agent's failed turn is, and at rest once it ended otherwise. Note that a
+ * worker whose call ended without answering and whose task recorded no
+ * failure is said to have stopped, because that is a worker the developer
+ * stopped or whose planning call ended under it, as its own transcript's
+ * end line says (`plan-work.tsx`), and no failure of its own.
  */
 function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | "stateWords"> {
   if (worker.call.running) {
     return { state: GLYPH_STATE.WORKING, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.WORKING] };
   }
-  const stopped = worker.call.state === PLAN_WORK_STATE.FAILED;
-  return { state: GLYPH_STATE.REST, stateWords: stopped ? "Stopped" : undefined };
+  if (worker.call.state !== PLAN_WORK_STATE.FAILED) {
+    return { state: GLYPH_STATE.REST, stateWords: undefined };
+  }
+  if (workFailed(worker.session?.record)) {
+    return { state: GLYPH_STATE.FAILED, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.FAILED] };
+  }
+  return { state: GLYPH_STATE.REST, stateWords: "Stopped" };
 }
 
 /** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
