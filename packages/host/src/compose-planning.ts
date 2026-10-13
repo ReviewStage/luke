@@ -174,10 +174,7 @@ export type PlanningClient = Pick<
   /** The account's workspaces, the ones it may join, and their members. */
   workspaces: Pick<HostedWorkspaceClient, "list" | "join" | "members" | "removeMember" | "leave">;
   /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
-  github: Pick<HostedGitHubConnectionClient, "status" | "connect"> & {
-    /** The service's page that disconnects the account's GitHub, which asks the service nothing until the browser opens it. */
-    disconnectUrl: () => string;
-  };
+  github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnectUrl">;
 };
 
 export interface PlanningDependencies {
