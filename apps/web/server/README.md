@@ -121,7 +121,15 @@ the plugin's own; no transaction encloses it, so two Macs ensuring at once
 settle on the unique slug and the row's primary key, and the one the plugin
 refuses adopts the workspace under the slug. `listWorkspaces` answers every
 workspace the account is a member of, its personal one first and the rest by
-name. `tests/workspace-store.test.ts` holds the three.
+name. `tests/workspace-store.test.ts` holds the three. The workspace names the
+account rather than being named by it, so the user row's cascade would take
+only the `personal_workspace` row and leave the organization, with the
+account's name and id, standing: `account-store.ts`'s `deleteAccount` deletes
+it first (`deletePersonalWorkspace`), in the same transaction as the user row.
+That is a direct delete from the plugin's table, because Better Auth documents
+no deletion without a session: `deleteOrganization` requires session cookies
+and is off under `disableOrganizationDeletion`, and `user.deleteUser` wants a
+fresh session.
 
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
