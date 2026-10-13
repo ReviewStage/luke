@@ -262,8 +262,11 @@ reads it: `apps/desktop/src/shared/messages/acts.ts`,
   hand-written shape.
 - Drizzle follows the vendored `drizzle` and `db-migrations` skills
   (lobehub's): the `db.select()` builder, never `db.query`; the schema module
-  under `packages/database/src/schemas/` first, then `pnpm db:generate` for
-  its migration. Two things differ from lobehub's examples. A row is decoded
+  under `packages/database/src/schemas/` first, then
+  `pnpm db:generate --name=<what_it_does>` for its migration folder, which
+  Drizzle's migrator applies by name and `drizzle-kit check` (run by
+  `check.sh`) holds to commuting with every other branch's
+  (`packages/database/README.md`). Two things differ from lobehub's examples. A row is decoded
   by an Effect `Schema` through `SqlSchema`, never `drizzle-zod`, because
   Effect takes no zod schema and a second validation library would split the
   one way a boundary value is declared. A statement is an `Effect` from

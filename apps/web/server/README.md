@@ -33,20 +33,25 @@ serves and Drizzle names every declared column in an insert. The first
 deletes the declaration, runs `pnpm db:generate`, empties the `DROP COLUMN`
 out of the SQL file it writes (its snapshot already records the column gone),
 and lists the column in the drift check's `PENDING_DROP`. The second, once the
-first is live, runs `pnpm db:generate --custom`, writes `DROP COLUMN IF
-EXISTS` into the empty file it gets, and deletes the entry.
+first is live, runs `pnpm db:generate --custom --name=<table>_drop_<column>`,
+writes `DROP COLUMN IF EXISTS` into the file it gets, and deletes the entry.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
-connection Neon supplies for that deployment. The runner holds a PostgreSQL
-advisory lock for the migration session, so overlapping builds targeting one
-branch cannot apply the same migration concurrently.
+connection Neon supplies for that deployment. No lock of its own: Drizzle's
+batch of migrations is one transaction (the one-time history transfer before
+it commits in its own), nothing serializes two runs, and running one
+migration process per branch database at a time is the deploy's to keep.
 
-What applies them is `effect/sql`'s own migrator: `packages/database/src/core/migrator.ts`
-reads `packages/database/migrations/meta/_journal.json` and the `.sql` file each entry names, in
-order, and records what it applied in its own `effect_sql_migrations` table,
-which is what makes a second deploy a no-op. The older Drizzle-based runner's
-`drizzle.__drizzle_migrations`, which every database was bootstrapped from
-once, went with its schema in `20261013123642_dead_tables_drop`. The Neon integration
+What applies them is Drizzle's own Effect migrator, through
+`packages/database/src/core/migrator.ts`: it applies every folder under
+`packages/database/migrations/` that `public.__drizzle_migrations` does not
+name, in folder-name order, and records each by name, which is what makes a
+second deploy a no-op and a branch's older migration still apply after main's
+newer ones. Before it runs, a database the old `effect/sql` runner migrated has
+that runner's `effect_sql_migrations` history copied across once, under the
+folder each old tag moved to (`packages/database/README.md`). The table sits
+in `public` because `20261013123642_dead_tables_drop` drops the `drizzle`
+schema, where an earlier Drizzle runner kept it. The Neon integration
 creates a database branch for each Preview deployment, so its committed schema
 changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.

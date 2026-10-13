@@ -61,7 +61,7 @@ Rollout decisions must combine repository deployment facts with these measuremen
 Use the normal Drizzle workflow for schema changes that are safe to execute during deployment, such as creating a small table or adding a nullable column:
 
 1. Update the Drizzle schema.
-2. Run `bun run db:generate`.
+2. Run `pnpm db:generate --name=<what_it_does>`.
 3. Review and harden the generated artifacts using the steps below.
 
 Before listing a manual migration command as a release step, inspect the target repository's build and deployment scripts. If its deployment pipeline already applies migrations automatically, do not require a redundant manual run.
@@ -99,103 +99,64 @@ Backfill scripts should be resumable, safe to retry, processed in bounded batche
 
 ## Development-stage schema changes
 
-Schema changes churn during feature development. When the schema changes before the migration has shipped, do not hand-edit the existing migration SQL to chase the new schema shape. Delete the draft migration artifacts added by this branch (SQL file, matching snapshot, and matching journal entry), then run the generator again and re-apply the normal migration review steps below.
+Schema changes churn during feature development. When the schema changes before the migration has shipped, do not hand-edit the existing migration SQL to chase the new schema shape. Delete the draft migration folder this branch added (its `migration.sql` and `snapshot.json` go together), then run the generator again and re-apply the normal migration review steps below.
 
-For example, if this branch's draft migration is `NNNN_add_verify_tables` (substitute the branch's real number — never an already-shipped migration):
-
-```bash
-# 1. Delete the draft SQL and its snapshot
-rm packages/database/migrations/NNNN_add_verify_tables.sql
-rm packages/database/migrations/meta/NNNN_snapshot.json
-
-# 2. Remove the matching NNNN entry from the journal's "entries" array
-#    packages/database/migrations/meta/_journal.json
-
-# 3. Regenerate from the current schema
-bun run db:generate
-```
-
-This keeps the generated SQL, snapshot, and journal aligned with the actual schema. Manual SQL edits are reserved for review-time hardening such as idempotent clauses, custom extension SQL, and meaningful filename/tag updates.
-
-Before release, if a feature branch accumulated multiple development-only migrations, consolidate them into one migration when possible. Production does not need to replay every intermediate draft shape, and fewer migrations reduce deploy-time risk.
-
-For example, if this branch added three drafts `AAAA`, `BBBB`, and `CCCC`, delete all three and regenerate a single migration:
+For example, if this branch's draft migration is `20261014093000_add_verify_tables` (substitute the branch's real folder — never an already-shipped one):
 
 ```bash
-# 1. Delete every draft SQL and snapshot this branch added
-rm packages/database/migrations/{AAAA,BBBB,CCCC}_*.sql
-rm packages/database/migrations/meta/{AAAA,BBBB,CCCC}_snapshot.json
+# 1. Delete the draft folder
+rm -r packages/database/migrations/20261014093000_add_verify_tables
 
-# 2. Remove those entries from the journal's "entries" array
-#    packages/database/migrations/meta/_journal.json
-
-# 3. Regenerate one migration covering the full schema delta
-bun run db:generate
+# 2. Regenerate from the current schema
+pnpm db:generate --name=add_verify_tables
 ```
+
+This keeps the generated SQL and snapshot aligned with the actual schema. Manual SQL edits are reserved for review-time hardening such as idempotent clauses and custom SQL.
+
+Before release, if a feature branch accumulated multiple development-only migrations, consolidate them into one migration when possible. Production does not need to replay every intermediate draft shape, and fewer migrations reduce deploy-time risk: delete every draft folder the branch added and regenerate once.
 
 Do not make a migration compatible with earlier development-only versions of the same branch. While the migration has not shipped, there is no production history to preserve. Fix local/dev databases directly with whatever SQL is simplest (drop the draft table, rename a column, delete draft rows), then regenerate the branch migration from the current schema.
 
-For example, if an earlier draft on this branch created `signup_attempt_id` and you have since renamed it to `user_signup_log_id`, do not add a compatibility `ALTER ... RENAME` to the migration. Just fix the dev DB directly, then regenerate:
-
-```bash
-# Fix the dev DB to match the new schema (simplest SQL wins)
-set -a && source .env && set +a && bun -e '
-import pg from "pg";
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await client.connect();
-await client.query("ALTER TABLE user_signup_logs DROP COLUMN signup_attempt_id");
-await client.end();
-'
-
-# Regenerate so the migration reflects only the final shape
-bun run db:generate
-```
-
 After a migration has reached production or the target default branch, treat it as immutable: add a follow-up migration instead of rewriting it.
 
-## Rebase conflicts
+## Branches and conflicts
 
-When a rebase conflicts in migration files, keep the upstream/default-branch migrations and remove all migrations introduced by the current feature branch. Complete the rebase, then regenerate this branch's migration from the rebased schema. This avoids merging two independent snapshots or hand-splicing journal entries.
+Each migration is a folder of its own, `packages/database/migrations/<UTC timestamp>_<name>/`, holding `migration.sql` and `snapshot.json`, and the snapshot's `prevIds` names the snapshot it was generated from. There is no journal, so two branches that each add a migration merge without a file conflict. Drizzle's migrator (`packages/database/src/core/migrator.ts`) applies every folder its history table, `public.__drizzle_migrations`, does not name, in folder-name order, so a branch's migration that lands after main's newer ones is still applied.
+
+What a clean merge does not prove is that the two migrations commute. `pnpm --filter @sidecar/database check:migrations` (`drizzle-kit check`, run by `./scripts/check.sh`) reads the snapshot graph and fails when two branches cut from one parent touch the same table, column, or index. When it fails after a rebase, delete this branch's conflicting migration folder and every later one this branch added, then regenerate from the rebased schema:
+
+```bash
+rm -r packages/database/migrations/<this branch's folders>
+pnpm db:generate --name=<what_it_does>
+pnpm --filter @sidecar/database check:migrations
+```
 
 ## Step 1: Generate Migrations
 
 ```bash
-bun run db:generate
+pnpm db:generate --name=user_add_avatar_column
 ```
 
-This generates:
-
-- `packages/database/migrations/0046_meaningless_file_name.sql`
-
-And updates:
-
-- `packages/database/migrations/meta/_journal.json`
-- `docs/development/database-schema.dbml`
+This writes one folder, `packages/database/migrations/<UTC timestamp>_user_add_avatar_column/`, holding the `migration.sql` to review and the `snapshot.json` the next migration is generated from. Name the migration with `--name` rather than renaming the folder afterwards: the folder's name is the migration's identity in the history table.
 
 ## Custom Migrations (e.g. CREATE EXTENSION)
 
-For migrations that don't involve Drizzle schema changes (e.g. enabling PostgreSQL extensions), use the `--custom` flag:
+For SQL-only migrations that don't involve Drizzle schema changes and are safe to run during deployment (for example, enabling a PostgreSQL extension), use the `--custom` flag. A backfill or historical-data reconciliation is never one; it runs as its own script ("Data backfill" above):
 
 ```bash
-bunx drizzle-kit generate --custom --name=enable_pg_search
+pnpm db:generate --custom --name=enable_pg_search
 ```
 
-This generates an empty SQL file and properly updates `_journal.json` and snapshot. Then edit the generated SQL file to add your custom SQL:
+This writes a folder whose `migration.sql` holds only a placeholder comment and whose snapshot repeats the previous one with a new `id`. Then add the SQL below the comment:
 
 ```sql
 -- Custom SQL migration file, put your code below! --
 CREATE EXTENSION IF NOT EXISTS pg_search;
 ```
 
-**Do NOT manually create migration files or edit `_journal.json`** — always use `drizzle-kit generate` to ensure correct journal entries and snapshots.
+**Do NOT create a migration folder by hand** — always use `drizzle-kit generate`, so the snapshot and its `prevIds` are what `drizzle-kit check` and the next `generate` read.
 
-## Step 2: Optimize Migration SQL Filename
-
-Rename auto-generated filename to be meaningful:
-
-`0046_meaningless_file_name.sql` → `0046_user_add_avatar_column.sql`
-
-## Step 3: Use Idempotent Clauses (Defensive Programming)
+## Step 2: Use Idempotent Clauses (Defensive Programming)
 
 Always use defensive clauses to make migrations idempotent (safe to re-run):
 
@@ -252,6 +213,4 @@ DROP TABLE "old_table";
 CREATE INDEX "users_email_idx" ON "users" ("email");
 ```
 
-## Step 4: Update Journal Tag
-
-After renaming the migration SQL file in Step 2, update the `tag` field in `packages/database/migrations/meta/_journal.json` to match the new filename (without `.sql` extension).
+Never drop or alter `public.__drizzle_migrations` from a migration: the migrator records into it inside the same transaction the migration runs in. (It lives in `public` rather than Drizzle's default `drizzle` schema because `20261013123642_dead_tables_drop` drops that schema.)

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
 import { conversations, messages, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
@@ -90,7 +90,7 @@ async function publicTableNames(): Promise<readonly string[]> {
   const NameRowSchema = Schema.Struct({ name: Schema.String });
   return rows
     .map((row) => Schema.decodeUnknownSync(NameRowSchema)(row).name)
-    .filter((name) => name !== MIGRATIONS_TABLE)
+    .filter((name) => name !== DRIZZLE_MIGRATIONS.TABLE && name !== EFFECT_MIGRATIONS_TABLE)
     .sort();
 }
 

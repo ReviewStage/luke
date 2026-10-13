@@ -1,7 +1,7 @@
 # Collapse generated files in GitHub PR diffs (linguist-generated).
 # SQL migrations stay unmarked so they remain the reviewable change.
 
-apps/web/drizzle/meta/** linguist-generated
+packages/database/migrations/*/snapshot.json linguist-generated
 
 packages/surface/src/generated/** linguist-generated
 packages/surface/src/generated/*.test.ts -linguist-generated

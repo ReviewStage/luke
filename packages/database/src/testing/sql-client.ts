@@ -1,4 +1,3 @@
-import { NodeServices } from "@effect/platform-node";
 import { PgliteClient } from "@effect/sql-pglite";
 import { PGlite } from "@electric-sql/pglite";
 import * as PgliteDrizzle from "drizzle-orm/effect-pglite";
@@ -42,9 +41,7 @@ export const sqlClientOverPglite = (
 /** A PGlite carrying the same generated migrations the store's tests run against. */
 export async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
-  const migrationRuntime = ManagedRuntime.make(
-    Layer.mergeAll(sqlClientOverPglite(client), NodeServices.layer),
-  );
+  const migrationRuntime = ManagedRuntime.make(sqlClientOverPglite(client));
   try {
     await migrationRuntime.runPromise(runWebMigrations());
   } finally {
