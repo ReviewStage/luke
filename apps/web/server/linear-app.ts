@@ -48,7 +48,11 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { LINEAR_CONNECT_FAILURE, LinearConnect } from "./hosted/linear-connect.js";
+import {
+  LINEAR_CONNECT_FAILURE,
+  LinearConnect,
+  revokeLinearGrant,
+} from "./hosted/linear-connect.js";
 import {
   LINEAR_ROW_STATUS,
   type LinearConnectionRow,
@@ -216,16 +220,7 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/linearDisconnectEndpoi
   yield* hostedMethod(HTTP_METHOD.POST);
   const userId = yield* resolvedUserId(seams);
   yield* hostedStoreOrUnavailable(seams.deleteConnection(userId));
-  const connect = yield* LinearConnect;
-  if (connect.configured) {
-    yield* connect
-      .revoke(userId)
-      .pipe(
-        Effect.catch((failure) =>
-          Effect.logWarning("Vercel Connect could not revoke a Linear grant", failure.message),
-        ),
-      );
-  }
+  yield* revokeLinearGrant(userId);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: LINEAR_STATUS.DISCONNECTED });
 });
 

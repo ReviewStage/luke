@@ -36,6 +36,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
+import { type LinearConnect, revokeLinearGrant } from "./hosted/linear-connect.js";
 import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -154,7 +155,10 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * to erase. Where the deployment can, the analytics person is asked to be
  * erased first, because nothing after the delete would still name it; a
  * refusal or an outage there must not hold up the delete, so it is logged as
- * a status and the delete proceeds.
+ * a status and the delete proceeds. The account's Linear grant is revoked at
+ * Vercel Connect once the rows are gone, as a Disconnect revokes it, so the
+ * grant does not outlive the account; a revoke that fails is logged by its
+ * word and the account is deleted all the same.
  */
 const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoint")(function* (
   seams: AccountAppSeams,
@@ -164,12 +168,14 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   | HostedEnvironment
   | HttpClient.HttpClient
   | SqlClient.SqlClient
+  | LinearConnect
   | HttpServerRequest.HttpServerRequest
 > {
   yield* hostedMethod(HTTP_METHOD.POST);
   const userId = yield* resolvedUserId(seams);
   yield* forgetAnalytics(userId);
   yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
+  yield* revokeLinearGrant(userId);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
@@ -341,7 +347,9 @@ function refusing<R>(
  */
 export function accountApp(
   seams: AccountAppSeams,
-): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient | ModelCatalog> {
+): WebRoutes<
+  HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient | ModelCatalog | LinearConnect
+> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.DELETE, refusing(accountDeleteEndpoint(seams))),
     HttpRouter.add(

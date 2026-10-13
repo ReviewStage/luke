@@ -179,6 +179,28 @@ export function vercelLinearConnect(
   };
 }
 
+/**
+ * Asks Connect to revoke the account's grant, where the deployment names a
+ * connector at all: a Disconnect asks it, and so does deleting the account.
+ * A revoke that fails is logged by its word, code, and status, never
+ * Connect's sentence, and answered as done, because whoever asked has
+ * already deleted the account's row, so no agent reads a token again
+ * whatever Connect answered.
+ */
+export const revokeLinearGrant = /* @__PURE__ */ Effect.fn("web/revokeLinearGrant")(function* (
+  userId: string,
+): Effect.fn.Return<void, never, LinearConnect> {
+  const connect = yield* LinearConnect;
+  if (!connect.configured) return;
+  yield* connect
+    .revoke(userId)
+    .pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning("Vercel Connect could not revoke a Linear grant", failure.message),
+      ),
+    );
+});
+
 /** The service as this deployment's environment configures it: the connector it names, or none. */
 export const linearConnectFromEnvironment: Layer.Layer<LinearConnect, Config.ConfigError> =
   Layer.effect(
