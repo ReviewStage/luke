@@ -2502,8 +2502,11 @@ body:has(.app-stage[data-capture="true"])
    own Inbox tab: the items in a column on the sidebar's ground, under a bar
    the work column's height, and the chosen item beside it, at the Inbox's
    own measure (`.desktop-inbox`). The column is as wide as it was last
-   dragged (`inbox-list.tsx`), its edge drawn as the sidebar's is. */
+   dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
+   pane, which is why the Inbox is the container it measures; its edge is
+   drawn as the sidebar's is. */
 .inbox-view {
+  container-type: inline-size;
   display: grid;
   min-height: 0;
   flex: 1;

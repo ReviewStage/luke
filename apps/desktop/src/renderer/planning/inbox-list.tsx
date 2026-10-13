@@ -60,6 +60,17 @@ const WAITING_ONLY = "Waiting only";
  */
 const PANE_RESERVE = 360;
 
+/**
+ * The width the list is drawn at: the one kept, held no wider than the
+ * Inbox less the pane's reserve, though never under the least, so a window
+ * narrowed under a wide list still leaves the pane its room, and widened
+ * again gives the list back as it was kept. The Inbox is the container the
+ * width is measured against (`.inbox-view` in desktop.css).
+ */
+function drawnWidth(width: number): string {
+  return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
+}
+
 /** The mark of the agent that posted an item, as the plan's summary lists it, else the mark of an agent of no known harness. */
 function ItemGlyph({ plan, agentId }: { plan: PlanSummary; agentId: string }): React.JSX.Element {
   const agent = plan.agents?.agents.find((each) => each.id === agentId);
@@ -255,7 +266,7 @@ export function InboxList({
     />
   );
   return (
-    <nav className="inbox-plans" aria-label="Inbox items" style={{ width }}>
+    <nav className="inbox-plans" aria-label="Inbox items" style={{ width: drawnWidth(width) }}>
       {head === undefined ? null : <ListHead shown={head.shown} choices={head.choices} />}
       <div className="inbox-plans-scroll">
         {view.grouping === INBOX_GROUPING.NEWEST ? (

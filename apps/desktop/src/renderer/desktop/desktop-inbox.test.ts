@@ -351,35 +351,34 @@ test("a plan main says changed is read again, so an item answered on another Mac
 test("the list is resized from its edge between its bounds, and keeps its width across a relaunch", async () => {
   let { page } = mount();
   await settle();
-  const list = () => {
-    const nav = page.querySelector<HTMLElement>(".inbox-plans");
-    assert.ok(nav, "the list is drawn");
-    return nav;
+  const edge = () => {
+    const separator = page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+    assert.ok(separator, "the list has an edge to resize it by");
+    return separator;
   };
+  const width = () => Number(edge().getAttribute("aria-valuenow"));
   const press = (key: string) => {
-    const edge = list().querySelector<HTMLElement>('[role="separator"]');
-    assert.ok(edge, "the list has an edge to resize it by");
     act(() => {
-      edge.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      edge().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   };
-  assert.equal(list().style.width, "320px");
+  assert.equal(width(), 320);
   press("ArrowRight");
-  assert.equal(list().style.width, "336px");
+  assert.equal(width(), 336);
   press("End");
-  assert.equal(list().style.width, "520px");
+  assert.equal(width(), 520);
   press("ArrowRight");
-  assert.equal(list().style.width, "520px", "no wider than its greatest width");
+  assert.equal(width(), 520, "no wider than its greatest width");
 
   act(() => root?.unmount());
   root = undefined;
   ({ page } = mount());
   await settle();
-  assert.equal(list().style.width, "520px");
+  assert.equal(width(), 520);
   press("Home");
-  assert.equal(list().style.width, "300px");
+  assert.equal(width(), 300);
   press("ArrowLeft");
-  assert.equal(list().style.width, "300px", "no narrower than its least width");
+  assert.equal(width(), 300, "no narrower than its least width");
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */
