@@ -121,11 +121,30 @@ interface TemplateControl {
 }
 
 /**
+ * What the page's writes read and change as they land, which no render
+ * stands between: the template as the service last kept it, which every
+ * edit the document sends was written from; the write out; whether a reset
+ * is under way; words whose save failed while the page stood, until another
+ * save is sent; and whether the page still stands.
+ */
+interface HeldWrites {
+  kept: string;
+  flight: Promise<unknown> | undefined;
+  resetting: boolean;
+  failed: string | undefined;
+  standing: boolean;
+}
+
+/**
  * The service's template, read as the page opens and again on Retry, and
- * written through the document's edit door. Note that the write out is held
- * in a ref, because a reset must wait for it however many renders stand
- * between them, and whether the page still stands is too, because a save
- * the document sends as the page goes answers after it has.
+ * written through the document's edit door. Note that an edit written from
+ * a template the service no longer keeps is dropped, because it was queued
+ * behind a reset whose question said the edits go, and landing after the
+ * reset it would undo it. Words whose save failed are sent once more as the
+ * page goes, because the editor holds a failed save back from its own
+ * leaving; and a save that fails once the page has gone is said in a toast
+ * whose Retry sends the same words, because the page and its Retry are gone
+ * with them.
  */
 function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl {
   const [read, setRead] = useState<TemplateRead>(TEMPLATE_READ.READING);
@@ -133,21 +152,20 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
   const [text, setText] = useState("");
   const [custom, setCustom] = useState(false);
   const [editedAt, setEditedAt] = useState<number | undefined>(undefined);
-  const flight = useRef<Promise<unknown> | undefined>(undefined);
-  const standing = useRef(true);
+  const held = useRef<HeldWrites>({
+    kept: "",
+    flight: undefined,
+    resetting: false,
+    failed: undefined,
+    standing: true,
+  });
   const toast = useToast();
 
   const take = useCallback((answer: PlanTemplateAnswer, edited: number | undefined) => {
+    held.current.kept = answer.template;
     setText(answer.template);
     setCustom(answer.custom);
     setEditedAt(edited);
-  }, []);
-
-  useEffect(() => {
-    standing.current = true;
-    return () => {
-      standing.current = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -167,18 +185,20 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     };
   }, [act, signedIn, attempt, take]);
 
-  // Note that words the page left unsaved as it went are said in a toast,
-  // because the page and its Retry are gone with them.
   const save = (words: string): Promise<PlanningEditAnswer> => {
+    const writes = held.current;
+    writes.failed = undefined;
     if (words.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS) {
       return Promise.resolve({ failure: PLAN_EDIT_REFUSAL.TOO_LONG });
     }
     const sent = written(act, words).then((answer): PlanningEditAnswer => {
       if (answer !== undefined) {
-        if (standing.current) take(answer, Date.now());
+        if (writes.standing) take(answer, Date.now());
         return { saved: true };
       }
-      if (!standing.current) {
+      if (writes.standing) {
+        writes.failed = words;
+      } else {
         toast({
           words: PAGE_LINE.LEFT_UNSAVED,
           tone: TOAST_TONE.FAILED,
@@ -188,9 +208,22 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
       }
       return { failure: PLAN_CALL_FAILURE.UNANSWERED };
     });
-    flight.current = sent;
+    writes.flight = sent;
     return sent;
   };
+
+  // The page going sends words whose save failed a turn later, once the document's own leaving has sent anything newer.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the page going is what sends them, through the door it held.
+  useEffect(() => {
+    const writes = held.current;
+    writes.standing = true;
+    return () => {
+      writes.standing = false;
+      Promise.resolve().then(() => {
+        if (writes.failed !== undefined) save(writes.failed);
+      });
+    };
+  }, []);
 
   return {
     read,
@@ -198,11 +231,21 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     text,
     custom,
     editedAt,
-    edit: (request) => save(request.document.value),
+    edit: (request) => {
+      const writes = held.current;
+      if (writes.resetting || request.document.base !== writes.kept) {
+        return Promise.resolve({ saved: true });
+      }
+      return save(request.document.value);
+    },
     reset: async (): Promise<ActionResult> => {
       // The write already out lands before the null is sent, so the default is what the service keeps.
-      await flight.current;
+      const writes = held.current;
+      writes.resetting = true;
+      writes.failed = undefined;
+      await writes.flight;
       const answer = await written(act, null);
+      writes.resetting = false;
       if (answer === undefined) {
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
       }

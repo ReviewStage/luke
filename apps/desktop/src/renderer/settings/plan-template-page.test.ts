@@ -446,3 +446,44 @@ test("a reset while a save is out waits for it, so the default is what the servi
   assert.equal(stored, null);
   assert.deepEqual(sections(container), DEFAULT_HEADINGS);
 });
+
+it.effect(
+  "words whose save failed while the page stood are sent again as it goes, and a toast says so when they fail again",
+  () =>
+    Effect.gen(function* () {
+      refuseWrites = true;
+      const registry = yield* registryOnTestClock;
+      const { container, root } = yield* Effect.promise(() => mountWithToasts(registry));
+      yield* Effect.promise(() => edit(container, CUSTOM));
+      assert.deepEqual(writes(), [CUSTOM]);
+
+      act(() => root.unmount());
+      yield* settled;
+      assert.deepEqual(writes(), [CUSTOM, CUSTOM]);
+      assert.match(newestToastSays() ?? "", /Your plan template could not be saved/u);
+    }),
+);
+
+test("words queued behind a save as the reset is asked never land after it", async () => {
+  stored = CUSTOM;
+  holdWrites = true;
+  const { container } = await mount();
+  clickInto(container, "Why");
+  typeInto(box(container), `${CUSTOM}\n## Risks\n`);
+  finish(box(container));
+  await settle();
+  typeInto(box(container), `${CUSTOM}\n## Risks\n\n## Rollout\n`);
+  finish(box(container));
+  await settle();
+
+  confirmReset(container);
+  await settle();
+  for (let landed = 0; landed < 3; landed += 1) {
+    act(() => heldWrites.shift()?.());
+    await settle();
+  }
+
+  assert.deepEqual(writes(), [`${CUSTOM}\n## Risks\n`, null]);
+  assert.equal(stored, null);
+  assert.deepEqual(sections(container), DEFAULT_HEADINGS);
+});
