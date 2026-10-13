@@ -278,6 +278,21 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // The avatar feed's AudioWorklet, its own bundle because a worklet loads a
+  // module by URL into a scope of its own on the audio thread; the voice
+  // window adds it from beside `voice.html`, whose `script-src 'self'` is the
+  // policy a worklet module answers to (`src/renderer/avatar-feed/contract.ts`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-feed/pcm-tee-worklet.ts")],
+    outfile: path.join(outputRoot, "renderer/pcm-tee-worklet.js"),
+    bundle: true,
+    platform: "browser",
+    format: "esm",
+    target: "chrome140",
+    minify: true,
+    sourcemap: true,
+    logLevel: "info",
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),
