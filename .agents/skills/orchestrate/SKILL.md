@@ -15,8 +15,9 @@ Arguments: `$ARGUMENTS` is the plan (a file path, a Linear issue key such as
 user wants the workers on. Pull an issue with the Linear tools; read a plan
 file with `cat`. If the user did not name a model and effort, ask once with
 `AskUserQuestion`; check `conductor model` for the valid ids for the chosen
-agent rather than guessing. In the same question, ask whether workers merge
-their PRs on green or hold for an explicit go; never assume either.
+agent rather than guessing. If the user did not say whether workers merge
+their PRs on green or hold for an explicit go, ask that too, in the same
+question when model or effort is also missing; never assume either.
 
 Split the plan into small PRs and draw the dependency graph. Every linear
 chain in it becomes one GitHub stack owned by one worker, which builds,
@@ -78,7 +79,8 @@ Every brief must contain:
    worker's PR merges only once that PR has merged and the stack's bottom PR
    has been retargeted to `main` (`gh pr edit --base main`) and restacked.
 4. **Report back, do not wait to be asked**: on each milestone of each PR
-   (opened, CI green, blocked, merged) send a message to the orchestrator:
+   (opened, restacked, CI green, blocked, merged) send a message to the
+   orchestrator:
 
    ```sh
    conductor message create --session <ORCHESTRATOR_SESSION_ID> \
@@ -104,6 +106,9 @@ turn. You restack nothing; each owner restacks its own stack. On each report:
 
 - **PR opened**: if a branch-off chain is waiting on this PR, kick that
   workspace off now (Step 1) with this PR's branch as its base.
+- **Shared PR restacked**: when an owner reports it pushed a restacked PR
+  that a branch-off chain is based on, tell each of those chains' workers to
+  fetch and restack onto the new head.
 - **CI green**: under hold, relay the user's go to the worker when it comes.
 - **Question or blocked**: answer from the plan and the other PRs' state by
   replying to that worker's session with
