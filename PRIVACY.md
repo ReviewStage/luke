@@ -68,9 +68,10 @@ changed since.
 Deleting a plan removes it at once with its history, its inbox, and the
 record of each coding agent started on it with the plan copy or task that
 agent was handed, and marks the plan's conversation and each agent's
-transcript deleted, removed thirty days later. It does not stop a coding
-agent already at work, and does not remove the record of the plan's calls
-(see "Your account"), which stays until you delete your account. Deleting
+transcript deleted, removed thirty days later. It also deletes the record of
+each of the plan's calls, with every line said on it (see "Your account"):
+at once for a call that has ended, and within a minute or so of its end for
+a call still open. It does not stop a coding agent already at work. Deleting
 your account removes every plan. Pinning or archiving a plan stores only when
 you did it and deletes nothing.
 
@@ -291,8 +292,8 @@ it. These rows are not sealed: they are stored as written, and our own
 operators can read them. They stand until you delete your account, which
 removes them at once. A deleted plan's conversation and its agents'
 transcripts are marked deleted and removed thirty days later; its call
-records are not removed, are shown nowhere, and stay in our database until
-you delete your account.
+records, with the lines said on them, are deleted with the plan, or within a
+minute or so of the call ending for a call still open.
 
 **Linear, if you connect it.** Connecting Linear in Settings signs you in to
 Linear in your browser through Vercel Connect, which stores Linear's token
