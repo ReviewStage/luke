@@ -33,6 +33,7 @@
         "src/renderer/session-recorder/index.ts",
         "src/renderer/call/call-video-tile.tsx",
         "src/renderer/avatar-room/index.ts",
+        "src/renderer/voice/avatar-tee-worklet.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],

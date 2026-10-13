@@ -233,6 +233,21 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // The avatar tee's audio worklet, its own bundle because `addModule` loads
+  // a module by address and `voice.html` admits scripts from `'self'` alone,
+  // so the worklet is one of the window's own files rather than a `blob:`
+  // (`src/renderer/voice/avatar-tee.ts`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/voice/avatar-tee-worklet.ts")],
+    outfile: path.join(outputRoot, "renderer/avatar-tee-worklet.js"),
+    bundle: true,
+    platform: "browser",
+    format: "esm",
+    target: "chrome140",
+    minify: true,
+    sourcemap: true,
+    logLevel: "info",
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),
