@@ -387,6 +387,12 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
   };
 }
 
+/** The spoken lines a turn took as its ask, as the wire holds them: the newest it carries, each id within its bound; nothing where none stands. */
+function askedOf(asked: readonly string[]): Pick<PlanWorkTurn, "asked"> {
+  const ids = asked.filter((id) => id.length <= PLAN_WORK_BOUNDS.LINE_ID_CHARS);
+  return ids.length === 0 ? {} : { asked: ids.slice(-PLAN_WORK_BOUNDS.ASKED_LINES) };
+}
+
 /**
  * One planning turn's work, from its row and its journal (absent before the
  * turn wrote any): its state, when it started and, once it ended, when, and
@@ -398,7 +404,9 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
  * where one landed on that child (`titles`, by the call's id), and what
  * its newest task ran on and spent as its turn row recorded them
  * (`records`, by the call's id, `hosted/child-models.ts`). The turn carries
- * what it ran on and spent too, as its own row recorded them.
+ * what it ran on and spent too, as its own row recorded them, and the
+ * developer's spoken lines it took as its ask (`asked`, by the ids the
+ * voice's ledger minted), the newest the wire carries, where it took any.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
@@ -406,6 +414,7 @@ export function planWorkOf(
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
   records: ReadonlyMap<string, TurnRecord> = new Map(),
+  asked: readonly string[] = [],
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
@@ -430,6 +439,7 @@ export function planWorkOf(
     ...(ended === null ? undefined : { endedAt: ended.getTime() }),
     state: turnState,
     ...newest(parts),
+    ...askedOf(asked),
     ...turnRecordOf(turn),
   };
 }

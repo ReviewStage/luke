@@ -205,6 +205,8 @@ interface FollowTold {
   workers: ReadonlyMap<string, string>;
   /** Whether one of those calls sends work to a task an earlier turn started whose start no look has found yet, which the next look looks for. */
   seeking: boolean;
+  /** The spoken lines the turn has taken as its ask so far, read again on every look, since a later ask folded into the turn brings lines of its own. */
+  asked: readonly string[];
 }
 
 /** Whether a look found where a worker call's session is recorded other than under the call itself: the start of the task it steered. */
@@ -585,6 +587,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     } = yield* subagentJournalsOf(turn.conversationId, told.workers);
     // The start of a task the last look's calls steered is looked for ahead of the journal too.
     const earlier = told.seeking ? yield* workerJournalsOf(turn.conversationId) : [];
+    // So are the lines the turn has taken as its ask.
+    const asked = yield* options.store.messages.spokenAskRows(options.userId, turn.conversationId, [
+      turn.id,
+    ]);
+    told.asked = asked.get(turn.id) ?? [];
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(
@@ -617,7 +624,9 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     told.seeking = callsSendingToEarlierTasks(message).some(
       (callId) => !found(told.workers, callId),
     );
-    const work = telling ? planWorkOf(turn, message, subagents, titles, records) : undefined;
+    const work = telling
+      ? planWorkOf(turn, message, subagents, titles, records, told.asked)
+      : undefined;
     if (work !== undefined && !isDeepStrictEqual(work, told.work)) {
       told.work = work;
       for (const listener of [...workListeners]) listener(work);
@@ -679,6 +688,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       work: undefined,
       workers: new Map(),
       seeking: false,
+      asked: [],
     };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<FollowLook>(),

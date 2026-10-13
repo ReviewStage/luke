@@ -24,6 +24,7 @@ import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
+import { ASK_ORIGIN, MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import {
@@ -48,7 +49,13 @@ import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hoste
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
-import { FIRST_EVE_TURN, parkedTurn, resumedTurn, steeredTurn } from "./support/eve-turns";
+import {
+  FIRST_EVE_TURN,
+  parkedTurn,
+  resumedTurn,
+  spokenTurn,
+  steeredTurn,
+} from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 
@@ -850,6 +857,79 @@ test("a plan's work reads back from its conversation after the call: its turns o
   ]);
   const stranger = await database.createUser();
   assert.ok(Option.isNone(await database.run(readPlanWork(stranger, target.planId, undefined))));
+});
+
+/**
+ * A spoken ask on the plan's conversation, as the voice leaves it: the ask
+ * under its delegation's id, dispatched into the standing's eve session, and
+ * the developer's lines the delegation was about, written and attached to it.
+ */
+async function spokenAsk(
+  target: ConversationTarget,
+  standing: RelayStanding,
+  lines: readonly (readonly [rowId: string, text: string, fromMs: number])[],
+): Promise<void> {
+  const delegationId = `dl_${randomUUID()}`;
+  const record = askRecord();
+  const ask = await database.run(
+    record.record({
+      ...target,
+      clientId: delegationId,
+      origin: ASK_ORIGIN.SPOKEN,
+      createdAt: new Date(NOW),
+    }),
+  );
+  await database.run(
+    record.dispatchOnce(target, ask.id, () =>
+      Effect.succeed({ sessionId: standing.sessionId, deliveryId: delegationId }),
+    ),
+  );
+  for (const [clientId, text, fromMs] of lines) {
+    await database.run(
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
+        clientId,
+        text,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          from_ms: fromMs,
+          to_ms: fromMs + 900,
+        },
+      }),
+    );
+  }
+  await database.run(
+    writer.attachSpokenAsk(target, { delegationId, rowIds: lines.map(([rowId]) => rowId) }),
+  );
+  await play(spokenTurn(FIRST_EVE_TURN, NOW, [delegationId]), standing);
+}
+
+test("a plan's work read back names the developer's spoken lines each turn took as its ask, in the order they were said however late one was written, and a turn no spoken line opened names none", async () => {
+  const target = await planConversation();
+  const spoken = standingFor(target);
+  const typed = { ...standingFor(target), turn: BRAIN_HOST_TURN.TYPED };
+  // The later line is written first, as a fragment of the earlier one arriving late leaves them.
+  await spokenAsk(target, spoken, [
+    ["row-check", "Check how removal works.", 4_000],
+    ["row-who", "Who can withdraw an invite?", 1_000],
+  ]);
+  await askedAt(spoken, NOW - 60_000);
+  await play([...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Done.")], typed);
+  await askedAt(typed, NOW);
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.deepEqual(
+    read.value.turns.map((turn) => turn.asked),
+    [["row-who", "row-check"], undefined],
+  );
+  const stranger = await database.createUser();
+  const turnId = hostTurnId(spoken.sessionId, FIRST_EVE_TURN);
+  const theirs = await database.run(
+    database.store.messages.spokenAskRows(stranger, target.conversationId, [turnId]),
+  );
+  assert.equal(theirs.size, 0, "another account reads none of the plan's lines");
 });
 
 test("a plan of more turns than a page reads its newest first, then each older page before the oldest turn read, every code coming with the newest", async () => {

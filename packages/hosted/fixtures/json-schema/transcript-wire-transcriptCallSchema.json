@@ -46,6 +46,21 @@
               ],
               "additionalProperties": false
             }
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "rowIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "rowIds"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

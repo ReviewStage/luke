@@ -5,6 +5,7 @@ import {
   UNREGISTERED_TOOL_PART,
 } from "@sidecar/session/ui-messages";
 import {
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type SchemaPath,
   type SchemaRead,
@@ -785,6 +786,102 @@ export function turnsNamed(
       .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
     (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
   );
+}
+
+/** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
+const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
+
+const findSpokenAskRows = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    turnIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({ turnId: Schema.String, clientId: Schema.String }),
+  execute: ({ userId, conversationId, turnIds }) =>
+    db
+      .select({ turnId: messages.turnId, clientId: messages.clientId })
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.userId, userId),
+          eq(messages.conversationId, conversationId),
+          inArray(messages.turnId, [...turnIds]),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
+        ),
+      )
+      .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
+});
+
+/**
+ * The developer's spoken lines each of the turns named took as its ask, by
+ * the client id the voice's ledger minted for each line, in the order they
+ * were said, which is where on the call each began rather than where the
+ * conversation holds it, since a line taken into its turn moves there: the
+ * rows a delegation's attach or the turn's receipt took into the turn. A
+ * turn no spoken line opened names none.
+ */
+export function spokenAskRowsOf(
+  userId: string,
+  conversationId: string,
+  turnIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, readonly string[]>, MessageReadFailure, SqlClient.SqlClient> {
+  if (turnIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(findSpokenAskRows({ userId, conversationId, turnIds }), (rows) => {
+    const asked = new Map<string, string[]>();
+    for (const row of rows) asked.set(row.turnId, [...(asked.get(row.turnId) ?? []), row.clientId]);
+    return asked;
+  });
+}
+
+/** One utterance the voice wrote as a row: its client id, its speaker, its call, and where on the call its words began. */
+const SpokenRowSchema = Schema.Struct({
+  clientId: Schema.String,
+  role: Schema.Literals([MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
+  voiceSessionId: Schema.String,
+  fromMs: Schema.Number,
+});
+
+export type SpokenRow = typeof SpokenRowSchema.Type;
+
+const findSpokenRows = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    voiceSessionIds: Schema.Array(Schema.String),
+  }),
+  Result: SpokenRowSchema,
+  execute: ({ userId, conversationId, voiceSessionIds }) =>
+    db
+      .select({
+        clientId: messages.clientId,
+        role: messages.role,
+        voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
+        fromMs: SPOKEN_FROM_MS,
+      })
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.userId, userId),
+          eq(messages.conversationId, conversationId),
+          inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
+          sql`${messages.metadata}->>'from_ms' is not null`,
+        ),
+      )
+      .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
+});
+
+/** The rows the voice wrote in a conversation for what was said on the calls named, each with its call and where on it its words began, in the order they were said. */
+export function spokenRowsOn(
+  userId: string,
+  conversationId: string,
+  voiceSessionIds: readonly string[],
+): Effect.Effect<readonly SpokenRow[], MessageReadFailure, SqlClient.SqlClient> {
+  if (voiceSessionIds.length === 0) return Effect.succeed([]);
+  return findSpokenRows({ userId, conversationId, voiceSessionIds });
 }
 
 const findTurnQueuedAt = SqlSchema.findOneOption({

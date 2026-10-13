@@ -25,7 +25,15 @@ import { TestClock } from "effect/testing";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
+import {
+  ASK_ORIGIN,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_END,
+  TURN_EVENT_KIND,
+  TURN_SLOW_STEP,
+} from "../server/core";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
 import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
@@ -1192,6 +1200,89 @@ it.live(
 );
 
 it.live(
+  "a planning turn's work names the developer's spoken lines the turn took as its ask, from the first look that finds one, and a line taken into it later from the look after",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const conversation = { userId: target.userId, conversationId: planConversation };
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      // The developer's line as the voice leaves it ahead of the ask: written, and attached to the delegation.
+      const submissionId = randomUUID();
+      yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            yield* writer.upsertSpokenRow(conversation, {
+              role: MESSAGE_ROLE.USER,
+              clientId: "row-what-changed",
+              text: "What changed?",
+              metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+            });
+            yield* writer.attachSpokenAsk(conversation, {
+              delegationId: submissionId,
+              rowIds: ["row-what-changed"],
+            });
+          }),
+        ),
+      );
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk(spokenAsk("q", submissionId))),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: conversation,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const [started, ...rest] = planningTurn(FIRST_EVE_TURN, NOW);
+      assert.ok(started?.type === "turn.started");
+      const delivered = stampedEveEvent(started, NOW, f.eve.delivered);
+      const requested = rest.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play([delivered, ...rest.slice(0, requested)], standing));
+      yield* arrival(
+        (notify) => f.brain.onWork(notify),
+        () => shown.length >= 1,
+        "the first work",
+      );
+      assert.deepEqual(shown[0]?.asked, ["row-what-changed"]);
+
+      // The developer goes on before the turn answers, and the voice takes the line into the same ask.
+      yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            yield* writer.upsertSpokenRow(conversation, {
+              role: MESSAGE_ROLE.USER,
+              clientId: "row-and-why",
+              text: "And why?",
+              metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+            });
+            yield* writer.attachSpokenAsk(conversation, {
+              delegationId: submissionId,
+              rowIds: ["row-and-why"],
+            });
+          }),
+        ),
+      );
+      yield* Effect.promise(() => play(rest.slice(requested), standing));
+      yield* f.arrived(1);
+      assert.deepEqual(shown.at(-1)?.asked, ["row-what-changed", "row-and-why"]);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
   "a question the planning model queued reaches the service while its turn still runs, ahead of the reply",
   () =>
     Effect.gen(function* () {
@@ -1487,6 +1578,7 @@ const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget
         }),
     },
     messages: {
+      ...database.store.messages,
       byClientId: (userId, conversationId, tools, clientId) =>
         database.store.messages.byClientId(userId, conversationId, tools, clientId).pipe(
           Effect.tap(() =>
