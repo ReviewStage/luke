@@ -125,7 +125,7 @@ async function mount(signedIn = true, registry?: AtomRegistry): Promise<HTMLElem
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page = createElement(ApiKeysSection, { signedIn });
+  const page = createElement(ApiKeysSection, { signedIn, onKeys: () => undefined });
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return container;

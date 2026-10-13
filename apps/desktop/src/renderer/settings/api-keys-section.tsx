@@ -259,7 +259,14 @@ function ProviderKeyRow({
 }
 
 /** The API keys group: what an own key does, and a row per provider, or why they cannot be drawn. */
-export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+export function ApiKeysSection({
+  signedIn,
+  onKeys,
+}: {
+  signedIn: boolean;
+  /** The keys as last read or changed, none while they are being read or could not be. */
+  onKeys: (keys: readonly ProviderKeySummary[]) => void;
+}): React.JSX.Element {
   const { act } = useAct();
   const [keys, setKeys] = useState<readonly ProviderKeySummary[] | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
@@ -287,6 +294,9 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
       live = false;
     };
   }, [act, signedIn, attempt]);
+
+  // The page beside the group hears every answer, so nothing there says what a key used to be.
+  useEffect(() => onKeys(keys ?? []), [keys, onKeys]);
 
   const save = useCallback(
     (provider: ProviderKeyProvider, key: string): Promise<string | undefined> => {

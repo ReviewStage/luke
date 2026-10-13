@@ -12,9 +12,8 @@ import {
   settingsNavRowId,
 } from "../settings-views";
 import { AccountSection } from "./account-section";
-import { ApiKeysSection } from "./api-keys-section";
 import { AppearanceSection } from "./appearance-page";
-import { CodingAgentsSection } from "./coding-agents-page";
+import { CodingAgentsPage } from "./coding-agents-page";
 import type {
   MicrophoneControl,
   NotificationsControl,
@@ -169,8 +168,7 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? (
         <>
-          <CodingAgentsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
-          <ApiKeysSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+          <CodingAgentsPage signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
           {panelView ? (
             <NotificationsSection view={panelView} writes={writes} control={notifications} />
           ) : null}

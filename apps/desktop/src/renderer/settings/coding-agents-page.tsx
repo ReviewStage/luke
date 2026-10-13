@@ -5,7 +5,11 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
-import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import {
+  PROVIDER_KEY_STATUS,
+  type ProviderKeyStatus,
+  type ProviderKeySummary,
+} from "@sidecar/hosted/provider-key-wire";
 import { CubeIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -30,6 +34,7 @@ import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { Spinner, SpinnerRegion } from "../spinner";
+import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 
 /**
@@ -38,7 +43,8 @@ import { PickerRow } from "./picker-row";
  * The page is three groups under their own headings: this file's Default
  * model, then the account's own API keys (`api-keys-section.tsx`) and the
  * notification as an agent ends (`notifications-section.tsx`), drawn by the
- * panel in that order. The default model's one value is the account's, kept
+ * panel in that order. The first two share the one read of the keys, so a
+ * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
  * and by a Start that named a model alike, so the page reads it afresh as it
  * opens and shows what the last Start wrote. The model row is the same picker every settings row uses,
@@ -257,7 +263,14 @@ function DefaultRows({
 }
 
 /** The Default model group: the model, Fast, effort, and context rows, or why they cannot be drawn. */
-export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+function CodingAgentsSection({
+  signedIn,
+  ownKeys,
+}: {
+  signedIn: boolean;
+  /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them. */
+  ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
+}): React.JSX.Element {
   const { act } = useAct();
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
@@ -266,7 +279,6 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
-  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
 
   // The page opening reads the default the service holds now, which a Start may just have written, and the models beside it.
   useEffect(() => {
@@ -286,15 +298,6 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
       () => {
         if (live) setReadFailed(true);
       },
-    );
-    // Which providers run on the account's own key, for the model row's note; a read that fails says nothing.
-    setOwnKeys(new Map());
-    act(ACT_KIND.PROVIDER_KEYS_READ).then(
-      (answer) => {
-        if (live && !("failure" in answer))
-          setOwnKeys(new Map(answer.keys.map((key) => [key.provider, key.status])));
-      },
-      () => undefined,
     );
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
@@ -364,5 +367,24 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
         <SpinnerRegion label="Loading your default" />
       )}
     </section>
+  );
+}
+
+/**
+ * The Default model and API keys groups, over the keys the API keys group
+ * holds: the model row's note says which provider runs on the account's own
+ * key, so it reads them from the group that changes them rather than from a
+ * read of its own that a save below would leave behind.
+ */
+export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
+  const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
+    setOwnKeys(new Map(keys.map((key) => [key.provider, key.status])));
+  }, []);
+  return (
+    <>
+      <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} />
+      <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
+    </>
   );
 }
