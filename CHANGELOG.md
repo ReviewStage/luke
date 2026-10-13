@@ -34,20 +34,25 @@
      written here repository-relative
      (apps/web/public/changelog/<version>/<name>.png) so GitHub renders them
      too; the page rewrites that prefix to the site root. A release's
-     screenshots are frozen with it: a UI change gets a new screenshot in the
-     release that changed it, never an edit to an old one. A capture may show
-     real sessions instead of fixture data, but mind what it carries: a title,
-     branch, or conversation committed to history stays there, and whatever it
-     reveals is published with it.
+     screenshots show the build that shipped: a UI change gets a new
+     screenshot in the release that changed it, and a screenshot redone later
+     is taken from that release's own commit.
 
-     Every screenshot is the whole Luke window on macOS's Golden Gate Sunset
-     aerial, made by scripts/changelog-screenshot.sh on a Mac: open the release
-     on what the section shows (`./scripts/run.sh --fixture smoke --profile
-     <profile>` stages the fixture's plan, board, transcript, or work), size
-     the window to about 1600 by 1000 points so the side panel has room, run
-     the script with the PNG's path, and click the window. It keeps the
-     window's traffic lights and shadow and lays the wallpaper around them, so
-     every release's pictures match. -->
+     Every screenshot is taken on a Mac from the release's own build in
+     fixture mode, staged for the one feature it shows, and framed on macOS's
+     Golden Gate Sunset aerial by scripts/changelog-screenshot.sh, so every
+     release's pictures match. The changelog-screenshots skill
+     (.agents/skills/changelog-screenshots) is the whole method. Each picture
+     is chosen on purpose: a section gets one only where it helps, no two
+     share a composition, and the layout (the sidebar folded or open, the side
+     panel closed, open, or full screen, a menu or card held open) is whatever
+     puts the feature in front, as the whole window at 1600 by 1000 points or,
+     with `--crop`, a close-up of one part of it. Every picture is signed in
+     as Dean Stratakos with his GitHub photo, shows no Update pill or other
+     development chrome, and dates everything minutes or days before the
+     capture, never the fixture's 1970 or an hours-long timer. Its data is
+     synthetic: the acme organisation, its teal mark, and its repositories,
+     never a real account's titles, branches, or conversations. -->
 
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
@@ -70,6 +75,8 @@ long it ran, and its card says why it ended and the model it ran on.
 [#2246](https://github.com/ReviewStage/luke/pull/2246),
 [#2410](https://github.com/ReviewStage/luke/pull/2410),
 [#2417](https://github.com/ReviewStage/luke/pull/2417))
+
+![The Call tab over the whole window: yesterday's call closing on how long it ran, with Luke's reading, a subagent, and a command On your Mac folded under the question that asked for them, then today's call live.](apps/web/public/changelog/0.12.0/the-call-tab.png)
 
 ### The plan is one document
 
@@ -95,6 +102,8 @@ headings it belongs to, and plans from earlier releases carry over as documents.
 [#2320](https://github.com/ReviewStage/luke/pull/2320),
 [#2331](https://github.com/ReviewStage/luke/pull/2331))
 
+![A plan as one document, its title inline and the default template's headings filled in, with the plan's coding agents as tabs beside it.](apps/web/public/changelog/0.12.0/the-plan-is-one-document.png)
+
 ### Version history
 
 Every save to a plan is kept. Version history, in the plan's ⋯ menu, takes the
@@ -113,6 +122,8 @@ version.
 [#2261](https://github.com/ReviewStage/luke/pull/2261),
 [#2272](https://github.com/ReviewStage/luke/pull/2272),
 [#2292](https://github.com/ReviewStage/luke/pull/2292))
+
+![Version history over the whole window: versions under you, Luke, and a coding agent, one of them restored, and the agent's version open with its changes marked.](apps/web/public/changelog/0.12.0/version-history.png)
 
 ### The Inbox
 
@@ -135,6 +146,8 @@ a notification and a badge on Luke's Dock icon.
 [#2327](https://github.com/ReviewStage/luke/pull/2327),
 [#2392](https://github.com/ReviewStage/luke/pull/2392))
 
+![A plan's Inbox tab with a coding agent's decision over the lines of code it is about, and a question carrying a picture the agent took, while the sidebar's Inbox counts three.](apps/web/public/changelog/0.12.0/the-inbox.png)
+
 ### The Changes tab
 
 Once a coding agent opens a pull request, its Changes tab shows the diff file by
@@ -143,6 +156,8 @@ the lines added and removed, and a link to the files on GitHub. Open it from the
 agent's Changes chip, the side panel's +, the summary, or ⌘K.
 ([#2307](https://github.com/ReviewStage/luke/pull/2307),
 [#2395](https://github.com/ReviewStage/luke/pull/2395))
+
+![A finished coding agent beside its Changes tab: a migration's diff and the file tree narrowed to the pull request's nine changed files.](apps/web/public/changelog/0.12.0/the-changes-tab.png)
 
 ### Skills
 
@@ -156,6 +171,8 @@ too, and load one when it fits.
 [#2337](https://github.com/ReviewStage/luke/pull/2337),
 [#2375](https://github.com/ReviewStage/luke/pull/2375),
 [#2394](https://github.com/ReviewStage/luke/pull/2394))
+
+![A coding agent's message box with / typed and the repository's skills listed above it.](apps/web/public/changelog/0.12.0/skills.png)
 
 ### Commands on your Mac
 
@@ -200,6 +217,8 @@ page keeps its versions, and the side panel's + lists the plan's pages.
 [#2364](https://github.com/ReviewStage/luke/pull/2364),
 [#2370](https://github.com/ReviewStage/luke/pull/2370))
 
+![A Page tab beside the plan showing version 2 of an interactive mockup of the invite flow.](apps/web/public/changelog/0.12.0/pages.png)
+
 ### Integrations
 
 Connect Linear, Notion, and Sentry in Settings › Integrations, and Luke, coding
@@ -213,6 +232,8 @@ server off for that chat, and connects one in place.
 [#2333](https://github.com/ReviewStage/luke/pull/2333),
 [#2336](https://github.com/ReviewStage/luke/pull/2336),
 [#2358](https://github.com/ReviewStage/luke/pull/2358))
+
+![Settings › Integrations with Linear and Notion connected and Sentry offering Connect.](apps/web/public/changelog/0.12.0/integrations.png)
 
 ### The call follows you
 
@@ -246,6 +267,8 @@ repository, its coding agents, and their pull requests.
 [#2074](https://github.com/ReviewStage/luke/pull/2074),
 [#2120](https://github.com/ReviewStage/luke/pull/2120))
 
+![The sidebar with a pinned plan and a pinned repository, plans grouped by repository with when each last changed, and a pinned plan's card listing its coding agents and their pull requests.](apps/web/public/changelog/0.12.0/pin-archive-and-group-plans.png)
+
 ### A command palette
 
 ⌘K opens any plan, coding agent, subagent, setting, or command, and any file in
@@ -254,6 +277,8 @@ the open plan's repository, with a filter for each kind.
 [#2192](https://github.com/ReviewStage/luke/pull/2192),
 [#2212](https://github.com/ReviewStage/luke/pull/2212),
 [#2399](https://github.com/ReviewStage/luke/pull/2399))
+
+![The ⌘K command palette searching "invite" across plans, coding agents, and files.](apps/web/public/changelog/0.12.0/a-command-palette.png)
 
 ### Improvements
 
