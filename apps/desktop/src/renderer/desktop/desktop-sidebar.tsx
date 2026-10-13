@@ -185,7 +185,7 @@ interface PinnedRow {
 function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): PinnedRow[] {
   const planRows = pinned.map((plan) => ({ plan, pin: undefined, at: plan.pinnedAt ?? 0 }));
   const tabRows = plans.sidePanel.pins.flatMap((pin): PinnedRow[] => {
-    const plan = plans.plans.find((each) => each.id === pin.plan);
+    const plan = plans.listed.plans.find((each) => each.id === pin.plan);
     return plan === undefined ? [] : [{ plan, pin, at: pin.at }];
   });
   return [...planRows, ...tabRows].sort((a, b) => b.at - a.at);
@@ -482,7 +482,7 @@ function RepositorySection({
  */
 function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
-  const { archived } = context.plans;
+  const { archived } = context.plans.listed;
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
@@ -652,8 +652,9 @@ export function DesktopSidebar({
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) =>
     onPlans && !inInbox && !composing && planId === plans.activePlanId;
-  const unlisted = plans.plans.length === 0 && plans.archived.length === 0;
-  const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  // The list is the chosen workspace's; the unread marks above read every plan.
+  const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
+  const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
   // The pin the open plan was opened from is marked in its plan's place,
   // whichever of the plan's tabs is shown, while its row still stands.
@@ -690,7 +691,9 @@ export function DesktopSidebar({
             sameTab(plans.sidePanel.tab, pin.tab))));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
-  const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
+  const grouped = repositoryGroups(
+    plans.listed.plans.filter((plan) => plan.pinnedAt === undefined),
+  );
   const pinnedAt = (group: RepositoryGroup) =>
     group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
   const groups = [
