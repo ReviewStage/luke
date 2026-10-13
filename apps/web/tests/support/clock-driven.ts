@@ -23,29 +23,40 @@ export interface ClockDriven<A, E> {
 }
 
 /**
- * The effect forked on the test's clock, with each wait it makes announced.
+ * The test's clock with each wait it holds announced, for a test whose
+ * effect sleeps on a clock captured where its services were built rather
+ * than on the one it is forked under.
  * Note that the wait is forked to start at once, because the TestClock
  * registers it synchronously, so a wait is held before it is announced and
  * the step that answers the announcement wakes it.
  */
+export const announcingClock: Effect.Effect<{
+  readonly clock: Clock.Clock;
+  readonly asleep: Queue.Queue<void>;
+}> = Effect.gen(function* () {
+  const clock = yield* Clock.Clock;
+  const asleep = yield* Queue.unbounded<void>();
+  const announcing: Clock.Clock = {
+    ...clock,
+    sleep: (duration) =>
+      Effect.gen(function* () {
+        const waiting = yield* Effect.forkChild(clock.sleep(duration), {
+          startImmediately: true,
+        });
+        yield* Queue.offer(asleep, undefined);
+        yield* Fiber.join(waiting);
+      }),
+  };
+  return { clock: announcing, asleep };
+});
+
+/** The effect forked on the test's clock, with each wait it makes announced. */
 export const forkClockDriven = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<ClockDriven<A, E>, never, R> =>
   Effect.gen(function* () {
-    const clock = yield* Clock.Clock;
-    const asleep = yield* Queue.unbounded<void>();
-    const announcing: Clock.Clock = {
-      ...clock,
-      sleep: (duration) =>
-        Effect.gen(function* () {
-          const waiting = yield* Effect.forkChild(clock.sleep(duration), {
-            startImmediately: true,
-          });
-          yield* Queue.offer(asleep, undefined);
-          yield* Fiber.join(waiting);
-        }),
-    };
-    const fiber = yield* Effect.forkChild(Effect.provideService(effect, Clock.Clock, announcing));
+    const { clock, asleep } = yield* announcingClock;
+    const fiber = yield* Effect.forkChild(Effect.provideService(effect, Clock.Clock, clock));
     return { fiber, asleep };
   });
 

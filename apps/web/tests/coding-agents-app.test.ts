@@ -36,9 +36,9 @@ import {
   DateTime,
   Duration,
   Effect,
-  Fiber,
   Layer,
   Option,
+  Queue,
   Redacted,
   Result,
   type Schema,
@@ -76,6 +76,7 @@ import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
+import { announcingClock, driven } from "./support/clock-driven";
 import {
   type FakeGitHub,
   githubReaching,
@@ -256,7 +257,8 @@ const NO_KEYS: HostedEnvironmentValues = {
  * The group over the test's own database, GitHub, and eve, stood once and
  * answering every request of the test, so what it keeps between two
  * requests, the published answers, is kept as one function instance keeps
- * it; let go with the test's scope.
+ * it; let go with the test's scope. Its clock announces each wait, so a
+ * test can move the clock only while a held read sleeps on it.
  */
 const standing = (
   bearers: ReadonlyMap<string, string>,
@@ -266,10 +268,11 @@ const standing = (
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
+    const { clock, asleep } = yield* announcingClock;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      Layer.succeed(Clock.Clock, clock),
       Layer.succeed(HostedEnvironment, {
         ...NO_KEYS,
         anthropicKey: titles ? Redacted.make("sk-ant-fixture") : undefined,
@@ -310,7 +313,7 @@ const standing = (
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
-    return { ask, fetch };
+    return { ask, fetch, asleep };
   });
 
 function request(
@@ -355,23 +358,6 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
 /**
- * A forked ask driven to its answer, the clock moved a step at a time so
- * each wait it holds elapses, then joined. The steps are bounded, because
- * a step lands while a query of the ask's is still on its way, and an ask
- * that is meant to answer inside its hold must not have the hold stepped
- * out from under it: a bound under the hold leaves the join to the query.
- */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration, steps = 1_000) =>
-  Effect.gen(function* () {
-    for (let attempt = 0; attempt < steps; attempt += 1) {
-      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
-      yield* TestClock.adjust(step);
-      yield* Effect.yieldNow;
-    }
-    return yield* Fiber.join(fiber);
-  });
-
-/**
  * An owner who signed in with GitHub and holds one plan on the repository,
  * another account beside them, and the group over a GitHub reaching the
  * repository and the eve given.
@@ -400,8 +386,8 @@ const openPlan = (
     ]);
     const github = githubReaching([INSTALLATION], undefined, undefined, options.github);
     const eve = options.eve ?? fakeEve();
-    const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
-    return { owner, other, plan, eve, github, ask, fetch };
+    const { ask, fetch, asleep } = yield* standing(bearers, github, eve, options.titles ?? false);
+    return { owner, other, plan, eve, github, ask, fetch, asleep };
   });
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
@@ -493,7 +479,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "the transcript answers the conversation's rows past the cursor, with the cursor to read on from, and a cursor outside its shape is refused",
     () =>
       Effect.gen(function* () {
-        const { owner, other, plan, ask } = yield* openPlan();
+        const { owner, other, plan, ask, asleep } = yield* openPlan();
         const agent = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -506,16 +492,18 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const turnId = randomUUID();
         // Before any turn the agent is starting: an empty read is held rather than spinning, and
         // lets go at the hold with the status the page was read at.
+        // Note that the clock moves only while the read sleeps on it, because a step taken while
+        // its query is out on a real Postgres would carry the clock past the starting grace.
+        yield* Queue.clear(asleep);
         const starting = yield* Effect.forkChild(
           ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
         );
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
         assert.equal(starting.pollUnsafe(), undefined);
-        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
         const empty = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* driven(starting, CODER.MESSAGES_POLL),
+          yield* driven({ fiber: starting, asleep }, CODER.MESSAGES_POLL),
         );
         assert.deepEqual(empty.messages, []);
         assert.equal(empty.status, CODING_AGENT_STATUS.STARTING);
