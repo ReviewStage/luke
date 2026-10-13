@@ -445,7 +445,8 @@ export function SidebarPlan({
         <SidebarPlanMarks
           plans={plans}
           plan={plan}
-          current={current}
+          // The Inbox's chosen row is not the open plan, whose page holds ⇧⌘A, so it names no chord.
+          current={current && inbox === undefined}
           disabled={actions.deletion.busy}
           onContextMenu={showMenu}
         />

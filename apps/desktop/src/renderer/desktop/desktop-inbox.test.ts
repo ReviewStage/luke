@@ -238,6 +238,15 @@ test("the column lists every plan holding an item on the sidebar's own plan row,
   assert.deepEqual(titles(page), ["Expire after 7 days?"]);
   assert.equal(page.querySelector(".inbox-view-items h1")?.textContent, "Invites");
   assert.deepEqual(inboxReads, [INVITES.id]);
+  const chosenArchive = rowNamed(page, "Invites")
+    .closest(".sidebar-plan-item")
+    ?.querySelector('.sidebar-plan-marks [aria-label="Archive"]');
+  assert.ok(chosenArchive);
+  assert.equal(
+    chosenArchive.getAttribute("aria-keyshortcuts"),
+    null,
+    "the open plan's page holds ⇧⌘A, not the Inbox",
+  );
 });
 
 test("a row hangs the plan's card when rested on, offers Pin and Archive at its end, and its right-click offers Open plan ahead of the plan's own menu", async () => {
