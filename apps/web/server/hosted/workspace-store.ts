@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
@@ -117,6 +117,36 @@ const findWorkspaces = SqlSchema.findAll({
 });
 
 /**
+ * The account's personal workspace: the one its row names, and whatever
+ * stands under its personal slug, in case an ensure made the organization
+ * and never wrote the row. Its member rows and the account's row go with
+ * it through their own cascades.
+ */
+const deletePersonalOrganization = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) =>
+    db
+      .delete(organization)
+      .where(
+        or(
+          inArray(
+            organization.id,
+            db
+              .select({ id: personalWorkspace.organizationId })
+              .from(personalWorkspace)
+              .where(eq(personalWorkspace.userId, userId)),
+          ),
+          eq(organization.slug, personalSlugOf(userId)),
+        ),
+      ),
+});
+
+/** The slug an account's personal workspace is made under. */
+function personalSlugOf(userId: string): string {
+  return `${PERSONAL_SLUG_PREFIX}${userId}`;
+}
+
+/**
  * The workspace the plugin holds under the account's personal slug: the one
  * this call just made, or, where the plugin refused because the slug was
  * taken, the one a racing ensure made first. Nothing under the slug means
@@ -127,7 +157,7 @@ function createPersonalOrganization(
   name: string,
   seams: WorkspaceSeams,
 ): WorkspaceStoreEffect<string, Cause.UnknownError> {
-  const slug = `${PERSONAL_SLUG_PREFIX}${userId}`;
+  const slug = personalSlugOf(userId);
   return seams
     .createOrganization({ name, slug, userId, metadata: PERSONAL_WORKSPACE_METADATA })
     .pipe(
@@ -188,4 +218,15 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
       ...workspaces.filter((workspace) => !workspace.personal),
     ];
   });
+}
+
+/**
+ * Deletes the account's personal workspace, which carries its name and its
+ * id in the slug. The account's own row would take only the row naming the
+ * workspace with it, leaving the organization standing, so an account's
+ * erasure deletes it first (`account-store.ts`). A shared workspace the
+ * account was a member of stands; only its member row goes, with the account.
+ */
+export function deletePersonalWorkspace(userId: string): WorkspaceStoreEffect<void> {
+  return deletePersonalOrganization(userId);
 }

@@ -3,13 +3,14 @@ import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../db/auth-schema.js";
 import { accountPreference } from "../db/preferences-schema.js";
 import { db } from "../db/query.js";
 import { CODING_AGENT_DEFAULT_CHOICE } from "./model-catalog.js";
 import { InstantColumnSchema } from "./store/database.js";
+import { deletePersonalWorkspace } from "./workspace-store.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -57,18 +58,22 @@ export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClien
  * the dependent rows go with the row that names them, in one statement and
  * therefore as one unit. Nothing here enumerates the dependents, because a
  * list here could fall behind a table added later and leave a row standing
- * after the account it belongs to is gone.
+ * after the account it belongs to is gone. The one exception is the
+ * account's personal workspace: its organization names the account rather
+ * than being named by it, so it is deleted first, in the same transaction.
  */
 const deleteUserRow = SqlSchema.void({
   Request: Schema.String,
   execute: (userId) => db.delete(user).where(eq(user.id, userId)),
 });
 
-/** Erases the user row; every dependent row cascades with it. */
+/** Erases the account's personal workspace and its user row as one unit; every dependent row cascades with them. */
 export function deleteAccount(
   userId: string,
 ): Effect.Effect<void, AccountSeamFailure, SqlClient.SqlClient> {
-  return deleteUserRow(userId);
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(Effect.andThen(deletePersonalWorkspace(userId), deleteUserRow(userId))),
+  );
 }
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
