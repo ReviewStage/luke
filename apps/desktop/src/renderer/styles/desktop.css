@@ -1009,10 +1009,10 @@ body,
   color: var(--text-primary);
 }
 
-/* A release on its way in, a pill between the account and the gear. Waiting
-   on its restart it is tinted the working blue, as is the download offered
-   once installing it failed: news, not urgency, so a wash rather than the
-   accent's fill. Downloading it is a quiet count, with nothing yet to press. */
+/* A release with something to press, a pill between the account and the
+   gear. Waiting on its restart it is tinted the working blue: news, not
+   urgency, so a wash rather than the accent's fill. Once installing it
+   failed, the download it offers instead wears the failure's red. */
 .sidebar-update {
   display: inline-flex;
   flex: none;
@@ -1034,14 +1034,16 @@ body,
   background: color-mix(in srgb, var(--state-working) 22%, transparent);
 }
 
-.sidebar-update-progress,
-.sidebar-update-progress:hover {
-  background: none;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+.sidebar-update[data-failed="true"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger-text);
 }
 
-.sidebar-update-progress svg {
+.sidebar-update[data-failed="true"]:hover {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.sidebar-update svg {
   width: 13px;
   height: 13px;
 }
