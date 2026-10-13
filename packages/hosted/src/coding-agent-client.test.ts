@@ -688,6 +688,65 @@ it.effect("a plan template past the bound travels nowhere", () =>
 );
 
 it.effect(
+  "reads the plan template's history a page and a revision at a time and restores a revision at their addresses, ignoring a key a newer service added, and a revision the service does not find reads as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const line = {
+        seq: 2,
+        lastEdit: { actor: "developer", at: 1_000, duringCall: false },
+        startedAt: 1_000,
+        changes: 1,
+        default: true,
+      };
+      const api = fakeCloudApi({
+        "GET /api/account/plan-template/revisions": { answer: () => ({ revisions: [line] }) },
+        "GET /api/account/plan-template/revisions/2": {
+          answer: () => ({
+            revision: { seq: 2, document: { body: "## Why\n", assumptions: [] }, previous: null },
+          }),
+        },
+        "POST /api/account/plan-template/revisions/2/restore": {
+          answer: () => ({ template: "## Why\n", custom: true, updatedAt: 1 }),
+        },
+        "GET /api/account/plan-template/revisions/9": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const newest = yield* Effect.provide(client().readPlanTemplateRevisions({}), api.layer);
+      const older = yield* Effect.provide(
+        client().readPlanTemplateRevisions({ before: 3 }),
+        api.layer,
+      );
+      const revision = yield* Effect.provide(
+        client().readPlanTemplateRevision({ seq: 2 }),
+        api.layer,
+      );
+      const restored = yield* Effect.provide(client().restorePlanTemplate({ seq: 2 }), api.layer);
+      const missing = yield* Effect.provide(
+        client().readPlanTemplateRevision({ seq: 9 }),
+        api.layer,
+      );
+
+      assert.deepEqual(newest, { revisions: [line] });
+      assert.deepEqual(older, { revisions: [line] });
+      assert.deepEqual(revision, {
+        revision: { seq: 2, document: { body: "## Why\n", assumptions: [] }, previous: null },
+      });
+      assert.deepEqual(restored, { template: "## Why\n", custom: true });
+      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(recordedRoutes(api.requests()), [
+        "GET /api/account/plan-template/revisions",
+        "GET /api/account/plan-template/revisions?before=3",
+        "GET /api/account/plan-template/revisions/2",
+        "POST /api/account/plan-template/revisions/2/restore",
+        "GET /api/account/plan-template/revisions/9",
+      ]);
+    }),
+);
+
+it.effect(
   "reads a plan's inbox past the cursor at the plan's inbox address, and a plan the service does not find reads as not found",
   () =>
     Effect.gen(function* () {

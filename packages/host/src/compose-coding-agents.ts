@@ -29,7 +29,11 @@ import {
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionsAnswerView,
   type ProviderKeysAnswerView,
+  planTemplateRevisionParamsSchema,
+  planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -81,6 +85,9 @@ export type CodingAgentClient = Pick<
   | "removeProviderKey"
   | "readPlanTemplate"
   | "writePlanTemplate"
+  | "readPlanTemplateRevisions"
+  | "readPlanTemplateRevision"
+  | "restorePlanTemplate"
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
@@ -169,6 +176,36 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "a template write names a template within the bound, or null for the default",
         );
         const answer = yield* asked(client.writePlanTemplate(write));
+        return carried<PlanTemplateAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS]: (params) =>
+      Effect.gen(function* () {
+        const page = yield* read(
+          planTemplateRevisionsParamsSchema,
+          params,
+          "a page of the template's history names the revision it is read before, or none",
+        );
+        const answer = yield* asked(client.readPlanTemplateRevisions(page));
+        return carried<PlanTemplateRevisionsAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_REVISION]: (params) =>
+      Effect.gen(function* () {
+        const revision = yield* read(
+          planTemplateRevisionParamsSchema,
+          params,
+          "a revision of the template names its number",
+        );
+        const answer = yield* asked(client.readPlanTemplateRevision(revision));
+        return carried<PlanTemplateRevisionAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE]: (params) =>
+      Effect.gen(function* () {
+        const revision = yield* read(
+          planTemplateRevisionParamsSchema,
+          params,
+          "a restore of the template names the revision it brings back",
+        );
+        const answer = yield* asked(client.restorePlanTemplate(revision));
         return carried<PlanTemplateAnswerView>(answer);
       }),
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>

@@ -207,6 +207,23 @@ function fixture() {
           asked.push(`template:${template ?? "the default"}`);
           return { template: template ?? DEFAULT_PLAN_TEMPLATE, custom: template !== null };
         }),
+      planTemplateRevisions: ({ before }) =>
+        Effect.sync(() => {
+          asked.push(`revisions:${before ?? "newest"}`);
+          return { revisions: [] };
+        }),
+      planTemplateRevision: ({ seq }) =>
+        Effect.sync(() => {
+          asked.push(`revision:${seq}`);
+          return {
+            revision: { seq, document: { body: "## Why\n", assumptions: [] }, previous: null },
+          };
+        }),
+      planTemplateRestore: ({ seq }) =>
+        Effect.sync(() => {
+          asked.push(`restore:${seq}`);
+          return { template: "## Why\n", custom: true };
+        }),
       dictationTranscribe: ({ audio, keywords }) =>
         Effect.sync(() => {
           asked.push(`transcribe:${audio}:${keywords.join(",")}`);
@@ -465,6 +482,52 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel reads the plan template's history and restores a revision through the host; the voice window cannot, and a revision with no number reaches nothing",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const page = { kind: ACT_KIND.PLAN_TEMPLATE_REVISIONS, payload: { before: 3 } } as const;
+      const revision = { kind: ACT_KIND.PLAN_TEMPLATE_REVISION, payload: { seq: 2 } } as const;
+      const restore = { kind: ACT_KIND.PLAN_TEMPLATE_RESTORE, payload: { seq: 2 } } as const;
+
+      const paged = yield* router.performAct(page, PANEL);
+      const read = yield* router.performAct(revision, PANEL);
+      const restored = yield* router.performAct(restore, PANEL);
+      const refused = [
+        yield* router.performAct(page, VOICE),
+        yield* router.performAct(revision, VOICE),
+        yield* router.performAct(restore, VOICE),
+        yield* router.performAct(
+          { kind: ACT_KIND.PLAN_TEMPLATE_RESTORE, payload: { seq: 0 } },
+          PANEL,
+        ),
+      ];
+
+      assert.deepEqual(paged, { status: ACT_OUTCOME_STATUS.DONE, value: { revisions: [] } });
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: {
+          revision: { seq: 2, document: { body: "## Why\n", assumptions: [] }, previous: null },
+        },
+      });
+      assert.deepEqual(restored, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { template: "## Why\n", custom: true },
+      });
+      assert.deepEqual(asked, ["revisions:3", "revision:2", "restore:2"]);
+      assert.deepEqual(
+        refused.map((outcome) => outcome.status),
+        [
+          ACT_OUTCOME_STATUS.REFUSED,
+          ACT_OUTCOME_STATUS.REFUSED,
+          ACT_OUTCOME_STATUS.REFUSED,
+          ACT_OUTCOME_STATUS.REFUSED,
+        ],
+      );
     }),
 );
 

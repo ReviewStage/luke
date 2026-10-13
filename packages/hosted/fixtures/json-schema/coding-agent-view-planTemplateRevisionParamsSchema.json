@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "seq"
+  ],
+  "additionalProperties": false
+}

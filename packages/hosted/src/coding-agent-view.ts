@@ -20,8 +20,11 @@ import {
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
+  planTemplateRevisionAnswerSchema,
+  planTemplateRevisionsAnswerSchema,
   planTemplateWriteRequestSchema,
 } from "./plan-document-template.js";
+import { planRevisionSeqSchema } from "./plan-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
   providerKeySaveRequestSchema,
@@ -130,6 +133,34 @@ export type PlanTemplateAnswerView = typeof planTemplateAnswerViewSchema.Type;
 export const planTemplateWriteParamsSchema = planTemplateWriteRequestSchema;
 
 export type PlanTemplateWriteParams = typeof planTemplateWriteParamsSchema.Type;
+
+/** A page of the template's history, as the window asks it: the newest, or the one before a revision. */
+export const planTemplateRevisionsParamsSchema = EffectSchema.Struct({
+  before: EffectSchema.optionalKey(planRevisionSeqSchema),
+});
+
+export type PlanTemplateRevisionsParams = typeof planTemplateRevisionsParamsSchema.Type;
+
+/** A page of the template's history, as the window hears it read: the page, or why there is none. */
+export const planTemplateRevisionsAnswerViewSchema = EffectSchema.Union([
+  planTemplateRevisionsAnswerSchema,
+  failed,
+]);
+
+export type PlanTemplateRevisionsAnswerView = typeof planTemplateRevisionsAnswerViewSchema.Type;
+
+/** One revision of the template, as the window asks it read or restored: its number. */
+export const planTemplateRevisionParamsSchema = EffectSchema.Struct({ seq: planRevisionSeqSchema });
+
+export type PlanTemplateRevisionParams = typeof planTemplateRevisionParamsSchema.Type;
+
+/** One revision of the template, as the window hears it read: the revision beside the one before it, or why there is none. */
+export const planTemplateRevisionAnswerViewSchema = EffectSchema.Union([
+  planTemplateRevisionAnswerSchema,
+  failed,
+]);
+
+export type PlanTemplateRevisionAnswerView = typeof planTemplateRevisionAnswerViewSchema.Type;
 
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;

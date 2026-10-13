@@ -24,6 +24,10 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionParams,
+  type PlanTemplateRevisionsAnswerView,
+  type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
@@ -79,6 +83,13 @@ export interface CodingAgentActsDependencies {
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
     planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
+    planTemplateRevisions(
+      params: PlanTemplateRevisionsParams,
+    ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
+    planTemplateRevision(
+      params: PlanTemplateRevisionParams,
+    ): Effect.Effect<PlanTemplateRevisionAnswerView>;
+    planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
     dictationTranscribe(
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
@@ -124,6 +135,9 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
   | typeof ACT_KIND.PLAN_TEMPLATE_READ
   | typeof ACT_KIND.PLAN_TEMPLATE_WRITE
+  | typeof ACT_KIND.PLAN_TEMPLATE_REVISIONS
+  | typeof ACT_KIND.PLAN_TEMPLATE_REVISION
+  | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
@@ -241,6 +255,18 @@ export function codingAgentActRows(
     [ACT_KIND.PLAN_TEMPLATE_WRITE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_WRITE, sender);
       return host.planTemplateWrite(params);
+    },
+    [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_REVISIONS, sender);
+      return host.planTemplateRevisions(params);
+    },
+    [ACT_KIND.PLAN_TEMPLATE_REVISION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_REVISION, sender);
+      return host.planTemplateRevision(params);
+    },
+    [ACT_KIND.PLAN_TEMPLATE_RESTORE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_RESTORE, sender);
+      return host.planTemplateRestore(params);
     },
     [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);

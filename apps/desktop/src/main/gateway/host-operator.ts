@@ -54,11 +54,17 @@ import {
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionParams,
+  type PlanTemplateRevisionsAnswerView,
+  type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
   planTemplateAnswerViewSchema,
+  planTemplateRevisionAnswerViewSchema,
+  planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import {
@@ -267,6 +273,16 @@ export interface HostOperator {
   planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
   /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
   planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
+  /** A page of the template's history, newest first; or why there is none. */
+  planTemplateRevisions(
+    params: PlanTemplateRevisionsParams,
+  ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
+  /** One revision of the template beside the one before it; or why there is none. */
+  planTemplateRevision(
+    params: PlanTemplateRevisionParams,
+  ): Effect.Effect<PlanTemplateRevisionAnswerView>;
+  /** One revision of the template put back as the template; the template as kept, or why it is unchanged. */
+  planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
     params: DictationTranscribeParams,
@@ -763,6 +779,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planTemplateWrite: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: params.template }),
+        codingAgentAnswer(planTemplateAnswerViewSchema),
+      ),
+    planTemplateRevisions: (params) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS,
+          params.before === undefined ? {} : { before: params.before },
+        ),
+        codingAgentAnswer(planTemplateRevisionsAnswerViewSchema),
+      ),
+    planTemplateRevision: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: params.seq }),
+        codingAgentAnswer(planTemplateRevisionAnswerViewSchema),
+      ),
+    planTemplateRestore: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: params.seq }),
         codingAgentAnswer(planTemplateAnswerViewSchema),
       ),
     dictationTranscribe: (params) =>

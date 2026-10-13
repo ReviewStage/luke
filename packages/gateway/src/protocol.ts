@@ -84,6 +84,12 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
   PLAN_TEMPLATE_WRITE: "planTemplate.write",
+  /** A page of the account's plan template history, read from the service now, newest first; or why there is none. */
+  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
+  /** One revision of the account's plan template beside the one before it; or why there is none. */
+  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
+  /** One revision of the account's plan template put back as the template; the template as kept, or why it is unchanged. */
+  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
