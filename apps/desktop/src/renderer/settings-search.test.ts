@@ -97,6 +97,17 @@ test("a row a page is not drawing is not offered", () => {
     searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "template"),
   );
   assert.deepEqual(labels(signedOutTemplate), [], "no template without an account to hold it");
+
+  // An integration is the account's too, so it is found on the Integrations page while one is signed in.
+  const tracker = found(searchSettings(hosted, "issues tracker"));
+  assert.deepEqual(
+    tracker.map((entry) => [entry.label, entry.page]),
+    [["Linear", SETTINGS_VIEW.INTEGRATIONS]],
+  );
+  const signedOutTracker = found(
+    searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "linear"),
+  );
+  assert.deepEqual(labels(signedOutTracker), [], "no integration without an account to connect it");
 });
 
 test("ids and labels are unique, so a result names exactly one row", () => {

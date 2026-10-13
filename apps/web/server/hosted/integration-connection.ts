@@ -59,8 +59,8 @@ interface UnavailableSentences {
 export function integrationUnavailable(provider: IntegrationProvider): UnavailableSentences {
   const name = INTEGRATION_NAME[provider];
   return {
-    NOT_CONNECTED: `${name} is not connected for this account. The developer can connect it in Luke's account settings; carry on without it.`,
-    EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in Luke's account settings; carry on without it.`,
+    NOT_CONNECTED: `${name} is not connected for this account. The developer can connect it in Luke's Settings › Integrations; carry on without it.`,
+    EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in Luke's Settings › Integrations; carry on without it.`,
     NOT_CONFIGURED: `${name} is not set up on this deployment of Luke; carry on without it.`,
     UNREACHABLE: `Luke could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
     NO_ACCOUNT: `This session stands for no account that can use ${name}.`,

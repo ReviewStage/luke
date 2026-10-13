@@ -23,6 +23,7 @@ import type {
   UpdateControl,
 } from "./controls";
 import { FeedbackSection } from "./feedback-section";
+import { IntegrationsSection } from "./integrations-page";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
@@ -177,6 +178,10 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.API_KEYS ? (
         <ApiKeysSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.INTEGRATIONS ? (
+        <IntegrationsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS ? (

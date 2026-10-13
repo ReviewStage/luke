@@ -20,6 +20,7 @@ export const SETTINGS_SUBVIEW_LIST = [
   SETTINGS_VIEW.PLAN_TEMPLATE,
   SETTINGS_VIEW.CODING_AGENTS,
   SETTINGS_VIEW.API_KEYS,
+  SETTINGS_VIEW.INTEGRATIONS,
 ] as const;
 
 export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
@@ -31,6 +32,7 @@ const NAV_ROW_ID = {
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "settings-nav-plan-template",
   [SETTINGS_VIEW.CODING_AGENTS]: "settings-nav-coding-agents",
   [SETTINGS_VIEW.API_KEYS]: "settings-nav-api-keys",
+  [SETTINGS_VIEW.INTEGRATIONS]: "settings-nav-integrations",
 };
 
 /**

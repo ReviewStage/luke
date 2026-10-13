@@ -14,6 +14,8 @@ export const SETTINGS_PAGE = {
   CODING_AGENTS: "coding-agents",
   /** The account's own provider API keys a coding agent runs on, held sealed on the service rather than as a stored setting. */
   API_KEYS: "api-keys",
+  /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
+  INTEGRATIONS: "integrations",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
