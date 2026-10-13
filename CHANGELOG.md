@@ -1743,11 +1743,15 @@ OpenAI key.
 [#204](https://github.com/ReviewStage/luke/pull/204),
 [#216](https://github.com/ReviewStage/luke/pull/216))
 
+!["What Luke runs on" in Settings: the included daily allowance chosen over an OpenAI key, its talking and session-check meters with plenty left.](apps/web/public/changelog/0.1.1/free-daily-allowance.png)
+
 ### Google Calendar
 
 Luke reads when your meetings start and end, and holds his updates until the
 meeting is over.
 ([#195](https://github.com/ReviewStage/luke/pull/195))
+
+![The Google Calendar card in Settings: connected, two calendars chosen, and "Quiet during meetings" on.](apps/web/public/changelog/0.1.1/google-calendar.png)
 
 ### Improvements
 
@@ -1821,6 +1825,8 @@ workspaces and spawns agents, and reads and acts on Linear issues.
 [#78](https://github.com/ReviewStage/luke/pull/78),
 [#70](https://github.com/ReviewStage/luke/pull/70),
 [#89](https://github.com/ReviewStage/luke/pull/89))
+
+![The capsule beside the notch with Luke's voice meter lit and his words beneath it: Claude Code opened #214 and has one question about how long invite links last.](apps/web/public/changelog/0.1.0/talk-to-luke.png)
 
 ### Announcements
 

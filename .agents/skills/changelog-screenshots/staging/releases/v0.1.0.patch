@@ -1,5 +1,5 @@
 diff --git a/apps/desktop/src/main.ts b/apps/desktop/src/main.ts
-index af51d1a99..2255a7c57 100644
+index af51d1a99..0343eca79 100644
 --- a/apps/desktop/src/main.ts
 +++ b/apps/desktop/src/main.ts
 @@ -150,6 +150,12 @@ import {
@@ -26,7 +26,7 @@ index af51d1a99..2255a7c57 100644
  const fixtureMode = captureMode || fixtureName !== undefined;
 +// Throwaway: a changelog shot draws its own roster in place of the smoke one.
 +const shotRun = isShotRun(fixtureMode, profile);
-+const fixture = shotRun ? shotFixture() : fixtureSnapshot(fixtureName ?? "smoke");
++const fixture = shotRun ? shotFixture(profile) : fixtureSnapshot(fixtureName ?? "smoke");
  const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
  // A development build may be pointed at a local account service; a packaged one
  // may not. The override redirects the whole sign-in — including the identity
@@ -51,18 +51,60 @@ index af51d1a99..2255a7c57 100644
        stayHidden: true,
        stayAwake: true,
 diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
-index 94f5a0c67..97a140595 100644
+index 94f5a0c67..5531455ce 100644
 --- a/apps/desktop/src/renderer/app.tsx
 +++ b/apps/desktop/src/renderer/app.tsx
 @@ -37,6 +37,7 @@ import type {
    SettingsUpdateResult,
  } from "../shared/contracts";
  import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
-+import { isShotRun, SHOT_INITIAL_SORT } from "../shared/shots";
++import { isShotRun, isShotTalk, SHOT_INITIAL_SORT, SHOT_TALK_CAPTION } from "../shared/shots";
  import type { CredentialProviderId } from "../shared/credential-providers";
  import {
    CREDENTIAL_PROVIDER_LIST,
-@@ -1547,6 +1548,10 @@ export function App(): React.JSX.Element {
+@@ -1279,7 +1280,7 @@ export function App(): React.JSX.Element {
+     stopMicrophone,
+     askLuke,
+     voiceTurn,
+-    lukeCaption,
++    lukeCaption: voiceCaption,
+     remoteAudio,
+     discardListening,
+     stopSpeaking,
+@@ -1295,11 +1296,19 @@ export function App(): React.JSX.Element {
+     voiceCaptions: settings?.voiceCaptions === true,
+     voiceAvailable: settings?.voiceAvailable,
+     outputSilent: outputSilent(outputAudio),
+-    fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
++    // Throwaway: `shot-talk` is the speaking evidence run.
++    fixtureSpeaking:
++      bootstrap?.profile === "speaking" ||
++      bootstrap?.profile === "muted" ||
++      isShotTalk(bootstrap?.fixtureMode ?? false, bootstrap?.profile),
+     capturingShortcut: () => shortcutCapture.current,
+     openSession: openSessionAloud,
+     carryAppAction,
+   });
++  // Throwaway: `shot-talk` captions the speaking capsule with Luke's line about acme.
++  const lukeCaption = isShotTalk(bootstrap?.fixtureMode ?? false, bootstrap?.profile)
++    ? SHOT_TALK_CAPTION
++    : voiceCaption;
+ 
+   // Whether the caption strip is holding the band under the housing — Luke's
+   // live words, or the voice-failure notice reported in their place. The gate
+@@ -1308,7 +1317,10 @@ export function App(): React.JSX.Element {
+   const captionDrawn =
+     (lukeCaption ??
+       voiceErrorToShow({
+-        fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
++        fixtureSpeaking:
++          bootstrap?.profile === "speaking" ||
++          bootstrap?.profile === "muted" ||
++          isShotTalk(bootstrap?.fixtureMode ?? false, bootstrap?.profile),
+         voice: voiceTurn,
+         error: voiceError,
+       })) !== undefined;
+@@ -1547,6 +1559,10 @@ export function App(): React.JSX.Element {
      void window.sidecar.getBootstrap().then((value) => {
        setBootstrap(value);
        setSessions(value.sessions);
@@ -73,20 +115,39 @@ index 94f5a0c67..97a140595 100644
        // Only fill in what no push has said yet: the bootstrap snapshot is
        // older than any change that raced past it, and the main process will
        // not repeat a list it believes it already announced.
+@@ -1882,7 +1898,11 @@ export function App(): React.JSX.Element {
+   // The muted evidence run is the speaking run with the hint drawn over it: a
+   // capture has no system output to read, so the state is asked for directly.
+   const fixtureMuted = bootstrap.profile === "muted";
+-  const fixtureSpeaking = bootstrap.profile === "speaking" || fixtureMuted;
++  // Throwaway: `shot-talk` is the speaking evidence run.
++  const fixtureSpeaking =
++    bootstrap.profile === "speaking" ||
++    fixtureMuted ||
++    isShotTalk(bootstrap.fixtureMode, bootstrap.profile);
+   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
+   const outputIsSilent = outputSilent(outputAudio);
+   // A failed call is reported where its reply would have landed: on the
 diff --git a/apps/desktop/src/shared/shots.ts b/apps/desktop/src/shared/shots.ts
 new file mode 100644
-index 000000000..1eb5a6ced
+index 000000000..16212ca3a
 --- /dev/null
 +++ b/apps/desktop/src/shared/shots.ts
-@@ -0,0 +1,187 @@
-+// shots.ts -- Throwaway: the changelog screenshot staged for 0.1.0, never committed.
+@@ -0,0 +1,227 @@
++// shots.ts -- Throwaway: the changelog screenshots staged for 0.1.0, never committed.
 +//
-+// One profile, `shot-one-panel`, run as
-+// `--fixture smoke --expanded --profile shot-one-panel --capture-evidence <png>`.
-+// It swaps the smoke fixture's six sessions for acme's roster (WORLD.md), opens
-+// the list on the release's own Recent sort so the needs-you, working, and done
-+// rows read as one mix, and gives the capture time to settle. Everything here is
-+// gated on the profile and on fixture mode at its call site.
++// Two profiles, each gated on itself and on fixture mode at its call site:
++//
++// - `shot-one-panel`, run as
++//   `--fixture smoke --expanded --profile shot-one-panel --capture-evidence <png>`.
++//   It swaps the smoke fixture's six sessions for acme's roster (WORLD.md), opens
++//   the list on the release's own Recent sort so the needs-you, working, and done
++//   rows read as one mix, and gives the capture time to settle.
++// - `shot-talk`, run as
++//   `--fixture smoke --compact --peek --profile shot-talk --capture-evidence <png>`.
++//   The release's own `speaking` evidence (meter lit, Luke's face talking, his
++//   caption under the housing) over the same roster, with the caption one of
++//   Luke's lines about acme's work.
 +
 +import {
 +  FIXTURE_EPOCH_MS,
@@ -101,6 +162,7 @@ index 000000000..1eb5a6ced
 +
 +export const SHOT_PROFILE = {
 +  ONE_PANEL: "shot-one-panel",
++  TALK: "shot-talk",
 +} as const;
 +
 +export type ShotProfile = (typeof SHOT_PROFILE)[keyof typeof SHOT_PROFILE];
@@ -254,14 +316,47 @@ index 000000000..1eb5a6ced
 +  ],
 +};
 +
++/**
++ * What Luke is saying in `shot-talk`: the session that needs Dean, by its
++ * provider and title, the way 0.1.0's announcements name one, and long enough
++ * to wrap, as the release's own speaking caption does.
++ */
++export const SHOT_TALK_CAPTION =
++  "Claude Code opened #214 for Add teammate invitations, and it has one question for you: should invite links last 7 days, or 14?";
++
++/**
++ * `shot-talk`'s roster: the same nine, except that Add teammate invitations
++ * ended its turn on the question Luke is announcing, so the count he sits beside
++ * agrees with him.
++ */
++const talkFixture: FixtureSnapshot = {
++  ...onePanelFixture,
++  sessions: onePanelFixture.sessions.map((session) =>
++    session.id === "shot-claude-teammate-invitations"
++      ? {
++          ...session,
++          detail: "Opened #214. Should invite links last 7 days or 14?",
++          urgency: SESSION_URGENCY.ATTENTION,
++        }
++      : session,
++  ),
++};
++
++const SHOT_PROFILE_LIST: readonly string[] = Object.values(SHOT_PROFILE);
++
 +/** Whether this run stages a shot: fixture mode and one of the shot profiles. */
 +export function isShotRun(fixtureMode: boolean, profile: string | undefined): boolean {
-+  return fixtureMode && profile === SHOT_PROFILE.ONE_PANEL;
++  return fixtureMode && profile !== undefined && SHOT_PROFILE_LIST.includes(profile);
++}
++
++/** Whether this run is `shot-talk`, which stages the speaking capsule. */
++export function isShotTalk(fixtureMode: boolean, profile: string | undefined): boolean {
++  return fixtureMode && profile === SHOT_PROFILE.TALK;
 +}
 +
 +/** The roster a shot run draws in place of the smoke fixture's. */
-+export function shotFixture(): FixtureSnapshot {
-+  return onePanelFixture;
++export function shotFixture(profile: string): FixtureSnapshot {
++  return profile === SHOT_PROFILE.TALK ? talkFixture : onePanelFixture;
 +}
 +
 +/** The order the shot's list opens on. */
