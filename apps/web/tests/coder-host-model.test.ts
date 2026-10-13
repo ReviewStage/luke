@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PROVIDER_KEY_UNREADABLE } from "@sidecar/database/models/provider-key-seal";
 import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { PROVIDER_KEY_STATUS } from "@sidecar/hosted/provider-key-wire";
 import { jsonResponse } from "@sidecar/wire/testing";
 import { generateText } from "ai";
 import { Duration, Option, Redacted, Result, Schema } from "effect";
@@ -183,6 +184,80 @@ test("a fast version runs at Anthropic as its base model asked for fast speed, w
   assert.equal(standard?.betas.includes("fast-mode"), false);
 });
 
+/**
+ * Anthropic as an organization outside fast mode's research preview meets
+ * it, as production met an account's own key: a standard request answered,
+ * and a fast one refused with the 429 Anthropic sent, against a fast limit
+ * of 0.
+ */
+const outsideFastPreview: typeof globalThis.fetch = async (_input, init) => {
+  const asked = readAnthropicRequest(JSON.parse(String(init?.body)));
+  if (asked.speed !== undefined) {
+    return jsonResponse(
+      {
+        type: "error",
+        error: {
+          type: "rate_limit_error",
+          message: `This request would exceed your organization's rate limit of 0 fast mode input tokens per minute (model: ${asked.model}).`,
+        },
+      },
+      429,
+    );
+  }
+  return jsonResponse({
+    id: "msg_fixture",
+    type: "message",
+    role: "assistant",
+    model: asked.model,
+    content: [{ type: "text", text: `Done on ${asked.model}.` }],
+    stop_reason: "end_turn",
+    usage: { input_tokens: 1, output_tokens: 1 },
+  });
+};
+
+/** The account's own Anthropic key, verified, its reports dropped. */
+const OWN_ANTHROPIC: ProviderKeys["anthropic"] = {
+  key: Redacted.make("sk-ant-own-fixture"),
+  account: { status: PROVIDER_KEY_STATUS.VERIFIED, report: async () => undefined },
+};
+
+/** What one step of the choice comes to against that Anthropic: the host's refusal, the step's answer, or why the step failed. */
+async function stepOutcome(model: string, anthropic: ProviderKeys["anthropic"]): Promise<string> {
+  const keys = { ...KEYS, anthropic, fetch: outsideFastPreview };
+  const selected = coderModel({ model, effort: "high" }, keys, WINDOW);
+  if (Result.isFailure(selected)) return selected.failure;
+  const { providerOptions } = selected.success.modelOptions;
+  try {
+    const answer = await generateText({
+      model: selected.success.model,
+      prompt: "Go.",
+      maxRetries: 0,
+      ...(providerOptions === undefined ? undefined : { providerOptions }),
+    });
+    return answer.text;
+  } catch (failure) {
+    return failure instanceof Error ? failure.message : String(failure);
+  }
+}
+
+test("a fast version on the account's own key is refused in words before any request, and its base model still runs there", async () => {
+  assert.equal(
+    await stepOutcome("anthropic/claude-opus-5.5-fast", OWN_ANTHROPIC),
+    CODER_REFUSAL.FAST_ON_OWN_KEY,
+  );
+  assert.equal(
+    await stepOutcome("anthropic/claude-opus-5.5", OWN_ANTHROPIC),
+    "Done on claude-opus-5-5.",
+  );
+});
+
+test("Anthropic refusing fast mode for the organization of Luke's key fails the step in words saying so, never as a bare rate limit", async () => {
+  assert.equal(
+    await stepOutcome("anthropic/claude-opus-5.5-fast", KEYS.anthropic),
+    CODER_REFUSAL.FAST_NOT_ENABLED,
+  );
+});
+
 test("a fast version whose provider's fast option Luke cannot confirm is refused in words saying so, never run as the slug", () => {
   assert.deepEqual(
     coderModel({ model: "openai/gpt-5.5-fast", effort: "high" }, KEYS, WINDOW),
@@ -270,6 +345,11 @@ test.for([
     failed(MODEL, `Error ${CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE}`),
     CODING_AGENT_FAILURE.PROVIDER_KEY,
   ],
+  [
+    failed(MODEL, `MODEL_CALL_FAILED [message,name] ${CODER_REFUSAL.FAST_NOT_ENABLED}`),
+    CODING_AGENT_FAILURE.FAST_NOT_ENABLED,
+  ],
+  [failed(MODEL, `Error ${CODER_REFUSAL.FAST_ON_OWN_KEY}`), CODING_AGENT_FAILURE.FAST_ON_OWN_KEY],
   [failed(ABANDONED), CODING_AGENT_FAILURE.ABANDONED],
   [failed(PERSISTENCE), CODING_AGENT_FAILURE.OTHER],
   [{ status: TURN_STATUS.CANCELLED, failure: MODEL, failureDetail: null }, undefined],

@@ -21,6 +21,7 @@ import {
   effortLabel,
   effortsOf,
   FAST_WORD,
+  fastRestingNote,
   longWindowNote,
   modelLabel,
   offeredModels,
@@ -51,7 +52,8 @@ import { SettingsGroup } from "./settings-group";
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
  * version folded into its model, the chosen one checked. Under it a Fast
- * switch runs the model's fast version, resting where the model has none;
+ * switch runs the model's fast version, resting where the model has none
+ * or the service withholds it for the account's own key, saying which;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
@@ -121,6 +123,8 @@ function DefaultRows({
   const efforts = offered.length === 0 ? [choice.effort] : offered;
   const read = readModelChoice(models ?? [], choice.model);
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
+  const fastNote =
+    base === undefined ? undefined : fastRestingNote(base.model.id, base, models ?? []);
   const unsearched = unsearchedModels(models ?? [], read.base);
   const windows = contextWindowsOf(models ?? [], choice.model);
   const window = windowOf(models ?? [], choice);
@@ -183,9 +187,7 @@ function DefaultRows({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>{FAST_WORD}</strong>
-          {base !== undefined && base.fast === undefined ? (
-            <small>{`No fast version of ${modelLabel(base.model.id, models)}.`}</small>
-          ) : null}
+          {fastNote === undefined ? null : <small>{`${fastNote}.`}</small>}
         </span>
         <button
           type="button"

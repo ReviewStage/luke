@@ -167,6 +167,8 @@
         "abandoned",
         "provider_key",
         "not_started",
+        "fast_own_key",
+        "fast_not_enabled",
         "other"
       ]
     },

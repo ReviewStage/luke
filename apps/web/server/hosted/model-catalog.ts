@@ -2,6 +2,7 @@ import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import {
   type CatalogModel,
   type ContextWindows,
+  FAST_WITHHELD,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -379,6 +380,31 @@ export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<Mod
 }
 
 // ------------------------------------------------------------- the checks
+
+/**
+ * The catalog as one account is offered it: where the account runs a
+ * provider on its own key, that provider's fast versions are withheld and
+ * each base model says why, since Luke runs Fast on its own key alone
+ * (`coder-host/model.ts`); everything else as the catalog lists it.
+ */
+export function offeredToAccount(
+  offered: readonly OfferedModel[],
+  ownKeyProviders: ReadonlySet<ModelProvider>,
+): readonly OfferedModel[] {
+  const withheld = new Set<string>();
+  const kept: OfferedModel[] = [];
+  for (const model of offered) {
+    const fast = providerModelOf(model.id)?.fast ?? false;
+    if (fast && ownKeyProviders.has(model.provider)) {
+      withheld.add(model.id.slice(0, -FAST_SLUG_SUFFIX.length));
+    } else {
+      kept.push(model);
+    }
+  }
+  return kept.map((model) =>
+    withheld.has(model.id) ? { ...model, fastWithheld: FAST_WITHHELD.OWN_KEY } : model,
+  );
+}
 
 /**
  * The choice as the catalog accepts it, or why it refuses: a model it does
