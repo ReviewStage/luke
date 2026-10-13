@@ -33,12 +33,23 @@
             "disconnected",
             "unavailable"
           ]
+        },
+        "slack": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
         }
       },
       "required": [
         "linear",
         "notion",
-        "sentry"
+        "sentry",
+        "slack"
       ],
       "additionalProperties": false
     }

@@ -88,6 +88,53 @@ function SentryMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+/**
+ * Slack's mark, verbatim from `SLA-Slack-icon-RGB.svg` in the Slack Media Kit
+ * logos (https://slack.com/media-kit, served from Salesforce's asset library
+ * at https://salesforce.widencollective.com/c/yn6bxnam), in the four colours
+ * Slack's logo rules keep (https://slack.com/terms-of-service/slack-brand:
+ * "Don't use different colors", "Don't use old versions").
+ */
+function SlackMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 400 400" aria-hidden="true" focusable="false">
+      <title>Slack</title>
+      <path
+        fill="#E3066A"
+        d="M84.039,252.769c0,23.127-18.893,42.02-42.02,42.02S0,275.896,0,252.769s18.893-42.02,42.02-42.02h42.02v42.02Z"
+      />
+      <path
+        fill="#E3066A"
+        d="M105.212,252.769c0-23.127,18.893-42.02,42.02-42.02s42.02,18.893,42.02,42.02v105.212c0,23.127-18.893,42.02-42.02,42.02s-42.02-18.893-42.02-42.02c0,0,0-105.212,0-105.212Z"
+      />
+      <path
+        fill="#00B3FF"
+        d="M147.231,84.039c-23.127,0-42.02-18.893-42.02-42.02S124.104,0,147.231,0s42.02,18.893,42.02,42.02v42.02h-42.02Z"
+      />
+      <path
+        fill="#00B3FF"
+        d="M147.231,105.212c23.127,0,42.02,18.893,42.02,42.02s-18.893,42.02-42.02,42.02H42.02c-23.127,0-42.02-18.893-42.02-42.02s18.893-42.02,42.02-42.02c0,0,105.212,0,105.212,0Z"
+      />
+      <path
+        fill="#41B658"
+        d="M315.961,147.231c0-23.127,18.893-42.02,42.02-42.02s42.02,18.893,42.02,42.02-18.893,42.02-42.02,42.02h-42.02v-42.02Z"
+      />
+      <path
+        fill="#41B658"
+        d="M294.788,147.231c0,23.127-18.893,42.02-42.02,42.02s-42.02-18.893-42.02-42.02V42.02c0-23.127,18.893-42.02,42.02-42.02s42.02,18.893,42.02,42.02v105.212Z"
+      />
+      <path
+        fill="#FCC003"
+        d="M252.769,315.961c23.127,0,42.02,18.893,42.02,42.02s-18.893,42.02-42.02,42.02-42.02-18.893-42.02-42.02v-42.02h42.02Z"
+      />
+      <path
+        fill="#FCC003"
+        d="M252.769,294.788c-23.127,0-42.02-18.893-42.02-42.02s18.893-42.02,42.02-42.02h105.212c23.127,0,42.02,18.893,42.02,42.02s-18.893,42.02-42.02,42.02h-105.212Z"
+      />
+    </svg>
+  );
+}
+
 /** One provider's mark, at whatever size the caller's class gives it. */
 export function IntegrationMark({
   provider,
@@ -103,5 +150,7 @@ export function IntegrationMark({
       return <NotionMark className={className} />;
     case INTEGRATION_PROVIDER.SENTRY:
       return <SentryMark className={className} />;
+    case INTEGRATION_PROVIDER.SLACK:
+      return <SlackMark className={className} />;
   }
 }

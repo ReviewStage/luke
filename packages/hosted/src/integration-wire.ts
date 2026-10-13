@@ -26,6 +26,7 @@ export const INTEGRATION_PROVIDER = {
   LINEAR: "linear",
   NOTION: "notion",
   SENTRY: "sentry",
+  SLACK: "slack",
 } as const;
 
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDER)[keyof typeof INTEGRATION_PROVIDER];
@@ -39,6 +40,7 @@ export const INTEGRATION_NAME = {
   [INTEGRATION_PROVIDER.LINEAR]: "Linear",
   [INTEGRATION_PROVIDER.NOTION]: "Notion",
   [INTEGRATION_PROVIDER.SENTRY]: "Sentry",
+  [INTEGRATION_PROVIDER.SLACK]: "Slack",
 } as const satisfies Record<IntegrationProvider, string>;
 
 const PROVIDERS: ReadonlySet<string> = new Set(INTEGRATION_PROVIDER_LIST);

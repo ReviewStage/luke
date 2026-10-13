@@ -103,6 +103,7 @@ const INTEGRATION_KEYWORDS = {
   [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
   [INTEGRATION_PROVIDER.NOTION]: "pages docs wiki databases notes",
   [INTEGRATION_PROVIDER.SENTRY]: "errors crashes exceptions monitoring traces issues",
+  [INTEGRATION_PROVIDER.SLACK]: "chat messages channels threads team",
 } as const satisfies Record<IntegrationProvider, string>;
 
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */

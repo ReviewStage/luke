@@ -27,6 +27,8 @@ export interface IntegrationDefinition {
   readonly DESCRIPTION: string;
   /** The fixed name a nested call of one of the provider's tools is stored under. */
   readonly REMOTE_TOOL: string;
+  /** The provider's own tools the agents are offered, where not every tool it lists: the rest are never searched or run. */
+  readonly ALLOWED_TOOLS?: readonly string[];
 }
 
 export const INTEGRATION = {
@@ -50,6 +52,29 @@ export const INTEGRATION = {
     DESCRIPTION:
       "Sentry, the developer's error and performance monitoring, as their own account sees it: find and read issues, errors, events, traces, logs, and releases, and update issues where the account allows it.",
     REMOTE_TOOL: "sentry_remote",
+  },
+  /*
+   * Slack is read-only: the agents are offered its search and read tools
+   * alone, so nothing they do posts, schedules, reacts, or writes a canvas as
+   * the developer. A tool Slack adds later is offered only once it is named
+   * here.
+   */
+  [INTEGRATION_PROVIDER.SLACK]: {
+    CONNECTOR_VARIABLE: "SLACK_CONNECTOR_UID",
+    MCP_URL: "https://mcp.slack.com/mcp",
+    DESCRIPTION:
+      "Slack, the developer's team chat, as their own account sees it, read-only: search messages, files, channels, and people, and read channels, threads, canvases, and profiles. Nothing can be posted.",
+    REMOTE_TOOL: "slack_remote",
+    ALLOWED_TOOLS: [
+      "slack_search_public",
+      "slack_search_public_and_private",
+      "slack_search_channels",
+      "slack_search_users",
+      "slack_read_channel",
+      "slack_read_thread",
+      "slack_read_canvas",
+      "slack_read_user_profile",
+    ],
   },
 } as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
 

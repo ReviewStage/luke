@@ -3,6 +3,7 @@
   "enum": [
     "linear",
     "notion",
-    "sentry"
+    "sentry",
+    "slack"
   ]
 }

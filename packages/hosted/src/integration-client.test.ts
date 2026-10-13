@@ -27,6 +27,7 @@ it.effect("reads where every provider stands under the account's bearer", () =>
             linear: INTEGRATION_STATUS.CONNECTED,
             notion: INTEGRATION_STATUS.UNAVAILABLE,
             sentry: INTEGRATION_STATUS.UNAVAILABLE,
+            slack: INTEGRATION_STATUS.UNAVAILABLE,
           },
         }),
       },
@@ -37,6 +38,7 @@ it.effect("reads where every provider stands under the account's bearer", () =>
         linear: INTEGRATION_STATUS.CONNECTED,
         notion: INTEGRATION_STATUS.UNAVAILABLE,
         sentry: INTEGRATION_STATUS.UNAVAILABLE,
+        slack: INTEGRATION_STATUS.UNAVAILABLE,
       },
     });
     assert.deepEqual(api.credentials(), ["token-1"]);
@@ -59,6 +61,7 @@ it.effect(
           linear: INTEGRATION_STATUS.CONNECTED,
           notion: INTEGRATION_STATUS.UNAVAILABLE,
           sentry: INTEGRATION_STATUS.UNAVAILABLE,
+          slack: INTEGRATION_STATUS.UNAVAILABLE,
         },
       });
 
