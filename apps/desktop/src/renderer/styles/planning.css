@@ -2093,7 +2093,8 @@ button.subagent-line:hover {
 
 /* A choice's option on the Inbox tab (`inbox-board.tsx`): a row the width of
    its card, its label over its trade-off, picked the way Settings' segments
-   are (`.settings-segment`), the fill of a chosen segment once pressed. The
+   are (`.settings-segment`), the fill of a chosen segment once pressed, ringed
+   so it reads apart from the hover that shares the fill. The
    one control of the tab with no kin elsewhere, since no other pick-one
    carries a line of detail. */
 .inbox-option {
@@ -2110,7 +2111,7 @@ button.subagent-line:hover {
 }
 
 .inbox-option:hover:not(:disabled) {
-  background: var(--selected);
+  background: var(--raised-strong);
 }
 
 .inbox-option[aria-pressed="true"] {
@@ -2141,6 +2142,13 @@ button.subagent-line:hover {
   display: block;
   max-width: 100%;
   height: auto;
+}
+
+/* A form's text field takes Settings' well, but in the card's body type:
+   Settings' tracking is for a key's characters, not an answer's words. */
+.inbox-field-input {
+  font-size: 13px;
+  letter-spacing: 0;
 }
 
 .inbox-image-pending {
