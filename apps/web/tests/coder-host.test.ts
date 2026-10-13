@@ -1028,6 +1028,43 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "the agent's page says where every worker stands as its own session reads, on the pair its delegation recorded: done once its turn settled, starting while its session has opened none",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, auth, sessionId, target, admitted } = yield* openAgent(host);
+        for (const [callId, model] of [
+          ["call-6", "openai/gpt-6.1-sol"],
+          ["call-7", "anthropic/claude-opus-5.5"],
+        ] as const) {
+          const made = yield* host
+            .delegate(admitted, callId, { model, effort: "low" })
+            .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+          assert.ok(Result.isSuccess(made));
+        }
+        const child = childSession(auth, sessionId, "call-6");
+        const state = memoryRelayState();
+        for (const event of workerTurn("turn_0", "Count the routes.", "Three routes.")) {
+          yield* host.relayChild(event, child, state);
+        }
+
+        const page = yield* ownPage(target, agent);
+        assert.deepEqual(
+          page.subagents?.map(({ callId, status, model, effort }) => [
+            callId,
+            status,
+            model,
+            effort,
+          ]),
+          [
+            ["call-6", CODING_AGENT_STATUS.COMPLETED, "openai/gpt-6.1-sol", "low"],
+            ["call-7", CODING_AGENT_STATUS.STARTING, "anthropic/claude-opus-5.5", "low"],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a worker whose title call fails, or that a deployment with no title model delegates, stays untitled, and the agent's page names no title for it",
     () =>
       Effect.gen(function* () {

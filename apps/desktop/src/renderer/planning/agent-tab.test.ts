@@ -12,6 +12,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSubagentStanding,
   type CodingAgentSummary,
   type CodingAgentUsage,
   PULL_REQUEST_STATE,
@@ -30,6 +31,7 @@ import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
+import { TOOL_STATE } from "../ai-elements/tool";
 import { ChangesChip, PublishedChip, type PublishedDoors, PublishedRow } from "./agent-published";
 import { AgentGlyph, AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
@@ -206,6 +208,7 @@ function tabElement(
       pageTitle: undefined,
       subagentTitles: new Map(),
       delegations: new Map(),
+      subagents: new Map(),
       reading: false,
       failed: false,
       onRetry: ignore,
@@ -1229,4 +1232,64 @@ test("a finished transcript ends on the pull request's row: its number and title
   assert.ok(pressed);
   act(() => pressed.click());
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/123"]);
+});
+
+test("a worker's row says where its own session stands over its call's state: running while the session runs though the call settled, at rest once it completed though the call still waits, and failed where it failed, each on the pair its delegation recorded", () => {
+  const settled: CodingAgentMessage = {
+    id: "m-tasks",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-delegate",
+        toolCallId: "call_s1",
+        state: "output-available",
+        input: { task: "Read the queue's docs." },
+        output: "Started task delegate-4hd8sa.",
+      },
+      {
+        type: "tool-delegate",
+        toolCallId: "call_s2",
+        state: "input-available",
+        input: { task: "Find the sweep's bound." },
+      },
+      {
+        type: "tool-delegate",
+        toolCallId: "call_s3",
+        state: "output-available",
+        input: { task: "Count the routes." },
+        output: "Started task delegate-9k2m7q.",
+      },
+    ],
+  };
+  const standing = (callId: string, status: CodingAgentSubagentStanding["status"]) =>
+    [callId, { callId, status, model: SONNET.id, effort: "low", startedAt: 1 }] as const;
+  const markup = renderToStaticMarkup(
+    createElement(AgentTranscriptView, {
+      messages: [PLAN, settled],
+      delegation: {
+        models: [SONNET],
+        standings: new Map([
+          standing("call_s1", CODING_AGENT_STATUS.RUNNING),
+          standing("call_s2", CODING_AGENT_STATUS.COMPLETED),
+          standing("call_s3", CODING_AGENT_STATUS.FAILED),
+        ]),
+      },
+      reading: false,
+      failed: false,
+      working: true,
+      onRetry: ignore,
+    }),
+  );
+  const container = document.createElement("div");
+  container.innerHTML = markup;
+  const states = [...container.querySelectorAll("[data-subagent-row]")].map((row) => [
+    row.getAttribute("data-call-id"),
+    row.querySelector("[data-tool-state]")?.getAttribute("data-tool-state") ?? null,
+    row.querySelector("[data-subagent-pair]")?.textContent,
+  ]);
+  assert.deepEqual(states, [
+    ["call_s1", TOOL_STATE.INPUT_AVAILABLE, "Sonnet 5.5 Low"],
+    ["call_s2", null, "Sonnet 5.5 Low"],
+    ["call_s3", TOOL_STATE.OUTPUT_ERROR, "Sonnet 5.5 Low"],
+  ]);
 });

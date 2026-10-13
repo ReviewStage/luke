@@ -998,6 +998,24 @@ export function agentWorkingPhase(
   return drawnParts(journal).length === 0 ? WORKING_PHASE.THINKING : WORKING_PHASE.WORKING;
 }
 
+/**
+ * How a worker's row marks where it stands, as its own session reads: still
+ * running while it starts or works, at rest once it completed or was
+ * stopped, whose own tab says which, and failed where it failed.
+ */
+export function workerToolState(status: CodingAgentStatus): ToolState {
+  switch (status) {
+    case CODING_AGENT_STATUS.STARTING:
+    case CODING_AGENT_STATUS.RUNNING:
+      return TOOL_STATE.INPUT_AVAILABLE;
+    case CODING_AGENT_STATUS.FAILED:
+      return TOOL_STATE.OUTPUT_ERROR;
+    case CODING_AGENT_STATUS.COMPLETED:
+    case CODING_AGENT_STATUS.CANCELLED:
+      return TOOL_STATE.OUTPUT_AVAILABLE;
+  }
+}
+
 /** Where a worker stands, read from its delegation's part: running until the call answers, then completed, or failed where the call ended in an error. */
 export function workerStatusOf(state: ToolState): CodingAgentStatus {
   if (state === TOOL_STATE.OUTPUT_AVAILABLE) return CODING_AGENT_STATUS.COMPLETED;

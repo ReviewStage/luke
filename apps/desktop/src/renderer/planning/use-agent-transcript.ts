@@ -9,6 +9,7 @@ import {
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentStatus,
+  type CodingAgentSubagentStanding,
   type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -66,6 +67,8 @@ export interface AgentTranscriptControl {
   subagentTitles: ReadonlyMap<string, string>;
   /** When each worker the agent's newest turn still waits on began, by the call that started it, as the last page said; none on a worker's. */
   delegations: ReadonlyMap<string, number>;
+  /** Where each of the agent's workers stands, by the call that started it, as its own session reads and the last page said; none on a worker's, and from a service older than it. */
+  subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -86,6 +89,7 @@ interface Held {
   pageTitle: string | undefined;
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
+  subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
   failed: boolean;
 }
 
@@ -103,6 +107,7 @@ function fresh(agentId: string): Held {
     pageTitle: undefined,
     subagentTitles: new Map(),
     delegations: new Map(),
+    subagents: new Map(),
     failed: false,
   };
 }
@@ -177,6 +182,9 @@ export function useAgentTranscript(input: {
           delegations: new Map(
             (answer.delegations ?? []).map((started) => [started.callId, started.startedAt]),
           ),
+          subagents: new Map(
+            (answer.subagents ?? []).map((standing) => [standing.callId, standing]),
+          ),
         }));
         latest.current.onStatus(agentId, answer);
         latest.current.onTitle(agentId, answer.title);
@@ -211,6 +219,7 @@ export function useAgentTranscript(input: {
     pageTitle: held.pageTitle,
     subagentTitles: held.subagentTitles,
     delegations: held.delegations,
+    subagents: held.subagents,
     reading: active && held.messages.length === 0,
     failed: held.failed,
     onRetry,

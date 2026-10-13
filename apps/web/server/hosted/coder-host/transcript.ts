@@ -3,6 +3,7 @@ import {
   type CodingAgent,
   type CodingAgentDelegation,
   delegationStartsOf,
+  delegationsOf,
   delegationTitlesOf,
   latestTurnsOf,
   readCodingAgentContext,
@@ -31,6 +32,7 @@ import {
   type CodingAgentDelegationStart,
   type CodingAgentFailure,
   type CodingAgentStatus,
+  type CodingAgentSubagentStanding,
   type CodingAgentSubagentTitle,
   type CodingAgentUsage,
   type TurnRecord,
@@ -133,6 +135,8 @@ export interface TranscriptPage {
   readonly delegations?: readonly CodingAgentDelegationStart[];
   /** Every one of its workers titled so far, by the call that delegated it, on its own transcript; absent while none is and on a worker's. */
   readonly subagentTitles?: readonly CodingAgentSubagentTitle[];
+  /** Where every one of its workers stands, read from the worker's own session, on its own transcript; absent while it has delegated nothing and on a worker's. */
+  readonly subagents?: readonly CodingAgentSubagentStanding[];
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -266,6 +270,37 @@ const delegationsUnderWay = (
   });
 
 /**
+ * Where every worker of the agent's stands: the status its own session's
+ * newest turn reads as, as an agent's own does (`status.ts`), with a worker
+ * whose session has opened no turn yet starting within the grace and failed
+ * past it, the pair its delegation recorded, and when it began. Note that
+ * the worker's session is read rather than the call that started it, because
+ * a call may settle the moment its worker is under way.
+ */
+const subagentStandingsOf = (
+  target: ConversationTarget,
+): TranscriptEffect<readonly CodingAgentSubagentStanding[]> =>
+  Effect.gen(function* () {
+    const delegations = yield* delegationsOf(target);
+    if (delegations.length === 0) return [];
+    const turns = yield* latestTurnsOf(
+      target.userId,
+      delegations.map((each) => each.childConversationId),
+    );
+    const now = yield* Clock.currentTimeMillis;
+    return delegations.map((each) => ({
+      callId: each.callId,
+      status: codingAgentStatusOf(turns.get(each.childConversationId), {
+        createdAt: each.createdAt,
+        now,
+      }),
+      model: each.model,
+      effort: each.effort,
+      startedAt: each.createdAt.getTime(),
+    }));
+  });
+
+/**
  * The page with what the agent has cost: every settled turn of its
  * conversation and its workers', and its newest turn, priced at the catalog
  * as the instance holds it now; a catalog it cannot read prices nothing,
@@ -293,6 +328,7 @@ const withUsage = (
         ? yield* delegationsUnderWay(target, tools, turn)
         : [];
     const subagentTitles = own === undefined ? [] : yield* delegationTitlesOf(target);
+    const subagents = own === undefined ? [] : yield* subagentStandingsOf(target);
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
@@ -300,6 +336,7 @@ const withUsage = (
       ...(context === undefined ? undefined : { context }),
       ...(delegations.length === 0 ? undefined : { delegations }),
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),
+      ...(subagents.length === 0 ? undefined : { subagents }),
     };
   });
 

@@ -5,6 +5,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
+  type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
@@ -22,6 +23,7 @@ import {
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
+import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
@@ -54,6 +56,7 @@ import {
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
+  workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
 import type { SkillSource } from "./skill-picker";
@@ -188,6 +191,8 @@ export interface DelegationDoors {
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
   /** Opens a coding agent's tab, by the agent, which the row of a call that started one asks for; none where nothing opens one. */
   onOpenAgent?: ((agentId: string) => void) | undefined;
+  /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
+  standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
 }
 
 /** One tool call: its row, and its input and answer under it once opened. */
@@ -211,6 +216,20 @@ function ToolCallView({
   );
 }
 
+/** When each running worker began: the newest turn's waits, and every worker its own session says still runs. */
+function workerStarts(
+  waits: ReadonlyMap<string, number>,
+  standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
+): ReadonlyMap<string, number> {
+  const running = [...standings.values()].filter(
+    (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
+  );
+  return new Map([
+    ...waits,
+    ...running.map((standing) => [standing.callId, standing.startedAt] as const),
+  ]);
+}
+
 /** One delegation: a subagent's row saying the task and the pair, the one button into its tab. */
 function DelegationRow({
   part,
@@ -221,21 +240,20 @@ function DelegationRow({
 }): ReactNode {
   const view = delegationView(part, doors?.own);
   const onOpen = doors?.onOpen;
+  // The worker's own session says where it stands, since the call may settle the moment it is under way.
+  const standing = doors?.standings?.get(part.callId);
+  const choice =
+    standing === undefined ? view.choice : { model: standing.model, effort: standing.effort };
+  const status = standing?.status ?? workerStatusOf(part.state);
   return (
     <TranscriptSubagent
       callId={part.callId}
       job={cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb}
-      pair={
-        view.choice === undefined ? undefined : { choice: view.choice, models: doors?.models ?? [] }
-      }
-      state={part.state}
+      pair={choice === undefined ? undefined : { choice, models: doors?.models ?? [] }}
+      state={standing === undefined ? part.state : workerToolState(standing.status)}
       startedAt={doors?.starts?.get(part.callId)}
       errorText={part.errorText}
-      onOpen={
-        onOpen === undefined
-          ? undefined
-          : () => onOpen(part.callId, view.task, workerStatusOf(part.state))
-      }
+      onOpen={onOpen === undefined ? undefined : () => onOpen(part.callId, view.task, status)}
     />
   );
 }
@@ -676,8 +694,9 @@ export function AgentTabView({
         delegation={{
           models,
           own: { model: agent.model, effort: agent.effort },
-          starts: delegationStarts,
+          starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
           onOpen: onOpenSubagent,
+          standings: transcript.subagents,
         }}
         reading={transcript.reading}
         failed={transcript.failed}

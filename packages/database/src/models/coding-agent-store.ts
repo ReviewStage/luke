@@ -894,6 +894,54 @@ export function delegationStartsOf(
   );
 }
 
+/** One worker an agent delegated to, as its delegation recorded it: the call, its child conversation, and the pair it runs on. */
+export interface DelegationRecord {
+  readonly callId: string;
+  readonly childConversationId: string;
+  readonly model: string;
+  readonly effort: string;
+  /** When the worker's conversation was opened, which is when its delegation was made. */
+  readonly createdAt: Date;
+}
+
+const findDelegations = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, parentConversationId: Schema.String }),
+  Result: Schema.Struct({
+    callId: Schema.String,
+    childConversationId: Schema.String,
+    model: Schema.String,
+    effort: Schema.String,
+    createdAt: InstantColumnSchema,
+  }),
+  execute: ({ userId, parentConversationId }) =>
+    db
+      .select({
+        callId: codingAgentDelegation.callId,
+        childConversationId: codingAgentDelegation.childConversationId,
+        model: codingAgentDelegation.model,
+        effort: codingAgentDelegation.effort,
+        createdAt: conversations.createdAt,
+      })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNotNull(codingAgentDelegation.callId),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(asc(conversations.createdAt)),
+});
+
+/** Every worker the account's conversation delegated to by a call it kept, oldest first. */
+export function delegationsOf(
+  parent: ConversationTarget,
+): CodingAgentStoreEffect<readonly DelegationRecord[]> {
+  return findDelegations({ userId: parent.userId, parentConversationId: parent.conversationId });
+}
+
 const findDelegationTitles = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, parentConversationId: Schema.String }),
   Result: Schema.Struct({ callId: Schema.String, title: Schema.String }),
