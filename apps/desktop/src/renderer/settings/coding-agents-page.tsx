@@ -10,7 +10,6 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
-import { CubeIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -36,6 +35,7 @@ import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { Spinner, SpinnerRegion } from "../spinner";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
+import { SettingsGroup } from "./settings-group";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
@@ -78,21 +78,21 @@ const PROVIDER_NAME = {
 } as const satisfies Record<ModelProvider, string>;
 
 /**
- * What the model row says under its name: that the default runs on the
- * account's own key where the provider last accepted it, and that the key
- * needs a hand where it did not, since such a key fails the agent's steps
- * rather than letting them fall back to Luke's.
+ * What the model row says under its name, where the key it runs on is the
+ * account's own: that it runs there while the provider last accepted it, and
+ * that the key needs a hand where it did not, since such a key fails the
+ * agent's steps rather than letting them fall back to Luke's. On Luke's key
+ * the row says nothing, there being nothing the developer did to remember.
  */
 function modelRowNote(
   provider: ModelProvider | undefined,
   status: ProviderKeyStatus | undefined,
-): string {
-  const plain = "What a click on Start runs an agent on.";
-  if (provider === undefined || status === undefined) return plain;
+): string | undefined {
+  if (provider === undefined || status === undefined) return undefined;
   const name = PROVIDER_NAME[provider];
   return status === PROVIDER_KEY_STATUS.VERIFIED
-    ? `What a click on Start runs an agent on, on your own ${name} key.`
-    : `${plain} Your ${name} key needs attention under API keys.`;
+    ? `Runs on your own ${name} key.`
+    : `Your ${name} key needs attention under API keys.`;
 }
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
@@ -114,6 +114,7 @@ function DefaultRows({
 }): React.JSX.Element {
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
+  const note = modelRowNote(listed?.provider, ownKey);
   // The stored effort stands alone until the catalog is read, and where the catalog has
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
@@ -140,7 +141,7 @@ function DefaultRows({
         copy={
           <>
             <strong>Model</strong>
-            <small>{modelRowNote(listed?.provider, ownKey)}</small>
+            {note === undefined ? null : <small>{note}</small>}
           </>
         }
         value={read.base}
@@ -182,11 +183,9 @@ function DefaultRows({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>{FAST_WORD}</strong>
-          <small>
-            {base !== undefined && base.fast === undefined
-              ? `No fast version of ${modelLabel(base.model.id, models)}.`
-              : "Run the model's fast version."}
-          </small>
+          {base !== undefined && base.fast === undefined ? (
+            <small>{`No fast version of ${modelLabel(base.model.id, models)}.`}</small>
+          ) : null}
         </span>
         <button
           type="button"
@@ -207,7 +206,6 @@ function DefaultRows({
       <div className="settings-row settings-row-wrapping">
         <span className="settings-copy">
           <strong>Effort</strong>
-          <small>How hard the model thinks.</small>
         </span>
         <fieldset
           className="settings-segments"
@@ -333,13 +331,9 @@ function CodingAgentsSection({
   );
 
   return (
-    <section className="settings-section">
-      <h2>
-        <CubeIcon />
-        Default model
-      </h2>
+    <SettingsGroup title="Default model">
       {!signedIn ? (
-        <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+        <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : choice !== undefined ? (
         <>
           <DefaultRows
@@ -357,16 +351,18 @@ function CodingAgentsSection({
           ) : null}
         </>
       ) : readFailed ? (
-        <>
+        <div className="settings-card-line">
           <p className="error-message" role="alert">
             {PAGE_LINE.FAILED}
           </p>
           <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
-        </>
+        </div>
       ) : (
-        <SpinnerRegion label="Loading your default" />
+        <div className="settings-card-line">
+          <SpinnerRegion label="Loading your default" />
+        </div>
       )}
-    </section>
+    </SettingsGroup>
   );
 }
 

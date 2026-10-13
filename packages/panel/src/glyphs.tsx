@@ -37,17 +37,6 @@ function Glyph({
   );
 }
 
-export function KeyIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <circle cx="8" cy="12" r="4.2" />
-      <path d="M12.2 12H21" />
-      <path d="M17.6 12v3.1" />
-      <path d="M20.4 12v2.2" />
-    </Glyph>
-  );
-}
-
 /**
  * Two halves of a plug joined, for the services an account connects: Settings'
  * Integrations page. Its paths are Tabler Icons' `plug-connected`
@@ -367,27 +356,6 @@ export function MicrophoneOffIcon(): React.JSX.Element {
       <path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0" />
       <path d="M12 17.8V21" />
       <path d="M4 3.4 20 19.4" />
-    </Glyph>
-  );
-}
-
-/** A bell: what the notifications section is for. */
-export function BellIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M6.2 16.6V11a5.8 5.8 0 0 1 11.6 0v5.6l1.6 1.8H4.6Z" />
-      <path d="M10 20.4a2.2 2.2 0 0 0 4 0" />
-    </Glyph>
-  );
-}
-
-/** A cube: a model, on the heading of the default a coding agent runs on. */
-export function CubeIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M12 3.2 19.6 7.6v8.8L12 20.8l-7.6-4.4V7.6Z" />
-      <path d="M4.4 7.6 12 12l7.6-4.4" />
-      <path d="M12 12v8.8" />
     </Glyph>
   );
 }

@@ -290,9 +290,11 @@ test("searching for notifications finds the switch on Coding agents, and pressin
 test("Coding agents holds the default model, the API keys, and notifications as three groups, and General holds none of them", () => {
   const container = mount();
   const headings = () =>
-    [...container.querySelectorAll(".settings-page .settings-section > h2")].map(
-      (heading) => heading.textContent,
-    );
+    [
+      ...container.querySelectorAll(
+        ".settings-page :is(.settings-group-title, .settings-section > h2)",
+      ),
+    ].map((heading) => heading.textContent);
   assert.ok(!pageList(container).includes("API keys"), "API keys is no page of its own");
   const codingAgents = [...sidebar(container).querySelectorAll("li > button")].find(
     (button) => button.textContent === "Coding agents",
