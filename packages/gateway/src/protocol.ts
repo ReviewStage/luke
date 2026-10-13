@@ -72,6 +72,10 @@ export const GATEWAY_METHOD = {
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
   /** The account left one workspace on the service; the view's workspaces and plans are read again. */
   WORKSPACES_LEAVE: "workspaces.leave",
+  /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
+  GITHUB_CONNECT: "github.connect",
+  /** The page that disconnects the account's GitHub, which asks the service nothing; the next workspaces read is owed at once. */
+  GITHUB_DISCONNECT: "github.disconnect",
   /** The models a coding agent may run on, read from the service's catalog now. */
   CODING_AGENTS_MODELS: "codingAgents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */

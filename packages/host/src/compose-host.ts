@@ -7,6 +7,7 @@ import {
 } from "@sidecar/gateway";
 import {
   HostedCodingAgentClient,
+  HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
   HostedPlanClient,
@@ -135,7 +136,13 @@ export const hostAssemblyLayer: Layer.Layer<
       endPlanCall: (planId) => live.service.endPlanCall(planId),
       client: Object.assign(
         new HostedPlanClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
-        { workspaces: workspaceClient },
+        {
+          workspaces: workspaceClient,
+          github: new HostedGitHubConnectionClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            ...account.token,
+          }),
+        },
       ),
       conversations: codingAgentClient,
     });

@@ -540,6 +540,11 @@ export function App(): React.JSX.Element {
                 setSettingsWorkspaceId(undefined);
               },
             },
+            github: {
+              connection: plans.github,
+              onConnect: plans.onConnectAccountGitHub,
+              onDisconnect: plans.onDisconnectAccountGitHub,
+            },
           }}
         />
       </div>
