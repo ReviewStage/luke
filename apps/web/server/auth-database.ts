@@ -1,11 +1,8 @@
-import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { type DB, drizzleAdapter } from "@better-auth/drizzle-adapter";
 import * as schema from "@sidecar/database/schemas/auth";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
-import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Pool, PoolClient } from "pg";
 import { getPool } from "./db/index.js";
-
-type AuthSchema = typeof schema;
 
 /**
  * Better Auth's adapter over the auth schema, and the one place the choice of
@@ -21,7 +18,7 @@ type AuthSchema = typeof schema;
  * and the test over PGlite that writes an access token through it is what
  * holds the two together.
  */
-export function authDatabaseAdapter(database: PgDatabase<PgQueryResultHKT, AuthSchema>) {
+export function authDatabaseAdapter(database: DB) {
   return drizzleAdapter(database, { provider: "pg", schema });
 }
 
@@ -50,4 +47,4 @@ class LazyPool {
 const lazyPool = new LazyPool() as NodePgClient;
 
 /** Exported for the one test that proves the first query, not the import, is where a missing `DATABASE_URL` fails. */
-export const authDatabase = drizzle(lazyPool, { schema });
+export const authDatabase = drizzle({ client: lazyPool });

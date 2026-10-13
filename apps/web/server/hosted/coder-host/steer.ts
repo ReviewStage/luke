@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
@@ -8,7 +9,6 @@ import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
 import { eveContent } from "../attached-files.js";
@@ -96,7 +96,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
 ): Effect.fn.Return<
   SteerOutcome,
   HostedRefusal,
-  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   const target = { userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(

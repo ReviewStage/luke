@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   type CodingAgent,
   type CodingAgentBriefText,
@@ -39,6 +39,7 @@ import { Effect, Option } from "effect";
  */
 
 const openUser = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
@@ -82,16 +83,20 @@ function started(answer: Option.Option<CodingAgentStarted>): CodingAgent {
 
 const agentRows = (userId: string) =>
   Effect.map(
-    db.select({ rows: count() }).from(codingAgent).where(eq(codingAgent.userId, userId)),
+    Database.use((db) =>
+      db.select({ rows: count() }).from(codingAgent).where(eq(codingAgent.userId, userId)),
+    ),
     (rows) => rows[0]?.rows ?? 0,
   );
 
 const conversationKind = (conversationId: string) =>
   Effect.map(
-    db
-      .select({ kind: conversations.kind, deletedAt: conversations.deletedAt })
-      .from(conversations)
-      .where(eq(conversations.id, conversationId)),
+    Database.use((db) =>
+      db
+        .select({ kind: conversations.kind, deletedAt: conversations.deletedAt })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId)),
+    ),
     (rows) => rows[0],
   );
 

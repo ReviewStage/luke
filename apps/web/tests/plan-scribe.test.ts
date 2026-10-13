@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { createPlan, type NewPlan, readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
@@ -31,6 +31,7 @@ const PROBLEM = "Only an admin can add someone to a workspace.";
 const OUTCOME = "A member invites a teammate by email.";
 
 const openPlan = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const plan = yield* createPlan(userId, RELAY_PLAN);

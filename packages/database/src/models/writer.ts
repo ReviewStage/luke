@@ -51,8 +51,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzl
 import { alias } from "drizzle-orm/pg-core";
 import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
@@ -108,9 +107,9 @@ import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
  * is composed, and refuses to exist over a catalog that fails it.
  *
  * Every statement is a Drizzle builder over the tables
- * `schemas/storage.ts` declares, yielded as the `Effect` over the ambient
- * `SqlClient` that `packages/database/src/core/drizzle.ts`'s bridge makes it; the transaction is
- * that client's own and the bridge reads it from the running fiber, which is
+ * `schemas/storage.ts` declares, yielded as the `Effect` Drizzle's own driver
+ * makes it over the same `PgClient` the ambient `SqlClient` is; the transaction is
+ * that client's own and the driver reads it from the running fiber, which is
  * what puts the sequence allocation and the writes that follow it inside the
  * conversation's lock rather than beside it. Each row a statement answers is
  * still decoded by a `Schema` rather than trusted, and a write's `jsonb`
@@ -462,7 +461,7 @@ type Parts = StoredUIMessage["parts"];
 const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN } as const;
 
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type WriteFailure = SqlError | Schema.SchemaError;
+type WriteFailure = QueryError | Schema.SchemaError;
 
 /**
  * A row a statement had to answer. Its absence is this writer's own
@@ -566,17 +565,19 @@ const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
   Result: RowIdSchema,
   execute: (target) =>
-    db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, target.conversationId),
-          eq(conversations.userId, target.userId),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, target.conversationId),
+            eq(conversations.userId, target.userId),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .for("update"),
+    ),
 });
 
 /**
@@ -586,7 +587,7 @@ const lockConversation = SqlSchema.findOneOption({
  * over the table's own `(conversation_id, seq)` pair.
  */
 const pastTheHighestMessageSeq = (conversationId: string) =>
-  db
+  queryBuilder
     .select({ free: sql<number>`coalesce(max(${messages.seq}), 0) + 1` })
     .from(messages)
     .where(eq(messages.conversationId, conversationId));
@@ -595,24 +596,28 @@ const allocateMessageSequence = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, now: Schema.Date }),
   Result: SequenceSchema,
   execute: (request) =>
-    db
-      .update(conversations)
-      .set({
-        nextMessageSeq: sql`greatest(${conversations.nextMessageSeq}, ${pastTheHighestMessageSeq(request.conversationId)}) + 1`,
-        lastActivityAt: request.now,
-      })
-      .where(eq(conversations.id, request.conversationId))
-      .returning({ next: conversations.nextMessageSeq }),
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({
+          nextMessageSeq: sql`greatest(${conversations.nextMessageSeq}, ${pastTheHighestMessageSeq(request.conversationId)}) + 1`,
+          lastActivityAt: request.now,
+        })
+        .where(eq(conversations.id, request.conversationId))
+        .returning({ next: conversations.nextMessageSeq }),
+    ),
 });
 
 const findTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
   Result: TurnRowSchema,
   execute: (request) =>
-    db
-      .select({ status: turns.status })
-      .from(turns)
-      .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
+    Database.use((db) =>
+      db
+        .select({ status: turns.status })
+        .from(turns)
+        .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
+    ),
 });
 
 /** The turn's status and when it settled, for the read of whether words spoken after it were its reply read aloud. */
@@ -623,10 +628,12 @@ const findSettledTurn = SqlSchema.findOneOption({
     settledAt: Schema.NullOr(InstantColumnSchema),
   }),
   execute: (request) =>
-    db
-      .select({ status: turns.status, settledAt: turns.settledAt })
-      .from(turns)
-      .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
+    Database.use((db) =>
+      db
+        .select({ status: turns.status, settledAt: turns.settledAt })
+        .from(turns)
+        .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
+    ),
 });
 
 /**
@@ -641,20 +648,22 @@ const findMessageByClientId = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: MessageRowSchema,
   execute: (request) =>
-    db
-      .select({
-        id: messages.id,
-        parts: messages.parts,
-        metadata: messages.metadata,
-        finishedAt: messages.finishedAt,
-      })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, request.conversationId),
-          eq(messages.clientId, request.clientId),
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          parts: messages.parts,
+          metadata: messages.metadata,
+          finishedAt: messages.finishedAt,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, request.conversationId),
+            eq(messages.clientId, request.clientId),
+          ),
         ),
-      ),
+    ),
 });
 
 /**
@@ -667,32 +676,36 @@ const findVoiceSessionStart = SqlSchema.findOneOption({
   Request: Schema.Struct({ id: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ startedAt: InstantColumnSchema }),
   execute: (request) =>
-    db
-      .select({ startedAt: voiceSessions.startedAt })
-      .from(voiceSessions)
-      .where(and(eq(voiceSessions.id, request.id), eq(voiceSessions.userId, request.userId))),
+    Database.use((db) =>
+      db
+        .select({ startedAt: voiceSessions.startedAt })
+        .from(voiceSessions)
+        .where(and(eq(voiceSessions.id, request.id), eq(voiceSessions.userId, request.userId))),
+    ),
 });
 
 const insertMessageRow = SqlSchema.findOneOption({
   Request: MessageInsertSchema,
   Result: RowIdSchema,
   execute: (row) =>
-    db
-      .insert(messages)
-      .values({
-        userId: row.userId,
-        conversationId: row.conversationId,
-        seq: row.seq,
-        turnId: row.turnId,
-        clientId: row.clientId,
-        role: row.role,
-        parts: row.parts,
-        metadata: row.metadata,
-        createdAt: row.createdAt,
-        placedAt: row.placedAt,
-        finishedAt: row.finishedAt,
-      })
-      .returning({ id: messages.id }),
+    Database.use((db) =>
+      db
+        .insert(messages)
+        .values({
+          userId: row.userId,
+          conversationId: row.conversationId,
+          seq: row.seq,
+          turnId: row.turnId,
+          clientId: row.clientId,
+          role: row.role,
+          parts: row.parts,
+          metadata: row.metadata,
+          createdAt: row.createdAt,
+          placedAt: row.placedAt,
+          finishedAt: row.finishedAt,
+        })
+        .returning({ id: messages.id }),
+    ),
 });
 
 /**
@@ -715,7 +728,7 @@ const insertMessageRow = SqlSchema.findOneOption({
 const BUMPED_REVISION = "bumped";
 
 const bumpedRevision = (conversationId: string) =>
-  db.$with(BUMPED_REVISION, { journalRevision: conversations.journalRevision }).as(
+  queryBuilder.$with(BUMPED_REVISION, { journalRevision: conversations.journalRevision }).as(
     sql`update ${conversations}
         set ${sql.identifier(conversations.journalRevision.name)} = ${conversations.journalRevision} + 1
         where ${eq(conversations.id, conversationId)}
@@ -734,11 +747,13 @@ const updateMessageParts = SqlSchema.void({
   }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
-    return db
-      .with(bumped)
-      .update(messages)
-      .set({ parts: row.parts, revision: landedRevision(bumped) })
-      .where(eq(messages.id, row.id));
+    return Database.use((db) =>
+      db
+        .with(bumped)
+        .update(messages)
+        .set({ parts: row.parts, revision: landedRevision(bumped) })
+        .where(eq(messages.id, row.id)),
+    );
   },
 });
 
@@ -751,15 +766,17 @@ const finishMessage = SqlSchema.void({
   }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
-    return db
-      .with(bumped)
-      .update(messages)
-      .set({
-        parts: row.parts,
-        finishedAt: row.finishedAt,
-        revision: landedRevision(bumped),
-      })
-      .where(eq(messages.id, row.id));
+    return Database.use((db) =>
+      db
+        .with(bumped)
+        .update(messages)
+        .set({
+          parts: row.parts,
+          finishedAt: row.finishedAt,
+          revision: landedRevision(bumped),
+        })
+        .where(eq(messages.id, row.id)),
+    );
   },
 });
 
@@ -773,16 +790,18 @@ const completeMessage = SqlSchema.void({
   }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
-    return db
-      .with(bumped)
-      .update(messages)
-      .set({
-        parts: row.parts,
-        metadata: row.metadata,
-        finishedAt: row.finishedAt,
-        revision: landedRevision(bumped),
-      })
-      .where(eq(messages.id, row.id));
+    return Database.use((db) =>
+      db
+        .with(bumped)
+        .update(messages)
+        .set({
+          parts: row.parts,
+          metadata: row.metadata,
+          finishedAt: row.finishedAt,
+          revision: landedRevision(bumped),
+        })
+        .where(eq(messages.id, row.id)),
+    );
   },
 });
 
@@ -796,11 +815,13 @@ const reviseJournal = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
-    return db
-      .with(bumped)
-      .update(messages)
-      .set({ revision: landedRevision(bumped) })
-      .where(eq(messages.id, row.id));
+    return Database.use((db) =>
+      db
+        .with(bumped)
+        .update(messages)
+        .set({ revision: landedRevision(bumped) })
+        .where(eq(messages.id, row.id)),
+    );
   },
 });
 
@@ -813,11 +834,13 @@ const delegateSpokenRow = SqlSchema.void({
   }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
-    return db
-      .with(bumped)
-      .update(messages)
-      .set({ metadata: row.metadata, revision: landedRevision(bumped) })
-      .where(eq(messages.id, row.id));
+    return Database.use((db) =>
+      db
+        .with(bumped)
+        .update(messages)
+        .set({ metadata: row.metadata, revision: landedRevision(bumped) })
+        .where(eq(messages.id, row.id)),
+    );
   },
 });
 
@@ -830,15 +853,17 @@ const insertStartedTurn = SqlSchema.void({
     startedAt: Schema.Date,
   }),
   execute: (row) =>
-    db.insert(turns).values({
-      id: row.turnId,
-      userId: row.userId,
-      conversationId: row.conversationId,
-      origin: row.origin,
-      status: TURN_STATUS.RUNNING,
-      queuedAt: row.startedAt,
-      startedAt: row.startedAt,
-    }),
+    Database.use((db) =>
+      db.insert(turns).values({
+        id: row.turnId,
+        userId: row.userId,
+        conversationId: row.conversationId,
+        origin: row.origin,
+        status: TURN_STATUS.RUNNING,
+        queuedAt: row.startedAt,
+        startedAt: row.startedAt,
+      }),
+    ),
 });
 
 const insertQueuedTurn = SqlSchema.void({
@@ -855,28 +880,32 @@ const insertQueuedTurn = SqlSchema.void({
     queuedAt: Schema.Date,
   }),
   execute: (row) =>
-    db.insert(turns).values({
-      id: row.turnId,
-      userId: row.userId,
-      conversationId: row.conversationId,
-      origin: row.origin,
-      status: TURN_STATUS.QUEUED,
-      eveTurnId: row.eveTurnId,
-      model: row.model,
-      reasoningEffort: row.reasoningEffort,
-      promptHash: row.promptHash,
-      toolSetHash: row.toolSetHash,
-      queuedAt: row.queuedAt,
-    }),
+    Database.use((db) =>
+      db.insert(turns).values({
+        id: row.turnId,
+        userId: row.userId,
+        conversationId: row.conversationId,
+        origin: row.origin,
+        status: TURN_STATUS.QUEUED,
+        eveTurnId: row.eveTurnId,
+        model: row.model,
+        reasoningEffort: row.reasoningEffort,
+        promptHash: row.promptHash,
+        toolSetHash: row.toolSetHash,
+        queuedAt: row.queuedAt,
+      }),
+    ),
 });
 
 const startTurn = SqlSchema.void({
   Request: Schema.Struct({ turnId: Schema.String, startedAt: Schema.Date }),
   execute: (row) =>
-    db
-      .update(turns)
-      .set({ status: TURN_STATUS.RUNNING, startedAt: row.startedAt })
-      .where(eq(turns.id, row.turnId)),
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ status: TURN_STATUS.RUNNING, startedAt: row.startedAt })
+        .where(eq(turns.id, row.turnId)),
+    ),
 });
 
 /**
@@ -898,17 +927,19 @@ const settleTurn = SqlSchema.void({
     responseIds: Schema.Array(Schema.String),
   }),
   execute: (row) =>
-    db
-      .update(turns)
-      .set({
-        status: row.status,
-        settledAt: row.settledAt,
-        failure: row.failure,
-        failureDetail: row.failureDetail,
-        usage: row.usage,
-        responseIds: [...row.responseIds],
-      })
-      .where(eq(turns.id, row.turnId)),
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({
+          status: row.status,
+          settledAt: row.settledAt,
+          failure: row.failure,
+          failureDetail: row.failureDetail,
+          usage: row.usage,
+          responseIds: [...row.responseIds],
+        })
+        .where(eq(turns.id, row.turnId)),
+    ),
 });
 
 /**
@@ -933,19 +964,21 @@ const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
   Result: SpokenLineRowSchema,
   execute: (request) =>
-    db
-      .select({ clientId: messages.clientId, delegationId: SPOKEN_DELEGATION_ID })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, request.conversationId),
-          eq(messages.role, MESSAGE_ROLE.USER),
-          sql`${SPOKEN_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
-          sql`${SPOKEN_FROM_MS} <= ${request.atOrBeforeMs}`,
-        ),
-      )
-      .orderBy(desc(SPOKEN_FROM_MS), desc(messages.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ clientId: messages.clientId, delegationId: SPOKEN_DELEGATION_ID })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, request.conversationId),
+            eq(messages.role, MESSAGE_ROLE.USER),
+            sql`${SPOKEN_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
+            sql`${SPOKEN_FROM_MS} <= ${request.atOrBeforeMs}`,
+          ),
+        )
+        .orderBy(desc(SPOKEN_FROM_MS), desc(messages.seq))
+        .limit(1),
+    ),
 });
 
 function pendingToolPart(name: string, callId: string, input: UnparsedWireValue): ToolPart {
@@ -1005,7 +1038,7 @@ interface WriterContext {
 }
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
-type Write<Result> = Effect.Effect<Result, WriteFailure, SqlClient.SqlClient>;
+type Write<Result> = Effect.Effect<Result, WriteFailure, DatabaseServices>;
 
 type Admitted = Result.Result<StoredUIMessage, MessageRefused>;
 
@@ -1048,7 +1081,7 @@ function admitted(
  */
 const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<number, WriteFailure, DatabaseServices> {
   const row = yield* allocateMessageSequence({
     conversationId: context.target.conversationId,
     now: context.now,
@@ -1093,7 +1126,7 @@ const placedInstant = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   metadata: StoredMessageMetadata | undefined,
   createdAt: Date,
-): Effect.fn.Return<Date, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<Date, WriteFailure, DatabaseServices> {
   if (metadata === undefined || !("channel" in metadata)) return createdAt;
   if (metadata.channel !== MESSAGE_CHANNEL.VOICE) return createdAt;
   const { voice_session_id: sessionId, from_ms: fromMs } = metadata;
@@ -1113,7 +1146,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     message: StoredUIMessage;
     finishedAt: Date | undefined;
   },
-): Effect.fn.Return<InsertedMessage, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<InsertedMessage, WriteFailure, DatabaseServices> {
   const seq = yield* allocateMessageSeq(context);
   const metadata: StoredMessageMetadata | undefined =
     row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
@@ -1166,7 +1199,7 @@ function openTurn(
 const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
-): Effect.fn.Return<Journal, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<Journal, WriteFailure, DatabaseServices> {
   const standing = yield* messageByClientId(context, turnId);
   if (Option.isSome(standing)) return Result.succeed(standing.value);
   const closed = yield* openTurn(context, turnId);
@@ -1185,7 +1218,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: MessageRow,
   parts: Parts,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const read = yield* admitted(context, {
     id: row.id,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -1204,7 +1237,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
 const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_STARTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   const startedAt = new Date(event.at);
   if (Option.isNone(standing)) {
@@ -1227,7 +1260,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_ENDED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   if (Option.isNone(standing)) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN });
   if (TERMINAL_TURN_STATUSES.has(standing.value.status)) {
@@ -1291,7 +1324,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
 const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
@@ -1304,7 +1337,7 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
@@ -1321,7 +1354,7 @@ const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const standing = yield* messageByClientId(context, event.turnId);
   if (Option.isNone(standing)) {
     const turn = yield* turnRow(context, event.turnId);
@@ -1355,7 +1388,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
 const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const { id } = event.item;
   if (!isWireString(id)) return Result.succeed(STORE_WRITE_EFFECT.IGNORED);
   const opened = yield* journal(context, event.turnId);
@@ -1378,7 +1411,7 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
@@ -1419,7 +1452,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const read = yield* admitted(context, event.message);
   if (Result.isFailure(read)) return Result.fail(read.failure);
   const message = read.success;
@@ -1509,7 +1542,7 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
 const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
   context: WriterContext,
   enqueue: TurnEnqueue,
-): Effect.fn.Return<TurnEnqueueResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<TurnEnqueueResult, WriteFailure, DatabaseServices> {
   const turnId = enqueue.turnId ?? randomUUID();
   if (Option.isSome(yield* turnRow(context, turnId))) {
     return Result.succeed({ turnId, effect: STORE_WRITE_EFFECT.REPEATED });
@@ -1532,7 +1565,7 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
 const upsertSpokenRow = /* @__PURE__ */ Effect.fn("web/upsertSpokenRow")(function* (
   context: WriterContext,
   write: SpokenRowWrite,
-): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<UserMessageWriteResult, WriteFailure, DatabaseServices> {
   const standing = yield* messageByClientId(context, write.clientId);
   const parts = [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }];
   // What Luke's words were read from is read again on every write, since the turn they answer may
@@ -1674,7 +1707,7 @@ function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write
 function askTurnOf(key: {
   readonly conversationId: string;
   readonly clientId: string;
-}): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+}): Effect.Effect<string | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(findAskTurn(key), (found) =>
     Option.match(found, { onNone: () => undefined, onSome: (row) => row.turnId ?? undefined }),
   );
@@ -1684,11 +1717,13 @@ const findAskTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: Schema.Struct({ turnId: Schema.NullOr(Schema.String) }),
   execute: (key) =>
-    db
-      .select({ turnId: asks.turnId })
-      .from(asks)
-      .innerJoin(turns, eq(turns.id, asks.turnId))
-      .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
+    Database.use((db) =>
+      db
+        .select({ turnId: asks.turnId })
+        .from(asks)
+        .innerJoin(turns, eq(turns.id, asks.turnId))
+        .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
+    ),
 });
 
 /**
@@ -1702,33 +1737,37 @@ const findUnattachedAskRows = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, role: MessageRoleSchema }),
   execute: (key) =>
-    db
-      .select({ id: messages.id, role: messages.role })
-      .from(messages)
-      .innerJoin(
-        asks,
-        and(
-          eq(asks.conversationId, messages.conversationId),
-          // The ask names the row either way, so the join is one `in` over a
-          // list of two expressions, which the builder has no operator for.
-          sql`${asks.clientId} in (${messages.clientId}, ${SPOKEN_DELEGATION_ID})`,
-        ),
-      )
-      .where(
-        and(
-          eq(asks.conversationId, key.conversationId),
-          eq(asks.turnId, key.turnId),
-          isNull(messages.turnId),
-          sql`${SPOKEN_READ_FROM} is null`,
-        ),
-      )
-      .orderBy(asc(messages.seq)),
+    Database.use((db) =>
+      db
+        .select({ id: messages.id, role: messages.role })
+        .from(messages)
+        .innerJoin(
+          asks,
+          and(
+            eq(asks.conversationId, messages.conversationId),
+            // The ask names the row either way, so the join is one `in` over a
+            // list of two expressions, which the builder has no operator for.
+            sql`${asks.clientId} in (${messages.clientId}, ${SPOKEN_DELEGATION_ID})`,
+          ),
+        )
+        .where(
+          and(
+            eq(asks.conversationId, key.conversationId),
+            eq(asks.turnId, key.turnId),
+            isNull(messages.turnId),
+            sql`${SPOKEN_READ_FROM} is null`,
+          ),
+        )
+        .orderBy(asc(messages.seq)),
+    ),
 });
 
 const placeMessageInTurn = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, turnId: Schema.String, seq: Schema.Int }),
   execute: (row) =>
-    db.update(messages).set({ turnId: row.turnId, seq: row.seq }).where(eq(messages.id, row.id)),
+    Database.use((db) =>
+      db.update(messages).set({ turnId: row.turnId, seq: row.seq }).where(eq(messages.id, row.id)),
+    ),
 });
 
 /** The turn's own rows — its journal, its answer, a compaction — standing ahead of a place, in sequence. */
@@ -1736,18 +1775,20 @@ const findTurnWorkBefore = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String, seq: Schema.Int }),
   Result: RowIdSchema,
   execute: (key) =>
-    db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, key.conversationId),
-          eq(messages.turnId, key.turnId),
-          ne(messages.role, MESSAGE_ROLE.USER),
-          lt(messages.seq, key.seq),
-        ),
-      )
-      .orderBy(asc(messages.seq)),
+    Database.use((db) =>
+      db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, key.conversationId),
+            eq(messages.turnId, key.turnId),
+            ne(messages.role, MESSAGE_ROLE.USER),
+            lt(messages.seq, key.seq),
+          ),
+        )
+        .orderBy(asc(messages.seq)),
+    ),
 });
 
 /** A row of the conversation and the rows standing past it: one table under the two names the join reads it by. */
@@ -1759,21 +1800,24 @@ const findMessageFollowing = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
   Result: RowIdSchema,
   execute: (key) =>
-    db
-      .select({ id: later.id })
-      .from(placed)
-      .innerJoin(
-        later,
-        and(eq(later.conversationId, placed.conversationId), gt(later.seq, placed.seq)),
-      )
-      .where(and(eq(placed.conversationId, key.conversationId), eq(placed.id, key.id)))
-      .orderBy(asc(later.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ id: later.id })
+        .from(placed)
+        .innerJoin(
+          later,
+          and(eq(later.conversationId, placed.conversationId), gt(later.seq, placed.seq)),
+        )
+        .where(and(eq(placed.conversationId, key.conversationId), eq(placed.id, key.id)))
+        .orderBy(asc(later.seq))
+        .limit(1),
+    ),
 });
 
 const moveMessage = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, seq: Schema.Int }),
-  execute: (row) => db.update(messages).set({ seq: row.seq }).where(eq(messages.id, row.id)),
+  execute: (row) =>
+    Database.use((db) => db.update(messages).set({ seq: row.seq }).where(eq(messages.id, row.id))),
 });
 
 /**
@@ -1817,7 +1861,7 @@ function moveTurnWorkAfter(context: WriterContext, turnId: string, seq: number):
 const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function* (
   context: WriterContext,
   turnId: string,
-): Effect.fn.Return<AskLinesAttached, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AskLinesAttached, WriteFailure, DatabaseServices> {
   const standing = yield* findUnattachedAskRows({
     conversationId: context.target.conversationId,
     turnId,
@@ -1852,20 +1896,22 @@ const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, parts: StoredPartsColumnSchema }),
   execute: (key) =>
-    db
-      .select({ id: messages.id, parts: messages.parts })
-      .from(messages)
-      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-      .where(
-        and(
-          eq(messages.conversationId, key.conversationId),
-          eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-          eq(messages.role, MESSAGE_ROLE.USER),
-          isNull(messages.turnId),
-          noReceiptOfLine(),
-        ),
-      )
-      .orderBy(asc(messages.seq)),
+    Database.use((db) =>
+      db
+        .select({ id: messages.id, parts: messages.parts })
+        .from(messages)
+        .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+        .where(
+          and(
+            eq(messages.conversationId, key.conversationId),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            eq(messages.role, MESSAGE_ROLE.USER),
+            isNull(messages.turnId),
+            noReceiptOfLine(),
+          ),
+        )
+        .orderBy(asc(messages.seq)),
+    ),
 });
 
 /** A line taken by the turn that received it: the turn on the row in place, its revision moved. */
@@ -1877,11 +1923,13 @@ const giveLineToTurn = SqlSchema.void({
   }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
-    return db
-      .with(bumped)
-      .update(messages)
-      .set({ turnId: row.turnId, revision: landedRevision(bumped) })
-      .where(eq(messages.id, row.id));
+    return Database.use((db) =>
+      db
+        .with(bumped)
+        .update(messages)
+        .set({ turnId: row.turnId, revision: landedRevision(bumped) })
+        .where(eq(messages.id, row.id)),
+    );
   },
 });
 
@@ -1938,7 +1986,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
   dispatch: Effect.Effect<boolean>,
-): Effect.fn.Return<AwaitingLineWritten, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AwaitingLineWritten, WriteFailure, DatabaseServices> {
   const clientId = sentLineId(line.clientKey);
   // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
@@ -1967,7 +2015,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   take: AwaitingLineTake,
-): Effect.fn.Return<AwaitingLineTaken, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AwaitingLineTaken, WriteFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
   const run = coalescedRun(awaiting, take.text);
@@ -2003,34 +2051,36 @@ const findSpokenRowsToAttach = SqlSchema.findAll({
     metadata: Schema.NullOr(MessageMetadataColumnSchema),
   }),
   execute: (key) =>
-    db
-      .select({
-        id: messages.id,
-        clientId: messages.clientId,
-        turnId: messages.turnId,
-        delegationId: SPOKEN_DELEGATION_ID,
-        parts: messages.parts,
-        metadata: messages.metadata,
-      })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, key.conversationId),
-          eq(messages.role, MESSAGE_ROLE.USER),
-          inArray(messages.clientId, [...key.clientIds]),
-          or(
-            sql`${SPOKEN_DELEGATION_ID} is null`,
-            sql`${SPOKEN_DELEGATION_ID} = ${key.delegationId}`,
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          clientId: messages.clientId,
+          turnId: messages.turnId,
+          delegationId: SPOKEN_DELEGATION_ID,
+          parts: messages.parts,
+          metadata: messages.metadata,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, key.conversationId),
+            eq(messages.role, MESSAGE_ROLE.USER),
+            inArray(messages.clientId, [...key.clientIds]),
+            or(
+              sql`${SPOKEN_DELEGATION_ID} is null`,
+              sql`${SPOKEN_DELEGATION_ID} = ${key.delegationId}`,
+            ),
           ),
-        ),
-      )
-      .orderBy(asc(messages.seq)),
+        )
+        .orderBy(asc(messages.seq)),
+    ),
 });
 
 const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(function* (
   context: WriterContext,
   attach: SpokenAskAttach,
-): Effect.fn.Return<SpokenAskAttached, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<SpokenAskAttached, WriteFailure, DatabaseServices> {
   if (attach.rowIds.length === 0) return Result.succeed([]);
   const rows = yield* findSpokenRowsToAttach({
     conversationId: context.target.conversationId,
@@ -2081,17 +2131,19 @@ const stampTurnCancel = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
-    db
-      .update(turns)
-      .set({ cancelRequestedAt: row.at })
-      .where(
-        and(
-          eq(turns.id, row.turnId),
-          eq(turns.conversationId, row.conversationId),
-          isNull(turns.cancelRequestedAt),
-        ),
-      )
-      .returning({ id: turns.id }),
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ cancelRequestedAt: row.at })
+        .where(
+          and(
+            eq(turns.id, row.turnId),
+            eq(turns.conversationId, row.conversationId),
+            isNull(turns.cancelRequestedAt),
+          ),
+        )
+        .returning({ id: turns.id }),
+    ),
 });
 
 /**
@@ -2103,7 +2155,7 @@ const stampTurnCancel = SqlSchema.findAll({
 const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
   cancel: TurnCancelRequest,
-): Effect.fn.Return<TurnCancelResult, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<TurnCancelResult, WriteFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, cancel.turnId))) return Result.fail(NO_TURN);
   const stamped = yield* stampTurnCancel({
     turnId: cancel.turnId,

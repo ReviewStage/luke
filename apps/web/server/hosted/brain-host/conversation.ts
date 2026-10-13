@@ -1,12 +1,10 @@
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
 import { SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
@@ -44,7 +42,7 @@ export interface AdmittedConversation {
 export type ConversationAdmission = Result.Result<AdmittedConversation, BrainHostRefusal>;
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type ConversationFailure = SqlError | Schema.SchemaError;
+type ConversationFailure = QueryError | Schema.SchemaError;
 
 /**
  * How a session stands to the conversation's record: it must be the recorded
@@ -73,31 +71,38 @@ const findConversation = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConversationRowSchema,
   execute: (conversationId) =>
-    db
-      .select({
-        userId: conversations.userId,
-        runtimeSessionId: conversations.runtimeSessionId,
-      })
-      .from(conversations)
-      .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
+    Database.use((db) =>
+      db
+        .select({
+          userId: conversations.userId,
+          runtimeSessionId: conversations.runtimeSessionId,
+        })
+        .from(conversations)
+        .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
+    ),
 });
 
 const findRuntimeSessionOwner = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OwnerRowSchema,
   execute: (runtimeSessionId) =>
-    db
-      .select({ userId: conversations.userId })
-      .from(conversations)
-      .where(
-        and(eq(conversations.runtimeSessionId, runtimeSessionId), isNull(conversations.deletedAt)),
-      ),
+    Database.use((db) =>
+      db
+        .select({ userId: conversations.userId })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.runtimeSessionId, runtimeSessionId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
 });
 
 export function admitConversation(
   auth: SessionAuth,
   session: { readonly id: string; readonly standing: SessionStanding },
-): Effect.Effect<ConversationAdmission, ConversationFailure, SqlClient.SqlClient> {
+): Effect.Effect<ConversationAdmission, ConversationFailure, DatabaseServices> {
   const current = auth.current;
   const account = actedForAccount(current);
   if (!current || account === undefined) {
@@ -128,7 +133,7 @@ export function admitConversation(
 /** The account whose standing conversation recorded this runtime session; nothing while none has. */
 export function runtimeSessionOwner(
   runtimeSessionId: string,
-): Effect.Effect<string | undefined, ConversationFailure, SqlClient.SqlClient> {
+): Effect.Effect<string | undefined, ConversationFailure, DatabaseServices> {
   return Effect.map(findRuntimeSessionOwner(runtimeSessionId), (found) =>
     Option.getOrUndefined(Option.map(found, (row) => row.userId)),
   );
@@ -143,18 +148,20 @@ const insertChildConversation = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ id, userId, parentConversationId, label }) =>
-    db
-      .insert(conversations)
-      .values({
-        id,
-        userId,
-        kind: CONVERSATION_KIND.CHILD,
-        parentConversationId,
-        label,
-        expectsCompletion: false,
-      })
-      .onConflictDoNothing({ target: conversations.id })
-      .returning({ id: conversations.id }),
+    Database.use((db) =>
+      db
+        .insert(conversations)
+        .values({
+          id,
+          userId,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId,
+          label,
+          expectsCompletion: false,
+        })
+        .onConflictDoNothing({ target: conversations.id })
+        .returning({ id: conversations.id }),
+    ),
 });
 
 /**
@@ -168,7 +175,7 @@ export function openChildConversation(
   parent: ConversationTarget,
   childId: string,
   label: string,
-): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.asVoid(
     insertChildConversation({
       id: childId,

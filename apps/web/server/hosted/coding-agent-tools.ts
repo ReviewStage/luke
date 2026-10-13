@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   awaitingLinesOf,
   type CodingAgent,
@@ -20,7 +21,6 @@ import { describeWire } from "@sidecar/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -151,11 +151,7 @@ export interface CodingAgentCall {
 }
 
 /** What a message or a start reaches: the store, GitHub through the App on the developer's standing, the network to eve, and the catalog a start's choice is checked against. */
-type CodingAgentToolServices =
-  | SqlClient.SqlClient
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog;
+type CodingAgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 const AGENT_ID = describeWire(wireUuidSchema, "The agent's id, as list_coding_agents answered it.");
 
@@ -383,7 +379,7 @@ const readAgent = (
     readonly failureReason: CodingAgentFailure | undefined;
   },
   offered: readonly OfferedModel[],
-): Effect.Effect<AgentReading, StoreFailure, SqlClient.SqlClient> =>
+): Effect.Effect<AgentReading, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const [newest] = yield* journalsOf(userId, agent, 1);
     const activity =
@@ -413,7 +409,7 @@ const publishedOf = (
 ): Effect.Effect<
   CodingAgentPullRequestAnswer | undefined,
   never,
-  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
 > =>
   Effect.map(Effect.result(agentPublished(userId, agent)), (read) =>
     Result.isSuccess(read) ? read.success : undefined,

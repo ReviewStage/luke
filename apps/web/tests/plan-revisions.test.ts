@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import {
   listRevisions,
@@ -43,6 +43,7 @@ const DRAFT_NOTES: readonly PlanNote[] = [
 ];
 
 const openPlan = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const plan = yield* createPlan(userId, { name: "Teammate invitations" });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
@@ -43,6 +43,7 @@ const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, reques
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
     );
@@ -65,6 +66,7 @@ const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, reques
 /** The owner signed in with GitHub through the App; the other signed in with Google alone. */
 const openAccounts = (github: FakeGitHub) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });

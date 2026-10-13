@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { writePage } from "@sidecar/database/models/plan-pages";
 import {
   PAGE_BOUNDS,
@@ -8,7 +9,6 @@ import {
 } from "@sidecar/hosted/page-wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
 import type { SandboxSession } from "eve/sandbox";
 import {
   ACTION_RESULT_STATUS,
@@ -186,7 +186,7 @@ function htmlRefusal(html: string): string | undefined {
 export function runShowPage(
   binding: PageToolBinding,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, SqlClient.SqlClient> {
+): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
     const read = readInput(input);
     if (Result.isFailure(read)) return showPageRejected(SHOW_PAGE_REFUSAL.UNREADABLE);

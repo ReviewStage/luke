@@ -8,7 +8,10 @@
  * a credential. The kind is read from the tags the failure is made of: its
  * `_tag`, or an `Error`'s `name`, and one level beneath it the tag of its
  * `reason` or `issue`, which is where a `SqlError`, an `HttpClientError`, and
- * a `SchemaError` say what went wrong. A tag is kept only when it is shaped
+ * a `SchemaError` say what went wrong. A failure that only wraps a `Cause`
+ * of another — Drizzle's `EffectDrizzleQueryError` around the `SqlError` its
+ * statement failed with — is named by what it wraps, since the wrapper's own
+ * name says only that a statement failed. A tag is kept only when it is shaped
  * like an identifier, so a name that was given a sentence is not written
  * either.
  */
@@ -29,6 +32,7 @@ const readKind = Schema.decodeUnknownOption(Kind);
 const readTagged = Schema.decodeUnknownOption(Tagged);
 const readReason = Schema.decodeUnknownOption(Schema.Struct({ reason: Tagged }));
 const readIssue = Schema.decodeUnknownOption(Schema.Struct({ issue: Tagged }));
+const readWrapper = Schema.decodeUnknownOption(Schema.Struct({ cause: Schema.Unknown }));
 
 /** The failure's own tag, or its error name, where either is shaped like an identifier. */
 function tagOf(cause: unknown): Option.Option<string> {
@@ -44,11 +48,22 @@ function beneathOf(cause: unknown): Option.Option<string> {
   );
 }
 
+/** The failure a wrapper carries as a `Cause` of its own, which is what it is named by. */
+function wrappedOf(cause: unknown): Option.Option<unknown> {
+  return Option.flatMap(readWrapper(cause), ({ cause: inner }) =>
+    Cause.isCause(inner) && !Cause.hasInterruptsOnly(inner)
+      ? Option.some(Cause.squash(inner))
+      : Option.none(),
+  );
+}
+
 /**
  * The failure as a few fixed words: `SqlError: ConnectionError`,
  * `TypeError`, or `unnamed` for a thrown value with no name of its own.
  */
 export function failureKind(cause: unknown): string {
+  const wrapped = wrappedOf(cause);
+  if (Option.isSome(wrapped)) return failureKind(wrapped.value);
   const kind = tagOf(cause);
   if (Option.isNone(kind)) return FAILURE_KIND.UNNAMED;
   const beneath = beneathOf(cause);

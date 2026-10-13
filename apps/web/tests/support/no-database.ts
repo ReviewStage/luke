@@ -1,4 +1,5 @@
 import { PgClient } from "@effect/sql-pg";
+import { databaseOverPgClient } from "@sidecar/database/core/query";
 import { Effect, Layer, Stream } from "effect";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -25,14 +26,32 @@ const refusingConnection: SqlConnection.Connection = {
   executeStream: () => Stream.fromEffect(refused()),
 };
 
-export const noDatabase = Layer.effect(
-  SqlClient.SqlClient,
+/**
+ * A `PgClient` over the refusing connection, so the Drizzle `Database` the
+ * runtime builds over its `PgClient` stands over this one unchanged and
+ * refuses every statement the same way.
+ */
+const refusingPgClient = Effect.map(
   SqlClient.make({
     acquirer: Effect.succeed(refusingConnection),
     transactionAcquirer: Effect.succeed(refusingConnection),
     compiler: PgClient.makeCompiler(),
     spanAttributes: [],
   }),
+  (client): PgClient.PgClient =>
+    Object.assign(client, {
+      [PgClient.TypeId]: PgClient.TypeId,
+      config: {},
+      // Every statement refuses, so the fragment a JSON value would render is never sent.
+      json: () => client`null`,
+      listen: refused,
+      notify: refused,
+    }),
+);
+
+export const noDatabase = Layer.provideMerge(
+  databaseOverPgClient,
+  PgClient.layerFrom(refusingPgClient),
 ).pipe(Layer.provide(Reactivity.layer));
 
 /**

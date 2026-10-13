@@ -1,8 +1,8 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import { GitHubApp } from "../github/github-app.js";
@@ -252,7 +252,7 @@ export type RepositoryShellResult =
   | { readonly status: typeof REPOSITORY_SHELL_STATUS.NOT_RUN; readonly reason: string };
 
 /** What the shell may reach: the store and GitHub for the checkout's confirmation and token. */
-export type RepositoryShellServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+export type RepositoryShellServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 const RUN_IN_REPOSITORY_INPUT = Schema.Struct({
   command: describeWire(

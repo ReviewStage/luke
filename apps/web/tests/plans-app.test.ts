@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { writePage } from "@sidecar/database/models/plan-pages";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
 import { user } from "@sidecar/database/schemas/auth";
@@ -113,6 +113,7 @@ const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
  */
 const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });
@@ -141,6 +142,7 @@ const answer = (
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
       modelCatalogOf([]),
@@ -211,7 +213,7 @@ const refusal = (status: number, error: string): Answer => ({ status, body: { er
 
 /** What the contents API holds of the fixture repository, by path: a file's text, a directory, a link, or a file past the bound. */
 const CONTENTS = new Map([
-  ["src/invite.ts", () => fileContents("one\ntwo\n" + "x".repeat(500) + "\nfour")],
+  ["src/invite.ts", () => fileContents(`one\ntwo\n${"x".repeat(500)}\nfour`)],
   ["src/marked.ts", () => fileContents("\uFEFFa\r\nb")],
   [
     "src/latin1.txt",
@@ -284,6 +286,7 @@ const callAbout = (
   said: readonly Said[],
 ) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const [row] = yield* db
       .insert(voiceSessions)
       .values({

@@ -1,97 +1,43 @@
 import { NodeServices } from "@effect/platform-node";
-import { PgClient } from "@effect/sql-pg";
+import { PgliteClient } from "@effect/sql-pglite";
 import { PGlite } from "@electric-sql/pglite";
-import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
-import * as Reactivity from "effect/reactivity/Reactivity";
-import * as SqlClient from "effect/sql/SqlClient";
-import type * as SqlConnection from "effect/sql/SqlConnection";
-import { SqlError, UnknownError } from "effect/sql/SqlError";
+import * as PgliteDrizzle from "drizzle-orm/effect-pglite";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import type * as SqlClient from "effect/sql/SqlClient";
+import type { SqlError } from "effect/sql/SqlError";
 import { runWebMigrations } from "../core/migrator.js";
+import { Database, type DatabaseServices } from "../core/query.js";
 import { sqlClientOverUrl } from "../core/sql-client.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
 /**
- * The `SqlClient` the store's own tests will read, standing over the same two
- * dialects `hosted-store-database.ts` already chooses between: PGlite in
- * process by default, so `check.sh` needs no service, and the Postgres named by
- * `LUKE_STORE_TEST_DATABASE_URL` in the CI job that has one. Either way a
- * build of the layer is a database of its own: a fresh PGlite, or a clone of
- * the migrated Postgres dropped when the layer's scope closes
- * (`test-postgres.ts`), so a file's unscoped statement reaches no other
+ * The `SqlClient` and Drizzle `Database` the store's own tests read, standing
+ * over the same two dialects `hosted-store-database.ts` already chooses
+ * between: PGlite in process by default, so `check.sh` needs no service, and
+ * the Postgres named by `LUKE_STORE_TEST_DATABASE_URL` in the CI job that has
+ * one. Either way a build of the layer is a database of its own: a fresh
+ * PGlite, or a clone of the migrated Postgres dropped when the layer's scope
+ * closes (`test-postgres.ts`), so a file's unscoped statement reaches no other
  * file's rows on either dialect. The Postgres half is the production layer's
- * own client; the PGlite half is the small connection below, because no
- * `@effect/sql-pglite` ships against the 3.x Effect line.
+ * own client and database; the PGlite half is `@effect/sql-pglite`'s client
+ * and Drizzle's PGlite driver over it.
  */
-
-const ROW_MODE = {
-  ARRAY: "array",
-} as const;
-
-function pgliteConnection(client: PGlite): SqlConnection.Connection {
-  // PGlite's own failures are not classified here: the store's tests read the
-  // failure as one refusal whatever the database said, and no classifier for
-  // this driver ships with the library.
-  const fail = (cause: unknown) =>
-    new SqlError({ reason: new UnknownError({ cause, message: "Failed to execute statement" }) });
-  const objectRows = (sql: string, params: ReadonlyArray<unknown>) =>
-    Effect.tryPromise({
-      try: () => client.query<SqlConnection.Row>(sql, [...params]),
-      catch: fail,
-    });
-  const rows = (
-    sql: string,
-    params: ReadonlyArray<unknown>,
-    transformRows: (<A extends object>(row: ReadonlyArray<A>) => ReadonlyArray<A>) | undefined,
-  ) =>
-    objectRows(sql, params).pipe(
-      Effect.map((result) => (transformRows ? transformRows(result.rows) : result.rows)),
-    );
-  const values = (sql: string, params: ReadonlyArray<unknown>) =>
-    Effect.tryPromise({
-      try: () =>
-        client.query<ReadonlyArray<unknown>>(sql, [...params], { rowMode: ROW_MODE.ARRAY }),
-      catch: fail,
-    }).pipe(Effect.map((result) => result.rows));
-  return {
-    execute: rows,
-    executeRaw: (sql, params) => objectRows(sql, params),
-    executeUnprepared: rows,
-    executeStream: (sql, params, transformRows) =>
-      Stream.fromIterableEffect(rows(sql, params, transformRows)),
-    executeValues: values,
-    executeValuesUnprepared: values,
-  };
-}
 
 /**
- * A `SqlClient` over a PGlite the caller already opened and still closes
- * itself, so a harness holding one database can read it through this client
- * and through the Drizzle handle beside it.
- *
- * PGlite is one connection, so the client is handed that connection under a
- * permit rather than directly: a statement holds the permit for its own
- * execution and a transaction for its whole span, which is what a pool gives
- * a Postgres and what PGlite's own exclusive transaction gave the Drizzle
- * handle beside this one. Without it two concurrent transactions would
- * nest their `BEGIN` on one connection and a plain read of another fiber
- * would land inside whichever transaction was open.
+ * A `SqlClient` and the Drizzle `Database` over a PGlite the caller already
+ * opened and still closes itself. `@effect/sql-pglite` serializes access to
+ * the one connection PGlite is: a statement holds it for its own execution
+ * and a transaction for its whole span, which is what a pool gives a
+ * Postgres, so two concurrent transactions never nest their `BEGIN` and a
+ * plain read of another fiber never lands inside whichever one is open.
  */
-export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlClient> =>
-  Layer.effect(
-    SqlClient.SqlClient,
-    Effect.flatMap(Semaphore.make(1), (connections) => {
-      const exclusive = Effect.acquireRelease(
-        Effect.as(connections.take(1), pgliteConnection(client)),
-        () => connections.release(1),
-      );
-      return SqlClient.make({
-        acquirer: exclusive,
-        transactionAcquirer: exclusive,
-        compiler: PgClient.makeCompiler(),
-        spanAttributes: [],
-      });
-    }),
-  ).pipe(Layer.provide(Reactivity.layer));
+export const sqlClientOverPglite = (
+  client: PGlite,
+): Layer.Layer<SqlClient.SqlClient | PgliteClient.PgliteClient | Database, SqlError> =>
+  Layer.provideMerge(
+    Layer.effect(Database, PgliteDrizzle.makeWithDefaults()),
+    PgliteClient.layerFrom(PgliteClient.fromClient({ liveClient: client })),
+  );
 
 /** A PGlite carrying the same generated migrations the store's tests run against. */
 export async function openMigratedPglite(): Promise<PGlite> {
@@ -123,7 +69,7 @@ const pgliteSqlClient = pgliteSqlClientOver(openMigratedPglite);
  * runner itself needs: the Postgres a CI run clones from has already been
  * migrated, so only an in-process database can stand in for a fresh one.
  */
-export const unmigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
+export const unmigratedPgliteSqlClient: Layer.Layer<DatabaseServices, SqlError> =
   pgliteSqlClientOver(async () => new PGlite());
 
 /**
@@ -147,8 +93,9 @@ const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
 /**
  * A database of the test's own, carrying every migration, over whichever
  * dialect this run was pointed at: lobehub's `getTestDB`, answered as the
- * `SqlClient` layer a test provides rather than a handle it awaits, since
- * every statement here is an effect that reads its client from the fiber.
+ * layer a test provides rather than a handle it awaits, since every
+ * statement here is an effect that reads its client and database from the
+ * fiber.
  */
-export const getTestDB = (): Layer.Layer<SqlClient.SqlClient, SqlError> =>
+export const getTestDB = (): Layer.Layer<DatabaseServices, SqlError> =>
   connectionString === undefined ? pgliteSqlClient : postgresSqlClient(connectionString);

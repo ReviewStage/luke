@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { inboxItem } from "@sidecar/database/schemas/inbox";
@@ -25,7 +25,6 @@ import {
 import { and, count, desc, eq, isNull, max, ne, notInArray, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 
 /**
  * inbox-store.ts -- the developer's inbox: the items a plan's coding agents post, close, and read, and the developer's answers to them.
@@ -57,10 +56,10 @@ import type { SqlError } from "effect/sql/SqlError";
  * database of its own.
  */
 
-type InboxStoreFailure = SqlError | Schema.SchemaError;
+type InboxStoreFailure = QueryError | Schema.SchemaError;
 
 /** What an inbox store operation answers: an effect over the ambient client, composed into whatever called it. */
-export type InboxStoreEffect<A> = Effect.Effect<A, InboxStoreFailure, SqlClient.SqlClient>;
+export type InboxStoreEffect<A> = Effect.Effect<A, InboxStoreFailure, DatabaseServices>;
 
 /** The agent an item belongs to, as every write of the agent's names it. */
 export interface InboxAgent {
@@ -168,11 +167,13 @@ const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, agentId }) =>
-    db
-      .select({ id: codingAgent.id })
-      .from(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .for("update"),
+    ),
 });
 
 /** How many items the agent holds open under a key other than the one given. */
@@ -180,17 +181,19 @@ const countOpenBesides = SqlSchema.findOne({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ open: Schema.Number }),
   execute: ({ userId, agentId, key }) =>
-    db
-      .select({ open: sql<number>`count(*)::int` })
-      .from(inboxItem)
-      .where(
-        and(
-          eq(inboxItem.userId, userId),
-          eq(inboxItem.agentId, agentId),
-          eq(inboxItem.status, INBOX_STATUS.OPEN),
-          ne(inboxItem.key, key),
+    Database.use((db) =>
+      db
+        .select({ open: sql<number>`count(*)::int` })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            ne(inboxItem.key, key),
+          ),
         ),
-      ),
+    ),
 });
 
 const PostWriteSchema = Schema.Struct({
@@ -220,20 +223,22 @@ const AttachmentWriteSchema = Schema.Struct({
 const insertAttachment = SqlSchema.void({
   Request: AttachmentWriteSchema,
   execute: ({ now, ...attachment }) =>
-    db.insert(inboxAttachment).values({ ...attachment, createdAt: now }),
+    Database.use((db) => db.insert(inboxAttachment).values({ ...attachment, createdAt: now })),
 });
 
 /** The item's attachments no block of its names any longer, deleted. */
 const deleteOtherAttachments = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, kept: Schema.Array(Schema.String) }),
   execute: ({ itemId, kept }) =>
-    db
-      .delete(inboxAttachment)
-      .where(
-        kept.length === 0
-          ? eq(inboxAttachment.itemId, itemId)
-          : and(eq(inboxAttachment.itemId, itemId), notInArray(inboxAttachment.id, [...kept])),
-      ),
+    Database.use((db) =>
+      db
+        .delete(inboxAttachment)
+        .where(
+          kept.length === 0
+            ? eq(inboxAttachment.itemId, itemId)
+            : and(eq(inboxAttachment.itemId, itemId), notInArray(inboxAttachment.id, [...kept])),
+        ),
+    ),
 });
 
 /** The account's attachment, where it is the item's: its type and its bytes. */
@@ -245,16 +250,18 @@ const findAttachment = SqlSchema.findOneOption({
   }),
   Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
   execute: ({ userId, itemId, attachmentId }) =>
-    db
-      .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
-      .from(inboxAttachment)
-      .where(
-        and(
-          eq(inboxAttachment.userId, userId),
-          eq(inboxAttachment.itemId, itemId),
-          eq(inboxAttachment.id, attachmentId),
+    Database.use((db) =>
+      db
+        .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
+        .from(inboxAttachment)
+        .where(
+          and(
+            eq(inboxAttachment.userId, userId),
+            eq(inboxAttachment.itemId, itemId),
+            eq(inboxAttachment.id, attachmentId),
+          ),
         ),
-      ),
+    ),
 });
 
 /** The blocks as the item keeps them: each image block naming the attachment minted for it, in the order the images were handed in, and every other block as posted. */
@@ -290,22 +297,24 @@ const upsertItem = SqlSchema.findOne({
       closedReason: null,
       updatedAt: write.now,
     };
-    return db
-      .insert(inboxItem)
-      .values({
-        userId: write.userId,
-        planId: write.planId,
-        agentId: write.agentId,
-        key: write.key,
-        revision: 1,
-        postedAt: write.now,
-        ...posted,
-      })
-      .onConflictDoUpdate({
-        target: [inboxItem.agentId, inboxItem.key],
-        set: { ...posted, revision: sql`${inboxItem.revision} + 1` },
-      })
-      .returning(INBOX_COLUMNS);
+    return Database.use((db) =>
+      db
+        .insert(inboxItem)
+        .values({
+          userId: write.userId,
+          planId: write.planId,
+          agentId: write.agentId,
+          key: write.key,
+          revision: 1,
+          postedAt: write.now,
+          ...posted,
+        })
+        .onConflictDoUpdate({
+          target: [inboxItem.agentId, inboxItem.key],
+          set: { ...posted, revision: sql`${inboxItem.revision} + 1` },
+        })
+        .returning(INBOX_COLUMNS),
+    );
   },
 });
 
@@ -319,18 +328,20 @@ const closeItem = SqlSchema.findOneOption({
   }),
   Result: InboxRowSchema,
   execute: ({ userId, agentId, key, reason, now }) =>
-    db
-      .update(inboxItem)
-      .set({
-        status: INBOX_STATUS.CLOSED,
-        closedReason: reason,
-        revision: sql`${inboxItem.revision} + 1`,
-        updatedAt: now,
-      })
-      .where(
-        and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId), eq(inboxItem.key, key)),
-      )
-      .returning(INBOX_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          status: INBOX_STATUS.CLOSED,
+          closedReason: reason,
+          revision: sql`${inboxItem.revision} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId), eq(inboxItem.key, key)),
+        )
+        .returning(INBOX_COLUMNS),
+    ),
 });
 
 /** Where a read looks: one plan's items, or one agent's, always the account's own. */
@@ -365,11 +376,13 @@ const findOpenItems = SqlSchema.findAll({
   Request: ScopeSchema,
   Result: InboxRowSchema,
   execute: (scope) =>
-    db
-      .select(INBOX_COLUMNS)
-      .from(inboxItem)
-      .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
-      .orderBy(...LATEST_FIRST),
+    Database.use((db) =>
+      db
+        .select(INBOX_COLUMNS)
+        .from(inboxItem)
+        .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
+        .orderBy(...LATEST_FIRST),
+    ),
 });
 
 /** The scope's settled items, the latest changed first, as many as the read carries. */
@@ -377,12 +390,14 @@ const findSettledItems = SqlSchema.findAll({
   Request: Schema.Struct({ ...ScopeSchema.fields, limit: Schema.Number }),
   Result: InboxRowSchema,
   execute: ({ limit, ...scope }) =>
-    db
-      .select(INBOX_COLUMNS)
-      .from(inboxItem)
-      .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
-      .orderBy(...LATEST_FIRST)
-      .limit(limit),
+    Database.use((db) =>
+      db
+        .select(INBOX_COLUMNS)
+        .from(inboxItem)
+        .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
+        .orderBy(...LATEST_FIRST)
+        .limit(limit),
+    ),
 });
 
 /** Where one item stands, without what it says: what a held read compares between looks. */
@@ -404,23 +419,27 @@ const findOpenStamps = SqlSchema.findAll({
   Request: ScopeSchema,
   Result: StampRowSchema,
   execute: (scope) =>
-    db
-      .select(STAMP_COLUMNS)
-      .from(inboxItem)
-      .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
-      .orderBy(...LATEST_FIRST),
+    Database.use((db) =>
+      db
+        .select(STAMP_COLUMNS)
+        .from(inboxItem)
+        .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
+        .orderBy(...LATEST_FIRST),
+    ),
 });
 
 const findSettledStamps = SqlSchema.findAll({
   Request: Schema.Struct({ ...ScopeSchema.fields, limit: Schema.Number }),
   Result: StampRowSchema,
   execute: ({ limit, ...scope }) =>
-    db
-      .select(STAMP_COLUMNS)
-      .from(inboxItem)
-      .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
-      .orderBy(...LATEST_FIRST)
-      .limit(limit),
+    Database.use((db) =>
+      db
+        .select(STAMP_COLUMNS)
+        .from(inboxItem)
+        .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
+        .orderBy(...LATEST_FIRST)
+        .limit(limit),
+    ),
 });
 
 /**
@@ -457,36 +476,40 @@ const findWaitingItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: WaitingRowSchema,
   execute: ({ userId }) =>
-    db
-      .select({
-        id: inboxItem.id,
-        planId: inboxItem.planId,
-        agentId: inboxItem.agentId,
-        agentTitle: codingAgent.title,
-        agentModel: codingAgent.model,
-        title: inboxItem.title,
-        revision: inboxItem.revision,
-        status: inboxItem.status,
-        postedAt: inboxItem.postedAt,
-        updatedAt: inboxItem.updatedAt,
-      })
-      .from(inboxItem)
-      .innerJoin(plan, eq(plan.id, inboxItem.planId))
-      .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
-      .where(accountWaiting(userId))
-      .orderBy(...LATEST_FIRST),
+    Database.use((db) =>
+      db
+        .select({
+          id: inboxItem.id,
+          planId: inboxItem.planId,
+          agentId: inboxItem.agentId,
+          agentTitle: codingAgent.title,
+          agentModel: codingAgent.model,
+          title: inboxItem.title,
+          revision: inboxItem.revision,
+          status: inboxItem.status,
+          postedAt: inboxItem.postedAt,
+          updatedAt: inboxItem.updatedAt,
+        })
+        .from(inboxItem)
+        .innerJoin(plan, eq(plan.id, inboxItem.planId))
+        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .where(accountWaiting(userId))
+        .orderBy(...LATEST_FIRST),
+    ),
 });
 
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
   execute: ({ userId }) =>
-    db
-      .select(STAMP_COLUMNS)
-      .from(inboxItem)
-      .innerJoin(plan, eq(plan.id, inboxItem.planId))
-      .where(accountWaiting(userId))
-      .orderBy(...LATEST_FIRST),
+    Database.use((db) =>
+      db
+        .select(STAMP_COLUMNS)
+        .from(inboxItem)
+        .innerJoin(plan, eq(plan.id, inboxItem.planId))
+        .where(accountWaiting(userId))
+        .orderBy(...LATEST_FIRST),
+    ),
 });
 
 /** One plan holding items as the account's read lists it: how many, and when the latest changed. */
@@ -509,13 +532,15 @@ const findPlansWithItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: PlanItemsRowSchema,
   execute: ({ userId }) =>
-    db
-      .select({ planId: inboxItem.planId, items: count(), updatedAt: LATEST_ITEM })
-      .from(inboxItem)
-      .innerJoin(plan, eq(plan.id, inboxItem.planId))
-      .where(and(eq(inboxItem.userId, userId), isNull(plan.archivedAt)))
-      .groupBy(inboxItem.planId)
-      .orderBy(desc(LATEST_ITEM), desc(inboxItem.planId)),
+    Database.use((db) =>
+      db
+        .select({ planId: inboxItem.planId, items: count(), updatedAt: LATEST_ITEM })
+        .from(inboxItem)
+        .innerJoin(plan, eq(plan.id, inboxItem.planId))
+        .where(and(eq(inboxItem.userId, userId), isNull(plan.archivedAt)))
+        .groupBy(inboxItem.planId)
+        .orderBy(desc(LATEST_ITEM), desc(inboxItem.planId)),
+    ),
 });
 
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
@@ -533,10 +558,12 @@ const findItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
   Result: InboxRowSchema,
   execute: ({ userId, itemId }) =>
-    db
-      .select(INBOX_COLUMNS)
-      .from(inboxItem)
-      .where(and(eq(inboxItem.userId, userId), eq(inboxItem.id, itemId))),
+    Database.use((db) =>
+      db
+        .select(INBOX_COLUMNS)
+        .from(inboxItem)
+        .where(and(eq(inboxItem.userId, userId), eq(inboxItem.id, itemId))),
+    ),
 });
 
 /** The answer written on the item where it is open at the revision named; nothing where it is not. */
@@ -551,18 +578,20 @@ const answerItem = SqlSchema.findOneOption({
   }),
   Result: InboxRowSchema,
   execute: ({ userId, itemId, revision, answer, answerKey, now }) =>
-    db
-      .update(inboxItem)
-      .set({ status: INBOX_STATUS.ANSWERED, answer, answerKey, updatedAt: now })
-      .where(
-        and(
-          eq(inboxItem.userId, userId),
-          eq(inboxItem.id, itemId),
-          eq(inboxItem.revision, revision),
-          eq(inboxItem.status, INBOX_STATUS.OPEN),
-        ),
-      )
-      .returning(INBOX_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({ status: INBOX_STATUS.ANSWERED, answer, answerKey, updatedAt: now })
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.id, itemId),
+            eq(inboxItem.revision, revision),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+          ),
+        )
+        .returning(INBOX_COLUMNS),
+    ),
 });
 
 /**
@@ -716,18 +745,20 @@ const withdrawAnswer = SqlSchema.findOneOption({
   }),
   Result: InboxRowSchema,
   execute: ({ userId, itemId, answerKey, now }) =>
-    db
-      .update(inboxItem)
-      .set({ status: INBOX_STATUS.OPEN, answer: null, answerKey: null, updatedAt: now })
-      .where(
-        and(
-          eq(inboxItem.userId, userId),
-          eq(inboxItem.id, itemId),
-          eq(inboxItem.answerKey, answerKey),
-          eq(inboxItem.status, INBOX_STATUS.ANSWERED),
-        ),
-      )
-      .returning(INBOX_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({ status: INBOX_STATUS.OPEN, answer: null, answerKey: null, updatedAt: now })
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.id, itemId),
+            eq(inboxItem.answerKey, answerKey),
+            eq(inboxItem.status, INBOX_STATUS.ANSWERED),
+          ),
+        )
+        .returning(INBOX_COLUMNS),
+    ),
 });
 
 /** The answer taken under the key withdrawn, the item open again, where it still stands; nothing where it does not. */

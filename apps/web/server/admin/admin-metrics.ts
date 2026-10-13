@@ -1,6 +1,6 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { utcDayKey } from "@sidecar/database/models/quota";
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/sql";
 import { DAY_MS } from "../core.js";
 import {
   ADMIN_ERROR,
@@ -449,7 +449,7 @@ export interface AdminMetricsOptions {
  */
 export function handleAdminMetrics(
   options: AdminMetricsOptions,
-): Effect.Effect<Response, never, SqlClient.SqlClient> {
+): Effect.Effect<Response, never, DatabaseServices> {
   const { request } = options;
 
   const windowDays = adminMetricsWindow(request.url);

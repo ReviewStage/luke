@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { Database, type DatabaseServices } from "@sidecar/database/core/query";
 import { TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
 import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import type { HostedStore } from "@sidecar/database/models/hosted-store";
@@ -96,8 +97,8 @@ import {
  * The brain is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
  * them and nothing is emitted after; the submission `LiveBrain` declares is
- * an effect of the caller's own fiber, with the `SqlClient` the scope was
- * built on provided to it where the ask door asks for one, exactly as
+ * an effect of the caller's own fiber, with the `SqlClient` and `Database`
+ * the scope was built on provided to it where the ask door asks for them, exactly as
  * `runTool` provides it to the brain's seams.
  */
 
@@ -365,8 +366,9 @@ export interface HostedLiveBrain extends LiveBrain {
 
 export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(function* (
   options: HostedLiveBrainOptions,
-): Effect.fn.Return<HostedLiveBrain, never, Scope.Scope | SqlClient.SqlClient> {
+): Effect.fn.Return<HostedLiveBrain, never, Scope.Scope | DatabaseServices> {
   const sql = yield* SqlClient.SqlClient;
+  const database = yield* Database;
   const socket = yield* Effect.scope;
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
@@ -728,6 +730,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id } as const;
     }).pipe(
       Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.provideService(Database, database),
       // The ask's rows could not be read or written: the refusal is the
       // store's own standing sentence, the failure is written down where
       // its cause is known, and the session goes on.
@@ -789,6 +792,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       ).pipe(
         Effect.map(cancelOf),
         Effect.provideService(SqlClient.SqlClient, sql),
+        Effect.provideService(Database, database),
         Effect.tapError(logStoreFailure),
         Effect.catch(() =>
           Effect.sync(() => {
@@ -825,15 +829,17 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         const recovery: LiveBrainRecovery = {
           revision: Math.max(0, ...asked.map((ask) => ask.revision)),
           runs,
-          follow: Effect.provideService(
-            Effect.forEach(runs, (run) => follow(run.runId, run.revision), { discard: true }),
-            SqlClient.SqlClient,
-            sql,
+          follow: Effect.forEach(runs, (run) => follow(run.runId, run.revision), {
+            discard: true,
+          }).pipe(
+            Effect.provideService(SqlClient.SqlClient, sql),
+            Effect.provideService(Database, database),
           ),
         };
         return recovery;
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, sql),
+        Effect.provideService(Database, database),
         Effect.tapError(logStoreFailure),
         Effect.catch(() =>
           Effect.sync(() => {

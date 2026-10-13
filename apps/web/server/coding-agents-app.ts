@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import {
   archiveCodingAgent,
@@ -46,7 +47,6 @@ import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import {
   isRecord,
   isWireString,
@@ -248,7 +248,7 @@ export interface CodingAgentsAppSeams extends EveReach {
 
 /** What the routes may require of the function that stands them. */
 export type CodingAgentsAppServices =
-  | SqlClient.SqlClient
+  | DatabaseServices
   | GitHubApp
   | HttpClient.HttpClient
   | ModelCatalog
@@ -443,7 +443,7 @@ const ownedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   { readonly userId: string; readonly agent: CodingAgent; readonly target: ConversationTarget },
   HostedRefusal,
-  SqlClient.SqlClient
+  DatabaseServices
 > {
   const agentId = yield* idOf(request);
   const userId = yield* resolvedUserId(seams, request);
@@ -658,6 +658,7 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
         case "RepositoryNotReachable":
           return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
         case "SqlError":
+        case "EffectDrizzleQueryError":
         case "SchemaError":
           return hostedStoreOrUnavailable(Effect.fail(failure));
         default:
@@ -864,7 +865,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   stored: StoredInboxItem,
   asked: { readonly revision: number; readonly clientKey: string; readonly reply: InboxReply },
-): Effect.fn.Return<InboxItem | undefined, HostedRefusal, SqlClient.SqlClient> {
+): Effect.fn.Return<InboxItem | undefined, HostedRefusal, DatabaseServices> {
   const { item, answerKey } = stored;
   if (answerKey === asked.clientKey) return item;
   if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;

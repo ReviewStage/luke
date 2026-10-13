@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   readAccountPreferences,
   writeAccountPreferences,
@@ -16,7 +17,6 @@ import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
 import { eveContent } from "../attached-files.js";
@@ -80,7 +80,7 @@ export interface CodingAgentStart {
 }
 
 /** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
-export type StartServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog;
+export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 /**
  * The choice an agent runs on: the one named where one is, the account's
@@ -95,7 +95,7 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   ModelChoice,
   HostedRefusal | ModelChoiceRefused,
-  SqlClient.SqlClient | ModelCatalog
+  DatabaseServices | ModelCatalog
 > {
   const choice =
     named ??

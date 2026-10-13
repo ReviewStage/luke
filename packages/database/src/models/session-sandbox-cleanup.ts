@@ -12,51 +12,58 @@
 
 import { asc, eq, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { sessionSandboxCleanup } from "../schemas/session-sandbox.js";
 
-type CleanupFailure = SqlError | Schema.SchemaError;
+type CleanupFailure = QueryError | Schema.SchemaError;
 
-type CleanupEffect<A> = Effect.Effect<A, CleanupFailure, SqlClient.SqlClient>;
+type CleanupEffect<A> = Effect.Effect<A, CleanupFailure, DatabaseServices>;
 
 const insertSessions = SqlSchema.void({
   Request: Schema.Array(Schema.String),
   execute: (sessionIds) =>
-    db
-      .insert(sessionSandboxCleanup)
-      .values(sessionIds.map((sessionId) => ({ sessionId })))
-      .onConflictDoNothing({ target: sessionSandboxCleanup.sessionId }),
+    Database.use((db) =>
+      db
+        .insert(sessionSandboxCleanup)
+        .values(sessionIds.map((sessionId) => ({ sessionId })))
+        .onConflictDoNothing({ target: sessionSandboxCleanup.sessionId }),
+    ),
 });
 
 const findNext = SqlSchema.findAll({
   Request: Schema.Number,
   Result: Schema.Struct({ sessionId: Schema.String }),
   execute: (limit) =>
-    db
-      .select({ sessionId: sessionSandboxCleanup.sessionId })
-      .from(sessionSandboxCleanup)
-      .orderBy(
-        sql`${sessionSandboxCleanup.triedAt} asc nulls first`,
-        asc(sessionSandboxCleanup.queuedAt),
-      )
-      .limit(limit),
+    Database.use((db) =>
+      db
+        .select({ sessionId: sessionSandboxCleanup.sessionId })
+        .from(sessionSandboxCleanup)
+        .orderBy(
+          sql`${sessionSandboxCleanup.triedAt} asc nulls first`,
+          asc(sessionSandboxCleanup.queuedAt),
+        )
+        .limit(limit),
+    ),
 });
 
 const removeSession = SqlSchema.void({
   Request: Schema.String,
   execute: (sessionId) =>
-    db.delete(sessionSandboxCleanup).where(eq(sessionSandboxCleanup.sessionId, sessionId)),
+    Database.use((db) =>
+      db.delete(sessionSandboxCleanup).where(eq(sessionSandboxCleanup.sessionId, sessionId)),
+    ),
 });
 
 const stampTried = SqlSchema.void({
   Request: Schema.Struct({ sessionId: Schema.String, now: Schema.Date }),
   execute: ({ sessionId, now }) =>
-    db
-      .update(sessionSandboxCleanup)
-      .set({ triedAt: now })
-      .where(eq(sessionSandboxCleanup.sessionId, sessionId)),
+    Database.use((db) =>
+      db
+        .update(sessionSandboxCleanup)
+        .set({ triedAt: now })
+        .where(eq(sessionSandboxCleanup.sessionId, sessionId)),
+    ),
 });
 
 /** The sessions rows ran in, each once, leaving out a row that never opened one. */

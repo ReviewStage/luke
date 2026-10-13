@@ -36,6 +36,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   INTEGRATION_LANDING_STATUS,
@@ -51,7 +52,6 @@ import {
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -201,7 +201,7 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   row: IntegrationConnectionRow,
   state: string,
-): Effect.fn.Return<boolean, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | IntegrationConnect> {
   const connector = (yield* IntegrationConnect)[row.provider];
   const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
   if (Result.isFailure(issued)) {
@@ -220,7 +220,7 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
 const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   row: IntegrationConnectionRow | undefined,
-): Effect.fn.Return<IntegrationStatus, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
+): Effect.fn.Return<IntegrationStatus, HostedRefusal, DatabaseServices | IntegrationConnect> {
   if (row === undefined) return INTEGRATION_STATUS.DISCONNECTED;
   if (row.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
   // The state of a sign-in still under way, which is the one a settlement may complete.
@@ -239,7 +239,7 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+  HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
 > {
   yield* hostedMethod(HTTP_METHOD.GET);
   const userId = yield* resolvedUserId(seams);
@@ -276,7 +276,7 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
   | HttpServerRequest.HttpServerRequest
-  | SqlClient.SqlClient
+  | DatabaseServices
   | IntegrationConnect
   | HttpClient.HttpClient
 > {
@@ -341,7 +341,7 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+  HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
 > {
   yield* hostedMethod(HTTP_METHOD.POST);
   const provider = yield* requestedProvider();
@@ -376,7 +376,7 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
   ): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+    HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
   > {
     yield* hostedMethod(HTTP_METHOD.POST);
     const provider = yield* requestedProvider();
@@ -403,7 +403,7 @@ function landing({ provider, status }: Landing): HttpServerResponse.HttpServerRe
 const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   state: string | null,
-): Effect.fn.Return<Landing, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
+): Effect.fn.Return<Landing, HostedRefusal, DatabaseServices | IntegrationConnect> {
   const expired = { provider: undefined, status: INTEGRATION_LANDING_STATUS.EXPIRED } as const;
   if (state === null || !STATE_PATTERN.test(state)) return expired;
   const row = yield* hostedStoreOrUnavailable(seams.readSignIn(state));
@@ -440,7 +440,7 @@ const connectedEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectedEnd
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+  HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
 > {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const query = new URL(request.url, "https://localhost").searchParams;
@@ -462,7 +462,7 @@ function refusing<R>(
 /** The group: the five paths, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
-): WebRoutes<SqlClient.SqlClient | IntegrationConnect | HttpClient.HttpClient> {
+): WebRoutes<DatabaseServices | IntegrationConnect | HttpClient.HttpClient> {
   const tools: ToolsCache = new Map();
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.TOOLS, refusing(toolsEndpoint(seams, tools))),

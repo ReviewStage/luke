@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { writeDelegation } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
@@ -5,7 +6,6 @@ import { codingAgentDelegationInputSchema } from "@sidecar/hosted/coding-agent-w
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { openChildConversation } from "../brain-host/conversation.js";
 import { MODEL_CHOICE_REFUSAL, type OfferedModel, validateModelChoice } from "../model-catalog.js";
 
@@ -77,7 +77,7 @@ export function recordDelegation(
   callId: string,
   choice: ModelChoice,
   label: string,
-): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   const child = childConversationId(parent.conversationId, callId);
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(

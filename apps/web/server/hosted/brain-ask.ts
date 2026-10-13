@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import {
   ASK_DISPATCH_REFUSAL,
   type AskRecord,
@@ -23,8 +24,6 @@ import {
   Option,
   Result,
 } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "../core.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./brain-host/bounds.js";
 import {
@@ -102,8 +101,8 @@ export const askStanding = /* @__PURE__ */ Effect.fn("web/askStanding")(function
   id: string,
 ): Effect.fn.Return<
   AskStanding | undefined,
-  SqlError | EffectSchema.SchemaError,
-  SqlClient.SqlClient
+  QueryError | EffectSchema.SchemaError,
+  DatabaseServices
 > {
   const [turn] = yield* reads.store.turns.named(userId, [id]);
   if (turn) return { ask: undefined, turn };
@@ -215,7 +214,7 @@ const unreachableSend = () =>
 export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
   seams: AskSeams,
   input: AskInput,
-): Effect.fn.Return<AskOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+): Effect.fn.Return<AskOutcome, QueryError | EffectSchema.SchemaError, DatabaseServices> {
   const { userId, question, origin, clientId, conversationId } = input;
   const now = new Date(yield* Clock.currentTimeMillis);
   if (!(yield* conversationOwnedBy(userId, conversationId))) {
@@ -346,7 +345,7 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
   seams: StopSeams,
   userId: string,
   id: string,
-): Effect.fn.Return<StopOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+): Effect.fn.Return<StopOutcome, QueryError | EffectSchema.SchemaError, DatabaseServices> {
   const standing = yield* askStanding(seams, userId, id);
   if (standing === undefined) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
   const at = new Date(yield* Clock.currentTimeMillis);

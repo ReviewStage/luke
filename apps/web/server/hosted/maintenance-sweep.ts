@@ -1,5 +1,5 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { Clock, Effect, type Redacted } from "effect";
-import type { SqlClient } from "effect/sql";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import {
   bearerMatchesSecret,
@@ -23,7 +23,7 @@ import type { SessionSandboxSweepOutcome } from "./session-sandboxes.js";
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
-type SweepRead<A> = Effect.Effect<A, unknown, SqlClient.SqlClient>;
+type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
 /** The five sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
@@ -61,7 +61,7 @@ interface MaintenanceSweepAnswer {
 export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaintenanceSweep")(
   function* (
     options: MaintenanceSweepOptions,
-  ): Effect.fn.Return<Response, unknown, SqlClient.SqlClient> {
+  ): Effect.fn.Return<Response, unknown, DatabaseServices> {
     const { request } = options;
     if (request.method !== "GET") {
       return errorResponse(

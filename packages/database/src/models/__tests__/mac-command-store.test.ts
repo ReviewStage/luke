@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { MacCommandResult } from "@sidecar/hosted/mac-command-wire";
 import { Clock, Effect, Option } from "effect";
-import { db } from "../../core/query.js";
+import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
@@ -34,6 +34,7 @@ const RESULT: MacCommandResult = {
 };
 
 const openAccounts = Effect.gen(function* () {
+  const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
     yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });

@@ -1,5 +1,5 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { Effect } from "effect";
-import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,
@@ -38,7 +38,7 @@ export interface AdminFavoriteOptions {
  */
 export function handleAdminFavorite(
   options: AdminFavoriteOptions,
-): Effect.Effect<Response, never, SqlClient.SqlClient> {
+): Effect.Effect<Response, never, DatabaseServices> {
   const { request } = options;
   // The gate admitted only PUT and DELETE, and which of the two it was is the
   // whole ask: PUT sets the star, DELETE takes it back.

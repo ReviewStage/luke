@@ -8,11 +8,12 @@
  * Schema failure's issue may quote the row. A route carries the failure
  * onward as the unavailable refusal.
  */
+
+import type { QueryError } from "@sidecar/database/core/query";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, type Schema } from "effect";
-import type { SqlError } from "effect/sql/SqlError";
 
-export type StoreFailure = SqlError | Schema.SchemaError;
+export type StoreFailure = QueryError | Schema.SchemaError;
 
 /**
  * The failure as one warning line of kinds alone: a `SqlError` by the kind of

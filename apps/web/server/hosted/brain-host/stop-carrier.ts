@@ -2,10 +2,9 @@
  * stop-carrier.ts -- the Stop a waiting ask took, carried to eve at the start of its turn.
  */
 
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import { Effect, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { describeUnreachable, EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
 
 /** What carrying a waiting ask's Stop at its turn's start needs: eve as the carrier reaches it, the writer's stamp, the clock, and where a refusal is said. */
@@ -35,7 +34,7 @@ export const carryStop = /* @__PURE__ */ Effect.fn("web/carryStop")(function* (
   sessionId: string,
   eveTurnId: string,
   turnId: string,
-): Effect.fn.Return<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.fn.Return<void, QueryError | Schema.SchemaError, DatabaseServices> {
   const cancelled = yield* seams.eve.cancel(sessionId, eveTurnId).pipe(
     Effect.catchTag("EveUnreachable", (failure) => {
       seams.report(

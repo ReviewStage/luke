@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -56,6 +57,7 @@ const answer = (catalog: Layer.Layer<ModelCatalog>, request: Request, logged: st
     const services = Layer.mergeAll(
       catalog,
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Logger.layer([capture]),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(

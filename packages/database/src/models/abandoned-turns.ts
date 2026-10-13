@@ -3,10 +3,8 @@ import { sessionKey } from "@sidecar/runtime/vocabulary";
 import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
 import { SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
@@ -61,28 +59,30 @@ const abandonedTurns = SqlSchema.findAll({
   }),
   Result: AbandonedTurnRowSchema,
   execute: (request) =>
-    db
-      .select({ id: turns.id, userId: turns.userId, conversationId: turns.conversationId })
-      .from(turns)
-      .innerJoin(conversations, eq(conversations.id, turns.conversationId))
-      .where(
-        and(
-          eq(turns.status, TURN_STATUS.RUNNING),
-          isNull(conversations.deletedAt),
-          or(
-            and(
-              ne(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-              lt(turns.startedAt, request.startedBefore),
-            ),
-            and(
-              eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-              lt(turns.startedAt, request.codingAgentStartedBefore),
+    Database.use((db) =>
+      db
+        .select({ id: turns.id, userId: turns.userId, conversationId: turns.conversationId })
+        .from(turns)
+        .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+        .where(
+          and(
+            eq(turns.status, TURN_STATUS.RUNNING),
+            isNull(conversations.deletedAt),
+            or(
+              and(
+                ne(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+                lt(turns.startedAt, request.startedBefore),
+              ),
+              and(
+                eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+                lt(turns.startedAt, request.codingAgentStartedBefore),
+              ),
             ),
           ),
-        ),
-      )
-      .orderBy(asc(turns.startedAt), asc(turns.id))
-      .limit(request.limit),
+        )
+        .orderBy(asc(turns.startedAt), asc(turns.id))
+        .limit(request.limit),
+    ),
 });
 
 export interface AbandonedTurnSweepStore {
@@ -99,7 +99,7 @@ export interface AbandonedTurnSweepOptions {
 export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandonedTurns")(function* (
   store: AbandonedTurnSweepStore,
   options: AbandonedTurnSweepOptions,
-): Effect.fn.Return<number, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
   const turns = yield* abandonedTurns({
     startedBefore: new Date(options.now - TURN_ABANDON.AFTER_MS),
     codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.CODING_AGENT_AFTER_MS),

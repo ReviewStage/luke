@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
@@ -39,7 +40,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import {
   PLAN_LIST_ARCHIVED,
   PLAN_LIST_QUERY,
@@ -254,11 +254,7 @@ export interface PlansAppSeams extends EveReach {
 }
 
 /** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a planning worker's transcript prices its turns at. */
-export type PlansAppServices =
-  | SqlClient.SqlClient
-  | GitHubApp
-  | HttpClient.HttpClient
-  | ModelCatalog;
+export type PlansAppServices = DatabaseServices | GitHubApp | HttpClient.HttpClient | ModelCatalog;
 
 type PlansServices = PlansAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -303,7 +299,7 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   string | null,
   HostedRefusal,
-  GitHubApp | HttpClient.HttpClient | SqlClient.SqlClient
+  GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
   if (repository === undefined || repository === null) return null;
   const app = yield* GitHubApp;

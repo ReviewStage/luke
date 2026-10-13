@@ -1,8 +1,8 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import { GitHubApp, type GitHubUserReadFailure, noreplyAddress } from "../../github/github-app.js";
 import {
   type CheckoutIdentity,
@@ -53,7 +53,7 @@ export class CheckoutRefused extends Data.TaggedError("CheckoutRefused")<{
 }> {}
 
 /** What a mint or a checkout may reach: GitHub through the App, and the store for the account's token. */
-export type CheckoutServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+export type CheckoutServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 /** The branch checked out, as git prints it: the name, or nothing on a detached HEAD. */
 const SHOW_BRANCH = "git branch --show-current";

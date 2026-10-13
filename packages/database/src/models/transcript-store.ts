@@ -9,7 +9,7 @@ import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { db } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
@@ -45,10 +45,12 @@ const findOwnedPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String, conversationId: Schema.NullOr(Schema.String) }),
   execute: ({ userId, planId }) =>
-    db
-      .select({ id: plan.id, conversationId: plan.conversationId })
-      .from(plan)
-      .where(and(eq(plan.id, planId), eq(plan.userId, userId))),
+    Database.use((db) =>
+      db
+        .select({ id: plan.id, conversationId: plan.conversationId })
+        .from(plan)
+        .where(and(eq(plan.id, planId), eq(plan.userId, userId))),
+    ),
 });
 
 const SegmentRowSchema = Schema.Struct({
@@ -71,24 +73,26 @@ const findNewestSegments = SqlSchema.findAll({
   Request: PlanKeySchema,
   Result: SegmentRowSchema,
   execute: ({ userId, planId }) =>
-    db
-      .select({
-        voiceSessionId: voiceTranscriptSegments.voiceSessionId,
-        startedAt: voiceSessions.startedAt,
-        role: voiceTranscriptSegments.role,
-        text: voiceTranscriptSegments.text,
-        startMs: voiceTranscriptSegments.startMs,
-        endMs: voiceTranscriptSegments.endMs,
-      })
-      .from(voiceTranscriptSegments)
-      .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-      .where(and(eq(voiceSessions.userId, userId), eq(voiceSessions.planId, planId)))
-      .orderBy(
-        desc(voiceSessions.startedAt),
-        desc(voiceSessions.id),
-        desc(voiceTranscriptSegments.seq),
-      )
-      .limit(TRANSCRIPT_BOUNDS.MAX_SEGMENTS + 1),
+    Database.use((db) =>
+      db
+        .select({
+          voiceSessionId: voiceTranscriptSegments.voiceSessionId,
+          startedAt: voiceSessions.startedAt,
+          role: voiceTranscriptSegments.role,
+          text: voiceTranscriptSegments.text,
+          startMs: voiceTranscriptSegments.startMs,
+          endMs: voiceTranscriptSegments.endMs,
+        })
+        .from(voiceTranscriptSegments)
+        .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
+        .where(and(eq(voiceSessions.userId, userId), eq(voiceSessions.planId, planId)))
+        .orderBy(
+          desc(voiceSessions.startedAt),
+          desc(voiceSessions.id),
+          desc(voiceTranscriptSegments.seq),
+        )
+        .limit(TRANSCRIPT_BOUNDS.MAX_SEGMENTS + 1),
+    ),
 });
 
 const CallRecordRowSchema = Schema.Struct({
@@ -106,16 +110,18 @@ const findCallRecords = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, ids: Schema.Array(Schema.String) }),
   Result: CallRecordRowSchema,
   execute: ({ userId, ids }) =>
-    db
-      .select({
-        id: voiceSessions.id,
-        closedAt: voiceSessions.closedAt,
-        closeReason: voiceSessions.closeReason,
-        usage: voiceSessions.usage,
-        model: voiceSessions.model,
-      })
-      .from(voiceSessions)
-      .where(and(inArray(voiceSessions.id, [...ids]), eq(voiceSessions.userId, userId))),
+    Database.use((db) =>
+      db
+        .select({
+          id: voiceSessions.id,
+          closedAt: voiceSessions.closedAt,
+          closeReason: voiceSessions.closeReason,
+          usage: voiceSessions.usage,
+          model: voiceSessions.model,
+        })
+        .from(voiceSessions)
+        .where(and(inArray(voiceSessions.id, [...ids]), eq(voiceSessions.userId, userId))),
+    ),
 });
 
 /** The rows a line was written as: each of its speaker's on its call whose words began inside the line's span, more than one where a call that reattached split one utterance across rows. */

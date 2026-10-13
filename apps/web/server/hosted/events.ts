@@ -1,8 +1,7 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { Clock, Effect, type Layer, Option, type Schema } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import {
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
   type ProductEventBatch,
@@ -68,7 +67,7 @@ export interface EventsOptions {
    */
   readPerson?: (
     userId: string,
-  ) => Effect.Effect<PosthogPerson | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+  ) => Effect.Effect<PosthogPerson | undefined, QueryError | Schema.SchemaError, DatabaseServices>;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
 }
@@ -121,7 +120,7 @@ function batchDocument(
 
 export function handleEvents(
   options: EventsOptions,
-): Effect.Effect<Response, never, SqlClient.SqlClient> {
+): Effect.Effect<Response, never, DatabaseServices> {
   const { request } = options;
   return Effect.gen(function* () {
     if (request.method !== "POST") {

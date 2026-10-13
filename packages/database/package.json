@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./core/drizzle": "./src/core/drizzle.js",
     "./core/migrator": "./src/core/migrator.js",
     "./core/query": "./src/core/query.js",
     "./core/sql-client": "./src/core/sql-client.js",
@@ -75,7 +74,7 @@
     "@sidecar/settings": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "ai": "catalog:",
-    "drizzle-orm": "0.45.2",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
@@ -85,7 +84,7 @@
     "@electric-sql/pglite": "0.5.8",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "catalog:",
     "pg": "8.23.0",
     "typescript": "catalog:",
     "vitest": "catalog:"

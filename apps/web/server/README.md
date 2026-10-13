@@ -366,23 +366,27 @@ environment variables reach all three services alike, and each service's own
 
 Drizzle is the statement layer and nothing else. A query module builds its
 statement with the query builder over the tables its own
-`packages/database/src/schemas/*.ts` module declares, and `packages/database/src/core/drizzle.ts` — the
-bridge ported from `@effect/sql-drizzle`, named in root AGENTS.md as a
-permanent adaptor — renders it and runs it on the `SqlClient` the asking fiber
-already carries. So a module still answers `Effect<A, SqlError |
-Schema.SchemaError, SqlClient>`, a bridged statement lands inside whatever
-`client.withTransaction` encloses it rather than beside it on a second
-connection, and one module still runs on both dialects. Only
+`packages/database/src/schemas/*.ts` module declares, on the `Database`
+service `packages/database/src/core/query.ts` names: Drizzle's own Effect
+driver, `drizzle-orm/effect-postgres` over the same `PgClient` a raw `sql`
+statement runs on (`drizzle-orm/effect-pglite` over `@effect/sql-pglite` in
+the store's tests). So a module answers `Effect<A, QueryError |
+Schema.SchemaError, DatabaseServices>` — `QueryError` being a raw statement's
+`SqlError` or the driver's `EffectDrizzleQueryError` around one — a Drizzle
+statement lands inside whatever `client.withTransaction` encloses it rather
+than beside it on a second connection, and one module still runs on both
+dialects. Only
 `packages/database/src/core/migrator.ts` is raw by design: its six statements are
 dialect metaprogramming over the journal rather than domain queries. A tagged
 template anywhere else is a leftover, not a pattern.
 
-`packages/database/src/core/query.ts` holds the one shared handle, `db`, built at module scope
-and imported wherever a statement is spelled. There is nothing per-module or
-per-request to build: the handle carries no connection, no client, and no
-context — it reads the `SqlClient` out of the fiber that yields the statement
-— so one serves every request and both dialects at once and two callers have
-nothing to contend over. It takes no `schema` config, because nothing reaches
+`packages/database/src/core/query.ts` holds the `Database` service, its
+layer over the runtime's `PgClient` (provided beside the `SqlClient` by
+`server/db/sql-client.ts`, `core/sql-client.ts`, and `getTestDB()`), and
+`queryBuilder`, the session-less builder a subquery or a `with` clause is
+rendered with outside any statement. A module reads the database as
+`const db = yield* Database` in a generator, or `Database.use((db) => ...)`
+where a statement is one expression. It takes no `relations` config, because nothing reaches
 Drizzle's relational queries: a statement is the `db.select()` builder, never
 `db.query`, as the `drizzle` skill has it. The tables a statement names are
 named imports from their own module
@@ -392,20 +396,21 @@ which is what makes a renamed column a type error at the call site.
 The builder hands back the statement's rows, not a guarantee about them, so a
 row is still decoded by an Effect `Schema`, where lobehub's examples reach for
 `drizzle-zod`: Effect takes no zod schema, and every other boundary value here
-is declared as a `Schema` already. `SqlSchema`'s `execute` takes the builder
-itself — a patched builder already is the `Effect<rows, SqlError, SqlClient>`
-that `execute` wants — so no wrapper stands between them:
+is declared as a `Schema` already. `SqlSchema`'s `execute` takes the statement
+as the Effect the driver's builder already is, read off the service:
 
 ```ts
 const findPlans = SqlSchema.findAll({
   Request: Schema.String,
   Result: PlanRowSchema,
   execute: (userId) =>
-    db
-      .select(PLAN_COLUMNS)
-      .from(plan)
-      .where(eq(plan.userId, userId))
-      .orderBy(desc(plan.createdAt), desc(plan.id)),
+    Database.use((db) =>
+      db
+        .select(PLAN_COLUMNS)
+        .from(plan)
+        .where(eq(plan.userId, userId))
+        .orderBy(desc(plan.createdAt), desc(plan.id)),
+    ),
 });
 ```
 
@@ -482,7 +487,7 @@ query.
 
 Every module under `server/` that reads or writes this database reads the
 client out of the fiber it runs on rather than holding one of its own, the
-bridged statements of "The data layer" above included, so the edge serving a
+Drizzle `Database` of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer and the voice writer among them.
 Outside `packages/database/src/models/`, `packages/database/src/models/plan-store.ts` is on the same

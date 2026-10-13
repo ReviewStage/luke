@@ -1,4 +1,4 @@
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { plan } from "@sidecar/database/schemas/plan";
 import { eq, sql } from "drizzle-orm";
 
@@ -28,7 +28,7 @@ export const INVITATIONS_TEXT = [
 
 /** Makes the plan one document holding `text`. */
 export function makeDocumentPlan(planId: string, text: string) {
-  return db.update(plan).set({ document: text }).where(eq(plan.id, planId));
+  return Database.use((db) => db.update(plan).set({ document: text }).where(eq(plan.id, planId)));
 }
 
 /**
@@ -37,8 +37,10 @@ export function makeDocumentPlan(planId: string, text: string) {
  * as the revision it changed (`earlier`) and its sections read as no one's.
  */
 export function makeSavedDocumentPlan(planId: string, text: string) {
-  return db
-    .update(plan)
-    .set({ document: text, updatedAt: sql`${plan.createdAt} + interval '1 minute'` })
-    .where(eq(plan.id, planId));
+  return Database.use((db) =>
+    db
+      .update(plan)
+      .set({ document: text, updatedAt: sql`${plan.createdAt} + interval '1 minute'` })
+      .where(eq(plan.id, planId)),
+  );
 }

@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   type CodingAgent,
   readCodingAgent,
@@ -9,7 +10,6 @@ import type {
 } from "@sidecar/hosted/coding-agent-wire";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import { GitHubApp, type GitHubUserReadFailure } from "../../github/github-app.js";
 import {
   branchStands,
@@ -55,7 +55,7 @@ class RepositoryNotReachable extends Data.TaggedError("RepositoryNotReachable")<
 /** What a read of what an agent published may fail with: the store, GitHub on the developer's token, or a repository out of reach. */
 type PublishedReadFailure = StoreFailure | GitHubUserReadFailure | RepositoryNotReachable;
 
-type PublishedServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 /** The wire's pull request from GitHub's, with its head's checks read beside it. */
 function withChecks(

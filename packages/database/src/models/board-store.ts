@@ -8,7 +8,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices } from "../core/query.js";
 import { plan, planBoard } from "../schemas/plan.js";
 import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./plan-store.js";
 
@@ -60,12 +60,14 @@ const findBoard = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: BoardRowSchema,
   execute: ({ userId, planId }) =>
-    db
-      .select(BOARD_COLUMNS)
-      .from(plan)
-      .leftJoin(planBoard, eq(planBoard.planId, plan.id))
-      .where(ownedPlan(userId, planId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(BOARD_COLUMNS)
+        .from(plan)
+        .leftJoin(planBoard, eq(planBoard.planId, plan.id))
+        .where(ownedPlan(userId, planId))
+        .limit(1),
+    ),
 });
 
 /** The plan's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account owns no such plan. */
@@ -73,11 +75,13 @@ const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planId }) =>
-    db
-      .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
-      .from(plan)
-      .where(ownedPlan(userId, planId))
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
+        .from(plan)
+        .where(ownedPlan(userId, planId))
+        .for("update"),
+    ),
 });
 
 /**
@@ -94,14 +98,16 @@ function upsertScene(elements: readonly BoardElement[], image: string | undefine
       const scene = { elements, appliedDrawing, updatedAt: now };
       // Note that a save moving to a new drawing with no image drops the old one, which shows a drawing gone.
       const kept = sql`case when ${planBoard.appliedDrawing} = ${appliedDrawing} then ${planBoard.image} end`;
-      return db
-        .insert(planBoard)
-        .values({ planId, ...scene, image: image ?? null })
-        .onConflictDoUpdate({
-          target: planBoard.planId,
-          set: { ...scene, image: image ?? kept },
-        })
-        .returning(BOARD_COLUMNS);
+      return Database.use((db) =>
+        db
+          .insert(planBoard)
+          .values({ planId, ...scene, image: image ?? null })
+          .onConflictDoUpdate({
+            target: planBoard.planId,
+            set: { ...scene, image: image ?? kept },
+          })
+          .returning(BOARD_COLUMNS),
+      );
     },
   });
 }
@@ -117,16 +123,18 @@ const findBoardImage = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: BoardImageRowSchema,
   execute: ({ userId, planId }) =>
-    db
-      .select({
-        image: planBoard.image,
-        appliedDrawing: planBoard.appliedDrawing,
-        drawingNumber: planBoard.drawingNumber,
-      })
-      .from(plan)
-      .leftJoin(planBoard, eq(planBoard.planId, plan.id))
-      .where(ownedPlan(userId, planId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({
+          image: planBoard.image,
+          appliedDrawing: planBoard.appliedDrawing,
+          drawingNumber: planBoard.drawingNumber,
+        })
+        .from(plan)
+        .leftJoin(planBoard, eq(planBoard.planId, plan.id))
+        .where(ownedPlan(userId, planId))
+        .limit(1),
+    ),
 });
 
 /** Luke's drawing written whole, as the next number. */
@@ -135,14 +143,16 @@ function upsertDrawing(drawing: readonly DrawingElement[]) {
     Request: Schema.Struct({ planId: Schema.String, now: Schema.Date }),
     Result: BoardRowSchema,
     execute: ({ planId, now }) =>
-      db
-        .insert(planBoard)
-        .values({ planId, drawing, drawingNumber: 1, updatedAt: now })
-        .onConflictDoUpdate({
-          target: planBoard.planId,
-          set: { drawing, drawingNumber: sql`${planBoard.drawingNumber} + 1`, updatedAt: now },
-        })
-        .returning(BOARD_COLUMNS),
+      Database.use((db) =>
+        db
+          .insert(planBoard)
+          .values({ planId, drawing, drawingNumber: 1, updatedAt: now })
+          .onConflictDoUpdate({
+            target: planBoard.planId,
+            set: { drawing, drawingNumber: sql`${planBoard.drawingNumber} + 1`, updatedAt: now },
+          })
+          .returning(BOARD_COLUMNS),
+      ),
   });
 }
 
@@ -160,7 +170,7 @@ function boardOf(row: BoardRow): Board {
 function underPlanLock<E>(
   userId: string,
   planId: string,
-  write: (now: Date, archived: boolean) => Effect.Effect<BoardRow, E, SqlClient.SqlClient>,
+  write: (now: Date, archived: boolean) => Effect.Effect<BoardRow, E, DatabaseServices>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -207,7 +217,7 @@ export function writeScene(
   elements: readonly BoardElement[],
   appliedDrawing: number,
   image?: string,
-): Effect.Effect<Option.Option<Board>, PlanStoreFailure | PlanArchived, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<Board>, PlanStoreFailure | PlanArchived, DatabaseServices> {
   return underPlanLock(userId, planId, (now, archived) =>
     archived
       ? Effect.fail(new PlanArchived())

@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   listRepositoryPins,
   setRepositoryPin,
@@ -6,7 +7,6 @@ import { repositoryPinRequestSchema } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -50,7 +50,7 @@ const repositoryPinsEndpoint = /* @__PURE__ */ Effect.fn("web/repositoryPinsEndp
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  HttpServerRequest.HttpServerRequest | DatabaseServices
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.PUT) {
@@ -75,7 +75,7 @@ const repositoryPinsEndpoint = /* @__PURE__ */ Effect.fn("web/repositoryPinsEndp
 });
 
 /** The group: the one pins path, and the hosted vocabulary's own refusal for any other. */
-export function repositoryPinsApp(seams: RepositoryPinsAppSeams): WebRoutes<SqlClient.SqlClient> {
+export function repositoryPinsApp(seams: RepositoryPinsAppSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, REPOSITORY_PINS_PATH, hostedRefusing(repositoryPinsEndpoint(seams))),
     hostedNotFoundRoute,

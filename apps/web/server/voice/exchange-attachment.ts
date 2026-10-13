@@ -1,9 +1,8 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import type { StoreWriter } from "@sidecar/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import {
   type ExchangeAttachment,
@@ -68,8 +67,8 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     session,
   ): Effect.Effect<
     HostedLiveExchange,
-    SqlError | Schema.SchemaError | ExchangeCannotStand,
-    Scope.Scope | SqlClient.SqlClient
+    QueryError | Schema.SchemaError | ExchangeCannotStand,
+    Scope.Scope | DatabaseServices
   > =>
     Effect.gen(function* () {
       const conversationId = yield* planConversation(session.accountId, session.planId);

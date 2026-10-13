@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { spendDictationMeter } from "@sidecar/database/models/quota";
 import { base64Bytes, base64Chars } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -13,7 +14,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -67,7 +67,7 @@ export interface DictationAppSeams {
 
 type DictationRequirements =
   | HttpServerRequest.HttpServerRequest
-  | SqlClient.SqlClient
+  | DatabaseServices
   | HostedEnvironment
   | HttpClient.HttpClient;
 
@@ -117,7 +117,7 @@ const dictationEndpoint = /* @__PURE__ */ Effect.fn("web/dictationEndpoint")(fun
 /** The group: the one dictation path, and the hosted vocabulary's own refusal for any other. */
 export function dictationApp(
   seams: DictationAppSeams,
-): WebRoutes<SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient> {
+): WebRoutes<DatabaseServices | HostedEnvironment | HttpClient.HttpClient> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, DICTATION_PATH, hostedRefusing(dictationEndpoint(seams))),
     hostedNotFoundRoute,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { repositoryPinsAnswerSchema } from "@sidecar/hosted/plan-wire";
@@ -33,6 +33,7 @@ interface Answer {
 
 /** Two accounts, each behind its own bearer, and the group answering one request. */
 const openAccounts = Effect.gen(function* () {
+  const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
     yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
@@ -51,6 +52,7 @@ const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
     // The handler runs on the router's own fiber, so it is handed the test's clock: a pin's instant is read from it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(

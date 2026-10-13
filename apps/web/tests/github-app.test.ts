@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { verify } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { account } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { eq } from "drizzle-orm";
@@ -121,6 +121,7 @@ afterEach(() => {
 it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
   it.effect("the row stays sealed: what the table holds is not the token", () =>
     Effect.gen(function* () {
+      const db = yield* Database;
       const now = yield* Clock.currentTimeMillis;
       const userId = yield* openGithubUser(standingGithubRow(now));
       const [row] = yield* db

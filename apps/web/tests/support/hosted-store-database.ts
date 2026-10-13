@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
 import { runWebMigrations } from "@sidecar/database/core/migrator";
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { type HostedStore, hostedStore } from "@sidecar/database/models/hosted-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -13,8 +13,6 @@ import {
 } from "@sidecar/database/testing";
 import { atInstant } from "@sidecar/wire/testing";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import type * as SqlClient from "effect/sql/SqlClient";
-import type { SqlError } from "effect/sql/SqlError";
 
 /**
  * The store's tests run against the real generated migrations on a real
@@ -33,13 +31,13 @@ import type { SqlError } from "effect/sql/SqlError";
  * through, over the runtime this harness opened for the test database.
  */
 export type HostedStoreTestRun = <A, E>(
-  effect: Effect.Effect<A, E, SqlClient.SqlClient>,
+  effect: Effect.Effect<A, E, DatabaseServices>,
 ) => Promise<A>;
 
 interface HostedStoreTestDatabase {
   readonly store: HostedStore;
   /** The same client the store's effects run against, for a test that reads one itself. */
-  readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
+  readonly sql: Layer.Layer<DatabaseServices, QueryError>;
   /** The runner a test answers the store's and the writers' effects through, over that client. */
   readonly run: HostedStoreTestRun;
   /**
@@ -47,7 +45,7 @@ interface HostedStoreTestDatabase {
    * contending for one row; none on PGlite, which is one connection and runs
    * two transactions one after the other whatever the test forks.
    */
-  readonly anotherConnection: (() => Layer.Layer<SqlClient.SqlClient, SqlError>) | undefined;
+  readonly anotherConnection: (() => Layer.Layer<DatabaseServices, QueryError>) | undefined;
   /** Inserts a user row for one test, answering the id every other row hangs from. */
   createUser(): Promise<string>;
   close(): Promise<void>;
@@ -78,7 +76,9 @@ export async function openHostedStoreTestDatabase({
       const id = `user-${randomUUID()}`;
       return run(
         Effect.asVoid(
-          db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@luke.test` }),
+          Database.use((db) =>
+            db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@luke.test` }),
+          ),
         ),
       ).then(() => id);
     },
@@ -90,7 +90,7 @@ export async function openHostedStoreTestDatabase({
 }
 
 interface OpenedDatabase {
-  readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
+  readonly sql: Layer.Layer<DatabaseServices, QueryError>;
   readonly anotherConnection: HostedStoreTestDatabase["anotherConnection"];
   close(): Promise<void>;
 }

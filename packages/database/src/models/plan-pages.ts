@@ -8,7 +8,7 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { db } from "../core/query.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -53,7 +53,9 @@ const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, planId }) =>
-    db.select({ id: plan.id }).from(plan).where(ownedPlan(userId, planId)).for("update"),
+    Database.use((db) =>
+      db.select({ id: plan.id }).from(plan).where(ownedPlan(userId, planId)).for("update"),
+    ),
 });
 
 /** The newest version's number of one page of the plan; nothing where the plan has no such page. */
@@ -61,12 +63,14 @@ const findNewestVersion = SqlSchema.findOneOption({
   Request: Schema.Struct({ planId: Schema.String, pageId: Schema.String }),
   Result: Schema.Struct({ version: Schema.Number }),
   execute: ({ planId, pageId }) =>
-    db
-      .select({ version: planPageVersion.version })
-      .from(planPageVersion)
-      .where(and(eq(planPageVersion.planId, planId), eq(planPageVersion.pageId, pageId)))
-      .orderBy(desc(planPageVersion.version))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ version: planPageVersion.version })
+        .from(planPageVersion)
+        .where(and(eq(planPageVersion.planId, planId), eq(planPageVersion.pageId, pageId)))
+        .orderBy(desc(planPageVersion.version))
+        .limit(1),
+    ),
 });
 
 const insertVersion = SqlSchema.findOne({
@@ -79,7 +83,8 @@ const insertVersion = SqlSchema.findOne({
     at: Schema.Date,
   }),
   Result: PageLineRowSchema,
-  execute: (row) => db.insert(planPageVersion).values(row).returning(PAGE_LINE_COLUMNS),
+  execute: (row) =>
+    Database.use((db) => db.insert(planPageVersion).values(row).returning(PAGE_LINE_COLUMNS)),
 });
 
 /** Each page of the account's plan by its newest version, the most recently written first. */
@@ -88,14 +93,14 @@ const findPageLines = SqlSchema.findAll({
   Result: PageLineRowSchema,
   execute: ({ userId, planId }) => {
     // Note that the newest versions are picked first and ordered after, because `distinct on` must lead the ordering.
-    const newest = db
+    const newest = queryBuilder
       .selectDistinctOn([planPageVersion.pageId], PAGE_LINE_COLUMNS)
       .from(planPageVersion)
       .innerJoin(plan, eq(plan.id, planPageVersion.planId))
       .where(and(eq(planPageVersion.planId, planId), eq(plan.userId, userId)))
       .orderBy(planPageVersion.pageId, desc(planPageVersion.version))
       .as("newest");
-    return db.select().from(newest).orderBy(desc(newest.at), newest.pageId);
+    return Database.use((db) => db.select().from(newest).orderBy(desc(newest.at), newest.pageId));
   },
 });
 
@@ -108,19 +113,21 @@ const findVersion = SqlSchema.findOneOption({
   }),
   Result: Schema.Struct({ ...PageLineRowSchema.fields, html: Schema.String }),
   execute: ({ userId, planId, pageId, version }) =>
-    db
-      .select({ ...PAGE_LINE_COLUMNS, html: planPageVersion.html })
-      .from(planPageVersion)
-      .innerJoin(plan, eq(plan.id, planPageVersion.planId))
-      .where(
-        and(
-          eq(planPageVersion.planId, planId),
-          eq(plan.userId, userId),
-          eq(planPageVersion.pageId, pageId),
-          eq(planPageVersion.version, version),
-        ),
-      )
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ ...PAGE_LINE_COLUMNS, html: planPageVersion.html })
+        .from(planPageVersion)
+        .innerJoin(plan, eq(plan.id, planPageVersion.planId))
+        .where(
+          and(
+            eq(planPageVersion.planId, planId),
+            eq(plan.userId, userId),
+            eq(planPageVersion.pageId, pageId),
+            eq(planPageVersion.version, version),
+          ),
+        )
+        .limit(1),
+    ),
 });
 
 function lineOf(row: typeof PageLineRowSchema.Type): PageLine {

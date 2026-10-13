@@ -9,7 +9,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
-import { getTableName } from "drizzle-orm";
+import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
@@ -156,7 +156,7 @@ test("every conversation row cascades with its account and no other account's", 
   await deleteUser(database.run, userId);
 
   for (const column of [conversations.userId, messages.userId, turns.userId]) {
-    const table = getTableName(column.table);
+    const table = getTableName(getColumnTable(column));
     assert.equal(
       await countRowsWhere(database.run, column, userId),
       0,

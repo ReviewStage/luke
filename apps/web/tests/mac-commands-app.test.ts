@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
 import { getTestDB } from "@sidecar/database/testing";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { Clock, Effect, Layer, Option } from "effect";
@@ -32,6 +33,7 @@ const ask = (request: Request) =>
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(

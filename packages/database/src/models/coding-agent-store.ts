@@ -16,8 +16,7 @@ import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import {
   codingAgent,
   codingAgentDelegation,
@@ -83,14 +82,10 @@ import type { ConversationTarget } from "./writer.js";
  * database of its own.
  */
 
-type CodingAgentStoreFailure = SqlError | Schema.SchemaError;
+type CodingAgentStoreFailure = QueryError | Schema.SchemaError;
 
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
-export type CodingAgentStoreEffect<A> = Effect.Effect<
-  A,
-  CodingAgentStoreFailure,
-  SqlClient.SqlClient
->;
+export type CodingAgentStoreEffect<A> = Effect.Effect<A, CodingAgentStoreFailure, DatabaseServices>;
 
 /** One coding agent as the service holds it: what the tabs read, and what the agent's own turns run on. */
 export interface CodingAgent {
@@ -209,11 +204,13 @@ const lockOwnedPlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planId }) =>
-    db
-      .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
-      .from(plan)
-      .where(and(eq(plan.id, planId), eq(plan.userId, userId)))
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
+        .from(plan)
+        .where(and(eq(plan.id, planId), eq(plan.userId, userId)))
+        .for("update"),
+    ),
 });
 
 const findAgentByKey = SqlSchema.findOneOption({
@@ -223,21 +220,30 @@ const findAgentByKey = SqlSchema.findOneOption({
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, idempotencyKey }) =>
-    db
-      .select(CODING_AGENT_COLUMNS)
-      .from(codingAgent)
-      .where(and(eq(codingAgent.userId, userId), eq(codingAgent.idempotencyKey, idempotencyKey)))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.userId, userId), eq(codingAgent.idempotencyKey, idempotencyKey)))
+        .limit(1),
+    ),
 });
 
 const insertAgentConversation = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
   Result: IdRowSchema,
   execute: ({ userId, now }) =>
-    db
-      .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT, createdAt: now, lastActivityAt: now })
-      .returning({ id: conversations.id }),
+    Database.use((db) =>
+      db
+        .insert(conversations)
+        .values({
+          userId,
+          kind: CONVERSATION_KIND.CODING_AGENT,
+          createdAt: now,
+          lastActivityAt: now,
+        })
+        .returning({ id: conversations.id }),
+    ),
 });
 
 const insertAgent = SqlSchema.findOne({
@@ -257,23 +263,25 @@ const insertAgent = SqlSchema.findOne({
   }),
   Result: CodingAgentRowSchema,
   execute: (write) =>
-    db
-      .insert(codingAgent)
-      .values({
-        userId: write.userId,
-        planId: write.planId,
-        conversationId: write.conversationId,
-        model: write.model,
-        effort: write.effort,
-        contextWindow: write.contextWindow,
-        planSnapshot: write.planSnapshot,
-        task: write.task,
-        repository: write.repository,
-        disabledServers: write.disabledServers,
-        idempotencyKey: write.idempotencyKey,
-        createdAt: write.now,
-      })
-      .returning(CODING_AGENT_COLUMNS),
+    Database.use((db) =>
+      db
+        .insert(codingAgent)
+        .values({
+          userId: write.userId,
+          planId: write.planId,
+          conversationId: write.conversationId,
+          model: write.model,
+          effort: write.effort,
+          contextWindow: write.contextWindow,
+          planSnapshot: write.planSnapshot,
+          task: write.task,
+          repository: write.repository,
+          disabledServers: write.disabledServers,
+          idempotencyKey: write.idempotencyKey,
+          createdAt: write.now,
+        })
+        .returning(CODING_AGENT_COLUMNS),
+    ),
 });
 
 const updateAgentChoice = SqlSchema.findOneOption({
@@ -286,11 +294,13 @@ const updateAgentChoice = SqlSchema.findOneOption({
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId, model, effort, contextWindow }) =>
-    db
-      .update(codingAgent)
-      .set({ model, effort, contextWindow })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .returning(CODING_AGENT_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ model, effort, contextWindow })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .returning(CODING_AGENT_COLUMNS),
+    ),
 });
 
 const updateAgentServers = SqlSchema.findOneOption({
@@ -301,11 +311,13 @@ const updateAgentServers = SqlSchema.findOneOption({
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId, disabledServers }) =>
-    db
-      .update(codingAgent)
-      .set({ disabledServers })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .returning(CODING_AGENT_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ disabledServers })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .returning(CODING_AGENT_COLUMNS),
+    ),
 });
 
 const updateAgentBranch = SqlSchema.void({
@@ -315,10 +327,12 @@ const updateAgentBranch = SqlSchema.void({
     branch: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, agentId, branch }) =>
-    db
-      .update(codingAgent)
-      .set({ branch })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ branch })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    ),
 });
 
 const updateAgentTitle = SqlSchema.findOneOption({
@@ -329,11 +343,13 @@ const updateAgentTitle = SqlSchema.findOneOption({
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId, title }) =>
-    db
-      .update(codingAgent)
-      .set({ title })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .returning(CODING_AGENT_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ title })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .returning(CODING_AGENT_COLUMNS),
+    ),
 });
 
 const updateAgentArchived = SqlSchema.findOneOption({
@@ -344,24 +360,32 @@ const updateAgentArchived = SqlSchema.findOneOption({
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId, archivedAt }) =>
-    db
-      .update(codingAgent)
-      .set({ archivedAt })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .returning(CODING_AGENT_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .returning(CODING_AGENT_COLUMNS),
+    ),
 });
 
 const fillAgentTitle = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, title: Schema.String }),
   Result: IdRowSchema,
   execute: ({ userId, agentId, title }) =>
-    db
-      .update(codingAgent)
-      .set({ title })
-      .where(
-        and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), isNull(codingAgent.title)),
-      )
-      .returning({ id: codingAgent.id }),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ title })
+        .where(
+          and(
+            eq(codingAgent.id, agentId),
+            eq(codingAgent.userId, userId),
+            isNull(codingAgent.title),
+          ),
+        )
+        .returning({ id: codingAgent.id }),
+    ),
 });
 
 /** The `last_step` column as the coder host writes it (`StoredAgentStep`). */
@@ -383,19 +407,23 @@ const updateAgentStep = SqlSchema.void({
     lastStep: AgentStepColumnSchema,
   }),
   execute: ({ userId, agentId, lastStep }) =>
-    db
-      .update(codingAgent)
-      .set({ lastStep })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ lastStep })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    ),
 });
 
 const updateAgentCompaction = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, at: Schema.Date }),
   execute: ({ userId, agentId, at }) =>
-    db
-      .update(codingAgent)
-      .set({ compactedAt: at })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ compactedAt: at })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    ),
 });
 
 const findAgentContext = SqlSchema.findOneOption({
@@ -407,16 +435,18 @@ const findAgentContext = SqlSchema.findOneOption({
     compactedAt: Schema.NullOr(InstantColumnSchema),
   }),
   execute: ({ userId, agentId }) =>
-    db
-      .select({
-        model: codingAgent.model,
-        contextWindow: codingAgent.contextWindow,
-        lastStep: codingAgent.lastStep,
-        compactedAt: codingAgent.compactedAt,
-      })
-      .from(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({
+          model: codingAgent.model,
+          contextWindow: codingAgent.contextWindow,
+          lastStep: codingAgent.lastStep,
+          compactedAt: codingAgent.compactedAt,
+        })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .limit(1),
+    ),
 });
 
 const findAgentsOfPlan = SqlSchema.findAll({
@@ -427,17 +457,19 @@ const findAgentsOfPlan = SqlSchema.findAll({
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, planId, includeArchived }) =>
-    db
-      .select(CODING_AGENT_COLUMNS)
-      .from(codingAgent)
-      .where(
-        and(
-          eq(codingAgent.userId, userId),
-          eq(codingAgent.planId, planId),
-          includeArchived ? undefined : isNull(codingAgent.archivedAt),
-        ),
-      )
-      .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(
+          and(
+            eq(codingAgent.userId, userId),
+            eq(codingAgent.planId, planId),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+          ),
+        )
+        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
 });
 
 const updateAgentPublished = SqlSchema.void({
@@ -447,10 +479,12 @@ const updateAgentPublished = SqlSchema.void({
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
   execute: ({ userId, agentId, published }) =>
-    db
-      .update(codingAgent)
-      .set({ published })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ published })
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    ),
 });
 
 const findAgentsOfPlans = SqlSchema.findAll({
@@ -460,17 +494,19 @@ const findAgentsOfPlans = SqlSchema.findAll({
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
   execute: ({ userId, planIds }) =>
-    db
-      .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
-      .from(codingAgent)
-      .where(
-        and(
-          eq(codingAgent.userId, userId),
-          inArray(codingAgent.planId, [...planIds]),
-          isNull(codingAgent.archivedAt),
-        ),
-      )
-      .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(codingAgent.userId, userId),
+            inArray(codingAgent.planId, [...planIds]),
+            isNull(codingAgent.archivedAt),
+          ),
+        )
+        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
 });
 
 const findAgentsOnBranches = SqlSchema.findAll({
@@ -481,54 +517,64 @@ const findAgentsOnBranches = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ ...CodingAgentRowSchema.fields, userId: Schema.String }),
   execute: ({ repository, branches, limit }) =>
-    db
-      .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
-      .from(codingAgent)
-      .where(
-        and(eq(codingAgent.repository, repository), inArray(codingAgent.branch, [...branches])),
-      )
-      .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
-      .limit(limit),
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
+        .from(codingAgent)
+        .where(
+          and(eq(codingAgent.repository, repository), inArray(codingAgent.branch, [...branches])),
+        )
+        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+        .limit(limit),
+    ),
 });
 
 const findAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId }) =>
-    db
-      .select(CODING_AGENT_COLUMNS)
-      .from(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .limit(1),
+    ),
 });
 
 const findAgentOfConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, conversationId }) =>
-    db
-      .select(CODING_AGENT_COLUMNS)
-      .from(codingAgent)
-      .where(and(eq(codingAgent.conversationId, conversationId), eq(codingAgent.userId, userId)))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.conversationId, conversationId), eq(codingAgent.userId, userId)))
+        .limit(1),
+    ),
 });
 
 const deleteAgentRow = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({ conversationId: Schema.String }),
   execute: ({ userId, agentId }) =>
-    db
-      .delete(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .returning({ conversationId: codingAgent.conversationId }),
+    Database.use((db) =>
+      db
+        .delete(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+        .returning({ conversationId: codingAgent.conversationId }),
+    ),
 });
 
 const deleteConversationRow = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   execute: ({ userId, conversationId }) =>
-    db
-      .delete(conversations)
-      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
+    Database.use((db) =>
+      db
+        .delete(conversations)
+        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
+    ),
 });
 
 /**
@@ -546,7 +592,7 @@ export function createCodingAgent(
 ): Effect.Effect<
   Option.Option<CodingAgentStarted>,
   CodingAgentStoreFailure | PlanArchived,
-  SqlClient.SqlClient
+  DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -791,10 +837,12 @@ const insertDelegation = SqlSchema.void({
     effort: Schema.String,
   }),
   execute: ({ childConversationId, callId, model, effort }) =>
-    db
-      .insert(codingAgentDelegation)
-      .values({ childConversationId, callId, model, effort })
-      .onConflictDoNothing({ target: codingAgentDelegation.childConversationId }),
+    Database.use((db) =>
+      db
+        .insert(codingAgentDelegation)
+        .values({ childConversationId, callId, model, effort })
+        .onConflictDoNothing({ target: codingAgentDelegation.childConversationId }),
+    ),
 });
 
 const findDelegation = SqlSchema.findOneOption({
@@ -809,22 +857,24 @@ const findDelegation = SqlSchema.findOneOption({
     createdAt: InstantColumnSchema,
   }),
   execute: ({ userId, parentConversationId, childConversationId }) =>
-    db
-      .select({
-        model: codingAgentDelegation.model,
-        effort: codingAgentDelegation.effort,
-        createdAt: conversations.createdAt,
-      })
-      .from(codingAgentDelegation)
-      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
-      .where(
-        and(
-          eq(codingAgentDelegation.childConversationId, childConversationId),
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNull(conversations.deletedAt),
+    Database.use((db) =>
+      db
+        .select({
+          model: codingAgentDelegation.model,
+          effort: codingAgentDelegation.effort,
+          createdAt: conversations.createdAt,
+        })
+        .from(codingAgentDelegation)
+        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .where(
+          and(
+            eq(codingAgentDelegation.childConversationId, childConversationId),
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNull(conversations.deletedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 /** Writes the pair a worker runs on under its child conversation, which must already stand, with the call that delegated it; a pair written twice under one child stands as first written, since the worker may already be reading it. */
@@ -861,21 +911,23 @@ const findDelegationStarts = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ childConversationId: Schema.String, createdAt: InstantColumnSchema }),
   execute: ({ userId, parentConversationId, childConversationIds }) =>
-    db
-      .select({
-        childConversationId: codingAgentDelegation.childConversationId,
-        createdAt: conversations.createdAt,
-      })
-      .from(codingAgentDelegation)
-      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
-      .where(
-        and(
-          inArray(codingAgentDelegation.childConversationId, [...childConversationIds]),
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNull(conversations.deletedAt),
+    Database.use((db) =>
+      db
+        .select({
+          childConversationId: codingAgentDelegation.childConversationId,
+          createdAt: conversations.createdAt,
+        })
+        .from(codingAgentDelegation)
+        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .where(
+          and(
+            inArray(codingAgentDelegation.childConversationId, [...childConversationIds]),
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNull(conversations.deletedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 /** When each of these children of the account's conversation was delegated, by child, for those a delegation was recorded under; none asked, none read. */
@@ -914,25 +966,27 @@ const findDelegations = SqlSchema.findAll({
     createdAt: InstantColumnSchema,
   }),
   execute: ({ userId, parentConversationId }) =>
-    db
-      .select({
-        callId: codingAgentDelegation.callId,
-        childConversationId: codingAgentDelegation.childConversationId,
-        model: codingAgentDelegation.model,
-        effort: codingAgentDelegation.effort,
-        createdAt: conversations.createdAt,
-      })
-      .from(codingAgentDelegation)
-      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
-      .where(
-        and(
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNotNull(codingAgentDelegation.callId),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .orderBy(asc(conversations.createdAt)),
+    Database.use((db) =>
+      db
+        .select({
+          callId: codingAgentDelegation.callId,
+          childConversationId: codingAgentDelegation.childConversationId,
+          model: codingAgentDelegation.model,
+          effort: codingAgentDelegation.effort,
+          createdAt: conversations.createdAt,
+        })
+        .from(codingAgentDelegation)
+        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .where(
+          and(
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNotNull(codingAgentDelegation.callId),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .orderBy(asc(conversations.createdAt)),
+    ),
 });
 
 /** Every worker the account's conversation delegated to by a call it kept, oldest first. */
@@ -946,20 +1000,22 @@ const findDelegationTitles = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, parentConversationId: Schema.String }),
   Result: Schema.Struct({ callId: Schema.String, title: Schema.String }),
   execute: ({ userId, parentConversationId }) =>
-    db
-      .select({ callId: codingAgentDelegation.callId, title: conversations.title })
-      .from(codingAgentDelegation)
-      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
-      .where(
-        and(
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNotNull(codingAgentDelegation.callId),
-          isNotNull(conversations.title),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .orderBy(asc(conversations.createdAt)),
+    Database.use((db) =>
+      db
+        .select({ callId: codingAgentDelegation.callId, title: conversations.title })
+        .from(codingAgentDelegation)
+        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .where(
+          and(
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNotNull(codingAgentDelegation.callId),
+            isNotNull(conversations.title),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .orderBy(asc(conversations.createdAt)),
+    ),
 });
 
 /** Every titled worker of the account's conversation by the call that delegated it, oldest first; one recorded before its call was kept reads as untitled. */
@@ -980,19 +1036,21 @@ const findUntitledDelegations = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ childConversationId: Schema.String }),
   execute: ({ userId, parentConversationId, since }) =>
-    db
-      .select({ childConversationId: codingAgentDelegation.childConversationId })
-      .from(codingAgentDelegation)
-      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
-      .where(
-        and(
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNull(conversations.title),
-          gt(conversations.createdAt, since),
-          isNull(conversations.deletedAt),
+    Database.use((db) =>
+      db
+        .select({ childConversationId: codingAgentDelegation.childConversationId })
+        .from(codingAgentDelegation)
+        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .where(
+          and(
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNull(conversations.title),
+            gt(conversations.createdAt, since),
+            isNull(conversations.deletedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 /** The children of the account's conversation delegated after `since` that have no title yet, which is where a title may still land. */

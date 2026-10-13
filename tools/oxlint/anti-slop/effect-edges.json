@@ -30,7 +30,6 @@
   "runShims": [
     "apps/web/coder/evals/coder.eval.ts",
     "apps/web/eve/evals/brain-host.eval.ts",
-    "packages/database/src/core/drizzle.ts",
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "packages/database/src/testing/sql-client.ts",

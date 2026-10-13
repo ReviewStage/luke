@@ -1,8 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { hostedUsage, voiceSessionUsage } from "../schemas/usage.js";
 
@@ -12,10 +11,10 @@ export function utcDayKey(now: number): string {
 }
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-type QuotaFailure = SqlError | Schema.SchemaError;
+type QuotaFailure = QueryError | Schema.SchemaError;
 
 /** What a meter seam answers: an effect over the ambient client, composed into the request that spent it. */
-export type QuotaEffect<A> = Effect.Effect<A, QuotaFailure, SqlClient.SqlClient>;
+export type QuotaEffect<A> = Effect.Effect<A, QuotaFailure, DatabaseServices>;
 
 /**
  * A row a statement had to answer. Its absence is this module's own
@@ -42,14 +41,16 @@ const spendHostedUsage = SqlSchema.findOneOption({
   Request: HostedUsageWriteSchema,
   Result: HostedUsageCallsRowSchema,
   execute: (write) =>
-    db
-      .insert(hostedUsage)
-      .values({ userId: write.userId, day: write.day, calls: 1 })
-      .onConflictDoUpdate({
-        target: [hostedUsage.userId, hostedUsage.day],
-        set: { calls: ONE_MORE_CALL },
-      })
-      .returning({ calls: hostedUsage.calls }),
+    Database.use((db) =>
+      db
+        .insert(hostedUsage)
+        .values({ userId: write.userId, day: write.day, calls: 1 })
+        .onConflictDoUpdate({
+          target: [hostedUsage.userId, hostedUsage.day],
+          set: { calls: ONE_MORE_CALL },
+        })
+        .returning({ calls: hostedUsage.calls }),
+    ),
 });
 
 /**
@@ -62,7 +63,7 @@ const spendHostedUsage = SqlSchema.findOneOption({
 export function spendHostedMeter(input: {
   readonly userId: string;
   readonly now: number;
-}): Effect.Effect<number, QuotaFailure, SqlClient.SqlClient> {
+}): Effect.Effect<number, QuotaFailure, DatabaseServices> {
   const day = utcDayKey(input.now);
   return spendHostedUsage({ userId: input.userId, day }).pipe(
     Effect.flatMap((row) => required(row, "The usage upsert returned no row.")),
@@ -85,16 +86,18 @@ const DictationUsageWriteSchema = Schema.Struct({
 const spendDictationUsage = SqlSchema.void({
   Request: DictationUsageWriteSchema,
   execute: (write) =>
-    db
-      .insert(hostedUsage)
-      .values({ userId: write.userId, day: write.day, calls: 1, dictationSeconds: write.seconds })
-      .onConflictDoUpdate({
-        target: [hostedUsage.userId, hostedUsage.day],
-        set: {
-          calls: ONE_MORE_CALL,
-          dictationSeconds: sql`${hostedUsage.dictationSeconds} + ${write.seconds}`,
-        },
-      }),
+    Database.use((db) =>
+      db
+        .insert(hostedUsage)
+        .values({ userId: write.userId, day: write.day, calls: 1, dictationSeconds: write.seconds })
+        .onConflictDoUpdate({
+          target: [hostedUsage.userId, hostedUsage.day],
+          set: {
+            calls: ONE_MORE_CALL,
+            dictationSeconds: sql`${hostedUsage.dictationSeconds} + ${write.seconds}`,
+          },
+        }),
+    ),
 });
 
 /**
@@ -107,7 +110,7 @@ export function spendDictationMeter(input: {
   readonly userId: string;
   readonly seconds: number;
   readonly now: number;
-}): Effect.Effect<void, QuotaFailure, SqlClient.SqlClient> {
+}): Effect.Effect<void, QuotaFailure, DatabaseServices> {
   return spendDictationUsage({
     userId: input.userId,
     day: utcDayKey(input.now),
@@ -132,7 +135,8 @@ export type VoiceSecondsOutcome =
 const findUserId = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: (userId) => db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1),
+  execute: (userId) =>
+    Database.use((db) => db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1)),
 });
 
 const VoiceSessionUsageInsertSchema = Schema.Struct({
@@ -146,16 +150,18 @@ const insertVoiceSessionUsage = SqlSchema.findAll({
   Request: VoiceSessionUsageInsertSchema,
   Result: Schema.Struct({ sessionId: Schema.String }),
   execute: (write) =>
-    db
-      .insert(voiceSessionUsage)
-      .values({
-        sessionId: write.sessionId,
-        userId: write.userId,
-        seconds: write.seconds,
-        recordedAt: write.recordedAt,
-      })
-      .onConflictDoNothing({ target: voiceSessionUsage.sessionId })
-      .returning({ sessionId: voiceSessionUsage.sessionId }),
+    Database.use((db) =>
+      db
+        .insert(voiceSessionUsage)
+        .values({
+          sessionId: write.sessionId,
+          userId: write.userId,
+          seconds: write.seconds,
+          recordedAt: write.recordedAt,
+        })
+        .onConflictDoNothing({ target: voiceSessionUsage.sessionId })
+        .returning({ sessionId: voiceSessionUsage.sessionId }),
+    ),
 });
 
 /**
@@ -171,7 +177,7 @@ export function recordVoiceSeconds(input: {
   readonly sessionId: string;
   readonly seconds: number;
   readonly now: number;
-}): Effect.Effect<VoiceSecondsOutcome, QuotaFailure, SqlClient.SqlClient> {
+}): Effect.Effect<VoiceSecondsOutcome, QuotaFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {

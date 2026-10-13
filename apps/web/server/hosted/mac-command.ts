@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   claimMacCommands,
   macCommandResult,
@@ -18,7 +19,6 @@ import {
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
@@ -171,7 +171,7 @@ function awaitedResult(
 function runOnMac(
   userId: string,
   ask: MacCommandAsk,
-): Effect.Effect<MacCommandAnswer, never, SqlClient.SqlClient> {
+): Effect.Effect<MacCommandAnswer, never, DatabaseServices> {
   const asked = readMacCommand({
     id: randomUUID(),
     command: ask.command,
@@ -200,7 +200,7 @@ function runOnMac(
 export function runOnMacTool(
   userId: string,
   input: UnparsedWireValue,
-): Effect.Effect<MacCommandAnswer, never, SqlClient.SqlClient> {
+): Effect.Effect<MacCommandAnswer, never, DatabaseServices> {
   const read = readInput(input);
   if (Result.isFailure(read)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
   const { command, timeout_seconds } = read.success;

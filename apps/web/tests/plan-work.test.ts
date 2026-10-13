@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
@@ -213,10 +213,12 @@ async function planConversation(): Promise<ConversationTarget & { planId: string
  */
 async function askedAt(standing: RelayStanding, at: number): Promise<void> {
   await database.run(
-    db
-      .update(turns)
-      .set({ queuedAt: new Date(at), startedAt: new Date(at) })
-      .where(eq(turns.id, hostTurnId(standing.sessionId, FIRST_EVE_TURN))),
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ queuedAt: new Date(at), startedAt: new Date(at) })
+        .where(eq(turns.id, hostTurnId(standing.sessionId, FIRST_EVE_TURN))),
+    ),
   );
 }
 
@@ -836,6 +838,7 @@ test("a held reader hears a worker end beside one still running at the next look
     Effect.gen(function* () {
       const read = yield* Effect.forkChild(plannerPagePast(target, cursor));
       yield* TestClock.adjust(PLANNER_POLL);
+      const db = yield* Database;
       yield* db
         .update(turns)
         .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })

@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import {
   latestTurnsOf,
@@ -25,8 +26,6 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { MESSAGE_ROLE, TURN_STATUS } from "../core.js";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
@@ -81,7 +80,7 @@ export interface PlannerPage {
   readonly subagentTitles?: readonly CodingAgentSubagentTitle[];
 }
 
-type PlannerEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type PlannerEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
 /** How a worker's standing on the plan's work reads as an agent's worker's does. */
 const STATUS_OF_WORK_STATE = {

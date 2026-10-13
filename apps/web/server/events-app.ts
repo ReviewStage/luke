@@ -1,11 +1,9 @@
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { resolveHostedUserId } from "./hosted/bearer.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";
@@ -20,7 +18,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  */
 
 /** How a statement below fails: the driver's own refusal, or a row this build cannot decode. */
-type EventsAppFailure = SqlError | Schema.SchemaError;
+type EventsAppFailure = QueryError | Schema.SchemaError;
 
 const PersonRowSchema = Schema.Struct({ name: Schema.String, email: Schema.String });
 
@@ -28,17 +26,19 @@ const findPerson = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PersonRowSchema,
   execute: (userId) =>
-    db
-      .select({ name: user.name, email: user.email })
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1),
+    ),
 });
 
 /** Reads the signed-in user's own name and email, for the events endpoint's PostHog person fields. */
 function readPerson(
   userId: string,
-): Effect.Effect<PosthogPerson | undefined, EventsAppFailure, SqlClient.SqlClient> {
+): Effect.Effect<PosthogPerson | undefined, EventsAppFailure, DatabaseServices> {
   return Effect.map(findPerson(userId), Option.getOrUndefined);
 }
 
@@ -53,7 +53,7 @@ const EVENTS_PATH = "/api/events";
  */
 const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
   request: Request,
-): Effect.fn.Return<Response, never, SqlClient.SqlClient | HostedEnvironment> {
+): Effect.fn.Return<Response, never, DatabaseServices | HostedEnvironment> {
   const environment = yield* HostedEnvironment;
   const options: EventsOptions = {
     request,
@@ -76,7 +76,7 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
  * since `vercel.json` sends the function only its own path, but the same
  * shape `auth-app.ts` answers with.
  */
-export function eventsApp(): WebRoutes<SqlClient.SqlClient | HostedEnvironment> {
+export function eventsApp(): WebRoutes<DatabaseServices | HostedEnvironment> {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `POST`: the handler decides its own method refusal, so
     // a request to the right path on the wrong method still answers 405 rather

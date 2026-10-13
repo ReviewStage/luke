@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { listCodingAgentsOnBranches } from "@sidecar/database/models/coding-agent-store";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -9,7 +10,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import type { GitHubApp } from "./github/github-app.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";
@@ -209,11 +209,7 @@ function deliveryTarget(event: string, payload: UnparsedWireValue): DeliveryTarg
 /** What the agents on the target's branches published, read again on each owner's token; answers how many reads landed. */
 const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgain")(function* (
   target: DeliveryTarget,
-): Effect.fn.Return<
-  number,
-  HostedRefusal,
-  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
-> {
+): Effect.fn.Return<number, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgentsOnBranches(target.repository, target.branches, MAXIMUM_AGENTS_PER_DELIVERY),
   );
@@ -244,7 +240,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     HostedRefusal,
     | HttpServerRequest.HttpServerRequest
     | HostedEnvironment
-    | SqlClient.SqlClient
+    | DatabaseServices
     | HttpClient.HttpClient
     | GitHubApp
   > {
@@ -269,7 +265,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
 
 /** The group: the one delivery path, and the hosted vocabulary's own refusal for any other. */
 export function githubWebhookApp(): WebRoutes<
-  HostedEnvironment | SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+  HostedEnvironment | DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, GITHUB_WEBHOOK_PATH, hostedRefusing(deliveryEndpoint())),

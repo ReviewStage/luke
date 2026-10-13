@@ -43,7 +43,6 @@
     "http",
     "https",
     "net",
-    "node:async_hooks",
     "node:buffer",
     "node:crypto",
     "node:dns/promises",

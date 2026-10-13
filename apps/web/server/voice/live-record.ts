@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import type {
   VoiceTarget,
   VoiceWriteResult,
@@ -7,8 +8,6 @@ import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
 import { causeKind, serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { LiveServerEvent } from "../live.js";
 
 /**
@@ -51,15 +50,15 @@ interface HostedLiveRecordOptions {
 
 interface HostedLiveRecord extends LiveRecord {
   /** One server event of the session's stream, in arrival order; answers what the writer did with it. */
-  observe(event: LiveServerEvent): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>;
+  observe(event: LiveServerEvent): Effect.Effect<VoiceWriteResult, QueryError | Schema.SchemaError>;
   /** Settles once every write started so far has landed or failed; a caller closing the session waits on it so no write is cut. */
   drained(): Effect.Effect<void>;
 }
 
-type Write = Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type Write = Effect.Effect<VoiceWriteResult, QueryError | Schema.SchemaError, DatabaseServices>;
 
 /** What the caller that handed a write over is waiting on. */
-type Landed = Deferred.Deferred<VoiceWriteResult, SqlError | Schema.SchemaError>;
+type Landed = Deferred.Deferred<VoiceWriteResult, QueryError | Schema.SchemaError>;
 
 export function hostedLiveRecord({
   writer,
@@ -67,14 +66,14 @@ export function hostedLiveRecord({
 }: HostedLiveRecordOptions): Effect.Effect<
   HostedLiveRecord,
   never,
-  Scope.Scope | SqlClient.SqlClient
+  Scope.Scope | DatabaseServices
 > {
   return Effect.gen(function* () {
     // Every end of a write, its death included, is the exit its deferred is
     // settled with, so the queue itself is handed nothing to catch. Note that
     // a defect here is logged by its kind alone, because its message or a
     // statement beneath it can quote the words being written.
-    const waiting = yield* serialQueue<SqlClient.SqlClient>({
+    const waiting = yield* serialQueue<DatabaseServices>({
       onDefect: (cause) =>
         Effect.logError(`a live record write could not be settled: ${causeKind(cause)}`),
     });
@@ -85,8 +84,10 @@ export function hostedLiveRecord({
      * sequence is its arrival: the write is put on the queue where it is
      * called for, and the effect handed back is the wait on that write alone.
      */
-    function enqueue(write: Write): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError> {
-      const landed = Deferred.makeUnsafe<VoiceWriteResult, SqlError | Schema.SchemaError>();
+    function enqueue(
+      write: Write,
+    ): Effect.Effect<VoiceWriteResult, QueryError | Schema.SchemaError> {
+      const landed = Deferred.makeUnsafe<VoiceWriteResult, QueryError | Schema.SchemaError>();
       last = landed;
       waiting.offerUnsafe(
         Effect.flatMap(Effect.exit(write), (written) =>
@@ -97,7 +98,7 @@ export function hostedLiveRecord({
     }
 
     /** Whether the record took an utterance: landed, found standing, or owed nothing; a refusal or a failure is not taken. */
-    const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>) =>
+    const taken = (write: Effect.Effect<VoiceWriteResult, QueryError | Schema.SchemaError>) =>
       write.pipe(
         Effect.map(Result.isSuccess),
         Effect.catch(() => Effect.succeed(false)),

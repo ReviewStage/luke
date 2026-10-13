@@ -11,11 +11,10 @@
  * under: built here once, so both hosts are that core and their own role.
  */
 
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Effect, Option, Result, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { SessionAuth, SessionContext } from "eve/context";
 import {
   type AdmittedConversation,
@@ -25,7 +24,7 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 
-type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
 /** How every host admits a session and lets one claim its conversation. */
 export interface HostAdmission {

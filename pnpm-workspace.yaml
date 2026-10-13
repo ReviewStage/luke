@@ -18,6 +18,8 @@ catalog:
   react-dom: 19.2.8
   ws: 8.21.3
   ai: 7.0.135
+  drizzle-orm: 1.0.0-rc.4
+  drizzle-kit: 1.0.0-rc.4
   vitest: 5.0.0
   "@effect/vitest": 4.0.4
 
@@ -55,3 +57,20 @@ ignoredBuiltDependencies:
 # nothing at runtime; delete it when an upstream release types them cleanly.
 patchedDependencies:
   "@better-auth/oauth-provider@1.7.7": patches/@better-auth__oauth-provider@1.7.7.patch
+#
+# `drizzle-orm` 1.0.0-rc.4's Effect code is patched for three things. Its error
+# classes call `Schema.TaggedErrorClass`, which Effect 4.0.4 stable names
+# `Schema.TaggedError`, so the Effect drivers fail to load at all; the patch
+# makes the same rename upstream's unreleased rc.5 builds make. Its Postgres
+# and PGlite declarations import `SqlError` from `effect/unstable/sql/SqlError`,
+# a path 4.0.4 does not have, which `skipLibCheck` turns into `any` in every
+# transaction's and migration's error channel; the patch points them at
+# `effect/sql/SqlError`. And its
+# Postgres driver fails a statement with an `EffectDrizzleQueryError` that
+# carries the statement's bound parameters and prints them in its `message`,
+# and a parameter can be an account's secret (a sealed provider key, a token)
+# that AGENTS.md's Never rule keeps out of every log, span, and answer; the
+# patch builds that error with no parameters, keeping the statement's text and
+# its cause. `apps/web/tests/drizzle-driver.test.ts` holds all three. Delete
+# the patch when drizzle-orm 1.0.0-rc.5 is released and carries them.
+  drizzle-orm@1.0.0-rc.4: patches/drizzle-orm@1.0.0-rc.4.patch

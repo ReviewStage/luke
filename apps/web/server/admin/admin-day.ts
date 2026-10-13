@@ -1,5 +1,5 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/sql";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -94,7 +94,7 @@ export interface AdminDayOptions {
  */
 export function handleAdminDay(
   options: AdminDayOptions,
-): Effect.Effect<Response, never, SqlClient.SqlClient> {
+): Effect.Effect<Response, never, DatabaseServices> {
   const { request } = options;
 
   const day = adminDayKey(request.url);

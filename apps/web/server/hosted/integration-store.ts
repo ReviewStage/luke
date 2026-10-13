@@ -10,7 +10,7 @@
  * is an effect over the ambient `SqlClient`.
  */
 
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { integrationConnection } from "@sidecar/database/schemas/integration";
 import {
@@ -19,8 +19,7 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
+import { SqlSchema } from "effect/sql";
 
 /** What a row's status may say. No row is a disconnected provider. */
 export const INTEGRATION_ROW_STATUS = {
@@ -36,8 +35,8 @@ type IntegrationRowStatus = (typeof INTEGRATION_ROW_STATUS)[keyof typeof INTEGRA
 
 export type IntegrationStoreEffect<A> = Effect.Effect<
   A,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
+  QueryError | Schema.SchemaError,
+  DatabaseServices
 >;
 
 /** One account's row at one provider, as the group and the agents read it. */
@@ -96,27 +95,33 @@ const findByAccount = SqlSchema.findOneOption({
   Request: AccountSchema,
   Result: IntegrationRowSchema,
   execute: (account) =>
-    db.select(ROW_COLUMNS).from(integrationConnection).where(ofAccount(account)),
+    Database.use((db) =>
+      db.select(ROW_COLUMNS).from(integrationConnection).where(ofAccount(account)),
+    ),
 });
 
 const findAllByUser = SqlSchema.findAll({
   Request: Schema.String,
   Result: IntegrationRowSchema,
   execute: (userId) =>
-    db
-      .select(ROW_COLUMNS)
-      .from(integrationConnection)
-      .where(eq(integrationConnection.userId, userId)),
+    Database.use((db) =>
+      db
+        .select(ROW_COLUMNS)
+        .from(integrationConnection)
+        .where(eq(integrationConnection.userId, userId)),
+    ),
 });
 
 const findByState = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: IntegrationRowSchema,
   execute: (state) =>
-    db
-      .select(ROW_COLUMNS)
-      .from(integrationConnection)
-      .where(eq(integrationConnection.state, state)),
+    Database.use((db) =>
+      db
+        .select(ROW_COLUMNS)
+        .from(integrationConnection)
+        .where(eq(integrationConnection.state, state)),
+    ),
 });
 
 /** The account's row at one provider, or nothing where it is not connected and is not signing in. */
@@ -159,20 +164,22 @@ const BeginSchema = Schema.Struct({
 const upsertSignIn = SqlSchema.void({
   Request: BeginSchema,
   execute: ({ userId, provider, state, at }) =>
-    db
-      .insert(integrationConnection)
-      .values({
-        userId,
-        provider,
-        status: INTEGRATION_ROW_STATUS.PENDING,
-        state,
-        stateIssuedAt: at,
-        updatedAt: at,
-      })
-      .onConflictDoUpdate({
-        target: [integrationConnection.userId, integrationConnection.provider],
-        set: { state, stateIssuedAt: at, updatedAt: at },
-      }),
+    Database.use((db) =>
+      db
+        .insert(integrationConnection)
+        .values({
+          userId,
+          provider,
+          status: INTEGRATION_ROW_STATUS.PENDING,
+          state,
+          stateIssuedAt: at,
+          updatedAt: at,
+        })
+        .onConflictDoUpdate({
+          target: [integrationConnection.userId, integrationConnection.provider],
+          set: { state, stateIssuedAt: at, updatedAt: at },
+        }),
+    ),
 });
 
 /** Records a sign-in to one provider under way for the account, under the state only its callback carries back. */
@@ -201,17 +208,19 @@ const updateConnected = SqlSchema.findAll({
   Request: CompleteSchema,
   Result: Schema.Struct({ userId: Schema.String }),
   execute: ({ at, state, ...account }) =>
-    db
-      .update(integrationConnection)
-      .set({
-        status: INTEGRATION_ROW_STATUS.CONNECTED,
-        state: null,
-        stateIssuedAt: null,
-        connectedAt: at,
-        updatedAt: at,
-      })
-      .where(and(ofAccount(account), eq(integrationConnection.state, state)))
-      .returning({ userId: integrationConnection.userId }),
+    Database.use((db) =>
+      db
+        .update(integrationConnection)
+        .set({
+          status: INTEGRATION_ROW_STATUS.CONNECTED,
+          state: null,
+          stateIssuedAt: null,
+          connectedAt: at,
+          updatedAt: at,
+        })
+        .where(and(ofAccount(account), eq(integrationConnection.state, state)))
+        .returning({ userId: integrationConnection.userId }),
+    ),
 });
 
 /**
@@ -233,12 +242,17 @@ export function completeIntegrationSignIn(
 const updateExpired = SqlSchema.void({
   Request: StampedSchema,
   execute: ({ at, ...account }) =>
-    db
-      .update(integrationConnection)
-      .set({ status: INTEGRATION_ROW_STATUS.EXPIRED, updatedAt: at })
-      .where(
-        and(ofAccount(account), eq(integrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED)),
-      ),
+    Database.use((db) =>
+      db
+        .update(integrationConnection)
+        .set({ status: INTEGRATION_ROW_STATUS.EXPIRED, updatedAt: at })
+        .where(
+          and(
+            ofAccount(account),
+            eq(integrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED),
+          ),
+        ),
+    ),
 });
 
 /** Marks a connected provider expired, once Connect answered it holds no grant it can use; any other row stands. */
@@ -251,7 +265,8 @@ export function expireIntegrationConnection(
 
 const deleteRow = SqlSchema.void({
   Request: AccountSchema,
-  execute: (account) => db.delete(integrationConnection).where(ofAccount(account)),
+  execute: (account) =>
+    Database.use((db) => db.delete(integrationConnection).where(ofAccount(account))),
 });
 
 /** Disconnects the account from one provider: its row is gone, so no agent reads a token from the next ask on. */

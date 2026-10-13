@@ -6,7 +6,7 @@ import {
 import { and, asc, eq, gte, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { db } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 
@@ -25,20 +25,24 @@ const CommandKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.Strin
 const upsertListener = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
   execute: ({ userId, now }) =>
-    db
-      .insert(macCommandListener)
-      .values({ userId, seenAt: now })
-      .onConflictDoUpdate({ target: macCommandListener.userId, set: { seenAt: now } }),
+    Database.use((db) =>
+      db
+        .insert(macCommandListener)
+        .values({ userId, seenAt: now })
+        .onConflictDoUpdate({ target: macCommandListener.userId, set: { seenAt: now } }),
+    ),
 });
 
 const findListener = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
   Result: Schema.Struct({ userId: Schema.String }),
   execute: ({ userId, since }) =>
-    db
-      .select({ userId: macCommandListener.userId })
-      .from(macCommandListener)
-      .where(and(eq(macCommandListener.userId, userId), gte(macCommandListener.seenAt, since))),
+    Database.use((db) =>
+      db
+        .select({ userId: macCommandListener.userId })
+        .from(macCommandListener)
+        .where(and(eq(macCommandListener.userId, userId), gte(macCommandListener.seenAt, since))),
+    ),
 });
 
 const insertCommand = SqlSchema.void({
@@ -50,13 +54,15 @@ const insertCommand = SqlSchema.void({
     now: Schema.Date,
   }),
   execute: (row) =>
-    db.insert(macCommand).values({
-      id: row.id,
-      userId: row.userId,
-      command: row.command,
-      timeoutSeconds: row.timeoutSeconds,
-      queuedAt: row.now,
-    }),
+    Database.use((db) =>
+      db.insert(macCommand).values({
+        id: row.id,
+        userId: row.userId,
+        command: row.command,
+        timeoutSeconds: row.timeoutSeconds,
+        queuedAt: row.now,
+      }),
+    ),
 });
 
 /**
@@ -80,58 +86,68 @@ const claimWaiting = SqlSchema.findAll({
     timeoutSeconds: Schema.Number,
   }),
   execute: ({ userId, queuedSince, now }) =>
-    db.update(macCommand).set({ claimedAt: now }).where(waiting(userId, queuedSince)).returning({
-      id: macCommand.id,
-      command: macCommand.command,
-      timeoutSeconds: macCommand.timeoutSeconds,
-    }),
+    Database.use((db) =>
+      db.update(macCommand).set({ claimedAt: now }).where(waiting(userId, queuedSince)).returning({
+        id: macCommand.id,
+        command: macCommand.command,
+        timeoutSeconds: macCommand.timeoutSeconds,
+      }),
+    ),
 });
 
 const findWaiting = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, queuedSince: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, queuedSince }) =>
-    db
-      .select({ id: macCommand.id })
-      .from(macCommand)
-      .where(waiting(userId, queuedSince))
-      .orderBy(asc(macCommand.queuedAt)),
+    Database.use((db) =>
+      db
+        .select({ id: macCommand.id })
+        .from(macCommand)
+        .where(waiting(userId, queuedSince))
+        .orderBy(asc(macCommand.queuedAt)),
+    ),
 });
 
 const writeResult = SqlSchema.findAll({
   Request: Schema.Struct({ ...CommandKeySchema.fields, result: macCommandResultSchema }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, id, result }) =>
-    db
-      .update(macCommand)
-      .set({ result })
-      .where(
-        and(
-          eq(macCommand.id, id),
-          eq(macCommand.userId, userId),
-          isNotNull(macCommand.claimedAt),
-          isNull(macCommand.result),
-        ),
-      )
-      .returning({ id: macCommand.id }),
+    Database.use((db) =>
+      db
+        .update(macCommand)
+        .set({ result })
+        .where(
+          and(
+            eq(macCommand.id, id),
+            eq(macCommand.userId, userId),
+            isNotNull(macCommand.claimedAt),
+            isNull(macCommand.result),
+          ),
+        )
+        .returning({ id: macCommand.id }),
+    ),
 });
 
 const findResult = SqlSchema.findOneOption({
   Request: CommandKeySchema,
   Result: Schema.Struct({ result: macCommandResultSchema }),
   execute: ({ userId, id }) =>
-    db
-      .select({ result: macCommand.result })
-      .from(macCommand)
-      .where(
-        and(eq(macCommand.id, id), eq(macCommand.userId, userId), isNotNull(macCommand.result)),
-      ),
+    Database.use((db) =>
+      db
+        .select({ result: macCommand.result })
+        .from(macCommand)
+        .where(
+          and(eq(macCommand.id, id), eq(macCommand.userId, userId), isNotNull(macCommand.result)),
+        ),
+    ),
 });
 
 const deleteCommand = SqlSchema.void({
   Request: CommandKeySchema,
   execute: ({ userId, id }) =>
-    db.delete(macCommand).where(and(eq(macCommand.id, id), eq(macCommand.userId, userId))),
+    Database.use((db) =>
+      db.delete(macCommand).where(and(eq(macCommand.id, id), eq(macCommand.userId, userId))),
+    ),
 });
 
 /** Records that a Mac of the account is listening now. */

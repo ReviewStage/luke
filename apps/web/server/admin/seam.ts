@@ -1,7 +1,6 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { causeKind, unlessInterrupted } from "@sidecar/runtime/effect";
 import { type Cause, Effect, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
 
 /**
@@ -13,8 +12,8 @@ import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
  */
 export type AdminSeamEffect<A> = Effect.Effect<
   A,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
+  QueryError | Schema.SchemaError,
+  DatabaseServices
 >;
 
 /**
