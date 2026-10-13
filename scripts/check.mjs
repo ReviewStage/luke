@@ -57,12 +57,42 @@ function affectedBase(env) {
   return known.status === 0 ? AFFECTED_BASE : undefined;
 }
 
-function runTurbo(label, args, { held, base }) {
+function listWorkspaces(args, env) {
+  const turbo = turboInvocation(["ls", ...args, "--output=json"], env);
+  const listed = spawnSync(turbo.command, turbo.args, { env: turbo.env, encoding: "utf8" });
+  if (listed.status !== 0) {
+    throw new Error(`turbo ls failed:\n${listed.stderr}`);
+  }
+  return JSON.parse(listed.stdout).packages.items;
+}
+
+// The `--filter`s that select every affected workspace, or none when nothing
+// changed. Note that we do not hand turbo `--affected` itself, because it
+// misses a change inside a nested workspace: apps/web/eve and apps/web/coder
+// are workspaces of their own, so turbo counts an edit there as changing them
+// alone, yet @luke/web compiles and tests their files and hashes them as its
+// own. The scope is turbo's affected list plus every workspace that holds an
+// affected one, each with its dependents; turbo intersects `--affected` with
+// a `--filter` rather than adding to it, so the whole scope is filters.
+function affectedFilters() {
+  const base = affectedBase(process.env);
+  const env = base ? { ...process.env, TURBO_SCM_BASE: base } : process.env;
+  const all = listWorkspaces([], env);
+  const affected = listWorkspaces([AFFECTED_FLAG], env);
+  const names = new Set(affected.map((workspace) => workspace.name));
+  for (const nested of affected) {
+    for (const holder of all) {
+      if (nested.path.startsWith(`${holder.path}/`)) names.add(holder.name);
+    }
+  }
+  return [...names].sort().map((name) => `--filter=...${name}`);
+}
+
+function runTurbo(label, args, { held }) {
   return new Promise((resolve) => {
     const chunks = [];
     const turbo = turboInvocation(["run", ...args]);
     const env = { ...turbo.env, FORCE_COLOR: process.stdout.isTTY ? "1" : "0" };
-    if (base) env.TURBO_SCM_BASE = base;
     const child = spawn(turbo.command, turbo.args, {
       stdio: held ? ["ignore", "pipe", "pipe"] : "inherit",
       env,
@@ -86,32 +116,33 @@ if (parsed.error) {
   process.stderr.write(`${parsed.error}\n`);
   process.exit(2);
 }
-const scope = parsed.affected ? [AFFECTED_FLAG] : [];
-const base = parsed.affected ? affectedBase(process.env) : undefined;
+const scope = parsed.affected ? affectedFilters() : [];
+const anyWorkspace = !parsed.affected || scope.length > 0;
+if (!anyWorkspace) {
+  process.stdout.write(`No workspace changed since ${affectedBase(process.env) ?? "main"}.\n`);
+}
 const rootTasks = ROOT_TASKS.filter((task) => !parsed.without.includes(task));
 const workspaceTasks = WORKSPACE_TASKS.filter((task) => !parsed.without.includes(task));
 const runs = [];
 if (rootTasks.length > 0) {
   runs.push({ label: rootTasks.join(", "), args: rootTasks });
 }
-if (workspaceTasks.length > 0) {
+if (anyWorkspace && workspaceTasks.length > 0) {
   runs.push({ label: workspaceTasks.join(", "), args: [...workspaceTasks, ...scope] });
 }
-if (!parsed.without.includes("test")) {
+if (anyWorkspace && !parsed.without.includes("test")) {
   runs.push({ label: "test", args: [...TEST_TASKS, "--concurrency=1", ...scope] });
 }
 
 // Note that we set exitCode rather than call process.exit, because on macOS a
 // piped stdout is asynchronous and an exit drops whatever a failing check's
 // output has not yet flushed, which is the part that names the failure.
-const results = await Promise.all(
-  runs.map((run) => runTurbo(run.label, run.args, { held: true, base })),
-);
+const results = await Promise.all(runs.map((run) => runTurbo(run.label, run.args, { held: true })));
 const failed = runs.filter((_, index) => !results[index]);
 if (failed.length > 0) {
   process.stderr.write(`\nerror: ${failed.map((run) => run.label).join("; ")} failed\n`);
   process.exitCode = 1;
-} else {
-  const built = await runTurbo("build", ["build", ...scope], { held: false, base });
+} else if (anyWorkspace) {
+  const built = await runTurbo("build", ["build", ...scope], { held: false });
   process.exitCode = built ? 0 : 1;
 }
