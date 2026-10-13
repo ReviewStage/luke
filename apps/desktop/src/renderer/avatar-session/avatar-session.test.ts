@@ -33,6 +33,9 @@ class FakePersona implements PersonaSessionSlice {
   interrupts = 0;
   left = false;
 
+  /** Whether `close()` rejects without the SDK's close report. */
+  breaksOnClose = false;
+
   constructor(
     readonly options: PersonaSessionOptions,
     private readonly refuse: boolean,
@@ -62,6 +65,7 @@ class FakePersona implements PersonaSessionSlice {
   close(): Promise<void> {
     if (this.left) return Promise.resolve();
     this.left = true;
+    if (this.breaksOnClose) return Promise.reject(new Error("the transport failed"));
     return Promise.resolve().then(() => this.options.onClose("client_initiated"));
   }
 
@@ -223,4 +227,19 @@ it.effect(
       assert.equal(fake.persona().turnsEnded, 0);
       assert.equal(fake.persona().interrupts, 0);
     }).pipe(Effect.scoped),
+);
+
+it.effect("a close that fails without Keyframe's report still settles the waits, as an error", () =>
+  Effect.gen(function* () {
+    const fake = fakeModule();
+    const scope = yield* Scope.make();
+    const session = yield* Scope.provide(openAvatarSession(GRANT, fake.module), scope);
+    fake.persona().breaksOnClose = true;
+    yield* Scope.close(scope, Exit.void);
+    assert.equal(yield* session.closed, AVATAR_CLOSE_REASON.ERROR);
+    assert.deepEqual(
+      yield* Effect.flip(session.video),
+      new AvatarSessionError({ failure: AVATAR_SESSION_FAILURE.CLOSED }),
+    );
+  }),
 );

@@ -108,7 +108,8 @@ const whileOpen = (
  * bridged, registers its close with the scope before connecting, so a
  * connect that fails halfway still leaves the room, and answers once the
  * room is joined. The tracks arrive after; a close before either arrives
- * fails the wait on it rather than leaving it standing.
+ * fails the wait on it rather than leaving it standing, and so does a
+ * close of the scope whose `close()` fails without the SDK's report.
  */
 export const openAvatarSession = /* @__PURE__ */ Effect.fn("desktop/openAvatarSession")(function* (
   grant: AvatarGrant,
@@ -118,6 +119,14 @@ export const openAvatarSession = /* @__PURE__ */ Effect.fn("desktop/openAvatarSe
   const audio = Deferred.makeUnsafe<MediaStreamTrack, AvatarSessionError>();
   const closed = Deferred.makeUnsafe<AvatarCloseReason>();
   const playback = yield* Queue.unbounded<boolean, Cause.Done>();
+  // The first close settles every wait; a later one changes nothing.
+  const settle = (reason: AvatarCloseReason) => {
+    const gone = Exit.fail(new AvatarSessionError({ failure: AVATAR_SESSION_FAILURE.CLOSED }));
+    Deferred.doneUnsafe(video, gone);
+    Deferred.doneUnsafe(audio, gone);
+    Deferred.doneUnsafe(closed, Exit.succeed(reason));
+    Queue.endUnsafe(playback);
+  };
   const session: PersonaSessionSlice = yield* Effect.acquireRelease(
     Effect.try({
       try: () =>
@@ -128,19 +137,15 @@ export const openAvatarSession = /* @__PURE__ */ Effect.fn("desktop/openAvatarSe
           onVideoTrack: (track) => Deferred.doneUnsafe(video, Exit.succeed(track)),
           onAudioTrack: (track) => Deferred.doneUnsafe(audio, Exit.succeed(track)),
           onAgentStateChange: (state) => Queue.offerUnsafe(playback, state === "speaking"),
-          onClose: (reason) => {
-            const gone = Exit.fail(
-              new AvatarSessionError({ failure: AVATAR_SESSION_FAILURE.CLOSED }),
-            );
-            Deferred.doneUnsafe(video, gone);
-            Deferred.doneUnsafe(audio, gone);
-            Deferred.doneUnsafe(closed, Exit.succeed(closeReasonOf(reason)));
-            Queue.endUnsafe(playback);
-          },
+          onClose: (reason) => settle(closeReasonOf(reason)),
         }),
       catch: failure(AVATAR_SESSION_FAILURE.CONNECT),
     }),
-    (session) => quietly(() => session.close()),
+    // Note that a close that fails reports nothing, so it settles the waits itself.
+    (session) =>
+      Effect.tryPromise(() => session.close()).pipe(
+        Effect.catch(() => Effect.sync(() => settle(AVATAR_CLOSE_REASON.ERROR))),
+      ),
   );
   yield* Effect.tryPromise({
     try: () => session.connect(),
