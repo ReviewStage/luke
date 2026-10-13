@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { db } from "@sidecar/database/core/query";
+import { lineParts, receivedPartsOf } from "@sidecar/database/models/attached-file-parts";
 import {
   EpochMillisColumnSchema,
   InstantColumnSchema,
@@ -61,7 +62,6 @@ import {
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "../../core.js";
-import { lineParts, receivedPartsOf } from "../attached-files.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is

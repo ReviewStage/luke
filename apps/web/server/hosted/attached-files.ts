@@ -1,21 +1,19 @@
+import {
+  dataUrl,
+  fileMark,
+  inlinedFile,
+  textOf,
+} from "@sidecar/database/models/attached-file-parts";
 import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
 } from "@sidecar/hosted/coding-agent-wire";
-import {
-  type FileUIPart,
-  isFileUIPart,
-  isTextUIPart,
-  type TextUIPart,
-  type UIMessage,
-  type UserContent,
-} from "ai";
+import type { FileUIPart, UserContent } from "ai";
 import type { MessageReceivedPart } from "eve/client";
-import { UI_PART_STATE, UI_PART_TYPE } from "../core.js";
 
 /**
- * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, as the journal keeps them, and as eve's receipt of them reads back.
+ * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@sidecar/database/models/attached-file-parts`.
  *
  * A message is words, files, or both. eve is handed the words first where
  * there are any, then each text file inlined as its own text part, headed
@@ -36,42 +34,8 @@ import { UI_PART_STATE, UI_PART_TYPE } from "../core.js";
  * than the file.
  */
 
-/** What heads a text file inlined for the model, before its name. */
-const ATTACHED_FILE_HEADING = "Attached file: ";
-
-/** The shortest fence a text file is inlined in, as Markdown's is. */
-const SHORTEST_FENCE = 3;
-
 /** A text file as eve's receipt carries it: the heading's name, a fence, the file, and the same fence. */
 const INLINED_FILE = /^Attached file: ([^\n]+)\n(`{3,})\n([\s\S]*)\n\2$/u;
-
-/** An attachment's bytes as a `data:` URL, which both eve and the journal carry. */
-function dataUrl(mediaType: string, base64: string): string {
-  return `data:${mediaType};base64,${base64}`;
-}
-
-/** The base64 of a `data:` URL, or nothing where it is not one. */
-function base64Of(url: string): string | undefined {
-  const comma = url.indexOf(",");
-  return url.startsWith("data:") && comma >= 0 ? url.slice(comma + 1) : undefined;
-}
-
-/** An image or a PDF as a line is matched by it: its name and its type, which a receipt lists it by whether eve staged it or not. */
-function fileMark(filename: string | undefined, mediaType: string): string {
-  return `[file: ${filename ?? ""} (${mediaType})]`;
-}
-
-/** A text file as the model reads it: its name, then the file in a fence longer than any run of backticks inside it. */
-function inlinedFile(name: string, text: string): string {
-  const longest = Math.max(0, ...Array.from(text.matchAll(/`+/gu), (run) => run[0].length));
-  const fence = "`".repeat(Math.max(SHORTEST_FENCE, longest + 1));
-  return `${ATTACHED_FILE_HEADING}${name}\n${fence}\n${text}\n${fence}`;
-}
-
-/** The text a text file's base64 spells; the wire has already held it to UTF-8. */
-function textOf(base64: string): string {
-  return Buffer.from(base64, "base64").toString("utf8");
-}
 
 /**
  * What eve is handed for a message: the words alone where nothing is
@@ -102,48 +66,6 @@ export function eveContent(
         ],
   );
   return [...(text === "" ? [] : [{ type: "text" as const, text }]), ...texts, ...files];
-}
-
-/** The parts the journal keeps for a developer's line: the words, then each file it carried, in the order attached. */
-export function lineParts(
-  text: string,
-  attachments: readonly CodingAgentAttachment[],
-): (TextUIPart | FileUIPart)[] {
-  return [
-    { type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE },
-    ...attachments.map(
-      (file): FileUIPart => ({
-        type: "file",
-        mediaType: file.mediaType,
-        filename: file.name,
-        url: dataUrl(file.mediaType, file.data),
-      }),
-    ),
-  ];
-}
-
-/**
- * A line's parts as eve's receipt lists them, in the order eve was handed
- * them: the words where there are any, each text file inlined, then each
- * image and PDF by its mark; nothing for a row with no words part.
- */
-export function receivedPartsOf(
-  parts: readonly UIMessage["parts"][number][],
-): readonly string[] | undefined {
-  const [words, ...rest] = parts;
-  if (words === undefined || !isTextUIPart(words)) return undefined;
-  const files = rest.filter(isFileUIPart);
-  const texts = files.flatMap((part) => {
-    if (part.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
-    const base64 = base64Of(part.url);
-    return base64 === undefined ? [] : [inlinedFile(part.filename ?? "", textOf(base64))];
-  });
-  const marks = files.flatMap((part) =>
-    part.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
-      ? []
-      : [fileMark(part.filename, part.mediaType)],
-  );
-  return [...(words.text === "" ? [] : [words.text]), ...texts, ...marks];
 }
 
 /** A message eve received, read back: the parts a line is matched by, joined, and the words and files a receipt's own row keeps. */
