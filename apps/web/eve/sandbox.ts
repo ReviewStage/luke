@@ -1,5 +1,6 @@
 import { defineSandbox } from "eve/sandbox";
-import { VercelSandbox } from "eve/sandbox/vercel";
+import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
+import { environment, openSandbox } from "../server/hosted/agent-runtime/sandbox.js";
 
 /**
  * sandbox.ts -- the planning session's sandbox: one Vercel Sandbox per eve session, where `run_in_repository` checks the plan's repository out and runs its commands.
@@ -16,16 +17,10 @@ import { VercelSandbox } from "eve/sandbox/vercel";
  * enters the sandbox. The worker subagent shares this sandbox
  * (`subagents/worker/sandbox.ts`), so its reads see the same checkout.
  *
- * `prepare` runs once per build on the snapshot every session starts from,
- * and holds the one thing the checkout needs of the image: git.
+ * The image and how the sandbox opens and lives are the planner's policy
+ * over the one environment both roots share
+ * (`server/hosted/agent-runtime/sandbox.ts`).
  */
-export const environment = VercelSandbox.environment({
-  prepare: async (sandbox) => {
-    const git = await sandbox.run({ command: "git --version" });
-    if (git.exitCode !== 0) {
-      throw new Error(`the sandbox image carries no git, which the checkout needs: ${git.stderr}`);
-    }
-  },
-});
+export { environment };
 
-export default defineSandbox(() => environment.open());
+export default defineSandbox(() => openSandbox(AGENT_ROLE.PLANNER));
