@@ -70,6 +70,8 @@ export interface IntegrationStatuses {
   readonly read: () => Promise<void>;
   /** One provider's standing as an answer of the host's left it, ahead of the next read. */
   readonly settle: (provider: IntegrationProvider, status: IntegrationStatus) => void;
+  /** A sign-in begun: the provider stands pending, unless it stands expired, which it stays until the sign-in settles. */
+  readonly signInBegun: (provider: IntegrationProvider) => void;
 }
 
 /** Where every provider stands, read when drawn and again whenever the window is focused. */
@@ -102,7 +104,16 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     setStatuses((standing) => ({ ...standing, [provider]: status }));
   }, []);
 
-  return { statusOf: (provider) => statuses?.[provider], readFailed, read, settle };
+  // Note that the check is made on the standing at the moment of the update, because a focus read may have landed since the press.
+  const signInBegun = useCallback((provider: IntegrationProvider) => {
+    setStatuses((standing) =>
+      standing?.[provider] === INTEGRATION_STATUS.EXPIRED
+        ? standing
+        : { ...standing, [provider]: INTEGRATION_STATUS.PENDING },
+    );
+  }, []);
+
+  return { statusOf: (provider) => statuses?.[provider], readFailed, read, settle, signInBegun };
 }
 
 export function IntegrationRow({
@@ -115,7 +126,7 @@ export function IntegrationRow({
   const { act } = useAct();
   const name = INTEGRATION_NAME[provider];
   const status = statuses.statusOf(provider);
-  const { readFailed, read, settle } = statuses;
+  const { readFailed, read, settle, signInBegun } = statuses;
   const [connecting, setConnecting] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
@@ -134,10 +145,9 @@ export function IntegrationRow({
           );
           return;
         }
-        // An expired connection stays expired until the sign-in settles.
-        if (status !== INTEGRATION_STATUS.EXPIRED) settle(provider, INTEGRATION_STATUS.PENDING);
+        signInBegun(provider);
       });
-  }, [act, provider, name, status, settle]);
+  }, [act, provider, name, signInBegun]);
 
   const disconnect = useConfirm(
     { subject: status === INTEGRATION_STATUS.CONNECTED, surfaceOpen: true },

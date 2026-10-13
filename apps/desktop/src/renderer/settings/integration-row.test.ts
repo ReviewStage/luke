@@ -36,6 +36,8 @@ let standing: IntegrationStatus = INTEGRATION_STATUS.DISCONNECTED;
 let sent: Act[] = [];
 /** Whether the browser could be opened for a sign-in. */
 let opens = true;
+/** Where a Connect waits before the host answers it, when the test holds it. */
+let connectHeld: Promise<void> | undefined;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -51,8 +53,7 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.INTEGRATIONS_CONNECT:
       assert.deepEqual(request.payload, LINEAR);
       if (!opens) return Promise.resolve(done({ failure: INTEGRATION_CALL_FAILURE.NOT_OPENED }));
-      standing = INTEGRATION_STATUS.PENDING;
-      return Promise.resolve(done({ opened: true }));
+      return (connectHeld ?? Promise.resolve()).then(() => done({ opened: true }));
     case ACT_KIND.INTEGRATIONS_DISCONNECT:
       assert.deepEqual(request.payload, LINEAR);
       standing = INTEGRATION_STATUS.DISCONNECTED;
@@ -74,6 +75,7 @@ beforeEach(() => {
   standing = INTEGRATION_STATUS.DISCONNECTED;
   sent = [];
   opens = true;
+  connectHeld = undefined;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -131,6 +133,25 @@ test("a disconnected account is offered Connect, which sends the browser and rea
     sent.map((request) => request.kind),
     [ACT_KIND.INTEGRATIONS_STATUS, ACT_KIND.INTEGRATIONS_CONNECT, ACT_KIND.INTEGRATIONS_STATUS],
   );
+});
+
+test("a sign-in found expired while Connect was answering stays expired once the browser is sent", async () => {
+  standing = INTEGRATION_STATUS.PENDING;
+  const row = await mount();
+  const held = Promise.withResolvers<void>();
+  connectHeld = held.promise;
+
+  act(() => button(row, "Connect again").click());
+  await settle();
+  // The window is focused before the host answers, and the read finds the sign-in expired.
+  standing = INTEGRATION_STATUS.EXPIRED;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  held.resolve();
+  await settle();
+  assert.match(line(row) ?? "", /expired/);
 });
 
 test("Disconnect asks first, and only the answer to the question disconnects", async () => {

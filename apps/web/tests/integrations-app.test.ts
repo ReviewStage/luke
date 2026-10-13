@@ -286,6 +286,14 @@ const EXCHANGES: readonly Exchange[] = [
     request: STATUSES,
     finalRows: ROWS(CONNECTED),
   },
+  // No connector at all: the answer needs no store, so an outage there is no refusal.
+  {
+    name: "status-unavailable-store-unavailable",
+    state: () => backing({ storeUnavailable: true }),
+    connect: () => connectState({ configured: false }),
+    request: STATUSES,
+    finalRows: NO_ROWS,
+  },
   {
     name: "status-disconnected",
     state: () => backing(),

@@ -205,7 +205,9 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
   yield* hostedMethod(HTTP_METHOD.GET);
   const userId = yield* resolvedUserId(seams);
   const connect = yield* IntegrationConnect;
-  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  // A deployment with no connector at all answers from its configuration alone, whatever the store.
+  const anyConfigured = INTEGRATION_PROVIDER_LIST.some((provider) => connect[provider].configured);
+  const rows = anyConfigured ? yield* hostedStoreOrUnavailable(seams.readConnections(userId)) : [];
   const integrations = Object.fromEntries(
     yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
       Effect.map(
