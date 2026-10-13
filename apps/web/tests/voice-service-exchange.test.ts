@@ -197,6 +197,9 @@ function fakeEve(): FakeEve {
     cancel() {
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
     },
+    reset() {
+      return Effect.die(new Error("this suite retires no session"));
+    },
   };
   return eve;
 }

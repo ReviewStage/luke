@@ -15,6 +15,7 @@ import {
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
+  type EveMount,
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
@@ -45,16 +46,17 @@ export interface EveReach {
   eve?: (authorization: Redacted.Redacted) => EveSessions;
 }
 
-/** eve as the developer reaches it, or unavailable where the deployment names no origin for eve. */
+/** eve as the developer reaches it, the coding agents' service unless another is named, or unavailable where the deployment names no origin for eve. */
 export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   request: Request,
+  mount: EveMount = EVE_MOUNT.CODER,
 ): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
   const authorization = Redacted.make(request.headers.get("authorization") ?? "");
   if (reach.eve !== undefined) return reach.eve(authorization);
   const origin = reach.eveOrigin();
   if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* eveSessions({ origin, caller: { authorization }, mount: EVE_MOUNT.CODER });
+  return yield* eveSessions({ origin, caller: { authorization }, mount });
 });
 
 /** Where each of the account's conversations named stands now: its newest turn, and whether a line of the developer's awaits one. */

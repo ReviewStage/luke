@@ -8,6 +8,7 @@ import {
   readPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
+import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
@@ -39,7 +40,7 @@ import {
 } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { type EveReach, stoppedForGood } from "./hosted/coder-host/stop.js";
+import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -63,6 +64,7 @@ import {
 } from "./hosted/plan-notes.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
+import { retireSessions } from "./hosted/retire-sessions.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -317,7 +319,8 @@ const ONE_PLAN_METHODS: ReadonlySet<string> = new Set([
 /**
  * DELETE: every coding agent of the plan stopped for good first, as a Stop
  * and an archive stop one, so none works on for a plan that is gone; then
- * the plan. An eve that refuses a Stop, an agent with a turn still coming
+ * the plan's eve sessions and its agents' retired (`retire-sessions.ts`);
+ * then the plan. An eve that refuses a Stop, an agent with a turn still coming
  * that no Stop can name yet, or an agent started while the others were
  * stopped, leaves the plan standing and refused.
  */
@@ -336,9 +339,16 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
   const stopped = new Set(agents.map(({ id }) => id));
   const deleted = yield* hostedStoreOrUnavailable(
-    deletePlan(userId, planId, stopped).pipe(
-      Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined)),
-    ),
+    deletePlan(userId, planId, {
+      stoppedAgentIds: stopped,
+      // Note that the sessions are retired under the plan's lock and before its conversations are
+      // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
+      // agent started meanwhile refuses retires nothing.
+      beforeDelete: (conversationIds) =>
+        Effect.flatMap(standingSessionsOf(userId, conversationIds), (sessions) =>
+          retireSessions((mount) => eveFor(seams, request, mount), sessions),
+        ),
+    }).pipe(Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined))),
   );
   // An agent started while the others were stopped is one this delete has not stopped yet.
   if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);

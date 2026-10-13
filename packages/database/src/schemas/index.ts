@@ -14,6 +14,7 @@ export * from "./plan-template-revision.js";
 export * from "./preferences.js";
 export * from "./repository-pin.js";
 export * from "./roster.js";
+export * from "./session-sandbox.js";
 export * from "./storage.js";
 export * from "./usage.js";
 export * from "./vault.js";

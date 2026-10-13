@@ -222,6 +222,7 @@ function fakeEve(): FakeEve {
         eve.activeTurn = undefined;
         return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
       }),
+    reset: () => Effect.die(new Error("this suite retires no session")),
   };
   return eve;
 }

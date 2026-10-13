@@ -11,13 +11,14 @@
  * keeps that bundle free of it.
  */
 
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import type { ConversationTarget } from "./writer.js";
 
 const StandingSessionSchema = Schema.Struct({
@@ -87,6 +88,58 @@ const findRecordedSession = SqlSchema.findOneOption({
       .from(conversations)
       .where(eq(conversations.id, conversationId)),
 });
+
+const StandingSessionRowSchema = Schema.Struct({
+  sessionId: Schema.String,
+  kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
+});
+
+const findStandingSessions = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationIds: Schema.optionalKey(Schema.Array(Schema.String)),
+  }),
+  Result: StandingSessionRowSchema,
+  execute: ({ userId, conversationIds }) =>
+    db
+      .select({
+        sessionId: sql<string>`${conversations.runtimeSessionId}`,
+        kind: conversations.kind,
+      })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          isNull(conversations.deletedAt),
+          isNotNull(conversations.runtimeSessionId),
+          conversationIds === undefined ? undefined : inArray(conversations.id, conversationIds),
+        ),
+      ),
+});
+
+type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
+
+/** An eve session a standing conversation of the account runs in, and the kind of conversation, which says which eve service runs it. */
+export interface StandingSession {
+  readonly sessionId: string;
+  readonly kind: ConversationKind;
+}
+
+/**
+ * The eve sessions the account's standing conversations run in: every one
+ * of them, or those of the conversations named. A cleared conversation is
+ * left out, since eve's door no longer admits anyone to its session.
+ */
+export function standingSessionsOf(
+  userId: string,
+  conversationIds?: readonly string[],
+): Effect.Effect<readonly StandingSession[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  if (conversationIds !== undefined && conversationIds.length === 0) return Effect.succeed([]);
+  return findStandingSessions({
+    userId,
+    ...(conversationIds === undefined ? undefined : { conversationIds }),
+  });
+}
 
 /** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
 export function recordedRuntimeSession(

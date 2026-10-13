@@ -173,8 +173,14 @@ command runs. Each command, the few words the model gives to describe it, and
 up to 20,000 characters each of its output and error text are stored with the
 planning conversation, under its terms. The checkout stays in the sandbox
 between commands and, once the sandbox is stopped for idleness, in a snapshot
-Vercel keeps until thirty days after its last use. Nothing written in the
-sandbox reaches your repository.
+Vercel keeps until thirty days after its last use. When the plan's
+conversation is removed, thirty days after you delete the plan, our service
+deletes the sandbox of each of its sessions and of its coding agents', with
+the snapshots no other sandbox uses, shortly after; deleting your account
+does the same for every session of yours, shortly after the deletion. A
+session a plan's conversation was moved off earlier in its life is not
+tracked, and its snapshot stays until Vercel lets it expire. Nothing written
+in the sandbox reaches your repository.
 
 **Code on screen during a planning call.** When the planning model wants to
 show you code, it names a file and lines, and our service reads them from
@@ -490,8 +496,9 @@ only when you press Send.
   agent and its workers also run as sessions on Vercel Workflow, which keeps
   each session's history (the messages, files, tool calls, and answers its
   model works from) so the session can pick up where it stopped. Deleting a
-  plan or your account does not remove that history; Vercel keeps it under its
-  own retention.
+  plan or your account ends each of its sessions for good, a turn still
+  running included, but does not remove that history; Vercel keeps it under
+  its own retention.
 - GitHub, asked by your Mac itself and unauthenticated: to check for updates,
   carrying nothing about you, and for the picture of each repository owner
   the app names, an organization's logo or a person's avatar, carrying only
@@ -556,10 +563,11 @@ reports by Sentry.
   Linear account, and does not revoke the Luke GitHub App (revoke it in
   GitHub's settings). It asks Vercel Connect to revoke the Linear grant it
   holds; if Vercel Connect cannot be reached, the account is deleted anyway
-  and the grant stays until you revoke Luke in Linear's own settings. A
-  sandbox snapshot stays until Vercel lets it expire, the session history
-  Vercel Workflow keeps stays, and anything stored only on your Mac stays
-  there until you remove it.
+  and the grant stays until you revoke Luke in Linear's own settings. It
+  ends every session of yours on Vercel Workflow and, shortly after, deletes
+  their sandboxes with the snapshots no other sandbox uses; the session
+  history Vercel Workflow keeps stays under Vercel's retention, and anything
+  stored only on your Mac stays there until you remove it.
 
 ## Google user data
 

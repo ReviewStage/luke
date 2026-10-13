@@ -9,8 +9,10 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
+import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readTemplateRevisionContent, recordTemplateRevision } from "./plan-template-revisions.js";
+import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -66,11 +68,44 @@ const deleteUserRow = SqlSchema.void({
   execute: (userId) => db.delete(user).where(eq(user.id, userId)),
 });
 
-/** Erases the user row; every dependent row cascades with it. */
+const lockUserRow = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) =>
+    db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
+});
+
+const findAccountSessions = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
+  execute: (userId) =>
+    db
+      .select({ runtimeSessionId: conversations.runtimeSessionId })
+      .from(conversations)
+      .where(eq(conversations.userId, userId))
+      .for("update"),
+});
+
+/**
+ * Erases the user row; every dependent row cascades with it. The eve session
+ * each of the account's conversations ran in, a deleted plan's too, is
+ * queued for its sandbox's deletion in the same transaction, since nothing
+ * after it names them. The user's row is locked first, so a conversation
+ * opened meanwhile waits on it and finds no account, and every conversation
+ * of the account is locked as its session is read, so a session claimed
+ * meanwhile waits and finds no row to claim, rather than landing unqueued.
+ */
 export function deleteAccount(
   userId: string,
 ): Effect.Effect<void, AccountSeamFailure, SqlClient.SqlClient> {
-  return deleteUserRow(userId);
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        yield* lockUserRow(userId);
+        yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
+        yield* deleteUserRow(userId);
+      }),
+    ),
+  );
 }
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */

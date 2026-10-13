@@ -101,6 +101,7 @@ const EXCHANGES: readonly Exchange[] = [
           purgeDeletedPlanCalls: () => Effect.succeed(0),
           sweepAbandonedTurns: () => Effect.succeed(0),
           sweepVoice: () => Effect.succeed(NOTHING_ORPHANED),
+          sweepSandboxes: () => Effect.succeed({ deleted: 0, pending: 0 }),
         }),
       );
     },

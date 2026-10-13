@@ -4,13 +4,14 @@ import { recordVoiceSeconds } from "@sidecar/database/models/quota";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpClient, HttpRouter } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
+import { sessionSandboxesLayer, sweepSessionSandboxes } from "./hosted/session-sandboxes.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import {
@@ -31,8 +32,16 @@ import {
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
-): Effect.fn.Return<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
+): Effect.fn.Return<
+  Response,
+  unknown,
+  SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
+> {
   const environment = yield* HostedEnvironment;
+  const sandboxes = Layer.provide(
+    sessionSandboxesLayer,
+    Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
+  );
   const voiceUpstream = environment.openAiKey
     ? createLiveUpstream({
         apiKey: Redacted.value(environment.openAiKey),
@@ -50,6 +59,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       Effect.flatMap(storeWriter({ tools: HOSTED_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
       ),
+    sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)
@@ -70,7 +80,9 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
  * own refusal for a path it does not declare — unreachable in production,
  * since `vercel.json` sends the function only its own path.
  */
-export function maintenanceApp(): WebRoutes<SqlClient.SqlClient | HostedEnvironment> {
+export function maintenanceApp(): WebRoutes<
+  SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
+> {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `GET`: the handler decides its own method refusal, so a
     // request to the right path on the wrong method still answers 405 rather
