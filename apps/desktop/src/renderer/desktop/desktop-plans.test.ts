@@ -28,6 +28,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
+import { TerminalIcon } from "@sidecar/panel";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
@@ -863,6 +864,58 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
   press(page, '[aria-label="Close Opus 5.5"]');
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+});
+
+test("a delegated worker wears the mark of the model its delegation chose, though its agent runs in another harness", async () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: null,
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const job = "Count the routes.";
+  const turn: CodingAgentMessage = {
+    id: "m-turn",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-delegate",
+        toolCallId: "call_d1",
+        state: "output-available",
+        input: { task: job, model: "openai/gpt-6-astra", effort: "high" },
+        output: { result: "Three routes." },
+      },
+    ],
+  };
+  const worker: CodingAgentMessage = {
+    id: "w-1",
+    role: "assistant",
+    parts: [{ type: "text", text: "Three routes." }],
+  };
+  const readTranscript: TranscriptReader = ({ after, callId }) => {
+    if (after !== CODING_AGENT_CURSOR_START) return new Promise(() => undefined);
+    return Promise.resolve({
+      messages: callId === undefined ? [turn] : [worker],
+      cursor: "1:1",
+      status: CODING_AGENT_STATUS.COMPLETED,
+      title: null,
+    });
+  };
+  const page = mountOpenPlan({
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id], readTranscript }),
+  });
+  act(() => tabNamed(page, "Opus 5.5").click());
+  await settle();
+  press(page, '[data-subagent-row][data-call-id="call_d1"]');
+  await settle();
+
+  const tab = tabNamed(page, job);
+  assert.ok(tab.querySelector('img.provider-mark[src="marks/codex-16.png"]'), "Codex's cloud");
+  assert.equal(tab.querySelector("svg.provider-mark"), null, "not its agent's Clawd");
 });
 
 test("a subagent's tab cuts a long job short and says the whole of it in its card, with the session's latest step, while a fixed tab hangs none", () => {
@@ -3176,21 +3229,34 @@ function addRow(label: string): HTMLElement {
   return row;
 }
 
-test("the column's + offers New coding agent and the plan's Inbox and coding agents under a section of their own, each by its glyph and name alone, found by a search, and picking one chooses its tab rather than doubling it", () => {
+test("the column's + offers the plan's Inbox first by itself, then New coding agent, then the plan's coding agents under a section of their own, each by its glyph and name alone, found by a search, and picking one chooses its tab rather than doubling it", () => {
   const page = mountAgents();
   act(() => columnAddButton(page).click());
 
-  assert.deepEqual(addSections(), [["Coding agents", ["Inbox", "Opus 5.5", "GPT 5.6 Sol"]]]);
+  assert.deepEqual(addSections(), [["Coding agents", ["Opus 5.5", "GPT 5.6 Sol"]]]);
   assert.deepEqual(addRows(), [
-    ["New coding agent", "", true],
     ["Inbox", "", true],
+    ["New coding agent", "", true],
     ["Opus 5.5", "", true],
     ["GPT 5.6 Sol", "", true],
   ]);
+  assert.ok(addRow("Inbox").querySelector("svg.lucide-inbox"), "the Inbox's tray");
+  const terminal = renderToStaticMarkup(createElement(TerminalIcon));
+  assert.equal(
+    [...document.querySelectorAll(".tab-add-menu svg")].some((svg) => svg.outerHTML === terminal),
+    false,
+    "no row wears the generic terminal",
+  );
   assert.equal(document.activeElement?.getAttribute("placeholder"), "Search tabs");
-  // An agent's row says nothing of where it stands, by word or by dot.
-  for (const label of ["Opus 5.5", "GPT 5.6 Sol"]) {
+  // An agent's row wears its harness's mark and says nothing of where it
+  // stands, by word, by dot, or by the working mark its tab wears.
+  for (const [label, mark] of [
+    ["Opus 5.5", "svg.provider-mark"],
+    ["GPT 5.6 Sol", 'img.provider-mark[src="marks/codex-16.png"]'],
+  ] as const) {
     const row = addRow(label);
+    assert.ok(row.querySelector(mark), `${label} wears its harness's mark`);
+    assert.equal(row.querySelector(".working-mark"), null);
     assert.equal(row.querySelector(".agent-status-dot"), null);
     assert.equal(row.querySelector(".plan-compose-menu-detail"), null);
     assert.equal(row.textContent, label);
@@ -3236,6 +3302,40 @@ test("the side panel's + lists the plan's subagents under a section of their own
   act(() => addButton(page).click());
   assert.equal(addRow(job).textContent, job, "an open tab's row says nothing of it");
 });
+test("a subagent wears its model's mark in its tab and its row of the side panel's +, as its row in the Work tab does, rather than the worker's robot", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session !== undefined);
+  const page = mountOpenPlan({
+    work: {
+      ...live,
+      callLive: false,
+      turns: [
+        {
+          ...turn,
+          state: PLAN_WORK_STATE.DONE,
+          parts: [
+            {
+              ...worker,
+              state: PLAN_WORK_STATE.DONE,
+              session: { ...worker.session, model: "openai/gpt-6.1-sol" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const codex = 'img.provider-mark[src="marks/codex-16.png"]';
+  assert.ok(tabNamed(page, job).querySelector(codex), "the tab wears Codex's cloud");
+  act(() => addButton(page).click());
+  assert.ok(addRow(job).querySelector(codex), "and so does its + row");
+  assert.equal(document.querySelector(".tab-add-menu svg.lucide-bot"), null);
+});
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the column's + lists it as it stands, and picking it there opens the tab again in its place", () => {
   const page = mountAgents();
   act(() => tabNamed(page, "GPT 5.6 Sol").click());
@@ -3272,7 +3372,7 @@ test("the + reads the plan's agents again as it opens, so an agent no tab follow
   // The agent is named with its tab closed, where nothing follows it.
   listed = [{ ...RUNNING_AGENT, title: "Queue spike" }, DONE_AGENT];
   act(() => columnAddButton(page).click());
-  assert.deepEqual(addSections(), [["Coding agents", ["Inbox", "Queue spike", "GPT 5.6 Sol"]]]);
+  assert.deepEqual(addSections(), [["Coding agents", ["Queue spike", "GPT 5.6 Sol"]]]);
 });
 
 /** The key the draft below is minted under, which its first message starts the agent with. */

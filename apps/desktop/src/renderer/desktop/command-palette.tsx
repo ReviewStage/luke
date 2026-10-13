@@ -67,7 +67,7 @@ import { matchesTokens, searchTokens } from "../search-tokens";
 import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
 import type { SettingsView } from "../settings-views";
 import { agentEntries, inboxEntries } from "./main-tabs";
-import { panelEntries, planWorkers } from "./side-panel";
+import { panelEntries, planWorkers, TAB_ICON } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -374,7 +374,7 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 
 /**
  * The side panel's kinds, listed with the commands as Show board and the
- * rest, each showing the panel on its tab as the panel's "+" does, over
+ * rest, each wearing its kind's glyph as its tab does and showing the panel on its tab as the panel's "+" does, over
  * the version history; none while the plan is not drawn, since there is
  * no panel to show. No chord reaches them.
  */
@@ -386,7 +386,7 @@ function panelTabRows(
   return SIDE_PANEL_TABS.map((tab) => {
     const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
     const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
-    return { label, terms: [label], onChoose: () => show(pick) };
+    return { icon: TAB_ICON[tab], label, terms: [label], onChoose: () => show(pick) };
   });
 }
 

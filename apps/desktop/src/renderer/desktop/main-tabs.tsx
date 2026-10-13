@@ -5,14 +5,19 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { DocumentIcon, PlusIcon, TerminalIcon } from "@sidecar/panel";
+import { DocumentIcon, PlusIcon } from "@sidecar/panel";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { AgentGlyph, AgentTab, agentEndMark } from "../planning/agent-tab";
+import { AgentGlyph, AgentMark, AgentTab, agentEndMark } from "../planning/agent-tab";
 import { AgentTabCard, cardCorner, heldLatest, lastFinished } from "../planning/agent-tab-card";
-import { agentStateWords, agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
+import {
+  agentStateWords,
+  agentStillWriting,
+  agentTabLabel,
+  providerOf,
+} from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import {
   inPlanOrder,
@@ -284,11 +289,11 @@ function agentTabs(input: {
 
 /**
  * Each of the plan's agents in the order started, as the "+" menu offers it
- * and the plan's summary lists it (`plan-summary.tsx`). In the "+" it wears
- * the Coding agents glyph and says nothing of where it stands, which its
- * tab does; the summary has no tab beside it to say it, so there it wears
- * its harness's mark for where it stands, and a failure at its end, as its
- * tab does (`standing`).
+ * and the plan's summary lists it (`plan-summary.tsx`), wearing the mark of
+ * its harness. In the "+" the mark says nothing of where the agent stands,
+ * which its tab does; the summary has no tab beside it to say it, so there
+ * the mark wears where it stands, and a failure at its end, as its tab does
+ * (`standing`).
  * Picking an agent whose tab is open chooses that tab rather than opening
  * another, as a browser's tab search does.
  */
@@ -301,7 +306,11 @@ export function agentEntries(
     row: {
       id: agent.id,
       label: agentTabLabel(agent, agents.models),
-      icon: standing ? <AgentGlyph agent={agent} /> : <TerminalIcon />,
+      icon: standing ? (
+        <AgentGlyph agent={agent} />
+      ) : (
+        <AgentMark provider={providerOf(agent.model)} />
+      ),
       section: AGENTS_SECTION,
     },
     endMark: standing ? agentEndMark(agent, true) : undefined,
@@ -329,21 +338,22 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
 }
 
 /**
- * The plan's Inbox as the "+" menu and ⌘K offer it, among the plan's
- * agents, since only they post to it; none on a plan with no agent. Picking
- * it opens the tab where it was closed and chooses it, through `onPick`.
+ * The plan's Inbox as the "+" menu and ⌘K offer it, by itself rather than
+ * among the plan's agents, though only they post to it; none on a plan with
+ * no agent. Picking it opens the tab where it was closed and chooses it,
+ * through `onPick`.
  */
 export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the plan holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0) return [];
-  const entry = inboxEntry(onPick, 0);
-  return [{ ...entry, row: { ...entry.row, section: AGENTS_SECTION } }];
+  return [inboxEntry(onPick, 0)];
 }
 
 /**
- * The "+" menu's rows: New coding agent, unavailable with Start's own
- * reason while Start could not run, and left out on an archived plan; then
- * the plan's Inbox and each of its agents (`inboxEntries`, `agentEntries`).
+ * The "+" menu's rows: the plan's Inbox first, by itself under no heading
+ * (`inboxEntries`); New coding agent, unavailable with Start's own reason
+ * while Start could not run, and left out on an archived plan; then each
+ * of its agents under Coding agents (`agentEntries`).
  */
 function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   const { start } = agents;
@@ -359,7 +369,7 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
   const agentRows = agentEntries(main, agents, false);
-  return [...(agents.onUnarchive === undefined ? [newAgent] : []), ...inbox, ...agentRows];
+  return [...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 
 /**
@@ -389,7 +399,7 @@ export function MainTabStrip({
   /** The sidebar's pins, which an agent's tab is pinned among, and their presses. */
   pins: {
     pinned: readonly PinnedTab[];
-    onPin: (tab: { agent: string }, label: string) => void;
+    onPin: (tab: { agent: string }, label: string, model: string) => void;
     onUnpin: (planId: string, tab: { agent: string }) => void;
   };
   /** The plan's rename, which its tab's menu opens; none while the plan is archived. */
@@ -466,7 +476,7 @@ export function MainTabStrip({
               onToggle: () =>
                 pinned
                   ? pins.onUnpin(plan.id, { agent: agent.id })
-                  : pins.onPin({ agent: agent.id }, entry.look.label),
+                  : pins.onPin({ agent: agent.id }, entry.look.label, agent.model),
             },
       onCopy: entry.copy,
     };

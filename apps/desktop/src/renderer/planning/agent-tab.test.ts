@@ -17,6 +17,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { DocumentIcon } from "@sidecar/panel";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -814,6 +815,11 @@ test("the plan is a card across the top of the transcript, folded under its titl
   const card = open(container, "[data-plan-card]");
   assert.equal(card.querySelector("h1")?.textContent, "Teammate invitations");
   assert.ok(card.textContent?.includes("Invite a teammate by email."));
+  const glyph = renderToStaticMarkup(createElement(DocumentIcon));
+  assert.ok(
+    [...card.querySelectorAll("summary svg")].some((svg) => svg.outerHTML === glyph),
+    "the plan's own glyph, as the plan's tab wears it",
+  );
 });
 
 test("the words are markdown, with the pull request's link opening on GitHub in the browser rather than in the window", () => {
