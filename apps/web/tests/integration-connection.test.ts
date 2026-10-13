@@ -455,7 +455,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an integration connection's to
           logged.push(JSON.stringify(options.message), String(options.cause));
         });
 
-        const read = yield* linearAccessToken(Effect.die(new TypeError(secret))).pipe(
+        const read = yield* integrationAccessToken(LINEAR, Effect.die(new TypeError(secret))).pipe(
           Effect.provide(connectLayer(new Map())),
           Effect.provide(Logger.layer([capture])),
         );

@@ -31,6 +31,7 @@
  */
 
 import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -142,7 +143,9 @@ export function integrationAccessToken(
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
-        Effect.logWarning(`the ${INTEGRATION_NAME[provider]} connection could not be read`, cause),
+        Effect.logWarning(
+          `the ${INTEGRATION_NAME[provider]} connection could not be read: ${causeKind(cause)}`,
+        ),
         Result.fail(integrationUnavailable(provider).UNREACHABLE),
       ),
     ),
