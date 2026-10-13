@@ -5,15 +5,15 @@ import {
   type TranscriptCall,
 } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "@sidecar/live";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { db } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
-import { messages } from "../schemas/storage.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
+import { type SpokenRow, spokenRowsOn } from "./message-reads.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 
 /**
@@ -117,42 +117,6 @@ const findCallRecords = SqlSchema.findAll({
       .where(and(inArray(voiceSessions.id, [...ids]), eq(voiceSessions.userId, userId))),
 });
 
-const SpokenRowSchema = Schema.Struct({
-  clientId: Schema.String,
-  role: Schema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
-  voiceSessionId: Schema.String,
-  fromMs: Schema.Number,
-});
-
-type SpokenRow = typeof SpokenRowSchema.Type;
-
-/** The rows the voice wrote in the plan's conversation for what was said on the calls named, each with its call and where on it its words began. */
-const findSpokenRows = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    ids: Schema.Array(Schema.String),
-  }),
-  Result: SpokenRowSchema,
-  execute: ({ userId, conversationId, ids }) =>
-    db
-      .select({
-        clientId: messages.clientId,
-        role: messages.role,
-        voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
-        fromMs: sql<number>`(${messages.metadata}->>'from_ms')::double precision`,
-      })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.userId, userId),
-          eq(messages.conversationId, conversationId),
-          inArray(sql`${messages.metadata}->>'voice_session_id'`, [...ids]),
-          sql`${messages.metadata}->>'from_ms' is not null`,
-        ),
-      ),
-});
-
 /** The row a line was written as: one of its speaker's on its call whose words began inside the line's span; none where the record holds no such row. */
 function rowOf(line: TranscriptUtterance, rows: readonly SpokenRow[]): string | undefined {
   return rows.find(
@@ -235,7 +199,7 @@ function spokenRowsOf(
   ids: readonly string[],
 ): PlanStoreEffect<ReadonlyMap<string, readonly SpokenRow[]>> {
   if (conversationId === null || ids.length === 0) return Effect.succeed(new Map());
-  return Effect.map(findSpokenRows({ userId, conversationId, ids }), (rows) => {
+  return Effect.map(spokenRowsOn(userId, conversationId, ids), (rows) => {
     const byCall = new Map<string, SpokenRow[]>();
     for (const row of rows)
       byCall.set(row.voiceSessionId, [...(byCall.get(row.voiceSessionId) ?? []), row]);
