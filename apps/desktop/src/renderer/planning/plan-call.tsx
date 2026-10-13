@@ -415,6 +415,7 @@ export function PlanCall({
     startedAt: row.startedAt,
     asked: row.asked,
     askedAt: row.askedAt,
+    spoken: row.spoken,
     turn: row,
   }));
   const doors: WorkDoors = {

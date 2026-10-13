@@ -10,7 +10,13 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { PLAN_WORK_STATE, type PlanWorkState } from "@sidecar/hosted/planning-view";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireString,
+  TURN_ORIGIN,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "./turn-rows";
@@ -79,6 +85,8 @@ export interface WorkTurnRow {
   /** The spoken lines the turn took as its ask, by the ids the voice's ledger minted, and where on its call each began. */
   asked: readonly string[];
   askedAt: NonNullable<CodingAgentMessage["askedAt"]>;
+  /** Whether the voice asked for the turn, so Luke says its words aloud whether or not a line on screen asked for it; false from a service older than the word. */
+  spoken: boolean;
 }
 
 /** What a subagent is named by, on its line, its task card, and its tab: its job, the first line of its task as plain words, or what was asked of it where no job was said. */
@@ -371,6 +379,7 @@ function rowOf(
     workers,
     asked: message.asked ?? [],
     askedAt: message.askedAt ?? [],
+    spoken: message.origin === TURN_ORIGIN.SPOKEN,
   };
 }
 

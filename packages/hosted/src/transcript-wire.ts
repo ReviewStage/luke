@@ -49,7 +49,9 @@ export const transcriptTextPartSchema = EffectSchema.Struct({
  * One speaker's utterance on a call, its fragments run together as received,
  * as a `UIMessage`: the speaker is the role, and the words are one text
  * part. The id is the line's place on its call, counted from zero, and the
- * metadata names the line's rows in the plan's conversation, by the ids the
+ * metadata says where on the call the line began and ended, which places a
+ * turn no line asked for among the lines by time, and names the line's rows
+ * in the plan's conversation, by the ids the
  * live call names its lines by and a planning turn names its ask by, where
  * the record holds them: one as a rule, and more where a call that
  * reattached wrote one utterance as two rows the line reads as one. Note that the parts are a mutable array, as the
@@ -60,9 +62,16 @@ export const transcriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
   parts: EffectSchema.mutable(EffectSchema.Array(transcriptTextPartSchema)),
-  /** Absent for a line whose rows the record does not hold, and from a service older than it. */
+  /** Absent from a service older than it. */
   metadata: EffectSchema.optionalKey(
-    EffectSchema.Struct({ rowIds: EffectSchema.Array(EffectSchema.String) }),
+    EffectSchema.Struct({
+      /** Absent for a line whose rows the record does not hold. */
+      rowIds: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
+      /** Milliseconds into the call the line's words began and ended, as the live call's lines carry them; absent from a service older than it. */
+      span: EffectSchema.optionalKey(
+        EffectSchema.Struct({ startMs: countedNumber, endMs: countedNumber }),
+      ),
+    }),
   ),
 });
 

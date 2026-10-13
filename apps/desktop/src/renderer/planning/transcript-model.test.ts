@@ -293,3 +293,27 @@ test("a stored call carries what its record holds of how it ended, and the call 
     [record, undefined],
   );
 });
+
+test("the call standing is dated from when it was first heard, less how far into the call its first line began, so a turn begun before any line stands ahead of them all", () => {
+  const voice = {
+    callPlanId: PLAN,
+    callTranscript: {
+      voiceSessionId: LIVE_CALL,
+      lines: [
+        {
+          rowId: "row-1",
+          speaker: TRANSCRIPT_SPEAKER.USER,
+          words: "Seven days.",
+          startMs: 4_000,
+          endMs: 5_000,
+        },
+      ],
+    },
+  };
+  const heard = heardCalls({ held: [], voice, planId: PLAN, now: 9_000 });
+  const region = transcriptRegion({ transcript: { status: PLANNING_READ.READING }, heard });
+  assert.deepEqual(
+    region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((call) => call.startedAt) : [],
+    [5_000],
+  );
+});

@@ -63,11 +63,27 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "span": {
+                          "type": "object",
+                          "properties": {
+                            "startMs": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "endMs": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "startMs",
+                            "endMs"
+                          ],
+                          "additionalProperties": false
                         }
                       },
-                      "required": [
-                        "rowIds"
-                      ],
+                      "required": [],
                       "additionalProperties": false
                     }
                   },
