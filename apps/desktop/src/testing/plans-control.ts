@@ -74,6 +74,7 @@ export function codingAgentsControl(
     // A plan with no archived agent holds exactly the agents given.
     heldIds: overrides.agentIds ?? [],
     keywords: [],
+    readSkills: undefined,
     draft: undefined,
     onNewDraft: () => "draft",
     onDraftChange: ignore,

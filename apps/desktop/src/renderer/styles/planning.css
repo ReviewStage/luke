@@ -1265,6 +1265,80 @@ button.code-card-path:hover {
   padding-left: 4px;
 }
 
+/* The box's words over the layer that draws a chosen skill's chip
+   (`skill-picker.tsx`): the layer is set in the field's own type at the
+   field's own insets, its words transparent, so each pill lies exactly
+   under its `/name`; the field stands over it, clear. */
+.agent-composer-field {
+  position: relative;
+}
+
+.agent-composer-input {
+  position: relative;
+  z-index: 1;
+}
+
+.skill-chips {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 1rem 1rem 0.5rem;
+  color: transparent;
+  font-size: var(--composer-type);
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.skill-chip {
+  border-radius: 4px;
+  background: var(--raised-strong);
+  box-shadow: 0 0 0 2px var(--raised-strong);
+  color: transparent;
+}
+
+/* The list a `/` opens: the window's menu, standing over the caret's line
+   at the left the line put it, inside the box. Named with the menu's own
+   class, since the menu's rule opens it under a trigger and is read later. */
+.plan-compose-menu.skill-menu {
+  top: auto;
+  z-index: 3;
+  width: 320px;
+  max-width: 100%;
+}
+
+.skill-menu .plan-compose-menu-row:hover {
+  background: none;
+}
+
+.skill-menu .plan-compose-menu-row[aria-selected="true"] {
+  background: var(--raised-strong);
+}
+
+.skill-menu .plan-compose-menu-name {
+  flex: none;
+}
+
+.skill-menu-description {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-menu-none {
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill-menu-hint {
+  font-size: 11.5px;
+}
+
 /* The foot's right: the model chip, the context ring, the microphone, and
    the round Send or Stop; the New Plan card's microphone, left of Start.
    It may narrow, so a long model name is cut short before the presses are. */

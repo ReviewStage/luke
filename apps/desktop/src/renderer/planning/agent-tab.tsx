@@ -54,6 +54,7 @@ import {
   workerStatusOf,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import type { SkillSource } from "./skill-picker";
 import {
   AGENT_TOOL,
   cardTitle,
@@ -568,6 +569,7 @@ export function AgentTabView({
   onOpenSubagent,
   openGitHub,
   keywords,
+  skills,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
@@ -590,6 +592,8 @@ export function AgentTabView({
   openGitHub: (url: string) => void;
   /** The words a dictation into the box is likely to say. */
   keywords?: readonly string[] | undefined;
+  /** Where the skills a `/` in the box offers are read from; nothing where it offers none. */
+  skills?: SkillSource | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
@@ -642,6 +646,7 @@ export function AgentTabView({
             // task, so the box takes a follow up even before the transcript is read.
             followsUp
             keywords={keywords}
+            skills={skills}
           />
         )}
       </footer>
@@ -725,6 +730,7 @@ export function AgentTab({
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
       keywords={control.keywords}
+      skills={control.readSkills}
     />
   );
 }

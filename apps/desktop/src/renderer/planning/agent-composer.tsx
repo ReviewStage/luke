@@ -28,6 +28,7 @@ import { PublishedChip, type PublishedDoors } from "./agent-published";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { DictateButton, DictationStrip } from "./dictation-strip";
+import { type SkillSource, useSkillPicker } from "./skill-picker";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
 import { DICTATION_PHASE, useDictation } from "./use-dictation";
@@ -79,6 +80,11 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * to be heard and the words land at the caret, or ✕ or Escape drops it
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
+ *
+ * A `/` at the start of a word opens the list of the skills the plan's
+ * repository keeps, at the caret, and the one chosen is written into the
+ * words as `/name`, drawn as a chip, which the agent loads before it acts
+ * (`skill-picker.tsx`).
  */
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
@@ -125,6 +131,7 @@ export function AgentComposer({
   onStop,
   followsUp,
   keywords = [],
+  skills,
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
@@ -148,6 +155,8 @@ export function AgentComposer({
   followsUp: boolean;
   /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
   keywords?: readonly string[] | undefined;
+  /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
+  skills?: SkillSource | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -183,6 +192,12 @@ export function AgentComposer({
     onNote: setRefusal,
   });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
+  const skillPicker = useSkillPicker({
+    field,
+    draft: composer.draft,
+    setDraft: (next) => latest.current.setDraft(next),
+    source: skills,
+  });
 
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
   useEffect(() => {
@@ -191,6 +206,7 @@ export function AgentComposer({
 
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (dictation.onFieldKey(event)) return;
+    if (skillPicker.onKeyDown(event)) return;
     if (event.key === "Escape") {
       event.stopPropagation();
       event.currentTarget.blur();
@@ -255,25 +271,36 @@ export function AgentComposer({
                 }
           }
         />
-        <PromptInputTextarea
-          ref={field}
-          className="ph-no-capture"
-          aria-label="Message to the agent"
-          placeholder={placeholder}
-          maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
-          value={composer.draft}
-          disabled={held}
-          readOnly={dictating}
-          onChange={(event) => composer.setDraft(event.currentTarget.value)}
-          onKeyDown={onFieldKey}
-          onPaste={(event) => {
-            // Only images are taken from the clipboard; text pastes as it always does.
-            const pasted = imageFiles(event.clipboardData.files);
-            if (pasted.length === 0) return;
-            event.preventDefault();
-            attach(pasted);
-          }}
-        />
+        <div className="agent-composer-field">
+          {skillPicker.chips}
+          <PromptInputTextarea
+            ref={field}
+            className="ph-no-capture agent-composer-input"
+            aria-label="Message to the agent"
+            placeholder={placeholder}
+            maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
+            value={composer.draft}
+            disabled={held}
+            readOnly={dictating}
+            {...skillPicker.fieldProps}
+            onChange={(event) => {
+              composer.setDraft(event.currentTarget.value);
+              skillPicker.onCaret();
+            }}
+            onKeyDown={onFieldKey}
+            onSelect={skillPicker.onCaret}
+            onBlur={skillPicker.onBlur}
+            onScroll={skillPicker.onScroll}
+            onPaste={(event) => {
+              // Only images are taken from the clipboard; text pastes as it always does.
+              const pasted = imageFiles(event.clipboardData.files);
+              if (pasted.length === 0) return;
+              event.preventDefault();
+              attach(pasted);
+            }}
+          />
+          {skillPicker.menu}
+        </div>
         <PromptInputFooter>
           {dictating ? (
             <DictationStrip dictation={dictation} />

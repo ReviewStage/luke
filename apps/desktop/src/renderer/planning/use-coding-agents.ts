@@ -30,6 +30,8 @@ import {
   withAgent,
   withAgentRun,
 } from "./coding-agent-model";
+import { keptSkills } from "./repository-skills";
+import type { SkillSource } from "./skill-picker";
 import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
@@ -170,6 +172,8 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
+  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
+  readSkills: SkillSource | undefined;
   /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
   readInbox: InboxReader;
   /** One answer to an inbox item, as a card sends it. */
@@ -621,6 +625,16 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  // Note that the skills are kept for the plan and its repository as they
+  // stand, so another plan, or the plan moved to another repository, reads afresh.
+  const readSkills = useMemo(
+    () =>
+      planId === undefined || repository === null
+        ? undefined
+        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId })),
+    [act, planId, repository],
+  );
+
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
     [act],
@@ -662,6 +676,7 @@ export function useCodingAgents(input: {
     readTranscript,
     readPullRequest,
     keywords: input.keywords ?? NO_KEYWORDS,
+    readSkills,
     readInbox,
     answerInbox,
     readInboxImage,
