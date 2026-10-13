@@ -30,7 +30,7 @@ import type { AgentSkill } from "./skills.js";
 type EdgeFailure = SqlError | Schema.SchemaError;
 
 /** What the doors need of a root's host: its admissions and its child relay, which both hosts carry alike. */
-export interface EdgeHost {
+interface EdgeHost {
   readonly admit: (auth: SessionAuth, sessionId: string) => IntegrationAdmission;
   readonly admitStarting: (auth: SessionAuth, sessionId: string) => IntegrationAdmission;
   readonly admitDelegated: (auth: SessionAuth, sessionId: string) => IntegrationAdmission;
