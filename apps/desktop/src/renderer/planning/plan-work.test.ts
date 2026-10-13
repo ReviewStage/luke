@@ -579,3 +579,43 @@ test("Luke's turn is drawn by a coding agent's own message, so his words carry t
   // The call ahead of the last words folds under the turn's line, as a stopped agent turn's lead does.
   assert.ok(work.textContent?.includes("1 tool call"));
 });
+
+test("a subagent that ended having recorded nothing still says how long it worked, beside the line saying it recorded nothing", () => {
+  const [row] = workRowsOf(
+    [
+      {
+        turnId: "turn-empty",
+        startedAt: 1,
+        endedAt: 9_000,
+        state: PLAN_WORK_STATE.DONE,
+        earlierOmitted: false,
+        parts: [
+          {
+            type: PLAN_WORK_PART.TOOL,
+            id: "call-empty",
+            tool: PLAN_WORK_TOOL.WORKER,
+            name: "worker",
+            state: PLAN_WORK_STATE.DONE,
+            subject: "Find the admin check.",
+            input: JSON.stringify({ message: "Find the admin check." }),
+            session: {
+              earlierOmitted: false,
+              parts: [],
+              startedAt: 1_000,
+              endedAt: 4_000,
+              model: "openai/gpt-6.1-sol",
+              effort: "medium",
+            },
+          },
+        ],
+      },
+    ],
+    false,
+  );
+  assert.ok(row);
+  const worker = workerOf([row], "call-empty");
+  assert.ok(worker);
+  const tab = mounted(createElement(SubagentTab, { worker, shown: true }));
+  assert.ok(tab.textContent?.includes("Nothing recorded."));
+  assert.ok(tab.textContent?.includes("Worked for 3s"), tab.textContent ?? "");
+});

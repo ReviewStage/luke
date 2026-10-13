@@ -108,6 +108,8 @@ export function SubagentTab({
 }): React.JSX.Element {
   const { call, task, session } = worker;
   const recorded = session !== undefined && session.message.parts.length > 0;
+  // A session that ended is drawn even with nothing recorded, so its end still says how long it worked and on what.
+  const drawn = recorded || session?.message.finishedAt !== undefined ? session : undefined;
   // A session whose own task failed says so even where the planning model answered its call and went on.
   const ended =
     call.running || (call.state !== PLAN_WORK_STATE.FAILED && !workFailed(session?.record))
@@ -117,7 +119,7 @@ export function SubagentTab({
     <section className="agent-tab ph-no-capture" aria-label={workerJob(call)}>
       <AgentTranscriptView
         briefTitle={workerJob(call)}
-        messages={workerLines(task, recorded ? [session.message] : [])}
+        messages={workerLines(task, drawn === undefined ? [] : [drawn.message])}
         lead={WORKER_LEAD}
         delegation={{ models }}
         reading={false}
