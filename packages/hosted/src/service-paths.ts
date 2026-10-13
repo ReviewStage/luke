@@ -98,18 +98,19 @@ export const HOSTED_SERVICE_PATH = {
   GITHUB_INSTALLED: "/api/github/installed",
   /**
    * The workspaces the account is a member of, its personal one first and
-   * the rest by name, and the ones of a GitHub App installation it may join
-   * (GET); a read makes the personal one and one per installation the
-   * account's GitHub reaches that has none yet. `workspace-wire.ts`
-   * declares the answer.
+   * the rest by name, each with its connected GitHub account (GET), or a
+   * workspace created, the account its owner (POST). `workspace-wire.ts`
+   * declares both.
    */
   WORKSPACES: "/api/workspaces",
   /**
-   * Joins the workspace of a GitHub App installation the account's GitHub
-   * still reaches (POST); joining one the account is in answers it as it is.
-   * `workspace-wire.ts` declares both bodies.
+   * Where an owner or admin connects a GitHub organization to a workspace
+   * (POST): answers the Luke GitHub App's install address, carrying a
+   * single-use intent GitHub returns to `GITHUB_INSTALLED` with.
    */
-  WORKSPACES_JOIN: "/api/workspaces/join",
+  WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
+  /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
+  WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
 } as const;
