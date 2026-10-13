@@ -633,6 +633,16 @@ it.effect(
       assert.equal(chosen(page), "Luke");
       assert.equal(chosenSummary(page), "4 changes");
       assert.ok(document.querySelector('[role="alertdialog"]'), "the restore asks first");
+      const cancel = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+      ].find((button) => button.textContent === "Cancel");
+      assert.ok(cancel);
+      yield* arrow("ArrowUp", cancel);
+      assert.equal(
+        chosenSummary(page),
+        "4 changes",
+        "the arrows in the question step nothing behind it",
+      );
       yield* press(document, "Restore");
       assert.equal(service.current, FIRST);
     }),
