@@ -864,6 +864,58 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
 });
 
+test("a delegated worker wears the mark of the model its delegation chose, though its agent runs in another harness", async () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: null,
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const job = "Count the routes.";
+  const turn: CodingAgentMessage = {
+    id: "m-turn",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-delegate",
+        toolCallId: "call_d1",
+        state: "output-available",
+        input: { task: job, model: "openai/gpt-6-astra", effort: "high" },
+        output: { result: "Three routes." },
+      },
+    ],
+  };
+  const worker: CodingAgentMessage = {
+    id: "w-1",
+    role: "assistant",
+    parts: [{ type: "text", text: "Three routes." }],
+  };
+  const readTranscript: TranscriptReader = ({ after, callId }) => {
+    if (after !== CODING_AGENT_CURSOR_START) return new Promise(() => undefined);
+    return Promise.resolve({
+      messages: callId === undefined ? [turn] : [worker],
+      cursor: "1:1",
+      status: CODING_AGENT_STATUS.COMPLETED,
+      title: null,
+    });
+  };
+  const page = mountOpenPlan({
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id], readTranscript }),
+  });
+  act(() => tabNamed(page, "Opus 5.5").click());
+  await settle();
+  press(page, '[data-subagent-row][data-call-id="call_d1"]');
+  await settle();
+
+  const tab = tabNamed(page, job);
+  assert.ok(tab.querySelector('img.provider-mark[src="marks/codex-16.png"]'), "Codex's cloud");
+  assert.equal(tab.querySelector("svg.provider-mark"), null, "not its agent's Clawd");
+});
+
 test("a subagent's tab cuts a long job short and says the whole of it in its card, with the session's latest step, while a fixed tab hangs none", () => {
   const job =
     "Compare the two queue libraries on revocation, retries, and the cost of running each at our volume.";

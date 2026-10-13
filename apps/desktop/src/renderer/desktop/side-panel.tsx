@@ -368,12 +368,22 @@ function stripTabs(input: {
   const subagentTabs = subagents.map(({ tab, label, untitled, state, stateWords, worker }) => {
     const running = state === GLYPH_STATE.WORKING;
     const { delegation } = tab;
-    // Note that a delegated worker is marked by its agent's model, because it
-    // runs in its agent's harness whatever model the delegation chose.
+    // Note that a delegated worker's pair is read from the call that started
+    // it, among what its agent's tab last held, whatever turn that was,
+    // because the call says it once and for good; its agent's own model
+    // stands in for the mark until that call is held.
+    const parent =
+      delegation === undefined
+        ? undefined
+        : agents.agents?.find((agent) => agent.id === delegation.agent);
+    const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
+    const started =
+      delegation === undefined ? undefined : held.agents.get(delegation.agent)?.messages;
+    const delegated = own && delegatedChoice(started, tab.subagent, own);
     const model =
       delegation === undefined
         ? worker && workerChoice(worker)?.model
-        : agents.agents?.find((agent) => agent.id === delegation.agent)?.model;
+        : (delegated?.model ?? parent?.model);
     // A worker runs one turn, so the run its tab last read is its run for good.
     const readCard = () => {
       if (delegation === undefined) {
@@ -389,12 +399,6 @@ function stripTabs(input: {
           transcript: worker && workerTranscript(worker),
         };
       }
-      // Note that the pair is read from the call that started the worker,
-      // among what its agent's tab last held, whatever turn that was, because
-      // the call says it once and for good.
-      const parent = agents.agents?.find((agent) => agent.id === delegation.agent);
-      const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
-      const started = held.agents.get(delegation.agent)?.messages;
       const drawn = held.workers.get(tab.subagent);
       const now = { writing: running, runStartedAt: drawn?.runStartedAt };
       const messages = heldLatest(drawn, now, chosen(tab));
@@ -405,7 +409,7 @@ function stripTabs(input: {
           movedAt: lastFinished(messages),
           state: stateWords,
         }),
-        choice: own && delegatedChoice(started, tab.subagent, own),
+        choice: delegated,
         transcript:
           messages &&
           agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
