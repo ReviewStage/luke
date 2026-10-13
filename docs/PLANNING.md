@@ -557,9 +557,8 @@ moves nothing forward.
 The answer is notes, the way a person takes notes on a call, never the text
 written out again:
 
-- `add` puts a new point at the end of a section, under the heading its
-  field names, or opens that section at the end of the text where it has
-  none.
+- `add` puts a new point at the end of a section, under the heading it
+  names, or opens that section at the end of the text where it has none.
 - `replace` corrects a phrase copied exactly from the text, standing once in
   it and touching no heading, and `remove` strikes the line holding one.
 
@@ -632,7 +631,7 @@ The service lays each save over what Luke wrote meanwhile
   edit never flickers back out (each `plan.draft` frame names the save it
   was drawn over).
 - **What Luke is told.** The planning model's standing context names the
-  sections the developer last wrote, by heading, under `[fields the
+  sections the developer last wrote, by heading, under `[sections the
   developer wrote]`, as their decisions; the notetaker is told the same
   sections and never rewords or strikes them unless the call says to. A
   section the notetaker writes again leaves that list. The voice is not told
@@ -1062,7 +1061,7 @@ admins."
 The model treats the correction first, before its own line of questioning:
 
 - It rewrites the assumption to "Members and admins can both invite."
-- It updates every field where "admin" was assumed.
+- It updates every section where "admin" was assumed.
 - It reopens the question the correction affects: "Then who can withdraw an
   invite: the member who sent it, any admin, or both?" It adds that question
   to `Open questions` until it is answered.
@@ -1097,7 +1096,7 @@ spoken conversation.
 
 The plan is done when the document is enough for a separate agent to build
 the change without coming back with a question, not when every branch of the
-design tree has been asked about: every core field holds an answer or an
+design tree has been asked about: every core section holds an answer or an
 agreed reason it does not apply, every hard part says how the change
 behaves, nothing open would change what gets built, and every choice the
 developer does not mind either way is stated as an assumption. The planning
@@ -1112,7 +1111,7 @@ leave it open.
 That, or the developer saying "I think that's everything", starts the review:
 Luke reviews the document aloud before it is copied. It covers:
 
-- every field still "Unanswered";
+- every section still holding only its template's guidance;
 - every assumption, one at a time ("I assumed invites expire after 7 days.
   Keep that?");
 - anything left in `Open questions`;
@@ -1128,12 +1127,14 @@ assumption.
 
 The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
 toolbar reads `Copied`. The
-clipboard holds the current document as readable Markdown: the body as saved,
-every section of the template in order, then the assumption list, which
-reads `_None recorded_` while the list is empty:
+clipboard holds the current document as readable Markdown: the plan's name
+as a `#` title over its document exactly as saved, whose assumptions are a
+section like any other (`packages/hosted/src/plan-markdown.ts`):
 
 ```markdown
-<body exactly as saved>
+# Teammate invitations
+
+<the document exactly as saved>
 
 ## Assumptions
 
@@ -1186,14 +1187,13 @@ the exact shape.
 | Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
-| Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
-| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352). |
+| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/hosted/src/plan-markdown.ts`). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `planning/tab-strip-model.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/hosted/src/plan-document-template.ts`), the headings and notes it is written in (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 
@@ -1243,30 +1243,21 @@ changes when a check is run, not when one is planned.
     deleting the call's plan or signing out ends it;
   - the final review written into the same document;
   - Copy's Markdown, at the store's largest document;
-  - the fixed template (LUKE-352), through the tool against a real store: a
-    new plan's untouched template, an incomplete draft saving and resuming in
-    its sections, the body's order independent of key order, field text
-    unable to open a section, an optional field left out until it holds
-    something and again once cleared, a renamed field, an extra key, a blank answer, a freeform body, and an oversized
-    formatted body each leaving the saved document, a scripted proposal,
-    assent, correction, and agreed non-applicable field, and a handoff
-    prompt refused as a field the template does not name; these hold data
-    flow, not model understanding;
   - the talk key, pressed while a plan is open, speaking into the open
     plan's call.
 - The Plans tab (LUKE-347) is held by renderer tests: the tab bar's four
   tabs, the list and document pages, Back leaving the plan, the plans read
   again each time the tab shows, and the host keeping the open plan through
   the tab going away, with nothing read on a clock.
-  Its regions render as static markup: a read-only assumption list, no composer and
-  no approve controls, a new plan's untouched template with its empty
-  assumptions section, and the failed, missing, and not-connected states.
+  Its regions render as static markup: no composer and no approve controls,
+  a new plan's untouched template, and the failed, missing, and
+  not-connected states.
 
 ### Not validated
 
 - **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
   `./scripts/verify.sh` has not been run on the integrated application. The
-  Plans tab in the panel, the fixed template's presentation (LUKE-352), the
+  Plans tab in the panel, the document's presentation, the
   document scrolling inside the panel's ceiling,
   the microphone row, and the captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the window
