@@ -913,3 +913,26 @@ test("a page no journal moved says where a worker under a turn older than a page
     [["call-0-0", CODING_AGENT_STATUS.COMPLETED]],
   );
 });
+
+test("a planner page's journal of a turn longer than the bound says its older parts were left out, and a short one says nothing", async () => {
+  const target = await planConversation();
+  const calls = Array.from({ length: PLAN_WORK_BOUNDS.PARTS + 1 }, () => ({
+    toolName: RUN_IN_REPOSITORY_TOOL.name,
+    input: { command: "ls" },
+    output: { status: REPOSITORY_SHELL_STATUS.RAN, exitCode: 0, stdout: "src", stderr: "" },
+  }));
+  await play(
+    [...opening(FIRST_EVE_TURN), ...callingStep(FIRST_EVE_TURN, 0, calls)],
+    standingFor(target),
+  );
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Short.")],
+    standingFor(target),
+  );
+
+  const page = await database.run(plannerTurnsPage(target, undefined));
+  assert.deepEqual(
+    page.messages.map((message) => message.earlierOmitted),
+    [true, undefined],
+  );
+});

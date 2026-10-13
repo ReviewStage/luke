@@ -1,6 +1,6 @@
 import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import { PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
+import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
 import { CallIcon } from "@sidecar/panel";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@sidecar/wire";
@@ -30,7 +30,13 @@ import {
   type TranscriptCallRow,
   type TranscriptRegion,
 } from "./transcript-model";
-import { type WorkTurnRow, workerJobs, workFailed, workRowsOf } from "./work-model";
+import {
+  type PlanConversation,
+  type WorkTurnRow,
+  workerJobs,
+  workFailed,
+  workRowsOf,
+} from "./work-model";
 import { WorkingLine } from "./working-time";
 
 /**
@@ -367,9 +373,8 @@ function ThreadSections({
 export function PlanCall({
   region,
   onRetry,
-  turns,
+  conversation,
   callLive,
-  earlier,
   onLoadEarlier,
   onOpenSubagent,
   onOpenAgent,
@@ -380,12 +385,10 @@ export function PlanCall({
   /** What was said on the plan's calls, as the transcript reads it. */
   region: TranscriptRegion;
   onRetry: () => void;
-  /** The plan's planning turns, newest page; none before the first read lands. */
-  turns: readonly PlanWorkTurn[] | undefined;
+  /** The plan's planning conversation as an agent's transcript is read, its newest turns and every older page read since; none before the first read lands. */
+  conversation: PlanConversation;
   callLive: boolean;
-  /** The turn the page before the oldest one drawn is read before; absent where no older turn stands. */
-  earlier: string | undefined;
-  /** Reads the page before the oldest turn drawn; the view brings it. */
+  /** Reads the page before the oldest turn drawn, which the conversation's `earlier` names; the view brings it. */
   onLoadEarlier: () => Promise<void>;
   /** Opens a subagent's session in a tab of the panel's own, or chooses the tab open on it, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
@@ -398,7 +401,8 @@ export function PlanCall({
   /** What a version's Open asked to bring into view, and the word that it has. */
   reveal?: CallReveal | undefined;
 }): React.JSX.Element {
-  const rows = workRowsOf(turns, callLive);
+  const rows = workRowsOf(conversation, callLive);
+  const earlier = conversation?.earlier;
   const now = Date.now();
   const root = useRef<HTMLElement>(null);
   const at = reveal !== undefined && "at" in reveal ? reveal.at : undefined;
@@ -406,16 +410,13 @@ export function PlanCall({
   // Note that an ask is answered once the transcript has been read, whether or not it holds what was asked for.
   useRevealInLog(root, region.kind !== TRANSCRIPT_REGION.READING && !seeking, reveal?.onRevealed);
   const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
-  const placed: readonly CallTurn<WorkTurnRow>[] = rows.map((row) => {
-    const stored = turns?.find((turn) => turn.turnId === row.key);
-    return {
-      key: row.key,
-      startedAt: row.startedAt,
-      asked: stored?.asked ?? [],
-      askedAt: stored?.askedAt ?? [],
-      turn: row,
-    };
-  });
+  const placed: readonly CallTurn<WorkTurnRow>[] = rows.map((row) => ({
+    key: row.key,
+    startedAt: row.startedAt,
+    asked: row.asked,
+    askedAt: row.askedAt,
+    turn: row,
+  }));
   const doors: WorkDoors = {
     delegation: {
       models,
@@ -424,7 +425,7 @@ export function PlanCall({
       onOpen: (callId) => onOpenSubagent(callId),
       onOpenAgent,
       // A stop names the subagent it stopped by its job, wherever among the turns its start stands.
-      jobs: workerJobs(turns),
+      jobs: workerJobs(conversation),
     },
     counting: shown,
     revealed: at === undefined ? undefined : turnAt(rows, at),

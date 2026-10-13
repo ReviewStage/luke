@@ -90,7 +90,7 @@ const STATUS_OF_WORK_STATE = {
   [PLAN_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
 } as const;
 
-/** A turn's journal as the agent tab reads a message: its projected parts, the turn it is and the lines that asked for it, and its span and record. */
+/** A turn's journal as the agent tab reads a message: its projected parts and whether older ones were left out, the turn it is and the lines that asked for it, and its span and record. */
 function messageOf(id: string, work: PlanWorkTurn): CodingAgentMessage {
   const { turnId, journal, asked, askedAt, startedAt, endedAt } = work;
   const { model, effort, tokens, ending } = work;
@@ -99,6 +99,7 @@ function messageOf(id: string, work: PlanWorkTurn): CodingAgentMessage {
     role: MESSAGE_ROLE.ASSISTANT,
     parts: journal ?? [],
     turnId,
+    ...(work.earlierOmitted ? { earlierOmitted: true } : undefined),
     ...(asked === undefined ? undefined : { asked }),
     ...(askedAt === undefined ? undefined : { askedAt }),
     startedAt,

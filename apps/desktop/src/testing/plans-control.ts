@@ -179,10 +179,10 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     pages: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {
-      turns: undefined,
+      conversation: undefined,
       callLive: false,
-      earlier: undefined,
       onLoadEarlier: () => Promise.resolve(),
+      readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
     },
     agents: codingAgentsControl(),
     history: versionHistoryControl(),

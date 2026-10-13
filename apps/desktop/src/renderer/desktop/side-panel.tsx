@@ -1,17 +1,14 @@
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { PageLine } from "@sidecar/hosted/page-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import {
-  PLAN_WORK_STATE,
-  type PlanCodeShowing,
-  type PlanWorkTurn,
-} from "@sidecar/hosted/planning-view";
+import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import {
   BoardIcon,
   CallIcon,
@@ -53,7 +50,6 @@ import { FileView } from "../planning/file-view";
 import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
-import { SubagentTab } from "../planning/plan-work";
 import {
   type ChangesStripTab,
   inPlanOrder,
@@ -73,9 +69,9 @@ import {
   agentTranscript,
   readWholeTranscript,
   type TranscriptCopy,
-  workerTranscript,
 } from "../planning/transcript-copy";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
+import type { TranscriptReader } from "../planning/use-agent-transcript";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import {
@@ -95,6 +91,7 @@ import {
   type SidePanelTab,
 } from "../planning/use-side-panel";
 import {
+  type PlanConversation,
   type WorkTurnRow,
   type WorkWorkerBlock,
   workerCallIds,
@@ -366,12 +363,9 @@ export function panelEntries(input: {
   return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows];
 }
 
-/** Every subagent the plan's work holds, with its session, in the order started. */
-export function planWorkers(
-  turns: readonly PlanWorkTurn[] | undefined,
-  workRows: readonly WorkTurnRow[],
-): readonly WorkWorkerBlock[] {
-  return workerCallIds(turns).flatMap((callId) => {
+/** Every subagent the plan's work holds, with where its session stands, in the order started. */
+export function planWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWorkerBlock[] {
+  return workerCallIds(workRows).flatMap((callId) => {
     const worker = workerOf(workRows, callId);
     return worker === undefined ? [] : [worker];
   });
@@ -424,8 +418,11 @@ function stripTabs(input: {
   pages: readonly DrawnPage[];
   held: HeldTranscripts;
   copied: TranscriptCopier;
+  /** Reads a planning worker's whole session for a copy, the plan standing in the agent's place. */
+  readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, held, copied } = input;
+  const { panel, unread, agents, subagents, files, changes, pages, held, copied, readWorker } =
+    input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -463,7 +460,7 @@ function stripTabs(input: {
         : (delegated?.model ?? parent?.model);
     // A worker runs one turn, so the run its tab last read is its run for good.
     const readCard = () => {
-      if (delegation === undefined) return workerCardReading(worker);
+      if (delegation === undefined) return workerCardReading(worker, held, chosen(tab));
       const drawn = held.workers.get(tab.subagent);
       const now = { writing: running, runStartedAt: drawn?.runStartedAt };
       const messages = heldLatest(drawn, now, chosen(tab));
@@ -480,22 +477,19 @@ function stripTabs(input: {
           agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
       };
     };
+    const task = delegation?.task ?? worker?.task ?? "";
     const read = () =>
-      delegation === undefined
-        ? Promise.resolve(worker === undefined ? undefined : workerTranscript(worker))
+      (delegation === undefined
+        ? readWorker(tab.subagent)
         : readWholeTranscript(agents.readTranscript, {
             agentId: delegation.agent,
             callId: tab.subagent,
-          }).then((messages) =>
-            messages === undefined
-              ? undefined
-              : agentTranscript({
-                  title: label,
-                  messages,
-                  brief: undefined,
-                  task: delegation.task,
-                }),
-          );
+          })
+      ).then((messages) =>
+        messages === undefined
+          ? undefined
+          : agentTranscript({ title: label, messages, brief: undefined, task }),
+      );
     return {
       tab,
       look: look(tab, {
@@ -563,6 +557,7 @@ function PanelTabs({
   shownFiles,
   offeredPages,
   held,
+  readWorker,
 }: {
   panel: SidePanelControl;
   /** The open plan, which a tab's pin is of. */
@@ -587,6 +582,8 @@ function PanelTabs({
   offeredPages: readonly PageLine[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
+  /** Reads a planning worker's session past a cursor, the plan standing in the agent's place. */
+  readWorker: TranscriptReader;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -599,6 +596,7 @@ function PanelTabs({
     pages,
     held,
     copied,
+    readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
   });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
@@ -687,10 +685,11 @@ interface SidePanelTranscript {
 
 /** What Luke's planning model wrote and ran on the open plan's calls, and whether a call still stands. */
 interface SidePanelWork {
-  turns: readonly PlanWorkTurn[] | undefined;
+  conversation: PlanConversation;
   callLive: boolean;
-  earlier: string | undefined;
   onLoadEarlier: () => Promise<void>;
+  /** Reads a planning worker's session past a cursor, as an agent's worker's tab reads its own, the plan standing in the agent's place. */
+  readWorker: TranscriptReader;
   /** The moment whose turn a version's Open asked to bring into view. */
   reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
 }
@@ -741,20 +740,36 @@ function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | 
  * say it. A worker the work no longer holds says nothing, as its tab is
  * then not drawn (`drawnSubagents`).
  */
-export function workerCardReading(worker: WorkWorkerBlock | undefined): CardReading {
+export function workerCardReading(
+  worker: WorkWorkerBlock | undefined,
+  held: HeldTranscripts,
+  chosen = false,
+): CardReading {
   const { state, stateWords } =
     worker === undefined
       ? { state: GLYPH_STATE.REST, stateWords: undefined }
       : workerStanding(worker);
+  const writing = state === GLYPH_STATE.WORKING;
+  // Its session is what its own tab last read, as a delegated worker's is.
+  const drawn = worker === undefined ? undefined : held.workers.get(worker.call.id);
+  const messages = heldLatest(drawn, { writing, runStartedAt: drawn?.runStartedAt }, chosen);
   return {
     corner: cardCorner({
-      writing: state === GLYPH_STATE.WORKING,
-      startedAt: worker?.session?.startedAt,
-      movedAt: worker?.session?.endedAt,
+      writing,
+      startedAt: worker?.session?.startedAt ?? drawn?.runStartedAt,
+      movedAt: lastFinished(messages),
       state: stateWords,
     }),
     choice: worker && workerChoice(worker),
-    transcript: worker && workerTranscript(worker),
+    transcript:
+      worker &&
+      messages &&
+      agentTranscript({
+        title: worker.session?.title ?? workerJob(worker.call),
+        messages,
+        brief: undefined,
+        task: worker.task,
+      }),
   };
 }
 
@@ -792,6 +807,14 @@ function drawnSubagents(
     const label = title ?? workerJob(worker.call);
     return [{ tab, label, untitled: title === undefined, ...workerStanding(worker), worker }];
   });
+}
+
+/** Where a planning worker stands, as its tab's working line reads it: running while it moves, failed where it failed, and done otherwise. */
+function workerStatus(worker: WorkWorkerBlock): CodingAgentStatus {
+  if (worker.call.running) return CODING_AGENT_STATUS.RUNNING;
+  return worker.call.state === PLAN_WORK_STATE.FAILED
+    ? CODING_AGENT_STATUS.FAILED
+    : CODING_AGENT_STATUS.COMPLETED;
 }
 
 /** What the chosen tab shows. */
@@ -922,6 +945,8 @@ function TabContent({
     );
   }
   if (isSubagentTab(tab)) {
+    // A planning worker's tab is an agent's worker's own, reading its session under the plan.
+    const planningWorkers = { ...agents, readTranscript: work.readWorker };
     if (tab.delegation !== undefined) {
       return (
         <AgentSubagentTab
@@ -943,7 +968,18 @@ function TabContent({
     return worker === undefined ? (
       <SpinnerRegion label="Loading subagent" />
     ) : (
-      <SubagentTab key={tab.subagent} worker={worker} shown={shown} models={agents.models} />
+      <AgentSubagentTab
+        key={tab.subagent}
+        agentId={planId}
+        callId={tab.subagent}
+        task={worker.task}
+        status={workerStatus(worker)}
+        control={planningWorkers}
+        shown={shown}
+        // Where a planning worker stands is the plan's pages' to say, beside its call.
+        onStatus={() => undefined}
+        onHeld={onWorkerHeld}
+      />
     );
   }
   switch (tab) {
@@ -969,9 +1005,8 @@ function TabContent({
         <PlanCall
           region={transcript.region}
           onRetry={transcript.onRetry}
-          turns={work.turns}
+          conversation={work.conversation}
           callLive={work.callLive}
-          earlier={work.earlier}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
           onOpenAgent={onOpenAgent}
@@ -1239,8 +1274,8 @@ export function SidePanel({
   // Every subagent the plan's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
-  const workRows = workRowsOf(work.turns, work.callLive);
-  const workers = planWorkers(work.turns, workRows);
+  const workRows = workRowsOf(work.conversation, work.callLive);
+  const workers = planWorkers(workRows);
   const { held: drawnTranscripts, standings } = views;
   const subagents = drawnSubagents(panel.subagents, workRows, standings, drawnTranscripts, {
     agents: openAgents,
@@ -1327,6 +1362,7 @@ export function SidePanel({
             shownFiles={offered}
             offeredPages={planPages}
             held={drawnTranscripts}
+            readWorker={work.readWorker}
           />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
