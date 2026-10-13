@@ -220,6 +220,9 @@ function groupSeams(state: Backing): AccountAppSeams {
     // The plan template's path is answered over a real dialect in `account-plan-template.test.ts`.
     readPlanTemplate: () => Effect.die(new Error("this suite reads no plan template")),
     writePlanTemplate: () => Effect.die(new Error("this suite writes no plan template")),
+    listPlanTemplateRevisions: () => Effect.die(new Error("this suite reads no plan template")),
+    readPlanTemplateRevision: () => Effect.die(new Error("this suite reads no plan template")),
+    restorePlanTemplate: () => Effect.die(new Error("this suite writes no plan template")),
   };
 }
 

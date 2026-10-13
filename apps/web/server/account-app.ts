@@ -10,11 +10,14 @@ import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
+  type PlanTemplateRevisionAnswer,
+  type PlanTemplateRevisionsAnswer,
   planTemplateWriteRequestSchema,
 } from "@sidecar/hosted/plan-document-template";
+import { planRevisionSeqSchema } from "@sidecar/hosted/plan-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { accountPreferencesFromWire } from "@sidecar/settings";
-import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import {
@@ -62,12 +65,27 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * snapshot, because the desktop syncs the snapshot and applies it over its
  * own settings, and a twenty-thousand-character text has no place in that
  * loop. It is kept verbatim, and null stands for the built-in default.
+ * Every write that changes it is kept as a revision, which its history
+ * reads a page at a time and one at a time, and which a restore puts back
+ * as a revision of its own, all under the bearer's account alone.
  */
 
 const ACCOUNT_PATH = {
   DELETE: "/api/account/delete",
   PREFERENCES: "/api/account/preferences",
   PLAN_TEMPLATE: "/api/account/plan-template",
+  /** GET reads a page of the template's history, before the revision `before` names where it names one. */
+  PLAN_TEMPLATE_REVISIONS: "/api/account/plan-template/revisions",
+  /** GET reads one revision beside the one before it; the rewrite moves the path's number into the `seq` query. */
+  PLAN_TEMPLATE_REVISION: "/api/account/plan-template/revision",
+  /** POST restores one revision as the template; the rewrite moves the path's number into the `seq` query. */
+  PLAN_TEMPLATE_RESTORE: "/api/account/plan-template/restore",
+} as const;
+
+/** The queries naming a revision of the template: the one an older page is read before, and the one a path names. */
+const REVISION_QUERY = {
+  BEFORE: "before",
+  SEQ: "seq",
 } as const;
 
 /** A template write is the template at its bound with every character escaped, and the key around it. */
@@ -93,6 +111,21 @@ export interface AccountAppSeams {
   readPlanTemplate: (userId: string) => AccountSeamEffect<string | null>;
   /** Keeps the template verbatim, or null for the default, and answers what is then kept. */
   writePlanTemplate: (userId: string, template: string | null) => AccountSeamEffect<string | null>;
+  /** A page of the template's revisions, the newest first, before the one `before` names where it names one. */
+  listPlanTemplateRevisions: (
+    userId: string,
+    before?: number,
+  ) => AccountSeamEffect<PlanTemplateRevisionsAnswer>;
+  /** One revision beside the one before it; nothing where the account has no such revision. */
+  readPlanTemplateRevision: (
+    userId: string,
+    seq: number,
+  ) => AccountSeamEffect<Option.Option<PlanTemplateRevisionAnswer["revision"]>>;
+  /** Puts one revision back as the template and answers what is then kept; nothing where the account has no such revision. */
+  restorePlanTemplate: (
+    userId: string,
+    seq: number,
+  ) => AccountSeamEffect<Option.Option<string | null>>;
 }
 
 /** A coding-agent choice as a write names it; the catalog decides whether it is one. */
@@ -330,6 +363,94 @@ const accountPlanTemplateEndpoint = /* @__PURE__ */ Effect.fn("web/accountPlanTe
 );
 
 /**
+ * The revision number the query `name` holds, named once, or nothing where
+ * it is absent. A number that is not a whole number from one names no
+ * revision, and is refused as a request that does not read.
+ */
+const revisionSeqOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  name: string,
+): Effect.fn.Return<number | undefined, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.getAll(name);
+  const [seq] = named;
+  if (seq === undefined) return undefined;
+  const read = readEither(planRevisionSeqSchema)(unparsedWire(Number(seq)));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** The revision the path names, which a revision's routes cannot do without. */
+const namedRevisionOf = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<
+  number,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const seq = yield* revisionSeqOf(REVISION_QUERY.SEQ);
+  if (seq === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return seq;
+});
+
+/** GET reads a page of the caller's template history, the newest first; an account with none answers an empty page. */
+const planTemplateRevisionsEndpoint = /* @__PURE__ */ Effect.fn(
+  "web/planTemplateRevisionsEndpoint",
+)(function* (
+  seams: AccountAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  yield* hostedMethod(HTTP_METHOD.GET);
+  const userId = yield* resolvedUserId(seams);
+  const before = yield* revisionSeqOf(REVISION_QUERY.BEFORE);
+  const page = yield* hostedStoreOrUnavailable(seams.listPlanTemplateRevisions(userId, before));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
+});
+
+/** GET reads one revision of the caller's template beside the one before it. */
+const planTemplateRevisionEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateRevisionEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    yield* hostedMethod(HTTP_METHOD.GET);
+    const seq = yield* namedRevisionOf();
+    const userId = yield* resolvedUserId(seams);
+    const revision = yield* hostedStoreOrUnavailable(seams.readPlanTemplateRevision(userId, seq));
+    if (Option.isNone(revision)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { revision: revision.value });
+  },
+);
+
+/**
+ * POST puts one revision back as the caller's template, a revision of its
+ * own naming it, and answers the template as a write does. It names nothing
+ * in a body: the revision is the path's.
+ */
+const planTemplateRestoreEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateRestoreEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    yield* hostedMethod(HTTP_METHOD.POST);
+    const seq = yield* namedRevisionOf();
+    const userId = yield* resolvedUserId(seams);
+    const restored = yield* hostedStoreOrUnavailable(seams.restorePlanTemplate(userId, seq));
+    if (Option.isNone(restored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, planTemplateAnswer(restored.value));
+  },
+);
+
+/**
  * An endpoint's refusal carried back onto the answer channel. A refusal is
  * failed with rather than returned, so an endpoint's steps read as the early
  * returns they are; a route answers on one channel, so the group makes the
@@ -342,7 +463,7 @@ function refusing<R>(
 }
 
 /**
- * The group: the three account endpoints on their own paths, and the hosted
+ * The group: the account endpoints on their own paths, and the hosted
  * vocabulary's own refusal for a method the matched path does not answer or a
  * path the group declares no route for.
  */
@@ -362,6 +483,21 @@ export function accountApp(
       ANY_METHOD,
       ACCOUNT_PATH.PLAN_TEMPLATE,
       refusing(accountPlanTemplateEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE_REVISIONS,
+      refusing(planTemplateRevisionsEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE_REVISION,
+      refusing(planTemplateRevisionEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE_RESTORE,
+      refusing(planTemplateRestoreEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

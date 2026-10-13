@@ -2,9 +2,14 @@ import {
   deleteAccount,
   readAccountPreferences,
   readPlanTemplate,
+  restorePlanTemplate,
   writeAccountPreferences,
   writePlanTemplate,
 } from "@sidecar/database/models/account-store";
+import {
+  listTemplateRevisions,
+  readTemplateRevision,
+} from "@sidecar/database/models/plan-template-revisions";
 import type { AccountAppSeams } from "../account-app.js";
 import { resolveHostedUserId } from "./bearer.js";
 
@@ -31,5 +36,8 @@ export function accountAppSeams(): AccountAppSeams {
     writePreferences: writeAccountPreferences,
     readPlanTemplate,
     writePlanTemplate,
+    listPlanTemplateRevisions: listTemplateRevisions,
+    readPlanTemplateRevision: readTemplateRevision,
+    restorePlanTemplate,
   };
 }

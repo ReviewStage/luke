@@ -174,6 +174,9 @@ const EFFECT_MODULE_SCHEMAS = {
   "plan-document-template": {
     planTemplateAnswerSchema: planDocumentTemplate.planTemplateAnswerSchema,
     planTemplateWriteRequestSchema: planDocumentTemplate.planTemplateWriteRequestSchema,
+    planTemplateRevisionLineSchema: planDocumentTemplate.planTemplateRevisionLineSchema,
+    planTemplateRevisionsAnswerSchema: planDocumentTemplate.planTemplateRevisionsAnswerSchema,
+    planTemplateRevisionAnswerSchema: planDocumentTemplate.planTemplateRevisionAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planDocumentTemplate>,
   "plan-edit": {
     planEditRequestSchema: planEdit.planEditRequestSchema,

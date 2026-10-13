@@ -10,6 +10,7 @@ export * from "./inbox-attachment.js";
 export * from "./linear.js";
 export * from "./plan.js";
 export * from "./plan-revision.js";
+export * from "./plan-template-revision.js";
 export * from "./preferences.js";
 export * from "./repository-pin.js";
 export * from "./roster.js";

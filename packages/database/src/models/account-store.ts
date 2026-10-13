@@ -4,12 +4,13 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { InstantColumnSchema } from "./columns.js";
+import { readTemplateRevisionContent, recordTemplateRevision } from "./plan-template-revisions.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -17,7 +18,8 @@ import { InstantColumnSchema } from "./columns.js";
  * settings preferences and the coding agents' default model, effort, and
  * context window beside them, and the plan template behind
  * `/api/account/plan-template`, a column of the same row that neither path
- * reads of the other. Every function here is an effect over the ambient `SqlClient`
+ * reads of the other, whose every change is kept as a revision
+ * (`plan-template-revisions.ts`). Every function here is an effect over the ambient `SqlClient`
  * and names no database of its own; `account-seams.ts` beside it runs them
  * at the web edge and is the only file of the two that reaches the auth
  * session.
@@ -242,34 +244,85 @@ const PlanTemplateWriteSchema = Schema.Struct({
   planTemplate: Schema.NullOr(Schema.String),
 });
 
+/** Opens the account's preference row where it has none, so the template's write has a row to lock. */
+const openPreferenceRow = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) => db.insert(accountPreference).values({ userId }).onConflictDoNothing(),
+});
+
+/** The template the account holds, its row locked until the transaction ends. */
+const lockPlanTemplate = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: PlanTemplateRowSchema,
+  execute: (userId) =>
+    db
+      .select(PLAN_TEMPLATE_COLUMNS)
+      .from(accountPreference)
+      .where(eq(accountPreference.userId, userId))
+      .for("update"),
+});
+
 /**
  * Note that the write sets the template column and nothing else, not even
  * `updated_at`, because that instant tells a Mac the preferences part was
  * written and a template is no part of it. A row the template opens holds
  * no preferences, so it answers none.
  */
-const upsertPlanTemplate = SqlSchema.findOne({
+const updatePlanTemplate = SqlSchema.findOne({
   Request: PlanTemplateWriteSchema,
   Result: PlanTemplateRowSchema,
   execute: (write) =>
     db
-      .insert(accountPreference)
-      .values(write)
-      .onConflictDoUpdate({
-        target: accountPreference.userId,
-        set: { planTemplate: write.planTemplate },
-      })
+      .update(accountPreference)
+      .set({ planTemplate: write.planTemplate })
+      .where(eq(accountPreference.userId, write.userId))
       .returning(PLAN_TEMPLATE_COLUMNS),
 });
 
-/** Keeps the account's template verbatim, or null for the default, and answers what is then kept. */
+/**
+ * Keeps the account's template verbatim, or null for the default, and
+ * answers what is then kept. A write that changes it is kept as a revision
+ * (`plan-template-revisions.ts`), a restore naming the revision it brought
+ * back, in one transaction with the row locked, so two writes never take one
+ * revision's number and the template and its history never disagree.
+ */
 export function writePlanTemplate(
   userId: string,
   template: string | null,
+  restoredFrom?: number,
 ): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
-  return upsertPlanTemplate({ userId, planTemplate: template }).pipe(
-    Effect.map((row) => row.planTemplate),
-    // An upsert that returned no row is the database breaking its own contract, not an outcome.
+  const written = Effect.gen(function* () {
+    yield* openPreferenceRow(userId);
+    const { planTemplate: before } = yield* lockPlanTemplate(userId);
+    if (before === template) return before;
+    const { planTemplate: after } = yield* updatePlanTemplate({ userId, planTemplate: template });
+    yield* recordTemplateRevision({
+      userId,
+      before,
+      after,
+      ...(restoredFrom === undefined ? undefined : { restoredFrom }),
+    });
+    return after;
+  }).pipe(
+    // A row the lock or the write found missing is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+  );
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
+}
+
+/**
+ * Puts one revision of the account's template back as the template, a
+ * revision of its own that names it, and answers what is then kept; nothing
+ * where the account has no such revision.
+ */
+export function restorePlanTemplate(
+  userId: string,
+  seq: number,
+): Effect.Effect<Option.Option<string | null>, AccountSeamFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(readTemplateRevisionContent(userId, seq), (content) =>
+    Option.match(content, {
+      onNone: () => Effect.succeed(Option.none<string | null>()),
+      onSome: (template) => Effect.map(writePlanTemplate(userId, template, seq), Option.some),
+    }),
   );
 }
