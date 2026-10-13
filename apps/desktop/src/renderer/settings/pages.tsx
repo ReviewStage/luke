@@ -5,12 +5,18 @@ import {
   DisplayIcon,
   DocumentIcon,
   KeyboardIcon,
+  LaptopIcon,
   PlugIcon,
   SpeakerIcon,
   TerminalIcon,
 } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
-import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
+import {
+  SETTINGS_VIEW,
+  type SettingsSubview,
+  type SettingsView,
+  settingsNavRowId,
+} from "../settings-views";
 import { AttentionMark } from "./marks";
 
 /**
@@ -20,7 +26,7 @@ import { AttentionMark } from "./marks";
  * page holds is one press away, and a sentence under every name made the
  * front page read as prose rather than as places to go.
  */
-export const SETTINGS_PAGE = {
+const SETTINGS_PAGE = {
   [SETTINGS_VIEW.VOICE]: {
     title: "Voice",
     icon: <SpeakerIcon />,
@@ -46,6 +52,14 @@ export const SETTINGS_PAGE = {
     icon: <PlugIcon />,
   },
 };
+
+/** The front page's name where it is one page among the others rather than their index. */
+const GENERAL_PAGE = { title: "General", icon: <LaptopIcon /> } as const;
+
+/** Any page's name and glyph, the front page's as General: what the desktop sidebar and the command palette list it by. */
+export function settingsPageOf(view: SettingsView): { title: string; icon: React.JSX.Element } {
+  return view === SETTINGS_VIEW.ROOT ? GENERAL_PAGE : SETTINGS_PAGE[view];
+}
 
 /**
  * One front-page row per page: its glyph, its name, and the chevron that

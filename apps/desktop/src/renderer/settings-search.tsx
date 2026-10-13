@@ -20,7 +20,7 @@ import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
-import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { SETTINGS_PAGE_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 
@@ -89,9 +89,6 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
   [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
 } satisfies Record<SettingsView, string>;
-
-/** The pages in the order the front page offers them, which orders results. */
-const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
 
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
@@ -284,7 +281,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     ];
   });
   const fixed = fixedEntries(input);
-  return PAGE_ORDER.flatMap((page) => [
+  return SETTINGS_PAGE_LIST.flatMap((page) => [
     ...described.filter((entry) => entry.page === page),
     ...fixed.filter((entry) => entry.page === page),
   ]).map((entry) => ({
@@ -321,7 +318,7 @@ export function searchSettings(
   const tokens = searchTokens(query);
   if (tokens.length === 0) return undefined;
   const kept = entries.filter((entry) => matchesTokens(entry.haystack, tokens));
-  const groups = PAGE_ORDER.flatMap((page): SettingsSearchGroup[] => {
+  const groups = SETTINGS_PAGE_LIST.flatMap((page): SettingsSearchGroup[] => {
     const items = kept.filter((entry) => entry.page === page);
     return items.length > 0 ? [{ page, items }] : [];
   });
