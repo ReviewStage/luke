@@ -44,6 +44,25 @@ it.effect("opens one plan with its saved document", () =>
   }),
 );
 
+it.effect("the repositories of one workspace are asked by its id, and every one by none", () =>
+  Effect.gen(function* () {
+    const listed = {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    };
+    const api = fakeCloudApi({ "GET /api/github/repositories": { answer: () => listed } });
+
+    yield* Effect.provide(client().repositories("workspace-acme"), api.layer);
+    yield* Effect.provide(client().repositories(), api.layer);
+
+    assert.deepEqual(recordedRoutes(api.requests()), [
+      "GET /api/github/repositories?workspaceId=workspace-acme",
+      "GET /api/github/repositories",
+    ]);
+  }),
+);
+
 it.effect(
   "an edit sends the text it was written from and the text written, exactly, and answers the plan as saved or the text as it stands; one past the bound is never sent",
   () =>

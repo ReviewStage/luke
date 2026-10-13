@@ -221,6 +221,30 @@
           "dest": "/api/default.js?route=repository-pins"
         },
         {
+          "src": "/api/workspaces",
+          "dest": "/api/default.js?route=workspaces"
+        },
+        {
+          "src": "/api/workspaces/github/connect",
+          "dest": "/api/default.js?route=workspaces/github/connect"
+        },
+        {
+          "src": "/api/workspaces/github/disconnect",
+          "dest": "/api/default.js?route=workspaces/github/disconnect"
+        },
+        {
+          "src": "/api/workspaces/leave",
+          "dest": "/api/default.js?route=workspaces/leave"
+        },
+        {
+          "src": "/api/workspaces/members",
+          "dest": "/api/default.js?route=workspaces/members"
+        },
+        {
+          "src": "/api/workspaces/members/remove",
+          "dest": "/api/default.js?route=workspaces/members/remove"
+        },
+        {
           "src": "/api/maintenance/sweep",
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
         },

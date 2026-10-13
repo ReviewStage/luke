@@ -8,10 +8,13 @@ import {
 } from "@sidecar/gateway";
 import type {
   HostedPlanClient,
+  HostedWorkspaceClient,
   PlanActivityFrame,
   PlanDraftFrame,
   PlanMarks,
+  WorkspaceCallResult,
 } from "@sidecar/hosted";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
@@ -33,6 +36,10 @@ import {
   type PlanningStartAnswer,
   type PlanningTreeAnswer,
   type PlanningView,
+  type PlanningWorkspaceAnswer,
+  type PlanningWorkspaceGitHubConnectAnswer,
+  type PlanningWorkspaceLeaveAnswer,
+  type PlanningWorkspaceMembersAnswer,
   type PlanShownCode,
   type PlanWorkTurn,
   planningArchiveParamsSchema,
@@ -43,18 +50,25 @@ import {
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
+  planningRepositoriesParamsSchema,
   planningRevisionParamsSchema,
   planningRevisionsParamsSchema,
   planningSetRepositoryParamsSchema,
   planningSkillsParamsSchema,
   planningStartRequestSchema,
   planningTreeParamsSchema,
+  planningWorkspaceCreateParamsSchema,
+  planningWorkspaceLeaveParamsSchema,
+  planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMembersParamsSchema,
+  planningWorkspaceParamsSchema,
 } from "@sidecar/hosted/planning-view";
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
+import { Clock, Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -98,6 +112,15 @@ import type { RunMode } from "./run-mode.js";
  * says a page the planning model showed just settled or it stopped working;
  * a page's HTML is answered to the frame that draws it and held nowhere
  * here.
+ * The workspaces the account is a member of are carried on the view beside
+ * the plans and read apart from them, so the plans never wait on them: on
+ * the first refresh after a launch or a sign-in, when the panel comes
+ * forward, at most once a minute either way, and after a workspace call
+ * moved them. A workspace made, a GitHub organization connected or
+ * disconnected, a removal of a member, and a leave are carried to the
+ * service on the developer's word, and a workspace's members and a
+ * connection's install address are answered to the caller that asked and
+ * held nowhere here.
  */
 
 /**
@@ -112,10 +135,21 @@ const TRANSCRIPT_SETTLE = Duration.seconds(5);
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
 
+/**
+ * How long a read of the account's workspaces stands before a refresh or the
+ * panel coming forward reads them again. Note that a teammate's change or an
+ * organization connected in the browser reaches this Mac only on a read, and
+ * a panel brought forward over and over is not a reason to read each time.
+ */
+const WORKSPACES_READ_EVERY = Duration.minutes(1);
+
+/** A workspace call behind a closed gate, which never reaches the service. */
+const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
+
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
-/** The service's side of the plans, as this concern asks it. */
+/** The service's side of the plans, and the workspaces they live in, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
   | "list"
@@ -141,7 +175,13 @@ export type PlanningClient = Pick<
   | "repositories"
   | "setRepository"
   | "edit"
->;
+> & {
+  /** The account's workspaces, the ones it may join, and their members. */
+  workspaces: Pick<
+    HostedWorkspaceClient,
+    "list" | "create" | "githubConnect" | "githubDisconnect" | "members" | "removeMember" | "leave"
+  >;
+};
 
 export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
@@ -297,6 +337,32 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
         : { listStatus: PLANNING_READ.FAILED },
     );
+  });
+
+  /** When the workspaces were last asked for, none since a sign-out; and how many sign-outs there have been, so a read out across one is dropped. */
+  let workspacesAskedAt: number | undefined;
+  let workspacesEpoch = 0;
+
+  /**
+   * Reads the account's workspaces and the ones it may join, apart from the
+   * plans, which never wait on it. A failed read keeps the workspaces it
+   * last read, as a failed list read keeps the plans.
+   */
+  const readWorkspaces = Effect.gen(function* () {
+    const epoch = workspacesEpoch;
+    workspacesAskedAt = yield* Clock.currentTimeMillis;
+    const answer = yield* Effect.provide(client.workspaces.list(), FetchHttpClient.layer);
+    if (answer === undefined || epoch !== workspacesEpoch) return;
+    write({ workspaces: answer.workspaces });
+  });
+
+  /** Reads the workspaces where none was asked for since a sign-out, or the last ask is older than its bound. */
+  const readWorkspacesWhenStale = Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const fresh =
+      workspacesAskedAt !== undefined &&
+      now - workspacesAskedAt < Duration.toMillis(WORKSPACES_READ_EVERY);
+    if (!fresh) yield* readWorkspaces;
   });
 
   // A failed read keeps the pins it last read, as a failed list read keeps the plans.
@@ -634,11 +700,32 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     );
   }
 
+  /**
+   * One workspace call, then what it may have moved read again, whatever it
+   * answered, since a refusal can find it already moved elsewhere: the
+   * workspaces after a workspace made, a disconnection, or a removal, and the
+   * plans beside them after a leave, which takes a workspace's plans out of
+   * the list.
+   */
+  function workspaceCall<Answer>(
+    call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
+    moves: { readonly plans: boolean },
+  ): Effect.Effect<WorkspaceCallResult<Answer>> {
+    return Effect.tap(Effect.provide(call, FetchHttpClient.layer), () =>
+      moves.plans
+        ? Effect.all([readWorkspaces, serial(readList)], { concurrency: "unbounded" })
+        : readWorkspaces,
+    );
+  }
+
   const methods: GatewayMethodTable = {
+    // The workspaces are read beside the plans rather than before them, and
+    // only where the last read is stale: the first refresh after a launch or
+    // a sign-in reads them, and the rest seldom.
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
-        yield* serial(
+        const plans = serial(
           Effect.gen(function* () {
             yield* readList;
             yield* readRepositoryPins;
@@ -650,6 +737,14 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (planId !== undefined) yield* readPages(planId);
           }),
         );
+        yield* Effect.all([plans, readWorkspacesWhenStale], { concurrency: "unbounded" });
+        return {};
+      }),
+    // The panel coming forward, which may follow a teammate's change or an
+    // installation made on GitHub, read no oftener than the bound allows.
+    [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
+      Effect.gen(function* () {
+        if (gate()) yield* readWorkspacesWhenStale;
         return {};
       }),
     [GATEWAY_METHOD.PLANNING_OPEN]: (params) =>
@@ -961,12 +1056,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile
     // shows on the next opening.
-    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
+    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: (params) =>
       Effect.gen(function* () {
+        const read = readEither(planningRepositoriesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("listing repositories names the workspace they are for, or none");
+        }
         if (!gate()) {
           return carried<PlanningRepositoriesAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         }
-        const listed = yield* Effect.provide(client.repositories(), FetchHttpClient.layer);
+        const listed = yield* Effect.provide(
+          client.repositories(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
         return carried<PlanningRepositoriesAnswer>(
           listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
         );
@@ -1021,6 +1123,93 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           }),
         );
       }),
+    [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceCreateParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("making a workspace names it");
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const made = yield* workspaceCall(client.workspaces.create(read.success.name), {
+          plans: false,
+        });
+        return carried<PlanningWorkspaceAnswer>(
+          made.ok ? { workspace: made.answer } : { failure: made.failure },
+        );
+      }),
+    // The install address is answered to the caller that opens it and held
+    // nowhere: the connection lands in the browser, and the workspaces read
+    // after it, as the panel comes forward, carry the organization.
+    [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("connecting GitHub names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
+        const begun = yield* Effect.provide(
+          client.workspaces.githubConnect(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspaceGitHubConnectAnswer>(
+          begun.ok ? { url: begun.answer } : { failure: begun.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("disconnecting GitHub names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const disconnected = yield* workspaceCall(
+          client.workspaces.githubDisconnect(read.success.workspaceId),
+          { plans: false },
+        );
+        return carried<PlanningWorkspaceAnswer>(
+          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
+        );
+      }),
+    // The members are answered to the window that asked and held nowhere:
+    // it keeps what it read, and reads again as it opens. A read moves
+    // nothing, so nothing else is read with it.
+    [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceMembersParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading members names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const members = yield* Effect.provide(
+          client.workspaces.members(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspaceMembersAnswer>(
+          members.ok ? { members: members.answer } : { failure: members.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceMemberRemoveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("removing a member names the workspace and the member");
+        }
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, userId } = read.success;
+        const remaining = yield* workspaceCall(
+          client.workspaces.removeMember(workspaceId, userId),
+          {
+            plans: false,
+          },
+        );
+        return carried<PlanningWorkspaceMembersAnswer>(
+          remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceLeaveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("leaving a workspace names it");
+        if (!gate()) return carried<PlanningWorkspaceLeaveAnswer>(WORKSPACE_UNANSWERED);
+        const left = yield* workspaceCall(client.workspaces.leave(read.success.workspaceId), {
+          plans: true,
+        });
+        return carried<PlanningWorkspaceLeaveAnswer>(
+          left.ok ? { left: true } : { failure: left.failure },
+        );
+      }),
     // A save of another plan than the open one is dropped: its board is not drawn.
     [GATEWAY_METHOD.PLANNING_BOARD_SAVE]: (params) =>
       Effect.gen(function* () {
@@ -1056,6 +1245,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       yield* endPlanCall(undefined);
       yield* serial(
         Effect.sync(() => {
+          workspacesAskedAt = undefined;
+          workspacesEpoch += 1;
           view = idleView();
           publish();
         }),

@@ -24,6 +24,7 @@ function _view(patch: Partial<PlanningView>): PlanningView {
   return {
     plans: [],
     listStatus: PLANNING_READ.READY,
+    workspaces: [],
     document: { status: PLANNING_READ.IDLE },
     ...patch,
   };

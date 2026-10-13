@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "@sidecar/database/github-installation-vocabulary";
 import { createPlan, type NewPlan } from "@sidecar/database/models/plan-store";
 import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
 import { member, organization } from "@sidecar/database/schemas/auth";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -55,6 +60,29 @@ export const openWorkspace = (ownerId: string) =>
       .insert(organization)
       .values({ id, name: TEST_WORKSPACE_NAME, slug: `workspace-${id}`, createdAt: now });
     yield* joinWorkspace(id, ownerId, WORKSPACE_ROLE.OWNER);
+    return id;
+  });
+
+/** The installation a test workspace stands for: GitHub's ids for it and its account, and the account's login. */
+export interface TestInstallation {
+  readonly installationId: number;
+  readonly accountId: number;
+  readonly accountLogin: string;
+}
+
+/** A new workspace the account owns that stands for the installation, active, as a sync leaves one; answers its id. */
+export const openInstallationWorkspace = (ownerId: string, installation: TestInstallation) =>
+  Effect.gen(function* () {
+    const id = yield* openWorkspace(ownerId);
+    const now = yield* DateTime.nowAsDate;
+    yield* db.insert(githubInstallation).values({
+      organizationId: id,
+      ...installation,
+      accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+      status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+      createdAt: now,
+      updatedAt: now,
+    });
     return id;
   });
 
