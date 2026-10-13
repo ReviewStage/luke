@@ -1974,7 +1974,8 @@ body,
    is a `.desktop-document`, so its column, measure, and type are the plan's,
    and the name is the plan's title field. What stands here is what a plan's
    page has no need of: the repository's labelled line, the Create plan row,
-   and the template's sections faint under them. */
+   and the template's sections under them. Only those sections are faint;
+   the title, the property, and the button are drawn at full strength. */
 .new-plan > * + * {
   margin-top: var(--space-16);
 }
@@ -2013,11 +2014,34 @@ body,
   font-size: 13px;
 }
 
+/* The chosen repository is the property's value, so it reads in the
+   value's colour rather than the composer chip's muted one. */
+.new-plan-property .plan-compose-chip {
+  color: var(--text-primary);
+}
+
 .new-plan-actions .primary-button .shortcut {
   --shortcut-ink: var(--on-accent-muted);
 }
 
-.new-plan-hint,
+/* Note that Create plan is never dimmed, because the page's one act would
+   read as the whole page faded: with no name yet it stands as a neutral
+   button that plainly cannot be pressed, and while the plan is being
+   created it keeps its accent beside the spinner. */
+.new-plan-actions .primary-button:disabled {
+  opacity: 1;
+}
+
+.new-plan-actions .primary-button:disabled:not([aria-busy="true"]) {
+  background: var(--raised-strong);
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.new-plan-actions .primary-button:disabled:not([aria-busy="true"]) .shortcut {
+  --shortcut-ink: var(--text-tertiary);
+}
+
 .new-plan-note {
   margin: 0;
   color: var(--text-secondary);
