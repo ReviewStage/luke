@@ -743,7 +743,7 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
   // As an agent's tab: the task a card at the top, and a working line at the end while the subagent runs.
-  const card = content?.querySelector("[data-task-card]");
+  const card = content?.querySelector("[data-plan-card]");
   assert.ok(card?.textContent?.includes(job));
   assert.equal(card?.textContent?.includes(task), false, "folded to its line");
   const opener = card?.querySelector("summary");
@@ -846,7 +846,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.equal(tabState(tabNamed(page, job)), "Working", "a ring around it while it runs");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
-  const card = content?.querySelector("[data-task-card], [data-plan-card]");
+  const card = content?.querySelector("[data-plan-card], [data-plan-card]");
   assert.equal(card?.getAttribute("aria-label"), "Task");
   assert.ok(card?.textContent?.includes(job));
   assert.ok(content?.querySelector("[data-working]"));

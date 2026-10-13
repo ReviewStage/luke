@@ -20,7 +20,7 @@ import {
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
 import { CALL_KIND, CALL_WORDS, type CallKind, TURN_ROW, type TurnRow } from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
-import { WORK_BLOCK, type WorkBlock, type WorkWorkerBlock, workerJob } from "./work-model";
+import { type WorkWorkerBlock, workerJob } from "./work-model";
 
 /**
  * transcript-copy.ts -- a coding agent's or a subagent's transcript as the markdown its tab's menu copies: concise, or whole.
@@ -175,29 +175,6 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
   return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
 }
 
-/** One block of the Work tab's worker session as a copy reads it. */
-function workBlock(block: WorkBlock): CopiedBlock {
-  switch (block.kind) {
-    case WORK_BLOCK.TEXT:
-      return { kind: COPIED_BLOCK.WORDS, text: block.text };
-    case WORK_BLOCK.REASONING:
-      return { kind: COPIED_BLOCK.REASONING, text: block.text };
-    case WORK_BLOCK.CALL:
-    case WORK_BLOCK.WORKER: {
-      const { call } = block;
-      return {
-        kind: COPIED_BLOCK.CALL,
-        call: call.kind,
-        subject: block.kind === WORK_BLOCK.WORKER ? workerJob(call) : (call.subject ?? ""),
-        description: call.description,
-        input: block.kind === WORK_BLOCK.WORKER ? textBlock(block.task) : call.input,
-        output: call.output === undefined ? undefined : textBlock(call.output),
-        error: undefined,
-      };
-    }
-  }
-}
-
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
  * the first of the developer's messages is the brief, the plan or the task
@@ -234,17 +211,17 @@ export function agentTranscript(input: {
   };
 }
 
-/** A worker of the plan's work, as its tab draws its session, read for a copy: the message it was handed is the brief, and its session one turn. */
+/** A worker of the plan's work, as its tab draws its session, read for a copy as an agent's worker is: the message it was handed is the brief, and its session one turn. */
 export function workerTranscript(worker: WorkWorkerBlock): CopiedTranscript {
   const { session } = worker;
   return {
-    title: workerJob(worker.call),
-    brief: { label: BRIEF_LABEL.TASK, text: worker.task },
+    ...agentTranscript({
+      title: workerJob(worker.call),
+      messages: session === undefined ? [] : [session.message],
+      brief: undefined,
+      task: worker.task,
+    }),
     earlierOmitted: session?.earlierOmitted ?? false,
-    turns:
-      session === undefined
-        ? []
-        : [{ speaker: SPEAKER.SUBAGENT, blocks: rowBlocks(session.rows).map(workBlock) }],
   };
 }
 

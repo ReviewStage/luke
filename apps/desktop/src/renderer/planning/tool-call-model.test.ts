@@ -302,3 +302,36 @@ test("an inbox call that did nothing shows why, so a refused post never reads as
     text: "Not posted: you hold 20 open items already.",
   });
 });
+
+test("a call its wire already read is drawn as the wire said it: its kind, subject, and purpose, a command behind its prompt, other input as it came, and its answer as it came", () => {
+  const command = toolCallView({
+    tool: "run_in_repository",
+    input: { command: "ls src", description: "List the sources" },
+    output: "queue.ts",
+    said: { kind: CALL_KIND.COMMAND, subject: "ls src", description: "List the sources" },
+  });
+  assert.deepEqual(command, {
+    kind: CALL_KIND.COMMAND,
+    subject: "ls src",
+    description: "List the sources",
+    input: { kind: TOOL_BLOCK.COMMAND, text: "ls src" },
+    output: { kind: TOOL_BLOCK.TEXT, text: "queue.ts" },
+  });
+  // A tool a coding agent also has is still drawn as said, not read again from its input.
+  const question = toolCallView({
+    tool: "bash",
+    input: { question: "Who can invite?" },
+    output: { status: "queued" },
+    said: { kind: CALL_KIND.QUEUE_QUESTION, subject: "Who can invite?" },
+  });
+  assert.equal(question.kind, CALL_KIND.QUEUE_QUESTION);
+  assert.equal(question.subject, "Who can invite?");
+  assert.deepEqual(question.input, {
+    kind: TOOL_BLOCK.JSON,
+    text: JSON.stringify({ question: "Who can invite?" }, null, 2),
+  });
+  assert.deepEqual(question.output, {
+    kind: TOOL_BLOCK.JSON,
+    text: JSON.stringify({ status: "queued" }, null, 2),
+  });
+});

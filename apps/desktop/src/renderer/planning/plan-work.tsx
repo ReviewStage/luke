@@ -6,70 +6,60 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { WorkIcon } from "@sidecar/panel";
-import { MESSAGE_ROLE } from "@sidecar/wire";
-import { BotIcon } from "lucide-react";
-import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
-import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { EmptyState } from "../empty-state";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel } from "../spinner";
-import { WORKING_PHASE, WORKING_PHASE_WORDS } from "./coding-agent-model";
+import {
+  AgentMessage,
+  AgentTranscriptView,
+  type DelegationDoors,
+  PLANNING_LEAD,
+  WORKER_LEAD,
+} from "./agent-tab";
+import { workerLines } from "./coding-agent-model";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
-import {
-  TranscriptNote,
-  TranscriptOpeningCall,
-  TranscriptReasoning,
-  TranscriptRows,
-  TranscriptSubagent,
-  TranscriptTool,
-  TranscriptWords,
-} from "./transcript-blocks";
+import { TranscriptNote } from "./transcript-blocks";
 import { callHeading } from "./transcript-model";
-import type { TurnRow } from "./turn-rows";
 import {
-  WORK_BLOCK,
   WORK_EMPTY_LINE,
-  type WorkBlock,
-  type WorkCallRow,
   type WorkTurnRow,
   type WorkWorkerBlock,
-  workerChoice,
   workerJob,
   workFailed,
   workRowsOf,
 } from "./work-model";
-import { WorkedFor, WorkingLine, WorkingTime } from "./working-time";
+import { WorkingTime } from "./working-time";
 
 /**
- * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, read the way an agent's own transcript reads.
+ * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, drawn with a coding agent's own transcript.
  *
  * Each turn opens at a Checkpoint saying when it began and how far it got,
- * and its rows are `work-model.ts`'s, drawn as one of Luke's turns by the
- * blocks every transcript shares (`transcript-blocks.tsx`): the model's
- * words as a reply, its reasoning folded behind one line, each call a row
- * wearing its kind's icon that opens onto its input and output, and the
- * runs of calls and a finished turn's lead folded as an agent's are, and
- * each worker the subagent's row an agent's delegation is too, one button
- * that opens its session in a tab of the panel's own (`SubagentTab`), or
- * chooses that tab where it is open. The
- * tab draws the session as an agent's tab draws its transcript: the task a
- * card at the top that opens onto the whole message the subagent was
- * handed, a shimmering line at the end while the subagent runs, a quiet one
- * where it stopped or failed, and follows it while the subagent runs. The tab
- * holds the plan's newest turns first, and the turns before them are read a
- * page at a time as the developer scrolls up to the oldest (`EarlierWork`).
- * Everything here is the planning model's or the developer's repository's,
- * a command's output included, so the root is left out of the screen
- * recording (`ph-no-capture`) as a second line behind its text masking.
+ * and is then one of Luke's messages, drawn by the agent tab's own
+ * component (`AgentMessage`) from the turn as `work-model.ts` reads it into
+ * the agent tab's parts: the model's words as a reply, its reasoning folded
+ * behind one line, each call a row wearing its kind's icon that opens onto
+ * its input and output, the runs of calls and a finished turn's lead folded,
+ * a coding agent's start the one button that opens the agent's tab, and
+ * each worker the subagent's row an agent's delegation is, one button that
+ * opens its session in a tab of the panel's own (`SubagentTab`), or chooses
+ * that tab where it is open. That tab is a worker's transcript as an
+ * agent's worker's tab draws it (`AgentTranscriptView`): the task a card at
+ * the top, a shimmering line at the end while the subagent runs, a quiet one
+ * where it stopped or failed, and follows it while the subagent runs. The
+ * tab holds the plan's newest turns first, and the turns before them are
+ * read a page at a time as the developer scrolls up to the oldest
+ * (`EarlierWork`). Everything here is the planning model's or the
+ * developer's repository's, a command's output included, so the root is
+ * left out of the screen recording (`ph-no-capture`) as a second line
+ * behind its text masking.
  */
 
 /** What a turn's state says beside its time. */
@@ -84,130 +74,26 @@ const ENDED_WORD = {
   FAILED: "Failed",
 } as const;
 
+/** What a subagent's session that ended having recorded nothing says in place of its rows. */
+const NOTHING_RECORDED = "Nothing recorded.";
+
 /** What work that ended without answering says it did, as its record says it ended. */
 function endedWord(record: TurnRecord | undefined): string {
   return workFailed(record) ? ENDED_WORD.FAILED : ENDED_WORD.STOPPED;
 }
 
-/** A call's state as the Tool row marks it, in the AI SDK's words: running only while it still moves. */
-function toolStateOf(call: WorkCallRow): ToolState {
-  if (call.running) return TOOL_STATE.INPUT_AVAILABLE;
-  return call.state === PLAN_WORK_STATE.FAILED
-    ? TOOL_STATE.OUTPUT_ERROR
-    : TOOL_STATE.OUTPUT_AVAILABLE;
-}
-
-/** Opens a coding agent's tab, by the agent, which a start's row reaches through this rather than through every row above it; none where the rows stand in a tab that opens no agent. */
-const OpenAgentContext = createContext<((agentId: string) => void) | undefined>(undefined);
-
-/**
- * A call's row, opening onto its input and what it answered, each as the
- * words the frame carried; a coding agent's start, once the agent began,
- * the one button that opens the agent's tab, as a subagent's row opens its.
- */
-function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
-  const openAgent = useContext(OpenAgentContext);
-  const failed = call.state === PLAN_WORK_STATE.FAILED;
-  const { agent } = call;
-  if (agent !== undefined && openAgent !== undefined) {
-    return (
-      <TranscriptOpeningCall
-        callId={call.id}
-        kind={call.kind}
-        subject={call.subject}
-        state={toolStateOf(call)}
-        onOpen={() => openAgent(agent)}
-      />
-    );
-  }
-  return (
-    <TranscriptTool
-      data-call-id={call.id}
-      kind={call.kind}
-      subject={call.subject}
-      description={call.description}
-      state={toolStateOf(call)}
-      input={call.input}
-      output={
-        call.output === undefined || failed
-          ? undefined
-          : { kind: TOOL_BLOCK.TEXT, text: call.output }
-      }
-      errorText={failed ? call.output : undefined}
-    />
-  );
-}
-
-/**
- * Opens a subagent's session in a tab of the panel's own, by the call that
- * started it, which a line deep in the tree reaches through this rather
- * than through every row above it. Nothing outside the Work tab, since a
- * subagent's own session starts no subagent of its own.
- */
-const OpenSubagentContext = createContext<(callId: string) => void>(() => undefined);
-
-/** Whether a running subagent's row counts how long it has worked: while the Work tab is on screen, as its running turn counts. */
-const CountingContext = createContext(false);
-
-/** The catalog a subagent's row names its model from; empty before the first read lands. */
-const ModelsContext = createContext<readonly CatalogModel[]>([]);
-
-/** A subagent's call as the one button every subagent's row is, which opens its tab, counting while it runs from when its task began. */
-function WorkerLine({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
-  const open = useContext(OpenSubagentContext);
-  const counting = useContext(CountingContext);
-  const models = useContext(ModelsContext);
-  const { call, session } = worker;
-  const choice = workerChoice(worker);
-  return (
-    <TranscriptSubagent
-      callId={call.id}
-      job={workerJob(call)}
-      pair={choice === undefined ? undefined : { choice, models }}
-      state={toolStateOf(call)}
-      startedAt={counting ? session?.startedAt : undefined}
-      errorText={undefined}
-      onOpen={() => open(call.id)}
-    />
-  );
-}
-
-/**
- * A subagent's session's rows, drawn as a turn's are, or a note in their
- * place where it ended with none; one still starting draws none, since the
- * working line at the tab's end says so.
- */
-function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element | null {
-  const { call, session } = worker;
-  if (session === undefined || session.rows.length === 0) {
-    return call.running ? null : <TranscriptNote>Nothing recorded.</TranscriptNote>;
-  }
-  return (
-    <>
-      {session.earlierOmitted ? (
-        <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-      ) : null}
-      <WorkTurnRows rows={session.rows} />
-    </>
-  );
-}
-
-/** The word before a subagent's task card's title. */
-const TASK_CARD_LABEL = "Task";
-
 /**
  * A subagent's session in a tab of the panel's own, drawn as an agent's
- * tab draws its transcript: the task it was handed as a card at the top,
- * its job on the card's line and the whole message once opened, scrolling
- * with the rest; its blocks as the Work tab draws them; and at
- * the end a shimmering line while it runs, "Starting…" until its session
- * draws its first row and "Working…" after, counting from when its task
- * began, or once it has finished a quiet line saying how long it worked
- * and when it ended, and one saying so where it stopped or failed. The tab's own
- * label names the task, so no head repeats it. The
+ * worker's tab draws its transcript (`AgentTranscriptView`): the task it was
+ * handed as a card at the top, its job on the card's line and the whole
+ * message once opened; its session as one of its messages; and at the end a
+ * shimmering line while it runs, "Starting…" until its session draws its
+ * first part and "Working…" after, counting from when its task began, or
+ * once it has finished a quiet line saying how long it worked and when it
+ * ended, and one saying so where it stopped or failed, or that it recorded
+ * nothing. The tab's own label names the task, so no head repeats it. The
  * worker is read from the plan's work on every frame, so the tab follows
- * the session while the subagent runs, and the log keeps to its newest
- * line as every transcript does.
+ * the session while the subagent runs.
  */
 export function SubagentTab({
   worker,
@@ -221,79 +107,30 @@ export function SubagentTab({
   models?: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   const { call, task, session } = worker;
-  const job = workerJob(call);
+  const recorded = session !== undefined && session.message.parts.length > 0;
+  // A session that ended is drawn even with nothing recorded, so its end still says how long it worked and on what.
+  const drawn = recorded || session?.message.finishedAt !== undefined ? session : undefined;
   // A session whose own task failed says so even where the planning model answered its call and went on.
   const ended =
     call.running || (call.state !== PLAN_WORK_STATE.FAILED && !workFailed(session?.record))
       ? undefined
       : endedWord(session?.record);
-  // A session that has drawn no row yet is the subagent starting, as an agent's working line says it.
-  const phase =
-    session === undefined || session.rows.length === 0
-      ? WORKING_PHASE.STARTING
-      : WORKING_PHASE.WORKING;
-  const worked =
-    call.running || session?.startedAt === undefined || session.endedAt === undefined
-      ? undefined
-      : { startedAt: session.startedAt, endedAt: session.endedAt };
   return (
-    <div className="plan-work ph-no-capture">
-      <Conversation>
-        {/* The card stands off the tab row by the gap between a column's groups, as an agent's plan does. */}
-        <ConversationContent className="pt-(--section-gap)">
-          <Plan data-task-card="" aria-label={TASK_CARD_LABEL}>
-            <PlanHeader>
-              <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <PlanTitle label={TASK_CARD_LABEL}>{job}</PlanTitle>
-            </PlanHeader>
-            <PlanContent>
-              <TranscriptWords text={task} />
-            </PlanContent>
-          </Plan>
-          <SubagentRows worker={worker} />
-          {call.running ? (
-            <WorkingLine
-              startedAt={shown ? session?.startedAt : undefined}
-              words={WORKING_PHASE_WORDS[phase]}
-            />
-          ) : null}
-          {worked === undefined ? null : (
-            <WorkedFor {...worked} record={session?.record} models={models} />
-          )}
-          {ended === undefined ? null : (
-            <p className="agent-end-line" data-ended="" aria-live="polite">
-              {ended}
-            </p>
-          )}
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
-    </div>
-  );
-}
-
-/** One block of a turn. */
-function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
-  switch (block.kind) {
-    case WORK_BLOCK.TEXT:
-      return <TranscriptWords text={block.text} />;
-    case WORK_BLOCK.REASONING:
-      return <TranscriptReasoning text={block.text} />;
-    case WORK_BLOCK.CALL:
-      return <WorkCall call={block.call} />;
-    case WORK_BLOCK.WORKER:
-      return <WorkerLine worker={block} />;
-  }
-}
-
-/** A turn's rows as one of Luke's turns, drawn as the Transcript tab draws his words. */
-function WorkTurnRows({ rows }: { rows: readonly TurnRow<WorkBlock>[] }): React.JSX.Element {
-  return (
-    <Message from={MESSAGE_ROLE.ASSISTANT}>
-      <MessageContent>
-        <TranscriptRows rows={rows}>{(block) => <WorkBlockView block={block} />}</TranscriptRows>
-      </MessageContent>
-    </Message>
+    <section className="agent-tab ph-no-capture" aria-label={workerJob(call)}>
+      <AgentTranscriptView
+        briefTitle={workerJob(call)}
+        messages={workerLines(task, drawn === undefined ? [] : [drawn.message])}
+        lead={WORKER_LEAD}
+        delegation={{ models }}
+        reading={false}
+        failed={false}
+        working={call.running}
+        startedAt={shown ? session?.startedAt : undefined}
+        ended={ended ?? (call.running || recorded ? undefined : NOTHING_RECORDED)}
+        onRetry={() => undefined}
+        earlierOmitted={session?.earlierOmitted ?? false}
+      />
+    </section>
   );
 }
 
@@ -329,17 +166,18 @@ function TurnState({
   );
 }
 
-/** One turn: the checkpoint saying when it began and how far it got, then its blocks, and once it ended how long it worked. */
+/** One turn: the checkpoint saying when it began and how far it got, then the turn as one of Luke's messages, ending once it ended on how long it worked. */
 function WorkTurn({
   turn,
   now,
   counting,
+  doors,
 }: {
   turn: WorkTurnRow;
   now: number;
   counting: boolean;
+  doors: DelegationDoors;
 }): React.JSX.Element {
-  const models = useContext(ModelsContext);
   return (
     <>
       <Checkpoint
@@ -355,17 +193,25 @@ function WorkTurn({
         {callHeading(turn.startedAt, now)}
       </Checkpoint>
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
-      <WorkTurnRows rows={turn.rows} />
-      {turn.state === PLAN_WORK_STATE.RUNNING || turn.endedAt === undefined ? null : (
-        <WorkedFor
-          startedAt={turn.startedAt}
-          endedAt={turn.endedAt}
-          record={turn.record}
-          models={models}
-          harnessed={false}
-        />
-      )}
+      <AgentMessage
+        message={turn.message}
+        plan={false}
+        lead={PLANNING_LEAD}
+        moving={turn.moving}
+        delegation={doors}
+      />
     </>
+  );
+}
+
+/** When each running worker's task began, by the call that started it, which its row counts from. */
+function workerStarts(rows: readonly WorkTurnRow[]): ReadonlyMap<string, number> {
+  return new Map(
+    rows.flatMap((turn) =>
+      turn.workers.flatMap((worker) =>
+        worker.session?.startedAt === undefined ? [] : [[worker.call.id, worker.session.startedAt]],
+      ),
+    ),
   );
 }
 
@@ -500,36 +346,33 @@ export function PlanWork({
   const seeking = useEarlierUntil(reveal?.at, rows, earlier, onLoadEarlier);
   const revealed = reveal === undefined ? undefined : turnAt(rows, reveal.at);
   useRevealInLog(root, turns !== undefined && !seeking, reveal?.onRevealed);
+  const doors: DelegationDoors = {
+    models,
+    // A running worker's row counts how long it has worked while the tab is on screen, as its turn counts.
+    starts: shown ? workerStarts(rows) : undefined,
+    onOpen: (callId) => onOpenSubagent(callId),
+    onOpenAgent,
+  };
   return (
     <section ref={root} className="plan-work ph-no-capture" aria-label="Work">
-      <OpenSubagentContext.Provider value={onOpenSubagent}>
-        <ModelsContext.Provider value={models ?? []}>
-          <OpenAgentContext.Provider value={onOpenAgent}>
-            <CountingContext.Provider value={shown}>
-              {rows.length === 0 && earlier === undefined ? (
-                <EmptyState icon={<WorkIcon />}>{WORK_EMPTY_LINE}</EmptyState>
-              ) : (
-                <Conversation>
-                  {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-                  <ConversationContent className="pt-0">
-                    {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
-                    {earlier === undefined ? null : (
-                      <EarlierWork key={earlier} onLoad={onLoadEarlier} />
-                    )}
-                    {rows.map((turn) => (
-                      <Fragment key={turn.key}>
-                        {turn.key === revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
-                        <WorkTurn turn={turn} now={now} counting={shown} />
-                      </Fragment>
-                    ))}
-                  </ConversationContent>
-                  <ConversationScrollButton />
-                </Conversation>
-              )}
-            </CountingContext.Provider>
-          </OpenAgentContext.Provider>
-        </ModelsContext.Provider>
-      </OpenSubagentContext.Provider>
+      {rows.length === 0 && earlier === undefined ? (
+        <EmptyState icon={<WorkIcon />}>{WORK_EMPTY_LINE}</EmptyState>
+      ) : (
+        <Conversation>
+          {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
+          <ConversationContent className="pt-0">
+            {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
+            {earlier === undefined ? null : <EarlierWork key={earlier} onLoad={onLoadEarlier} />}
+            {rows.map((turn) => (
+              <Fragment key={turn.key}>
+                {turn.key === revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
+                <WorkTurn turn={turn} now={now} counting={shown} doors={doors} />
+              </Fragment>
+            ))}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+      )}
     </section>
   );
 }

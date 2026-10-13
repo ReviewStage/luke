@@ -9,8 +9,19 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
+import { TOOL_STATE } from "../ai-elements/tool";
+import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
+import { toolCallView } from "./tool-call-model";
 import { CALL_KIND, TURN_ROW, type TurnRow } from "./turn-rows";
-import { WORK_BLOCK, type WorkBlock, workerOf, workRowsOf } from "./work-model";
+import { workerOf, workRowsOf } from "./work-model";
+
+/** What a reader scans a part as: words, a thought, a call, or a subagent. */
+const SCANNED = {
+  TEXT: "text",
+  REASONING: "reasoning",
+  CALL: "call",
+  WORKER: "worker",
+} as const;
 
 /** A call of `tool` about `subject`, at `state`. */
 function call(
@@ -42,15 +53,16 @@ function turn(state: PlanWorkState, parts: readonly PlanWorkPart[]): PlanWorkTur
   return { turnId: "turn-1", startedAt: 0, state, earlierOmitted: false, parts };
 }
 
-/** A block as a reader scans it: its kind, and what it holds. */
-function scannedBlock(block: WorkBlock): [string, string | undefined] {
-  return block.kind === WORK_BLOCK.TEXT || block.kind === WORK_BLOCK.REASONING
-    ? [block.kind, block.text]
-    : [block.kind, block.call.subject];
+/** A part as a reader scans it: its kind, and what it holds. */
+function scannedBlock(part: AgentPart): [string, string | undefined] {
+  if (part.kind === AGENT_PART.TEXT) return [SCANNED.TEXT, part.text];
+  if (part.kind === AGENT_PART.REASONING) return [SCANNED.REASONING, part.text];
+  assert.ok(part.kind === AGENT_PART.TOOL);
+  return [delegates(part) ? SCANNED.WORKER : SCANNED.CALL, part.said?.subject];
 }
 
-/** The rows as a reader scans them: each block, each group's calls and whether it opens, each fold's line and what it holds. */
-function scanned(rows: readonly TurnRow<WorkBlock>[]): unknown[] {
+/** The rows as a reader scans them: each part, each group's calls and whether it opens, each fold's line and what it holds. */
+function scanned(rows: readonly TurnRow<AgentPart>[]): unknown[] {
   return rows.map((row) => {
     if (row.kind === TURN_ROW.BLOCK) return scannedBlock(row.block);
     if (row.kind === TURN_ROW.GROUP) {
@@ -60,10 +72,18 @@ function scanned(rows: readonly TurnRow<WorkBlock>[]): unknown[] {
   });
 }
 
-function rowsOf(turns: readonly PlanWorkTurn[], callLive = true): readonly TurnRow<WorkBlock>[] {
+/** The first turn's rows as the agent tab draws Luke's message for it. */
+function rowsOf(turns: readonly PlanWorkTurn[], callLive = true): readonly TurnRow<AgentPart>[] {
   const [row] = workRowsOf(turns, callLive);
   assert.ok(row);
-  return row.rows;
+  return agentRows(row.message, row.moving);
+}
+
+/** The turn's calls, as the agent tab reads its parts. */
+function callsOf(turns: readonly PlanWorkTurn[], callLive = true) {
+  const [row] = workRowsOf(turns, callLive);
+  assert.ok(row);
+  return agentParts(row.message).flatMap((part) => (part.kind === AGENT_PART.TOOL ? [part] : []));
 }
 
 test("calls next to one another fold under one line once the model moves on, and the latest group stays open while the turn moves", () => {
@@ -78,7 +98,7 @@ test("calls next to one another fold under one line once the model moves on, and
 
   assert.deepEqual(scanned(rows), [
     [TURN_ROW.GROUP, ["ls", "cat a.ts"], false],
-    [WORK_BLOCK.TEXT, "Invites live in one file."],
+    [SCANNED.TEXT, "Invites live in one file."],
     [TURN_ROW.GROUP, ["cat b.ts"], true],
   ]);
 });
@@ -99,13 +119,13 @@ test("a finished turn folds everything ahead of its last words into one line say
       TURN_ROW.FOLDED,
       "3 tool calls, 1 message",
       [
-        [WORK_BLOCK.CALL, "ls"],
-        [WORK_BLOCK.TEXT, "Looking at the invites."],
-        [WORK_BLOCK.CALL, "invite expiry"],
-        [WORK_BLOCK.CALL, "example.com/docs"],
+        [SCANNED.CALL, "ls"],
+        [SCANNED.TEXT, "Looking at the invites."],
+        [SCANNED.CALL, "invite expiry"],
+        [SCANNED.CALL, "example.com/docs"],
       ],
     ],
-    [WORK_BLOCK.TEXT, "Seven days is common."],
+    [SCANNED.TEXT, "Seven days is common."],
   ]);
 });
 
@@ -124,12 +144,12 @@ test("a finished turn's calls ahead of its words are folded once, under the lead
       TURN_ROW.FOLDED,
       "3 tool calls",
       [
-        [WORK_BLOCK.CALL, undefined],
-        [WORK_BLOCK.CALL, "agent-1"],
-        [WORK_BLOCK.CALL, "agent-2"],
+        [SCANNED.CALL, undefined],
+        [SCANNED.CALL, "agent-1"],
+        [SCANNED.CALL, "agent-2"],
       ],
     ],
-    [WORK_BLOCK.TEXT, "Both agents are done."],
+    [SCANNED.TEXT, "Both agents are done."],
   ]);
 });
 
@@ -189,7 +209,8 @@ test("a stop names the subagent it stopped by that subagent's job, a start in an
   };
 
   const [, later] = workRowsOf([started, stopping], true);
-  assert.deepEqual(scanned(later?.rows ?? []), [
+  assert.ok(later);
+  assert.deepEqual(scanned(agentRows(later.message, later.moving)), [
     [TURN_ROW.GROUP, ["Read the styling setup.", undefined, undefined], true],
   ]);
 });
@@ -254,10 +275,10 @@ test("a finished turn with no call ahead of its last words folds nothing: its th
   ]);
 
   assert.deepEqual(scanned(rows), [
-    [WORK_BLOCK.REASONING, "They said hello."],
-    [WORK_BLOCK.TEXT, "Hello."],
-    [WORK_BLOCK.REASONING, "Nothing to look up."],
-    [WORK_BLOCK.TEXT, "What are we building?"],
+    [SCANNED.REASONING, "They said hello."],
+    [SCANNED.TEXT, "Hello."],
+    [SCANNED.REASONING, "Nothing to look up."],
+    [SCANNED.TEXT, "What are we building?"],
   ]);
 });
 
@@ -277,13 +298,13 @@ test("a finished turn's thought between its calls folds with them under the lead
       TURN_ROW.FOLDED,
       "2 tool calls",
       [
-        [WORK_BLOCK.REASONING, "Find the invites."],
-        [WORK_BLOCK.CALL, "ls"],
-        [WORK_BLOCK.REASONING, "Read the one file."],
-        [WORK_BLOCK.CALL, "cat invites.ts"],
+        [SCANNED.REASONING, "Find the invites."],
+        [SCANNED.CALL, "ls"],
+        [SCANNED.REASONING, "Read the one file."],
+        [SCANNED.CALL, "cat invites.ts"],
       ],
     ],
-    [WORK_BLOCK.TEXT, "Invites live in one file."],
+    [SCANNED.TEXT, "Invites live in one file."],
   ]);
 });
 
@@ -300,20 +321,17 @@ test("the same calls while their turn still moves are one open group, and no lea
 });
 
 test("the worker stands on its own row, the one call still turning while its turn waits on it", () => {
-  const [row] = workRowsOf(
-    [
-      turn(PLAN_WORK_STATE.RUNNING, [
-        call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues.", PLAN_WORK_STATE.RUNNING),
-        words("The worker is on it."),
-      ]),
-    ],
-    true,
-  );
-  assert.ok(row);
-  const [worker] = row.rows;
-  assert.ok(worker?.kind === TURN_ROW.BLOCK && worker.block.kind === WORK_BLOCK.WORKER);
-  assert.equal(worker.block.call.kind, CALL_KIND.WORKER);
-  assert.equal(worker.block.call.running, true);
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.RUNNING, [
+      call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues.", PLAN_WORK_STATE.RUNNING),
+      words("The worker is on it."),
+    ]),
+  ]);
+  const [worker] = rows;
+  assert.ok(worker?.kind === TURN_ROW.BLOCK && worker.block.kind === AGENT_PART.TOOL);
+  assert.equal(delegates(worker.block), true);
+  assert.equal(worker.block.said?.kind, CALL_KIND.WORKER);
+  assert.equal(worker.block.state, TOOL_STATE.INPUT_AVAILABLE);
 });
 
 test("a turn its call left running is drawn as stopped, with nothing on it still turning", () => {
@@ -327,13 +345,20 @@ test("a turn its call left running is drawn as stopped, with nothing on it still
   );
   assert.ok(row);
   assert.equal(row.state, PLAN_WORK_STATE.FAILED);
-  const [left] = row.rows;
-  assert.ok(left?.kind === TURN_ROW.BLOCK && left.block.kind === WORK_BLOCK.CALL);
-  assert.equal(left.block.call.running, false);
+  assert.equal(row.moving, false);
+  const [left] = callsOf(
+    [
+      turn(PLAN_WORK_STATE.RUNNING, [
+        call("a", PLAN_WORK_TOOL.REPOSITORY, "ls", PLAN_WORK_STATE.RUNNING),
+      ]),
+    ],
+    false,
+  );
+  assert.equal(left?.state, TOOL_STATE.OUTPUT_AVAILABLE);
 });
 
 test("each call is its kind with its subject, a command's body the command itself, and a tool this build does not know by its own name", () => {
-  const rows = rowsOf(
+  const calls = callsOf(
     [
       turn(PLAN_WORK_STATE.DONE, [
         { ...call("a", PLAN_WORK_TOOL.REPOSITORY, "ls"), input: '{ "command": "ls" }' },
@@ -343,22 +368,20 @@ test("each call is its kind with its subject, a command's body the command itsel
     ],
     false,
   );
-  const [group] = rows;
-  assert.ok(group?.kind === TURN_ROW.GROUP);
-  const calls = group.blocks.flatMap((block) =>
-    block.kind === WORK_BLOCK.CALL ? [block.call] : [],
-  );
   assert.deepEqual(
-    calls.map((inner) => [inner.kind, inner.subject, inner.input]),
+    calls.map((inner) => {
+      const view = toolCallView(inner);
+      return [view.kind, view.subject, view.input];
+    }),
     [
       [CALL_KIND.COMMAND, "ls", { kind: "command", text: "ls" }],
-      [CALL_KIND.QUEUE_QUESTION, "Who can invite?", { kind: "text", text: "{}" }],
-      [CALL_KIND.OTHER, "summon_reviewer", { kind: "text", text: "{}" }],
+      [CALL_KIND.QUEUE_QUESTION, "Who can invite?", { kind: "json", text: "{}" }],
+      [CALL_KIND.OTHER, "summon_reviewer", { kind: "json", text: "{}" }],
     ],
   );
 });
 
-test("a worker's session is walked into blocks the way a turn is, each call on its own line, and its tab finds it inside a finished turn's fold", () => {
+test("a worker's session is read into parts the way a turn is, each call on its own line, and its tab finds it among the turns", () => {
   const worker = {
     ...call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues."),
     session: {
@@ -377,10 +400,10 @@ test("a worker's session is walked into blocks the way a turn is, each call on i
 
   const opened = workerOf(rows, "w");
   assert.ok(opened?.session);
-  assert.deepEqual(scanned(opened.session.rows), [
-    [WORK_BLOCK.CALL, "queue revoke api"],
-    [WORK_BLOCK.CALL, "example.com/queue-a"],
-    [WORK_BLOCK.TEXT, "Queue A lets an admin revoke."],
+  assert.deepEqual(scanned(agentRows(opened.session.message, false, false)), [
+    [SCANNED.CALL, "queue revoke api"],
+    [SCANNED.CALL, "example.com/queue-a"],
+    [SCANNED.TEXT, "Queue A lets an admin revoke."],
   ]);
   assert.equal(workerOf(rows, "gone"), undefined);
 });
