@@ -15,6 +15,7 @@ import {
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -135,7 +136,6 @@ import {
   planningWorkspaceGitHubConnectAnswerSchema,
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
-  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
 import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings";

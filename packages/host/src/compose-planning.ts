@@ -14,6 +14,7 @@ import type {
   PlanMarks,
   WorkspaceCallResult,
 } from "@sidecar/hosted";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
@@ -60,7 +61,6 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { highlightSnippet } from "@sidecar/host";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import {
   type CodeLines,
   PLAN_CALL_FAILURE,
   type PlanningStartAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
-  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { Effect } from "effect";
@@ -36,7 +36,7 @@ const ACME = {
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  github: { login: "acme", active: true },
 };
 const GRACE = {
   userId: "user-grace",

@@ -156,7 +156,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
       name: "Personal",
       personal: true,
       role: WORKSPACE_ROLE.OWNER,
-      active: true,
+      github: null,
     },
   ],
   document: { status: PLANNING_READ.IDLE },

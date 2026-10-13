@@ -1,3 +1,4 @@
+import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@sidecar/hosted";
 import type {
   CodeLines,
   PlanningArchiveParams,
@@ -32,9 +33,7 @@ import type {
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
-  WorkspaceCallFailure,
 } from "@sidecar/hosted/planning-view";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import {
   ACT,

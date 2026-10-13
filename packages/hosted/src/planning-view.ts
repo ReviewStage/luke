@@ -27,7 +27,10 @@ import {
   shownCodeSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
+import { WORKSPACE_CALL_FAILURE } from "./workspace-client.js";
 import {
+  workspaceCreateRequestSchema,
+  workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberSchema,
@@ -683,19 +686,6 @@ export const planningRevisionAnswerSchema = EffectSchema.Union([
 
 export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;
 
-/** Why a workspace call answered nothing a window can draw. */
-export const WORKSPACE_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
-  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
-  /** The account's role does not allow it, or the workspace is a personal one: a member removing someone, an owner removed or leaving. */
-  NOT_PERMITTED: "not-permitted",
-  /** The workspace or the member is not one the service shows the account. */
-  NOT_FOUND: PLAN_CALL_FAILURE.NOT_FOUND,
-} as const;
-
-export type WorkspaceCallFailure =
-  (typeof WORKSPACE_CALL_FAILURE)[keyof typeof WORKSPACE_CALL_FAILURE];
-
 /** One version of one page of a plan, as the frame drawing it names it. */
 export const planningPageParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
@@ -717,21 +707,13 @@ const workspaceCallFailureSchema = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(WORKSPACE_CALL_FAILURE)),
 });
 
-/** The most characters of a workspace's name the window asks for; the service makes its slug from it. */
-export const WORKSPACE_NAME_MAX_CHARS = 100;
-
-/** Making a workspace, as the window asks it: its name; the account that asks owns it. */
-export const planningWorkspaceCreateParamsSchema = EffectSchema.Struct({
-  name: EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(WORKSPACE_NAME_MAX_CHARS),
-  ),
-});
+/** Making a workspace, as the window asks it: its name, as the service takes it; the account that asks owns it. */
+export const planningWorkspaceCreateParamsSchema = workspaceCreateRequestSchema;
 
 export type PlanningWorkspaceCreateParams = typeof planningWorkspaceCreateParamsSchema.Type;
 
 /** One workspace, as the window names it to invite people to, or to connect or disconnect its GitHub organization. */
-export const planningWorkspaceParamsSchema = workspaceLeaveRequestSchema;
+export const planningWorkspaceParamsSchema = workspaceGithubRequestSchema;
 
 export type PlanningWorkspaceParams = typeof planningWorkspaceParamsSchema.Type;
 

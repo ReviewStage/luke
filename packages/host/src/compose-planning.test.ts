@@ -11,6 +11,7 @@ import {
   type GitHubRepositoriesAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
+  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted";
 import {
   BOARD_ELEMENT_TYPE,
@@ -55,7 +56,6 @@ import {
   planningTreeAnswerSchema,
   planningViewSchema,
   type RepositoryCallFailure,
-  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
 import {
