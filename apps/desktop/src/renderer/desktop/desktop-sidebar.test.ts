@@ -149,6 +149,7 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
             onSignOut: options.onSignOut ?? (() => Promise.resolve()),
             updates: {
               update: options.update ?? UP_TO_DATE,
+              build: { packaged: true },
               onCheck: () => Promise.resolve(),
               onInstall: options.onInstall ?? (() => undefined),
               onOpenLatest: options.onOpenLatest ?? (() => undefined),

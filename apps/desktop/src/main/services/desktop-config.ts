@@ -1,4 +1,5 @@
 import type { RunMode } from "@sidecar/host";
+import type { BuildCommit } from "#shared/messages/update";
 
 /**
  * What the launch's own arguments said, parsed once in `main` and never read
@@ -25,6 +26,8 @@ export interface DesktopConfig {
   readonly stateRoot: string;
   readonly runMode: RunMode;
   readonly appVersion: string;
+  /** The commit the bundle was built from, absent where the build could not tell. */
+  readonly commit?: BuildCommit;
   readonly packaged: boolean;
   readonly environment: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;

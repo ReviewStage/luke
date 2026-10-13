@@ -121,7 +121,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       id: SETTINGS_SEARCH_ROW.UPDATES,
       label: "Updates",
       page: SETTINGS_VIEW.ROOT,
-      haystack: ["Updates", "version release download check for updates"],
+      haystack: ["Updates", "version release download check for updates build commit development"],
     },
     {
       id: SETTINGS_SEARCH_ROW.CHANGELOG,

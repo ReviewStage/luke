@@ -411,6 +411,10 @@ export function App(): React.JSX.Element {
   };
   const updates: UpdateControl = {
     update: fixtureUpdate(state.run, state.update),
+    build: {
+      packaged: state.run.packaged,
+      ...(state.run.commit ? { commit: state.run.commit } : undefined),
+    },
     // Answered rather than fire-and-forget so the row that asked redraws from
     // the same snapshot the broadcast carries to every other window.
     onCheck: async () => {

@@ -33,6 +33,7 @@ export function settingsPanelProps(
         installSupported: false,
         upToDate: false,
       },
+      build: { packaged: false },
       onCheck: () => Promise.resolve(),
       onInstall: ignore,
       onOpenLatest: ignore,
