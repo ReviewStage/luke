@@ -9,10 +9,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { builtStylesheet, compiledTailwind, cssRules, ownDeclarations } from "#testing/css-rules";
 import { AgentTranscriptView } from "./agent-tab";
-import { PlanTranscript } from "./plan-transcript";
-import { PlanWork, SubagentTab } from "./plan-work";
-import { TRANSCRIPT_REGION } from "./transcript-model";
+import { PlanCall } from "./plan-call";
+import { SubagentTab } from "./plan-work";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workerOf, workRowsOf } from "./work-model";
+
+/** A plan on which nothing was said yet, so the Call tab draws Luke's turns alone. */
+const NO_CALLS: TranscriptRegion = { kind: TRANSCRIPT_REGION.EMPTY };
 
 /**
  * The one layout rule a transcript's components keep, held against the
@@ -123,15 +126,23 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       working: true,
       onRetry: () => undefined,
     }),
-    createElement(PlanTranscript, {
+    createElement(PlanCall, {
       region: {
         kind: TRANSCRIPT_REGION.READY,
         earlierOmitted: false,
         calls: [{ key: "c1", startedAt: 1, live: true, lukeEnded: false, messages: CALL }],
       },
       onRetry: () => undefined,
+      turns: [],
+      callLive: true,
+      earlier: undefined,
+      onLoadEarlier: () => Promise.resolve(),
+      onOpenSubagent: () => undefined,
+      shown: true,
     }),
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       callLive: true,
       earlier: undefined,
       onLoadEarlier: () => Promise.resolve(),

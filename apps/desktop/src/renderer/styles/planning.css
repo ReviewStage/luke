@@ -1294,14 +1294,12 @@ button.code-card-path:hover {
   border-bottom: 0;
 }
 
-/* The three transcripts: the Transcript tab, the Work tab, and an agent's
-   tab, each a frame the log fills, their rows drawn by the one set of
-   blocks (../planning/transcript-blocks.tsx over ../ai-elements/). What
-   follows is each tab's own: Luke's mark above his spoken turns, drawn at
-   the row's 16px in his voice's colour; the agent's composer; the Work
-   tab's worker line. */
-.plan-transcript,
-.plan-work,
+/* The two transcripts: the Call tab and an agent's tab, each a frame the
+   log fills, their rows drawn by the one set of blocks
+   (../planning/transcript-blocks.tsx over ../ai-elements/). What follows is
+   each one's own: Luke's mark beside a note of his, drawn at the row's 16px
+   in his voice's colour; the agent's composer; a worker's line. */
+.plan-call,
 .agent-tab {
   display: flex;
   min-height: 0;

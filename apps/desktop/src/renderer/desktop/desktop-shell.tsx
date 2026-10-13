@@ -135,14 +135,14 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 
 /**
  * Whether the open plan's Transcript is on screen with its words, streaming
- * a call's as they are said. A Transcript tab standing behind another chosen
+ * a call's as they are said. A Call tab standing behind another chosen
  * tab is not on screen, and one still reading, or failed, shows no words.
  */
 function transcriptStreaming(plans: PlansControl): boolean {
   const { sidePanel, transcript } = plans;
   return (
     sidePanel.open &&
-    sidePanel.tab === SIDE_PANEL_TAB.TRANSCRIPT &&
+    sidePanel.tab === SIDE_PANEL_TAB.CALL &&
     transcript.region.kind === TRANSCRIPT_REGION.READY
   );
 }

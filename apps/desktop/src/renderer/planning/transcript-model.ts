@@ -1,11 +1,10 @@
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@sidecar/hosted/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import type { UIMessage } from "ai";
 import type { VoiceView } from "#shared/messages/voice-view";
 
 /**
- * transcript-model.ts -- what the open plan's Transcript tab draws, decided from the stored transcript and the call standing now.
+ * transcript-model.ts -- what the open plan's Call tab draws, decided from the stored transcript and the call standing now.
  *
  * Two sources make one list. The host reads what was said on the plan's
  * calls from the record whenever the plan opens and whenever a call about it
@@ -85,11 +84,6 @@ export interface HeardCall {
   readonly heardAt: number;
   /** Whether the call still stands. */
   readonly live: boolean;
-}
-
-/** Who said a message, on the tab: the developer, or Luke. */
-export function speakerLabel(role: UIMessage["role"]): string {
-  return role === TRANSCRIPT_SPEAKER.USER ? "You" : "Luke";
 }
 
 /** A run of consecutive lines from one speaker, drawn as one turn under the speaker's name. */

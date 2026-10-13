@@ -381,7 +381,7 @@ export const REVISION_SOURCE = {
 /**
  * The place that wrote a revision: a coding agent's tab, the call Luke wrote
  * it on in the Transcript, or, for Luke's save on no call the history names,
- * the Work tab's turn at the moment it was saved.
+ * the Call tab's turn at the moment it was saved.
  */
 export type RevisionSource =
   | { readonly kind: typeof REVISION_SOURCE.AGENT; readonly agentId: string }
@@ -390,7 +390,7 @@ export type RevisionSource =
 
 /**
  * Where a revision's Open goes: an agent's tab where the line names the
- * agent, the call where it names one, the Work tab at its latest save for
+ * agent, the call where it names one, the Call tab at its latest save for
  * Luke's other saves, and nowhere for the developer's own, a restore, or the
  * plan before history, which nothing else in the window wrote.
  */

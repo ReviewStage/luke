@@ -8,7 +8,7 @@ import { type CallRecord, callHeading } from "./transcript-model";
 import { WORKED_SEPARATOR, workingTime } from "./working-time";
 
 /**
- * call-card.tsx -- the quiet line a call that ended closes with on the Transcript tab, and the card it hangs: how long the call ran and when it ended, then what it ran on, when, how it ended, and what it metered.
+ * call-card.tsx -- the quiet line a call that ended closes with on the Call tab, and the card it hangs: how long the call ran and when it ended, then what it ran on, when, how it ended, and what it metered.
  *
  * A call closes the way a finished turn does (`working-time.tsx`'s
  * WorkedFor): one line saying it ended, how long it ran, and the day and

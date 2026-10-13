@@ -920,12 +920,12 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
 
 /**
  * One of the agent's turns as the rows every transcript draws, folded as
- * the Work tab folds Luke's (`turn-rows.ts`). A step boundary and a part
+ * the Call tab folds Luke's (`turn-rows.ts`). A step boundary and a part
  * this build does not draw are left out, because the parts keep one rhythm
  * across them. The turn moves while the agent may still write to it, which
  * is its last message; any other has ended. A worker's session is read for
  * its detail, so its calls stand each on a line of its own and its lead
- * never folds, as the Work tab's worker's do. The agent's newest to-do
+ * never folds, as the Call tab's worker's do. The agent's newest to-do
  * list, named by the call that wrote it (`newestTodos`), stays out of
  * a finished turn's fold, so the list standing is never folded away.
  */

@@ -29,7 +29,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
-import { CodingAgentsIcon } from "@sidecar/panel";
+import { CodingAgentsIcon, TranscriptIcon } from "@sidecar/panel";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
@@ -486,9 +486,9 @@ test("a panel too narrow for its tabs whole still draws every tab's label, hangi
     return this === panelTabs ? 200 : 0;
   });
   act(() => relayout());
-  act(() => tabNamed(page, "Transcript").click());
+  act(() => tabNamed(page, "Call").click());
 
-  for (const label of ["Board", "Code", "Work"]) {
+  for (const label of ["Board", "Code", "Call"]) {
     assert.equal(tabNamed(page, label).querySelector(".tab-label")?.textContent, label);
     assert.equal(hover(tabNamed(page, label)), undefined, `${label} hangs a pill`);
   }
@@ -579,7 +579,7 @@ test("a tab with something new on it reads in semibold and says it is new, and t
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
         region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
         unreadTabs: [SIDE_PANEL_TAB.BOARD],
       }),
     }),
@@ -587,11 +587,11 @@ test("a tab with something new on it reads in semibold and says it is new, and t
 
   assert.equal(tabUnread(tabNamed(page, "Board")), true);
   assert.equal(tabUnread(tabNamed(page, "Code")), false);
-  assert.equal(tabUnread(tabNamed(page, "Transcript")), false);
+  assert.equal(tabUnread(tabNamed(page, "Call")), false);
   assert.equal(page.querySelector(".tab-note"), null, "no tab wears a dot");
 });
 
-test("the Work tab draws each turn's calls as lines that open onto their output, left out of the screen recording", () => {
+test("the Call tab draws each turn's calls as lines that open onto their output, left out of the screen recording", () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -605,7 +605,7 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
           page: PLANS_PAGE.DOCUMENT,
           activePlanId: PLAN.id,
           region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-          sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
+          sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
           work: {
             callLive: true,
             earlier: undefined,
@@ -636,7 +636,7 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
     ),
   );
 
-  const work = container.querySelector('section[aria-label="Work"]');
+  const work = container.querySelector('section[aria-label="Call"]');
   assert.ok(work);
   assert.ok(work.classList.contains("ph-no-capture"));
   // The call's row is its fold's summary (../ai-elements/fold.tsx), as an agent tab's rows are.
@@ -653,7 +653,7 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   assert.deepEqual(output, ["$ ls src", "invite.ts"]);
 });
 
-test("a worker's line in the Work tab is one button saying where the subagent stands with the mark a call wears, no link on it, and pressing it opens the subagent's tab rather than its session in the tab's place", () => {
+test("a worker's line in the Call tab is one button saying where the subagent stands with the mark a call wears, no link on it, and pressing it opens the subagent's tab rather than its session in the tab's place", () => {
   const running = "Compare the two queue libraries.";
   const done = "Find the admin check.";
   const worker = (id: string, subject: string, state: PlanWorkState) => ({
@@ -690,8 +690,8 @@ test("a worker's line in the Work tab is one button saying where the subagent st
     },
   });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
-  const work = page.querySelector('section[aria-label="Work"]');
+  act(() => tabNamed(page, "Call").click());
+  const work = page.querySelector('section[aria-label="Call"]');
   assert.ok(work);
   const lines = [...work.querySelectorAll<HTMLElement>("[data-subagent-row]")];
   // Each line is the one button: its job, and the state mark a call's row wears while it runs.
@@ -709,11 +709,11 @@ test("a worker's line in the Work tab is one button saying where the subagent st
   assert.equal(work.querySelector('[aria-label="Open in tab"]'), null);
 
   act(() => lines[1]?.click());
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", done]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", done]);
   assert.equal(chosenTab(page), done);
-  // Back on the Work tab, every turn still stands: no session took its place.
-  act(() => tabNamed(page, "Work").click());
-  const back = page.querySelector('section[aria-label="Work"]');
+  // Back on the Call tab, every turn still stands: no session took its place.
+  act(() => tabNamed(page, "Call").click());
+  const back = page.querySelector('section[aria-label="Call"]');
   assert.ok(back?.textContent?.includes("While that runs"));
   assert.equal(back?.textContent?.includes(`Notes on: ${done}`), false);
 });
@@ -762,16 +762,16 @@ function workerWork(job: string, task?: string): PlansControl["work"] {
   };
 }
 
-test("a worker's line opens the subagent's session in a tab of its own after the fixed tabs, drawn as the Work tab draws it, its task card opening onto the whole message it was handed; pressed again it is chosen rather than doubled, and its × closes it", () => {
+test("a worker's line opens the subagent's session in a tab of its own after the fixed tabs, drawn as the Call tab draws it, its task card opening onto the whole message it was handed; pressed again it is chosen rather than doubled, and its × closes it", () => {
   const job = "Compare the two queue libraries.";
   // Longer than the subject the service cuts a worker's line to, as a task the planning model writes often is.
   const task =
     `${job} ${"Read each library's README and its source, and say which call revokes a pending invite. ".repeat(6)}`.trim();
   const page = mountOpenPlan({ work: workerWork(job, task) });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", job]);
   assert.equal(chosenTab(page), job);
   assert.equal(tabState(tabNamed(page, job)), "Working");
   assert.ok(
@@ -789,7 +789,7 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   act(() => opener.click());
   assert.ok(card?.textContent?.includes(task), "the whole task, uncut");
   assert.ok(content?.querySelector("[data-working]"));
-  // The session's rows as the Work tab draws them: the call a row that opens onto its output, the words after it.
+  // The session's rows as the Call tab draws them: the call a row that opens onto its output, the words after it.
   const call = [...(content?.querySelectorAll("summary") ?? [])].find((summary) =>
     summary.textContent?.includes("ls src"),
   );
@@ -798,14 +798,14 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   assert.ok(content?.textContent?.includes("queue.ts"));
   assert.ok(content?.textContent?.includes("Queue A lets an admin revoke."));
 
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", job]);
   assert.equal(chosenTab(page), job);
 
   press(page, `[aria-label="Close ${job}"]`);
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Work");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
+  assert.equal(chosenTab(page), "Call");
 });
 
 test("a delegation's row in an agent's tab opens the worker in a tab of the side panel's own, opening the panel, which draws the task as a card and reads the worker's transcript under the agent and the call, following it while the worker runs with its thinking folded; pressed again it is chosen rather than doubled, and its × closes it to the tab the panel showed before", async () => {
@@ -873,7 +873,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.ok(page.querySelector('.desktop-agent[aria-label="Opus 5.5"]'), "the agent in the column");
 
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", job]);
   assert.equal(chosenTab(page), job);
   assert.equal(columnChosen(page), "Opus 5.5", "the agent stays beside its worker");
   assert.equal(tabState(tabNamed(page, job)), "Working");
@@ -894,7 +894,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.equal(content?.querySelectorAll("[data-plan-card]").length, 1, "the task drawn once");
   assert.ok(content?.querySelector('[data-call-id="wcall_1"]'), "each call on a line of its own");
   assert.equal(content?.querySelector("[data-turn-fold]"), null);
-  // The worker's thinking folds under one quiet line previewing it, as the Work tab's and the agent's do.
+  // The worker's thinking folds under one quiet line previewing it, as the Call tab's and the agent's do.
   const thought = content?.querySelector<HTMLDetailsElement>(
     "details:not([data-call-id]):not([data-plan-card])",
   );
@@ -906,17 +906,17 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
 
   act(() => tabNamed(page, "Board").click());
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", job]);
   assert.equal(chosenTab(page), job);
 
   press(page, `[aria-label="Close ${job}"]`);
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
   assert.equal(chosenTab(page), "Board");
 
   // Closing the agent's tab takes its worker's with it.
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
   press(page, '[aria-label="Close Opus 5.5"]');
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
 });
 
 test("a delegated worker wears the mark of the model its delegation chose, though its agent runs in another harness", async () => {
@@ -982,11 +982,11 @@ test("a subagent's tab cuts a long job short and says the whole of it in its car
   });
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
   act(() => relayout());
 
-  assert.equal(hover(tabNamed(page, "Work")), undefined);
+  assert.equal(hover(tabNamed(page, "Call")), undefined);
   hover(tabNamed(page, job));
   assert.deepEqual(cardParts(), [job, "Working…", "Queue A lets an admin revoke."]);
 });
@@ -1010,7 +1010,7 @@ test("a planning worker whose call ended under it wears its glyph at rest and sa
   };
   const page = mountOpenPlan({ work: stopped });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
   const tab = tabNamed(page, job);
 
@@ -1046,7 +1046,7 @@ test("a planning worker whose own task failed wears an alert at its tab's end an
   };
   const page = mountOpenPlan({ work: failed });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
   const tab = tabNamed(page, job);
 
@@ -1081,7 +1081,7 @@ test("a planning worker whose call the planning model answered and went on from 
   };
   const page = mountOpenPlan({ work: answered });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
 
   assert.equal(tabEndState(tabNamed(page, job)), "Failed");
@@ -1098,17 +1098,17 @@ test("a tab's label cut short is marked to fade at its end, while a label shown 
   });
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
   act(() => relayout());
   const faded = (label: string) =>
     tabNamed(page, label).querySelector(".tab-label")?.getAttribute("data-overflow");
 
   assert.equal(faded(job), "true");
-  assert.equal(faded("Work"), "false");
+  assert.equal(faded("Call"), "false");
 });
 
-test("the Work tab with no turn says what will appear there, under the tab's glyph drawn large", () => {
+test("the Call tab with neither a call nor a turn says what will appear there, under the tab's glyph drawn large", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
       summary: UNPINNED_SUMMARY,
@@ -1117,13 +1117,28 @@ test("the Work tab with no turn says what will appear there, under the tab's gly
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
         region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
+        transcript: {
+          region: { kind: TRANSCRIPT_REGION.READY, earlierOmitted: false, calls: [] },
+          onRetry: () => undefined,
+        },
+        work: {
+          callLive: false,
+          earlier: undefined,
+          onLoadEarlier: () => Promise.resolve(),
+          turns: [],
+        },
       }),
     }),
   );
+  const glyph = document.createElement("div");
+  glyph.innerHTML = renderToStaticMarkup(createElement(TranscriptIcon));
 
-  assert.match(markup, /When Luke works on a call, what he reads and runs appears here\./u);
-  assert.match(markup, /<span class="empty-state-icon" aria-hidden="true"><svg/u);
+  assert.match(markup, /Nothing said yet — start a call and the transcript appears here\./u);
+  assert.ok(
+    markup.includes(`<span class="empty-state-icon" aria-hidden="true">${glyph.innerHTML}`),
+    "under the Call tab's own glyph",
+  );
 });
 
 /** The rows the page's observers watch, and a scroll that brings every one into view. */
@@ -1154,11 +1169,11 @@ function watchedRows() {
   };
 }
 
-test("the Work tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none says so in an alert and waits for a press", async () => {
+test("the Call tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none says so in an alert and waits for a press", async () => {
   const rows = watchedRows();
   const asked: string[] = [];
   const page = mountOpenPlan({
-    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.WORK, width: 400 },
+    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.CALL, width: 400 },
     work: {
       callLive: false,
       earlier: "turn-2",
@@ -1178,7 +1193,7 @@ test("the Work tab reads the turns before its oldest as the row before them scro
     },
   });
   const row = () =>
-    [...page.querySelectorAll<HTMLElement>("section[aria-label='Work'] button")].find((button) =>
+    [...page.querySelectorAll<HTMLElement>("section[aria-label='Call'] button")].find((button) =>
       button.textContent?.includes("earlier work"),
     );
 
@@ -1202,7 +1217,7 @@ test("the Work tab reads the turns before its oldest as the row before them scro
   assert.deepEqual(asked, ["earlier", "earlier"]);
 });
 
-test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {
+test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
       summary: UNPINNED_SUMMARY,
@@ -1211,7 +1226,7 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
         region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
         transcript: {
           region: {
             kind: TRANSCRIPT_REGION.READY,
@@ -1243,25 +1258,32 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
     }),
   );
 
-  assert.match(markup, /<section class="plan-transcript ph-no-capture" aria-label="Transcript">/u);
-  assert.match(
-    markup,
-    /data-speaker="user"[^>]*>.*?>You<\/span>.*?<p[^>]*>Invites should expire\.<\/p>/su,
+  const page = document.createElement("div");
+  page.innerHTML = markup;
+  const call = page.querySelector('section.plan-call.ph-no-capture[aria-label="Call"]');
+  assert.ok(call, "the Call tab, left out of the recording");
+  // The developer's line a bubble of their own, Luke's an assistant's message, as an agent's tab draws them.
+  assert.deepEqual(
+    [...call.querySelectorAll(".is-user, .is-assistant")].map((message) => [
+      message.classList.contains("is-user") ? "user" : "assistant",
+      message.querySelector("p")?.textContent,
+    ]),
+    [
+      ["user", "Invites should expire."],
+      ["assistant", "After how many days?"],
+    ],
   );
-  assert.match(
-    markup,
-    /data-speaker="assistant"[^>]*>.*?>Luke<\/span>.*?<p[^>]*>After how many days\?<\/p>/su,
-  );
-  assert.match(markup, />Live</u);
+  assert.match(call.textContent ?? "", /Live/u);
 });
 
-test("the Transcript tab is the panel's third, beside the document", () => {
+test("the Call tab is the panel's third, beside the document", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  act(() => tabNamed(page, "Transcript").click());
-  assert.equal(tabNamed(page, "Transcript").getAttribute("aria-selected"), "true");
-  assert.ok(page.querySelector('.side-panel .plan-transcript[aria-label="Transcript"]'));
+  assert.equal(panelTabs(page)[2], "Call");
+  act(() => tabNamed(page, "Call").click());
+  assert.equal(tabNamed(page, "Call").getAttribute("aria-selected"), "true");
+  assert.ok(page.querySelector('.side-panel .plan-call[aria-label="Call"]'));
   assert.ok(documentShown(page));
 });
 
@@ -2394,27 +2416,25 @@ test("closing the chosen tab chooses the tab viewed before it, and closing the l
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  act(() => tabNamed(page, "Code").click());
-  press(page, '[aria-label="Close Code"]');
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Board", "the tab shown before it");
-  assert.ok(documentShown(page));
-
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   act(() => tabNamed(page, "Board").click());
   press(page, '[aria-label="Close Board"]');
-  assert.equal(chosenTab(page), "Work", "the tab viewed before it, not the one beside it");
+  assert.deepEqual(panelTabs(page), ["Code", "Call"]);
+  assert.equal(chosenTab(page), "Call", "the tab viewed before it, not the one beside it");
+  assert.ok(documentShown(page));
 
-  press(page, '[aria-label="Close Transcript"]');
-  press(page, '[aria-label="Close Work"]');
+  act(() => tabNamed(page, "Code").click());
+  press(page, '[aria-label="Close Code"]');
+  assert.equal(chosenTab(page), "Call", "the tab shown before it");
+
+  press(page, '[aria-label="Close Call"]');
   assert.ok(panelShown(page));
   assert.deepEqual(panelTabs(page), []);
   const rows = page.querySelectorAll<HTMLButtonElement>(".side-panel-no-tabs button");
   assert.deepEqual(kindRows(rows), [
     ["Board", "", true],
     ["Code", "", true],
-    ["Transcript", "", true],
-    ["Work", "", true],
+    ["Call", "", true],
   ]);
 
   const code = [...rows].find((row) => row.textContent?.startsWith("Code"));
@@ -2448,25 +2468,28 @@ test("the panel's tabs are one stop for Tab that the arrow keys move along, and 
   const tabs = () => [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')];
   assert.deepEqual(
     tabs().map((tab) => tab.tabIndex),
-    [0, -1, -1, -1],
+    [0, -1, -1],
   );
 
   const board = tabNamed(page, "Board");
   act(() => board.focus());
+  key(board, "End");
+  assert.equal(document.activeElement, tabNamed(page, "Call"), "past Code, to the last");
+  key(tabNamed(page, "Call"), "ArrowRight");
+  assert.equal(document.activeElement, board);
   key(board, "ArrowRight");
   assert.equal(document.activeElement, tabNamed(page, "Code"));
-  key(tabNamed(page, "Code"), "End");
-  assert.equal(document.activeElement, tabNamed(page, "Work"));
-  key(tabNamed(page, "Work"), "ArrowRight");
+  key(tabNamed(page, "Code"), "ArrowRight");
+  key(tabNamed(page, "Call"), "ArrowRight");
   assert.equal(document.activeElement, board);
   assert.equal(chosenTab(page), "Board", "moving along the tabs chooses none of them");
 
   key(board, "Delete");
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Call"]);
   assert.equal(document.activeElement, tabNamed(page, "Code"));
   key(tabNamed(page, "Code"), "Backspace");
-  assert.deepEqual(panelTabs(page), ["Transcript", "Work"]);
-  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
+  assert.deepEqual(panelTabs(page), ["Call"]);
+  assert.equal(document.activeElement, tabNamed(page, "Call"));
 });
 
 /** The panel's "+". */
@@ -2549,7 +2572,7 @@ test("Command-F opens the find bar over the chosen tab of the column holding the
   act(() => tabNamed(page, "Board").click());
   assert.equal(find(), false, "the Board leaves ⌘F to its canvas");
 
-  act(() => tabNamed(page, "Transcript").click());
+  act(() => tabNamed(page, "Call").click());
   assert.equal(find(), true);
   assert.equal(page.querySelectorAll(".find-bar").length, 2, "the column's bar stays open over it");
   assert.match(focused().closest(".find-scope")?.className ?? "", /side-panel-content/u);
@@ -2575,8 +2598,7 @@ test("the + drops the searchable menu over every kind, whether or not it is open
   assert.deepEqual(addRows(), [
     ["Board", "", true],
     ["Code", "", true],
-    ["Transcript", "", true],
-    ["Work", "", true],
+    ["Call", "", true],
   ]);
   assert.equal(
     document.activeElement?.getAttribute("placeholder"),
@@ -2585,23 +2607,23 @@ test("the + drops the searchable menu over every kind, whether or not it is open
   );
 
   // A kind already open is chosen where it stands, not opened again.
-  act(() => addRow("Transcript").click());
+  act(() => addRow("Call").click());
   assert.equal(document.querySelector(".tab-add-menu"), null);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Transcript");
+  assert.deepEqual(panelTabs(page), ["Board", "Call"]);
+  assert.equal(chosenTab(page), "Call");
 
   act(() => addButton(page).click());
   typeSearch("code");
   key(focused(), "Enter");
   assert.equal(document.querySelector(".tab-add-menu"), null);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Call", "Code"]);
   assert.equal(chosenTab(page), "Code");
   assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
 
   act(() => addButton(page).click());
   typeSearch("board");
   key(focused(), "Enter");
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Call", "Code"]);
   assert.equal(chosenTab(page), "Board");
 });
 
@@ -2609,19 +2631,19 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
   press(page, '[aria-label="Close Board"]');
-  press(page, '[aria-label="Close Work"]');
+  press(page, '[aria-label="Close Call"]');
   act(() => addButton(page).click());
 
-  typeSearch("wo");
-  assert.deepEqual(addRows(), [["Work", "", true]]);
-  assert.equal(addHighlighted(), "Work");
+  typeSearch("ca");
+  assert.deepEqual(addRows(), [["Call", "", true]]);
+  assert.equal(addHighlighted(), "Call");
   typeSearch("zzz");
   assert.deepEqual(addRows(), []);
   assert.match(document.querySelector(".tab-add-menu")?.textContent ?? "", /No tabs match/u);
   typeSearch("");
   assert.deepEqual(
     addRows().map(([label]) => label),
-    ["Board", "Code", "Transcript", "Work"],
+    ["Board", "Code", "Call"],
   );
 
   key(focused(), "Escape");
@@ -2634,12 +2656,12 @@ test("the next launch opens the panel with the tabs this one left open, in their
   const first = mountOpenPlan();
   press(first, '[aria-label="Show panel"]');
   press(first, '[aria-label="Close Board"]');
-  act(() => tabNamed(first, "Transcript").click());
+  act(() => tabNamed(first, "Call").click());
   unmountAll();
 
   const next = mountOpenPlan();
-  assert.deepEqual(panelTabs(next), ["Code", "Transcript", "Work"]);
-  assert.equal(chosenTab(next), "Transcript");
+  assert.deepEqual(panelTabs(next), ["Code", "Call"]);
+  assert.equal(chosenTab(next), "Call");
 });
 
 test("a panel an earlier version kept, before its tabs could close, opens as it was with every tab, and one that no longer reads opens as a first launch", () => {
@@ -2649,7 +2671,7 @@ test("a panel an earlier version kept, before its tabs could close, opens as it 
   );
   const earlier = mountOpenPlan();
   assert.ok(panelShown(earlier));
-  assert.deepEqual(panelTabs(earlier), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(earlier), ["Board", "Code", "Call"]);
   assert.equal(chosenTab(earlier), "Code");
   assert.equal(earlier.querySelector<HTMLElement>(".side-panel")?.style.width, "500px");
   unmountAll();
@@ -2658,7 +2680,7 @@ test("a panel an earlier version kept, before its tabs could close, opens as it 
   const unread = mountOpenPlan();
   assert.equal(panelShown(unread), false);
   press(unread, '[aria-label="Show panel"]');
-  assert.deepEqual(panelTabs(unread), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(unread), ["Board", "Code", "Call"]);
   assert.equal(chosenTab(unread), "Board");
 });
 
@@ -2670,12 +2692,12 @@ test("Delete on a tab the arrow keys reached closes it and hands focus to the ta
 
   key(board, "ArrowRight");
   key(tabNamed(page, "Code"), "Delete");
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
-  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
+  assert.deepEqual(panelTabs(page), ["Board", "Call"]);
+  assert.equal(document.activeElement, tabNamed(page, "Call"));
   assert.equal(chosenTab(page), "Board", "closing another tab leaves the chosen one chosen");
 
-  key(tabNamed(page, "Transcript"), "Delete");
-  key(tabNamed(page, "Work"), "Delete");
+  key(tabNamed(page, "Call"), "Delete");
+  assert.equal(document.activeElement, tabNamed(page, "Board"), "the last tab hands focus back");
   key(tabNamed(page, "Board"), "Delete");
   assert.deepEqual(panelTabs(page), []);
   assert.equal(document.activeElement?.getAttribute("aria-label"), "Open a tab");
@@ -2754,7 +2776,7 @@ test("a press on a tab that wavers less than a drag is a click: it chooses the t
   assert.deepEqual(dragTab(code, 145, [147, 142], DRAG_END.DROP), []);
   act(() => code.click());
 
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
   assert.equal(chosenTab(page), "Code");
   assert.deepEqual(tabsMoved(page), []);
 });
@@ -2765,17 +2787,17 @@ test("a tab dragged past its neighbour lands there chosen, says where, and the n
   layOutTabs();
 
   dragTab(tabNamed(page, "Board"), 45, [60, 120, 160], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Code", "Board", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Board", "Call"]);
   assert.equal(chosenTab(page), "Board");
-  assert.equal(movedSaid(page), "Board moved to position 2 of 4");
+  assert.equal(movedSaid(page), "Board moved to position 2 of 3");
 
-  dragTab(tabNamed(page, "Work"), 345, [200, -400], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Work", "Code", "Board", "Transcript"]);
-  assert.equal(chosenTab(page), "Work", "the dragged tab is chosen");
+  dragTab(tabNamed(page, "Call"), 245, [150, -400], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Call", "Code", "Board"]);
+  assert.equal(chosenTab(page), "Call", "the dragged tab is chosen");
   unmountAll();
 
   const next = mountOpenPlan();
-  assert.deepEqual(panelTabs(next), ["Work", "Code", "Board", "Transcript"]);
+  assert.deepEqual(panelTabs(next), ["Call", "Code", "Board"]);
 });
 
 test("Escape, or the system taking the pointer, puts a dragged tab back and changes nothing", () => {
@@ -2784,17 +2806,13 @@ test("Escape, or the system taking the pointer, puts a dragged tab back and chan
   layOutTabs();
 
   const lifted = dragTab(tabNamed(page, "Code"), 145, [200, 360], DRAG_END.ESCAPE);
-  assert.deepEqual(
-    lifted,
-    ["Code", "Transcript", "Work"],
-    "Code is lifted and the two it passed stand aside",
-  );
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(lifted, ["Code", "Call"], "Code is lifted and the one it passed stands aside");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
   assert.equal(chosenTab(page), "Board");
   assert.deepEqual(tabsMoved(page), [], "every tab is back in its place");
 
   dragTab(tabNamed(page, "Code"), 145, [360], DRAG_END.CANCEL);
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
   assert.deepEqual(tabsMoved(page), []);
 });
 
@@ -2803,21 +2821,21 @@ test("a tab closed under a drag puts the drag back rather than dropping it at a 
   press(page, '[aria-label="Show panel"]');
   layOutTabs();
 
-  dragTab(tabNamed(page, "Code"), 145, [260], DRAG_END.DROP, () =>
-    press(page, '[aria-label="Close Work"]'),
+  dragTab(tabNamed(page, "Board"), 45, [260], DRAG_END.DROP, () =>
+    press(page, '[aria-label="Close Code"]'),
   );
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Call"]);
   assert.equal(chosenTab(page), "Board");
   assert.deepEqual(tabsMoved(page), []);
 
   // One closed and opened again stands at the strip's end, and the drag
   // that passed it is put back all the same.
   dragTab(tabNamed(page, "Board"), 45, [160], DRAG_END.DROP, () => {
-    press(page, '[aria-label="Close Code"]');
-    openKind(page, "Code");
+    press(page, '[aria-label="Close Call"]');
+    openKind(page, "Call");
   });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
-  assert.equal(chosenTab(page), "Code");
+  assert.deepEqual(panelTabs(page), ["Board", "Call"]);
+  assert.equal(chosenTab(page), "Call");
   assert.deepEqual(tabsMoved(page), []);
 });
 
@@ -2829,7 +2847,7 @@ test("the × on a tab starts no drag", () => {
   const close = page.querySelector<HTMLElement>('[aria-label="Close Board"]');
   assert.ok(close, "the Board tab has its ×");
   assert.deepEqual(dragTab(close, 80, [200, 300], DRAG_END.DROP), []);
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
 });
 
 test("a tab let go anywhere short of the first tab's middle lands first, and past the last tab's middle lands last, wherever it was held", () => {
@@ -2837,15 +2855,15 @@ test("a tab let go anywhere short of the first tab's middle lands first, and pas
   press(page, '[aria-label="Show panel"]');
   layOutTabs();
 
-  // Work spans 300 to 390, held near its start and let go at 40, short of
+  // Call spans 200 to 290, held near its start and let go at 40, short of
   // Board's middle at 45, though its own middle stands past Board's.
-  dragTab(tabNamed(page, "Work"), 305, [200, 40], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+  dragTab(tabNamed(page, "Call"), 205, [120, 40], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Call", "Board", "Code"]);
 
-  // Board, now at 100 to 190, held near its end and let go at 350, past
-  // Transcript's middle at 345, though its own middle falls short of it.
-  dragTab(tabNamed(page, "Board"), 185, [250, 350], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Work", "Code", "Transcript", "Board"]);
+  // Board, now at 100 to 190, held near its end and let go at 250, past
+  // Code's middle at 245, though its own middle falls short of it.
+  dragTab(tabNamed(page, "Board"), 185, [220, 250], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Call", "Code", "Board"]);
 });
 
 const MOVE_RIGHT = { key: "ArrowRight", code: "ArrowRight", metaKey: true, shiftKey: true };
@@ -2884,30 +2902,30 @@ test("a subagent's tab is dragged and stepped as any other, closed and opened ag
   const job = "Compare the two queue libraries.";
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
-  layOutTabs({ width: 6 * TAB_PITCH });
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  layOutTabs({ width: 5 * TAB_PITCH });
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", job]);
 
-  dragTab(tabNamed(page, job), 445, [300, 40], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), [job, "Board", "Code", "Transcript", "Work"]);
+  dragTab(tabNamed(page, job), 345, [200, 40], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), [job, "Board", "Code", "Call"]);
   const subagent = tabNamed(page, job);
   act(() => subagent.focus());
   keydown(MOVE_RIGHT);
-  assert.deepEqual(panelTabs(page), ["Board", job, "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", job, "Code", "Call"]);
   assert.equal(document.activeElement, subagent);
-  assert.equal(movedSaid(page), `${job} moved to position 2 of 5`);
+  assert.equal(movedSaid(page), `${job} moved to position 2 of 4`);
 
-  // Work, at 400 to 490, let go at 40, short of Board's middle.
-  dragTab(tabNamed(page, "Work"), 445, [300, 40], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Work", "Board", job, "Code", "Transcript"]);
+  // Call, at 300 to 390, let go at 40, short of Board's middle.
+  dragTab(tabNamed(page, "Call"), 345, [200, 40], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Call", "Board", job, "Code"]);
   press(page, `[aria-label="Close ${job}"]`);
   press(page, "[data-subagent-row]");
-  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript", job]);
+  assert.deepEqual(panelTabs(page), ["Call", "Board", "Code", job]);
   unmountAll();
 
   const next = mountOpenPlan({ work: workerWork(job) });
-  assert.deepEqual(panelTabs(next), ["Work", "Board", "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(next), ["Call", "Board", "Code"]);
 });
 
 test("Shift-Command-Arrow moves an agent's tab among the agents' in the plan's column, never before the plan's, and the plan's tab not at all", () => {
@@ -2942,16 +2960,15 @@ test("Shift-Command-Arrow moves the focused tab along the strip, focus and choic
   const code = tabNamed(page, "Code");
   act(() => code.focus());
   keydown(right);
-  keydown(right);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Call", "Code"]);
   assert.equal(document.activeElement, code);
   assert.equal(chosenTab(page), "Board");
-  assert.equal(movedSaid(page), "Code moved to position 4 of 4");
+  assert.equal(movedSaid(page), "Code moved to position 3 of 3");
 
   keydown(right);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"], "the last stays last");
+  assert.deepEqual(panelTabs(page), ["Board", "Call", "Code"], "the last stays last");
   for (const _ of SIDE_PANEL_TABS) keydown(left);
-  assert.deepEqual(panelTabs(page), ["Code", "Board", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Board", "Call"]);
   assert.equal(document.activeElement, code);
 });
 
@@ -2984,22 +3001,22 @@ test("a tab chosen, or opened, past the strip's shown room is scrolled into view
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
   const strip = layOutScrollingTabs();
-  assert.equal(tabInView(page, strip, "Work"), false);
+  assert.equal(tabInView(page, strip, "Call"), false);
 
-  act(() => tabNamed(page, "Work").click());
-  assert.ok(tabInView(page, strip, "Work"), "the chosen tab is brought into view");
+  act(() => tabNamed(page, "Call").click());
+  assert.ok(tabInView(page, strip, "Call"), "the chosen tab is brought into view");
   assert.equal(tabInView(page, strip, "Board"), false);
 
-  const work = tabNamed(page, "Work");
-  act(() => work.focus());
-  key(work, "Home");
+  const call = tabNamed(page, "Call");
+  act(() => call.focus());
+  key(call, "Home");
   assert.equal(document.activeElement, tabNamed(page, "Board"));
   assert.ok(tabInView(page, strip, "Board"), "the tab the keys reach is brought into view");
 
-  press(page, '[aria-label="Close Work"]');
-  openKind(page, "Work");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
-  assert.ok(tabInView(page, strip, "Work"), "a tab opened at the strip's end is brought into view");
+  press(page, '[aria-label="Close Call"]');
+  openKind(page, "Call");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
+  assert.ok(tabInView(page, strip, "Call"), "a tab opened at the strip's end is brought into view");
 });
 
 /**
@@ -3033,15 +3050,15 @@ test("a tab held at the edge of a strip scrolled along runs it back to the tabs 
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
   const strip = layOutScrollingTabs();
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   assert.equal(tabInView(page, strip, "Board"), false, "Board is scrolled out of sight");
   const frames = heldFrames();
 
-  // Work, shown at 110 to 200, held at 10, within the strip's faded edge.
-  dragTab(tabNamed(page, "Work"), 155, [100, 10], DRAG_END.DROP, () => {
+  // Call, shown at 110 to 200, held at 10, within the strip's faded edge.
+  dragTab(tabNamed(page, "Call"), 155, [100, 10], DRAG_END.DROP, () => {
     assert.ok(frames.run() > 1, "the strip runs along over frames");
   });
-  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Call", "Board", "Code"]);
 });
 
 test("a tab held still while the strip scrolls under it lands where the row has brought it", () => {
@@ -3049,27 +3066,27 @@ test("a tab held still while the strip scrolls under it lands where the row has 
   press(page, '[aria-label="Show panel"]');
   const strip = layOutScrollingTabs();
 
-  // Code, held at 150, clear of both edges, while a wheel runs the row two tabs along.
+  // Code, held at 150, clear of both edges, while a wheel runs the row one tab along, as far as it goes.
   dragTab(tabNamed(page, "Code"), 145, [150], DRAG_END.DROP, () =>
     act(() => {
-      strip.scrollLeft = 2 * TAB_PITCH;
+      strip.scrollLeft = TAB_PITCH;
       strip.dispatchEvent(new Event("scroll"));
     }),
   );
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Call", "Code"]);
 });
 
 test("a strip narrowed past its chosen tab scrolls to keep it in view", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
-  const shown = { tabs: 4 };
+  const shown = { tabs: 3 };
   const strip = layOutScrollingTabs(shown);
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   assert.equal(strip.scrollLeft, 0, "the strip shows every tab");
 
   shown.tabs = 2;
   act(() => relayout());
-  assert.ok(tabInView(page, strip, "Work"));
+  assert.ok(tabInView(page, strip, "Call"));
 });
 
 test("a wheel turned up and down over a strip with tabs hidden runs it along, a line of a wheel that counts lines a line of text", () => {
@@ -3106,8 +3123,14 @@ function fadedEdges(strip: HTMLElement): string[] {
 }
 
 test("the strip fades exactly the edges it hides tabs beyond, as it scrolls, resizes, and opens and closes tabs", () => {
-  const page = mountOpenPlan();
+  // A subagent's tab beside the three kinds, so the strip has a tab on either side of two shown.
+  const job = "Compare the two queue libraries.";
+  const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Call").click());
+  press(page, "[data-subagent-row]");
+  act(() => tabNamed(page, "Board").click());
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call", job]);
   const strip = page.querySelector<HTMLElement>(".side-panel .tab-strip");
   assert.ok(strip, "the panel draws its tabs");
   const shown = { width: 4 * TAB_PITCH };
@@ -3445,7 +3468,7 @@ test("the side panel's + lists the plan's subagents under a section of their own
   act(() => addButton(page).click());
   assert.equal(addRow(job).textContent, job, "an open tab's row says nothing of it");
 });
-test("a subagent wears its model's mark in its tab and its row of the side panel's +, as its row in the Work tab does, rather than the worker's robot", () => {
+test("a subagent wears its model's mark in its tab and its row of the side panel's +, as its row in the Call tab does, rather than the worker's robot", () => {
   const job = "Compare the two queue libraries.";
   const live = workerWork(job);
   const turn = live.turns?.[0];
@@ -3471,7 +3494,7 @@ test("a subagent wears its model's mark in its tab and its row of the side panel
     },
   });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
   const codex = 'img.provider-mark[src="marks/codex-16.png"]';
   assert.ok(tabNamed(page, job).querySelector(codex), "the tab wears Codex's cloud");
@@ -3954,7 +3977,7 @@ function closable(page: HTMLElement, label: string): boolean {
 test("a right-click on any of the panel's tabs offers Close and Close others, a fixed tab's and an agent's Pin tab, an agent's and a subagent's both copies of its transcript, an agent's Archive, and the menu keys open it under the focused tab", () => {
   const job = "Compare the two queue libraries.";
   const page = mountAgents(workerWork(job));
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
 
   const everyTab: [string, boolean][] = [
@@ -3994,11 +4017,11 @@ test("a right-click on any of the panel's tabs offers Close and Close others, a 
 
 test("Close in a tab's menu closes it as its × does, and Close others closes every other tab of its strip, a pinned one too, and chooses the tab, stopping no agent, the plan's tab always standing; with nothing else to close it is dimmed", () => {
   const page = mountAgents();
-  chooseFromTab(tabNamed(page, "Transcript"), "Pin tab");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  chooseFromTab(tabNamed(page, "Call"), "Pin tab");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
 
-  chooseFromTab(tabNamed(page, "Work"), "Close");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
+  chooseFromTab(tabNamed(page, "Board"), "Close");
+  assert.deepEqual(panelTabs(page), ["Code", "Call"]);
 
   chooseFromTab(tabNamed(page, "Code"), "Close others");
   assert.deepEqual(panelTabs(page), ["Code"]);
@@ -4031,33 +4054,33 @@ test("Close in a tab's menu closes it as its × does, and Close others closes ev
 test("Pin tab leaves the tab in its place with its ×, which closes it as any tab's does, and a pinned tab opened again offers Unpin tab, which takes the pin away", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
-  chooseFromTab(tabNamed(page, "Work"), "Pin tab");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
-  assert.ok(closable(page, "Work"));
-  assert.deepEqual(tabMenu(tabNamed(page, "Work"))[2], ["Unpin tab", true]);
+  chooseFromTab(tabNamed(page, "Call"), "Pin tab");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
+  assert.ok(closable(page, "Call"));
+  assert.deepEqual(tabMenu(tabNamed(page, "Call"))[2], ["Unpin tab", true]);
   closeMenu();
 
-  key(tabNamed(page, "Work"), "Delete");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
+  key(tabNamed(page, "Call"), "Delete");
+  assert.deepEqual(panelTabs(page), ["Board", "Code"]);
   act(() => addButton(page).click());
-  act(() => addRow("Work").click());
-  assert.deepEqual(tabMenu(tabNamed(page, "Work"))[2], ["Unpin tab", true], "closing kept the pin");
+  act(() => addRow("Call").click());
+  assert.deepEqual(tabMenu(tabNamed(page, "Call"))[2], ["Unpin tab", true], "closing kept the pin");
 
-  chooseFromTab(tabNamed(page, "Work"), "Unpin tab");
-  assert.deepEqual(tabMenu(tabNamed(page, "Work"))[2], ["Pin tab", true]);
+  chooseFromTab(tabNamed(page, "Call"), "Unpin tab");
+  assert.deepEqual(tabMenu(tabNamed(page, "Call"))[2], ["Pin tab", true]);
 });
 
 test("a tab pinned to the sidebar is dragged among the fixed tabs as any other is", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
-  chooseFromTab(tabNamed(page, "Transcript"), "Pin tab");
+  chooseFromTab(tabNamed(page, "Code"), "Pin tab");
   layOutTabs();
 
-  dragTab(tabNamed(page, "Work"), 345, [200, -400], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"], "past the pinned one");
+  dragTab(tabNamed(page, "Call"), 245, [150, -400], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Call", "Board", "Code"], "past the pinned one");
 
-  dragTab(tabNamed(page, "Transcript"), 345, [200, -400], DRAG_END.DROP);
-  assert.deepEqual(panelTabs(page), ["Transcript", "Work", "Board", "Code"]);
+  dragTab(tabNamed(page, "Code"), 245, [150, -400], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Code", "Call", "Board"]);
 });
 
 test("Copy concise and Copy full transcript put an agent's transcript, read whole from the service, and a subagent's session on the clipboard as markdown, its calls one line each or whole", async () => {
@@ -4102,7 +4125,7 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
   await settle();
   chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy full transcript");
   await settle();
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
   chooseFromTab(tabNamed(page, job), "Copy concise transcript");
   await settle();
@@ -4182,22 +4205,22 @@ test("Command-W closes the chosen tab of the column holding the focus as its men
   assert.equal(keydown({ key: "w", metaKey: true }), true);
   assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol"]);
   assert.equal(columnChosen(page), "GPT 5.6 Sol");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"], "the panel's stand");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"], "the panel's stand");
 
   into(".side-panel");
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   act(() => tabNamed(page, "Code").click());
   assert.equal(keydown({ key: "w", metaKey: true }), true);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Work");
+  assert.deepEqual(panelTabs(page), ["Board", "Call"]);
+  assert.equal(chosenTab(page), "Call");
 
-  chooseFromTab(tabNamed(page, "Work"), "Pin tab");
-  act(() => tabNamed(page, "Work").click());
-  tabMenu(tabNamed(page, "Work"));
+  chooseFromTab(tabNamed(page, "Call"), "Pin tab");
+  act(() => tabNamed(page, "Call").click());
+  tabMenu(tabNamed(page, "Call"));
   assert.equal(document.body.querySelector('[role="menuitem"] .plan-menu-end')?.textContent, "⌘W");
   closeMenu();
   keydown({ key: "w", metaKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Board"]);
   assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol"]);
 
   // Back in the plan's column, the chord closes its tab, and then, on the plan's, nothing.
@@ -4206,7 +4229,7 @@ test("Command-W closes the chosen tab of the column holding the focus as its men
   assert.deepEqual(columnTabs(page), [PLAN.name]);
   assert.equal(keydown({ key: "w", metaKey: true }), false, "the plan's tab never closes");
   assert.deepEqual(columnTabs(page), [PLAN.name]);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Board"]);
   assert.deepEqual(stops, [], "closing an agent's tab stops nothing");
 });
 test("with nothing to close, Command-W is left unclaimed: the panel hidden, or open with no tab", () => {
@@ -4365,7 +4388,7 @@ it.effect(
       yield* TestClock.adjust(Duration.minutes(6));
       const subagentCard = function* (ended: boolean) {
         const page = mountAgents(timedWorkerWork(job, ended), registry);
-        act(() => tabNamed(page, "Work").click());
+        act(() => tabNamed(page, "Call").click());
         press(page, "[data-subagent-row]");
         act(() => tabNamed(page, "Board").click());
         hover(tabNamed(page, job));
@@ -4551,7 +4574,7 @@ test("a planning worker whose session carries a title is drawn by it, on its tab
   };
   const page = mountOpenPlan({ work: titled });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Work").click());
+  act(() => tabNamed(page, "Call").click());
   press(page, "[data-subagent-row]");
 
   hover(tabNamed(page, "Queue library comparison"));
@@ -4562,9 +4585,9 @@ test("a planning worker whose session carries a title is drawn by it, on its tab
   ]);
 });
 
-test("a coding agent's start on the Work tab opens the agent's tab in the plan's column, which then holds the keys, its tab already chosen or not", () => {
+test("a coding agent's start on the Call tab opens the agent's tab in the plan's column, which then holds the keys, its tab already chosen or not", () => {
   const page = mountOpenPlan({
-    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.WORK, width: 400 },
+    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.CALL, width: 400 },
     agents: codingAgentsControl({ agents: [TITLED_AGENT], agentIds: [TITLED_AGENT.id] }),
     work: {
       callLive: false,

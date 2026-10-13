@@ -1,12 +1,12 @@
 /**
  * turn-rows.ts -- what every transcript's turn shares: how its calls are named on their rows, and how its rows fold.
  *
- * Two tabs draw a model's turns, the Work tab from the planning model's
+ * Two tabs draw a model's turns, the Call tab from the planning model's
  * parts and an agent's tab from a coding agent's stored message, and each
  * reads its own wire into blocks of its own. What they share is decided
  * here, so the two never drift: a call is one of a few kinds, each with
  * the verb its row says and whether its subject is code; and a turn's
- * blocks fold the way the Work tab folds them (Stagent's walk, Stage's chat
+ * blocks fold the way the Call tab folds them (Stagent's walk, Stage's chat
  * panel): calls next to one another are one group that is open while it is
  * the turn's latest work on a turn that moves and folded once the model
  * moved on, and a finished turn folds everything ahead of its last words
@@ -305,7 +305,7 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
 }
 
 /**
- * A turn's blocks as the rows a tab draws, folded the Work tab's way:
+ * A turn's blocks as the rows a tab draws, folded the Call tab's way:
  * calls grouped, and, once the turn is done, everything ahead of its last
  * words folded into one line saying what it holds, each call inside it on
  * a row of its own. A lead without a call has no work to fold away, so it

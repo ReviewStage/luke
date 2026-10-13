@@ -461,17 +461,16 @@ test("what an earlier version kept loads as the order alone: the tabs it held op
     "luke.sidePanel",
     JSON.stringify({
       open: true,
-      tabs: [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.CODE],
-      tab: SIDE_PANEL_TAB.WORK,
+      tabs: [SIDE_PANEL_TAB.CALL, SIDE_PANEL_TAB.CODE],
+      tab: SIDE_PANEL_TAB.CALL,
       width: 400,
     }),
   );
   const closed = mountOn(usedPlan(PLAN).holds);
   assert.deepEqual(closed.control().tabs, [
-    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.CODE,
     SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.TRANSCRIPT,
   ]);
   assert.deepEqual(closed.control().closedTabs, []);
 
@@ -480,7 +479,7 @@ test("what an earlier version kept loads as the order alone: the tabs it held op
     "luke.sidePanel",
     JSON.stringify({ open: true, tab: SIDE_PANEL_TAB.CODE, width: 500 }),
   );
-  assert.deepEqual(mountOn({ [SIDE_PANEL_TAB.WORK]: true }).control().tabs, [SIDE_PANEL_TAB.WORK]);
+  assert.deepEqual(mountOn({ [SIDE_PANEL_TAB.CALL]: true }).control().tabs, [SIDE_PANEL_TAB.CALL]);
 });
 
 test("what a version with the History tab kept loads whole without it, wherever it named the tab", () => {
@@ -488,7 +487,7 @@ test("what a version with the History tab kept loads whole without it, wherever 
     "luke.sidePanel",
     JSON.stringify({
       open: true,
-      tabs: ["history", SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.BOARD],
+      tabs: ["history", SIDE_PANEL_TAB.CALL, SIDE_PANEL_TAB.BOARD],
       tab: "history",
       width: 460,
       closedAgents: [AGENT],
@@ -497,24 +496,24 @@ test("what a version with the History tab kept loads whole without it, wherever 
           opened: ["history", SIDE_PANEL_TAB.CODE],
           closed: ["history"],
           pinned: ["history"],
-          recent: ["history", SIDE_PANEL_TAB.WORK],
+          recent: ["history", SIDE_PANEL_TAB.CALL],
         },
       },
     }),
   );
-  const panel = mountOn({ [SIDE_PANEL_TAB.WORK]: true }, [AGENT]);
+  const panel = mountOn({ [SIDE_PANEL_TAB.CALL]: true }, [AGENT]);
 
   assert.equal(panel.control().open, true);
   assert.equal(panel.control().width, 460);
-  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.CODE]);
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.CALL, SIDE_PANEL_TAB.CODE]);
   assert.equal(
     panel.control().tab,
-    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CALL,
     "the History tab chosen reads as the first",
   );
   assert.deepEqual(panel.control().closedTabs, []);
   assert.deepEqual(panel.control().pins, [], "its History pin is let go");
-  act(() => panel.control().onClose(SIDE_PANEL_TAB.WORK));
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.CALL));
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE, "the tabs viewed read without it too");
 });
 
@@ -534,7 +533,7 @@ test("a tab opened on a plan that holds nothing of it stands there across a laun
 
 test("a fixed tab opened stands at the strip's end, after a subagent's and a file's, one open already is chosen where it stands, and a launch keeps the order", () => {
   const stood = {
-    plan: { id: PLAN, holds: { [SIDE_PANEL_TAB.TRANSCRIPT]: true } },
+    plan: { id: PLAN, holds: { [SIDE_PANEL_TAB.CALL]: true } },
     agents: [],
     subagents: [CALL],
     files: [INVITE],
@@ -545,7 +544,7 @@ test("a fixed tab opened stands at the strip's end, after a subagent's and a fil
   act(() => panel.control().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
   const opened = [
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     { subagent: CALL },
     { file: INVITE },
     SIDE_PANEL_TAB.BOARD,
@@ -553,27 +552,27 @@ test("a fixed tab opened stands at the strip's end, after a subagent's and a fil
   ];
   assert.deepEqual(panel.control().order, opened);
   assert.deepEqual(panel.control().tabs, [
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.CODE,
   ]);
 
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CALL));
   assert.deepEqual(panel.control().order, opened, "a tab open already does not move");
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.TRANSCRIPT);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CALL);
 
   // A tab closed and opened again stands at the end, not where it stood.
   act(() => panel.control().onClose(SIDE_PANEL_TAB.BOARD));
   act(() => panel.control().onChoose(SIDE_PANEL_TAB.BOARD));
   assert.deepEqual(panel.control().tabs, [
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.CODE,
     SIDE_PANEL_TAB.BOARD,
   ]);
 
   const next = mountStood(stood);
   assert.deepEqual(next.control().tabs, [
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.CODE,
     SIDE_PANEL_TAB.BOARD,
   ]);
@@ -584,7 +583,7 @@ test("a tab closed on a plan and shown there from another, as a pin does, stands
   const holds = {
     [SIDE_PANEL_TAB.BOARD]: true,
     [SIDE_PANEL_TAB.CODE]: true,
-    [SIDE_PANEL_TAB.WORK]: true,
+    [SIDE_PANEL_TAB.CALL]: true,
   };
   const panel = mountOn(holds);
   act(() => panel.control().onClose(SIDE_PANEL_TAB.CODE));
@@ -595,46 +594,65 @@ test("a tab closed on a plan and shown there from another, as a pin does, stands
   panel.standOn(holds, PLAN);
   assert.deepEqual(panel.control().tabs, [
     SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.CODE,
   ]);
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE);
 });
 
 test("a kind's first content on the open plan adds its tab at the strip's end, while a kind's first read leaves it in its kind's place, as the strip stood", () => {
-  const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: false, [SIDE_PANEL_TAB.TRANSCRIPT]: true });
+  const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: false, [SIDE_PANEL_TAB.CALL]: true });
 
   // The plan's code read landing is the plan opening, not anything arriving.
   panel.standOn({
     [SIDE_PANEL_TAB.BOARD]: false,
     [SIDE_PANEL_TAB.CODE]: true,
-    [SIDE_PANEL_TAB.TRANSCRIPT]: true,
+    [SIDE_PANEL_TAB.CALL]: true,
   });
-  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]);
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.CALL]);
 
   panel.standOn({
     [SIDE_PANEL_TAB.BOARD]: true,
     [SIDE_PANEL_TAB.CODE]: true,
-    [SIDE_PANEL_TAB.TRANSCRIPT]: true,
+    [SIDE_PANEL_TAB.CALL]: true,
   });
   assert.deepEqual(panel.control().tabs, [
     SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.BOARD,
   ]);
 });
 
+test("a panel an earlier version kept on its Transcript and Work tabs still reads, those two let go and the Call tab standing where the plan holds a call", () => {
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: ["transcript", "work", SIDE_PANEL_TAB.CODE],
+      tab: "work",
+      width: 440,
+      plans: { [PLAN]: { opened: [], closed: [], recent: ["work"], order: ["transcript"] } },
+    }),
+  );
+  const panel = mountOn({ [SIDE_PANEL_TAB.CODE]: true, [SIDE_PANEL_TAB.CALL]: true });
+  assert.equal(panel.control().width, 440, "every other choice it held stands");
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.CALL]);
+  assert.deepEqual(panel.control().order, []);
+  const kept = window.localStorage.getItem("luke.sidePanel") ?? "";
+  assert.equal(kept.includes('"work"'), false);
+  assert.equal(kept.includes('"transcript"'), false);
+});
+
 test("a fixed tab dragged among a plan's few keeps its place on a plan that has them all", () => {
-  const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: true, [SIDE_PANEL_TAB.WORK]: true });
-  act(() => panel.control().onMove(SIDE_PANEL_TAB.WORK, 0));
-  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.BOARD]);
+  const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: true, [SIDE_PANEL_TAB.CALL]: true });
+  act(() => panel.control().onMove(SIDE_PANEL_TAB.CALL, 0));
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.CALL, SIDE_PANEL_TAB.BOARD]);
 
   panel.standOn(usedPlan(PLAN).holds);
   assert.deepEqual(panel.control().tabs, [
-    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.TRANSCRIPT,
   ]);
 });
 
@@ -665,19 +683,17 @@ test("tabs of every kind moved on one plan stand in that order on that plan alon
   const panel = mountStood({ plan: { id: PLAN, holds }, agents: [], subagents: [CALL] });
   act(() => panel.control().onChoose({ subagent: CALL }));
   act(() => panel.control().onMove({ subagent: CALL }, 0));
-  act(() => panel.control().onMove(SIDE_PANEL_TAB.TRANSCRIPT, 0));
+  act(() => panel.control().onMove(SIDE_PANEL_TAB.CALL, 0));
   assert.deepEqual(panel.control().order, [
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     { subagent: CALL },
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.WORK,
   ]);
   assert.deepEqual(panel.control().tabs, [
-    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CALL,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.WORK,
   ]);
 
   panel.render({ plan: { id: OTHER_PLAN, holds }, agents: [], subagents: [] });
@@ -685,13 +701,12 @@ test("tabs of every kind moved on one plan stand in that order on that plan alon
   assert.deepEqual(panel.control().tabs, [
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.TRANSCRIPT,
-    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CALL,
   ]);
 });
 test("a tab pinned to the sidebar is kept across a launch with its plan and name, newest first, outlives its tab's close, and goes with an unpin", () => {
   const first = mount([AGENT], [], [ROLES]);
-  act(() => first.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+  act(() => first.control().onPin(SIDE_PANEL_TAB.CALL, "Call"));
   act(() => first.control().onOpenFile({ path: ROLES }));
   act(() => first.control().onPin({ file: ROLES }, "roles.ts"));
   act(() => first.control().onPin({ file: ROLES }, "roles.ts"));
@@ -701,16 +716,16 @@ test("a tab pinned to the sidebar is kept across a launch with its plan and name
   const pinned = second.control().pins.map(({ plan, tab, label }) => ({ plan, tab, label }));
   assert.deepEqual(pinned, [
     { plan: PLAN, tab: { file: ROLES }, label: "roles.ts" },
-    { plan: PLAN, tab: SIDE_PANEL_TAB.WORK, label: "Work" },
+    { plan: PLAN, tab: SIDE_PANEL_TAB.CALL, label: "Call" },
   ]);
   assert.deepEqual(second.control().files, [], "the closed tab stays closed, its pin standing");
 
-  act(() => second.control().onUnpin(PLAN, SIDE_PANEL_TAB.WORK));
+  act(() => second.control().onUnpin(PLAN, SIDE_PANEL_TAB.CALL));
   assert.deepEqual(
     second.control().pins.map((pin) => pin.tab),
     [{ file: ROLES }],
   );
-  assert.ok(second.control().tabs.includes(SIDE_PANEL_TAB.WORK), "unpinned, its tab stays open");
+  assert.ok(second.control().tabs.includes(SIDE_PANEL_TAB.CALL), "unpinned, its tab stays open");
 });
 
 test("a pinned agent takes the name its tab has now on its own plan, and keeps the one it has elsewhere", () => {
@@ -726,35 +741,35 @@ test("a pinned agent takes the name its tab has now on its own plan, and keeps t
 test("a pinned agent keeps the model it ran on across a launch, for its row to wear its harness's mark on another plan", () => {
   const first = mount([AGENT]);
   act(() => first.control().onPin({ agent: AGENT }, "GPT-5.5", "openai/gpt-5.5"));
-  act(() => first.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+  act(() => first.control().onPin(SIDE_PANEL_TAB.CALL, "Call"));
 
   const second = mount([AGENT]);
   assert.deepEqual(
     second.control().pins.map(({ tab, model }) => ({ tab, model })),
     [
-      { tab: SIDE_PANEL_TAB.WORK, model: undefined },
+      { tab: SIDE_PANEL_TAB.CALL, model: undefined },
       { tab: { agent: AGENT }, model: "openai/gpt-5.5" },
     ],
   );
 });
 
 test("a file shown from its pin before the plan's code is read is chosen once it is, though other tabs arrive first", () => {
-  const { TRANSCRIPT, BOARD, CODE } = SIDE_PANEL_TAB;
+  const { CALL, BOARD, CODE } = SIDE_PANEL_TAB;
   const panel = mountStood({
-    plan: { id: PLAN, holds: { [TRANSCRIPT]: true } },
+    plan: { id: PLAN, holds: { [CALL]: true } },
     agents: [],
     subagents: [],
   });
   act(() => panel.control().onShow(PLAN, { file: ROLES }));
-  assert.equal(panel.control().tab, TRANSCRIPT, "standing in while the file is unread");
+  assert.equal(panel.control().tab, CALL, "standing in while the file is unread");
 
   panel.render({
-    plan: { id: PLAN, holds: { [TRANSCRIPT]: true, [BOARD]: true } },
+    plan: { id: PLAN, holds: { [CALL]: true, [BOARD]: true } },
     agents: [],
     subagents: [],
   });
   panel.render({
-    plan: { id: PLAN, holds: { [TRANSCRIPT]: true, [BOARD]: true, [CODE]: true } },
+    plan: { id: PLAN, holds: { [CALL]: true, [BOARD]: true, [CODE]: true } },
     agents: [],
     subagents: [],
     files: [ROLES],
@@ -781,11 +796,11 @@ test("the tabs an earlier version pinned in each plan's strip read as pinned to 
     }),
   );
   const panel = mount([AGENT]);
-  act(() => panel.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+  act(() => panel.control().onPin(SIDE_PANEL_TAB.CALL, "Call"));
 
   const pinned = panel.control().pins.map(({ plan, tab, label }) => ({ plan, tab, label }));
   assert.deepEqual(pinned, [
-    { plan: PLAN, tab: SIDE_PANEL_TAB.WORK, label: "Work" },
+    { plan: PLAN, tab: SIDE_PANEL_TAB.CALL, label: "Call" },
     { plan: PLAN, tab: SIDE_PANEL_TAB.CODE, label: "Code" },
     { plan: PLAN, tab: { agent: AGENT }, label: "Coding agent" },
     { plan: OTHER_PLAN, tab: { file: "src/team/roles.ts" }, label: "roles.ts" },
@@ -799,15 +814,15 @@ test("the tabs an earlier version pinned in each plan's strip read as pinned to 
 
 test("closing the tab shown returns to the one viewed before it, wherever it stands in the strip, and closing another leaves the one shown", () => {
   const panel = mount([]);
-  const { BOARD, CODE, TRANSCRIPT, WORK } = SIDE_PANEL_TAB;
-  for (const tab of [CODE, TRANSCRIPT, WORK]) act(() => panel.control().onChoose(tab));
-  act(() => panel.control().onClose(WORK));
-  assert.equal(panel.control().tab, TRANSCRIPT);
+  const { BOARD, CODE, CALL } = SIDE_PANEL_TAB;
+  for (const tab of [CODE, CALL]) act(() => panel.control().onChoose(tab));
+  act(() => panel.control().onClose(CALL));
+  assert.equal(panel.control().tab, CODE);
 
-  // Board stands two tabs from Work, so the neighbour would be Transcript.
+  // Board stands two tabs from Call, so the neighbour would be Code.
   act(() => panel.control().onChoose(BOARD));
-  act(() => panel.control().onChoose(WORK));
-  act(() => panel.control().onClose(WORK));
+  act(() => panel.control().onChoose(CALL));
+  act(() => panel.control().onClose(CALL));
   assert.equal(panel.control().tab, BOARD);
 
   act(() => panel.control().onClose(CODE));
@@ -816,45 +831,50 @@ test("closing the tab shown returns to the one viewed before it, wherever it sta
 
 test("each plan returns to the tabs viewed on it, not those viewed on another", () => {
   const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
-  const { BOARD, CODE, TRANSCRIPT, WORK } = SIDE_PANEL_TAB;
+  const { BOARD, CODE, CALL } = SIDE_PANEL_TAB;
   const used = usedPlan(PLAN).holds;
   const panel = mountOn(used);
   act(() => panel.control().onChoose(BOARD));
-  act(() => panel.control().onChoose(WORK));
+  act(() => panel.control().onChoose(CALL));
 
   panel.standOn(used, OTHER_PLAN);
-  act(() => panel.control().onChoose(TRANSCRIPT));
+  act(() => panel.control().onChoose(BOARD));
   act(() => panel.control().onChoose(CODE));
 
   // Code, chosen last on the other plan, is the tab this one shows; closing it returns to this plan's own.
   panel.standOn(used, PLAN);
   assert.equal(panel.control().tab, CODE);
   act(() => panel.control().onClose(CODE));
-  assert.equal(panel.control().tab, WORK);
+  assert.equal(panel.control().tab, CALL);
 });
 
 test("with every tab viewed closed, closing the one shown chooses the tab after it, else the one before", () => {
+  const { BOARD, CODE, CALL } = SIDE_PANEL_TAB;
   const panel = mount([]);
-  const { BOARD, CODE, TRANSCRIPT, WORK } = SIDE_PANEL_TAB;
-  act(() => panel.control().onChoose(TRANSCRIPT));
+  act(() => panel.control().onChoose(CODE));
   act(() => panel.control().onClose(BOARD));
-  act(() => panel.control().onClose(TRANSCRIPT));
-  assert.equal(panel.control().tab, WORK);
-  act(() => panel.control().onClose(WORK));
-  assert.equal(panel.control().tab, CODE);
+  act(() => panel.control().onClose(CODE));
+  assert.equal(panel.control().tab, CALL, "the tab after it");
+
+  window.localStorage.removeItem("luke.sidePanel");
+  const another = mount([]);
+  act(() => another.control().onChoose(CALL));
+  act(() => another.control().onClose(BOARD));
+  act(() => another.control().onClose(CALL));
+  assert.equal(another.control().tab, CODE, "the one before, where none stands after it");
 });
 
 test("the tabs viewed on a plan are kept across a launch, a file's dropping out as its tab does", () => {
   const first = mount([AGENT], [], [INVITE]);
-  act(() => first.control().onChoose(SIDE_PANEL_TAB.WORK));
+  act(() => first.control().onChoose(SIDE_PANEL_TAB.CALL));
   act(() => first.control().onOpenFile({ path: INVITE }));
   act(() => first.control().onChoose(SIDE_PANEL_TAB.CODE));
 
   const second = mount([AGENT], [], [INVITE]);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.CODE);
   act(() => second.control().onClose(SIDE_PANEL_TAB.CODE));
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.WORK);
-  act(() => second.control().onClose(SIDE_PANEL_TAB.WORK));
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.CALL);
+  act(() => second.control().onClose(SIDE_PANEL_TAB.CALL));
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
@@ -872,17 +892,17 @@ test("an agent's tab an earlier version kept in the panel is let go: chosen, it 
           opened: [],
           closed: [],
           recent: [SIDE_PANEL_TAB.CODE, { agent: AGENT }],
-          order: [{ agent: AGENT }, SIDE_PANEL_TAB.WORK],
+          order: [{ agent: AGENT }, SIDE_PANEL_TAB.CALL],
         },
       },
     }),
   );
   const panel = mount([AGENT]);
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.WORK, "the first of the strip, as moved");
-  assert.deepEqual(panel.control().order, [SIDE_PANEL_TAB.WORK]);
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
-  act(() => panel.control().onClose(SIDE_PANEL_TAB.TRANSCRIPT));
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.WORK, "the tab shown before it, not an agent's");
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CALL, "the first of the strip, as moved");
+  assert.deepEqual(panel.control().order, [SIDE_PANEL_TAB.CALL]);
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.BOARD));
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CALL, "the tab shown before it, not an agent's");
 
   const kept = window.localStorage.getItem("luke.sidePanel") ?? "";
   assert.equal(kept.includes(AGENT), false);

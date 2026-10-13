@@ -10,17 +10,21 @@ import { afterEach, test } from "vitest";
 import { selectedText, sheetStyle } from "#testing/css-rules";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
-import { PlanWork } from "./plan-work";
+import { PlanCall } from "./plan-call";
 import {
   TranscriptOpeningCall,
   TranscriptReasoning,
   TranscriptSubagent,
   TranscriptTool,
 } from "./transcript-blocks";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { CALL_KIND } from "./turn-rows";
 
+/** A plan on which nothing was said yet, so the Call tab draws Luke's turns alone. */
+const NO_CALLS: TranscriptRegion = { kind: TRANSCRIPT_REGION.EMPTY };
+
 /**
- * The Work tab and a coding agent's tab draw a turn's reasoning and its
+ * The Call tab and a coding agent's tab draw a turn's reasoning and its
  * tool calls through the same rows, so what a reader learns on one tab
  * holds on the other: a row is closed until clicked, and opens onto what
  * the call was given and what it answered.
@@ -60,7 +64,7 @@ const OUTPUT = "invite.ts";
 /** What the described call says it is for. */
 const DESCRIPTION = "List the sources";
 
-/** A repository call on the Work tab's wire, with what it is for where the model said it. */
+/** A repository call on the planning work wire, with what it is for where the model said it. */
 function workCall(id: string, command: string, description?: string) {
   return {
     type: PLAN_WORK_PART.TOOL,
@@ -100,7 +104,9 @@ function surfaces(
   callsFirst: boolean,
   description?: string,
 ): readonly (readonly [string, ReactElement])[] {
-  const work = createElement(PlanWork, {
+  const work = createElement(PlanCall, {
+    region: NO_CALLS,
+    onRetry: () => undefined,
     callLive: false,
     earlier: undefined,
     onLoadEarlier: () => Promise.resolve(),
@@ -152,7 +158,7 @@ function surfaces(
     onRetry: () => undefined,
   });
   return [
-    ["the Work tab", work],
+    ["the Call tab", work],
     ["an agent's tab", agent],
   ];
 }

@@ -398,13 +398,13 @@ function planHolds(
         ? undefined
         : board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0,
     [SIDE_PANEL_TAB.CODE]: shownCode === undefined ? undefined : shownCode.length > 0,
-    [SIDE_PANEL_TAB.TRANSCRIPT]:
-      transcript.kind === TRANSCRIPT_REGION.READY
+    // A call holds something once a line was said on it or Luke worked on the plan, and nothing yet while neither has been read.
+    [SIDE_PANEL_TAB.CALL]:
+      transcript.kind === TRANSCRIPT_REGION.READY || (work?.length ?? 0) > 0
         ? true
-        : transcript.kind === TRANSCRIPT_REGION.EMPTY
+        : transcript.kind === TRANSCRIPT_REGION.EMPTY && work !== undefined
           ? false
           : undefined,
-    [SIDE_PANEL_TAB.WORK]: work === undefined ? undefined : work.length > 0,
   };
 }
 
@@ -1193,7 +1193,7 @@ export function usePlansTab(input: {
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
-    // notification opens it, or the side panel's Transcript or Work, asked to
+    // notification opens it, or the side panel's Call tab, asked to
     // bring the call or the turn into view once it draws.
     onShowSource: (planId, source) => {
       if (source.kind === REVISION_SOURCE.AGENT) {
@@ -1203,10 +1203,7 @@ export function usePlansTab(input: {
       setInboxView(undefined);
       setHistoryFor(undefined);
       setReveal({ planId, source });
-      sidePanel.onShow(
-        planId,
-        source.kind === REVISION_SOURCE.CALL ? SIDE_PANEL_TAB.TRANSCRIPT : SIDE_PANEL_TAB.WORK,
-      );
+      sidePanel.onShow(planId, SIDE_PANEL_TAB.CALL);
     },
     // The call card's way back lands where the plan's call bar is in sight.
     secondCall: {

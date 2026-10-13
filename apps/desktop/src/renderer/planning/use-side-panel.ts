@@ -28,8 +28,8 @@ import { MAIN_TAB } from "./use-main-tabs";
  *
  * The plan's column holds the plan's document and its coding agents
  * (`use-main-tabs.ts`); what supports them (the whiteboard, the code Luke
- * has on screen, what was said on the plan's calls, and what Luke's
- * planning model wrote and ran on them) stands in a panel at the window's
+ * has on screen, and the plan's calls with what Luke's planning model
+ * wrote and ran on them) stands in a panel at the window's
  * right that the developer opens and closes, as every devtool window's
  * secondary sidebar does. What opens it on its own is Luke drawing on a
  * plan's board or showing its code (`use-panel-arrivals.ts`), each time he
@@ -47,8 +47,8 @@ import { MAIN_TAB } from "./use-main-tabs";
  * window's rather than any plan's, so a chosen tab the open plan does not
  * have reads as the first it does.
  *
- * The four fixed kinds are a constant. A subagent's tab, opened from its
- * call in the Work tab, from the "+", or from a delegation's row in an
+ * The three fixed kinds are a constant. A subagent's tab, opened from its
+ * call in the Call tab, from the "+", or from a delegation's row in an
  * agent's tab, is held to the open plan's work, or to the plan's open
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
@@ -126,23 +126,25 @@ import { MAIN_TAB } from "./use-main-tabs";
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
-  TRANSCRIPT: "transcript",
-  WORK: "work",
+  CALL: "call",
 } as const;
 
 /**
  * The kinds an earlier version had and this one does not, which what it kept
  * may still name: History, whose versions now take the whole window
- * (`desktop-version-history.tsx`). Note that a kind is retired here rather
+ * (`desktop-version-history.tsx`), and Transcript and Work, which the Call
+ * tab drew together (`plan-call.tsx`). Note that a kind is retired here rather
  * than deleted, because a kept state naming one would otherwise not read at
  * all and lose every other choice it holds.
  */
 const RETIRED_SIDE_PANEL_TAB = {
   HISTORY: "history",
+  TRANSCRIPT: "transcript",
+  WORK: "work",
 } as const;
 
 type RetiredSidePanelTab = (typeof RETIRED_SIDE_PANEL_TAB)[keyof typeof RETIRED_SIDE_PANEL_TAB];
@@ -203,8 +205,7 @@ export interface SidePanelTabKind {
 export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.BOARD]: { label: "Board" },
   [SIDE_PANEL_TAB.CODE]: { label: "Code" },
-  [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript" },
-  [SIDE_PANEL_TAB.WORK]: { label: "Work" },
+  [SIDE_PANEL_TAB.CALL]: { label: "Call" },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order the "+" offers them and a plan whose order holds none of them stands them in. */

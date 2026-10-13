@@ -1,7 +1,7 @@
 import { type RefObject, useEffect } from "react";
 
 /**
- * reveal-in-log.ts -- brings one mark in a conversation's log to the log's top once it is drawn: what a version's Open asks of the Transcript and Work tabs.
+ * reveal-in-log.ts -- brings one mark in a conversation's log to the log's top once it is drawn: what a version's Open asks of the Transcript and Call tabs.
  *
  * The tab draws a mark (`REVEAL_MARK`) just before the call or turn asked
  * for, and once what it draws has landed this scrolls the log the mark

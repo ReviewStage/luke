@@ -71,7 +71,7 @@ export type ReadFileWindow = (window: PlanFileRequest) => Promise<PlanningFileAn
 /**
  * The row standing above or below the drawn lines while the file goes on
  * past them: the next window is read as the row scrolls into view, or on
- * its press after a read that failed, as the Work tab reads earlier work.
+ * its press after a read that failed, as the Call tab reads earlier work.
  */
 function EdgeRow({
   label,

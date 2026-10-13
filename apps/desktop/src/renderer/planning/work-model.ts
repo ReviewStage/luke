@@ -26,13 +26,13 @@ import {
 } from "./turn-rows";
 
 /**
- * work-model.ts -- the open plan's Work tab as an agent's transcript reads: each planning turn one of Luke's messages, in the agent tab's own parts.
+ * work-model.ts -- the open plan's Call tab as an agent's transcript reads: each planning turn one of Luke's messages, in the agent tab's own parts.
  *
  * The service sends the planning model's turns already read: each call
  * named by kind with the one input a reader looks for first set apart as
  * its subject, and every text cut to the wire's bound. Each turn is turned
  * here into the message a coding agent's turn is (`CodingAgentMessage`),
- * its parts in the AI SDK's own words, so the Work tab draws it with the
+ * its parts in the AI SDK's own words, so the Call tab draws it with the
  * agent tab's own component (`agent-tab.tsx`), and a call says beside its
  * part what the wire read it as (`SaidCall`), which its row draws. A worker
  * is a delegation's part, which the agent tab draws as a subagent's row,
@@ -40,9 +40,6 @@ import {
  * delegation answers it. A stop names the subagent it stopped by that
  * subagent's job, wherever among the turns its start stands.
  */
-
-/** What the tab says while no turn has worked on the open plan. */
-export const WORK_EMPTY_LINE = "When Luke works on a call, what he reads and runs appears here.";
 
 /** A worker's call: its kind, its subject apart, its state, and whether it still moves. */
 export interface WorkCallRow {

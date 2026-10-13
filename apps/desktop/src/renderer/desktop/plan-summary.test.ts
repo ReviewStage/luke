@@ -107,8 +107,7 @@ const RESTING_WORK: PlansControl["work"] = {
 const HOLDS: PlanHolds = {
   [SIDE_PANEL_TAB.BOARD]: true,
   [SIDE_PANEL_TAB.CODE]: false,
-  [SIDE_PANEL_TAB.TRANSCRIPT]: true,
-  [SIDE_PANEL_TAB.WORK]: false,
+  [SIDE_PANEL_TAB.CALL]: true,
 };
 
 const roots: Root[] = [];
@@ -362,7 +361,7 @@ test("the pinned summary lists what the two pickers open, under their headings, 
   assert.equal(modeOf(page), "column");
 
   assert.deepEqual(listed(summary), [
-    ["Tabs", ["Board", "Transcript"]],
+    ["Tabs", ["Board", "Call"]],
     ["Coding agents", [AGENT.title]],
     ["Subagents", [JOB]],
     ["Files", ["invite.ts"]],
@@ -384,14 +383,14 @@ test("the Inbox leads Tabs while the plan holds an inbox item or its tab is open
   ];
   const waiting = mount(false, SHOWN, false, false, [], items);
   await settle();
-  assert.deepEqual(tabsOf(waiting), ["Inbox", "Board", "Transcript"]);
+  assert.deepEqual(tabsOf(waiting), ["Inbox", "Board", "Call"]);
   const counted = rowNamed(summaryOf(waiting), "Inbox");
   assert.equal(counted.textContent, "Inbox2 waiting");
   assert.equal(counted.lastElementChild?.textContent, "2 waiting");
   // Collapsed to its rail, the summary draws the panel's kinds alone.
   layOutColumn(800);
   assert.equal(modeOf(waiting), "rail");
-  assert.deepEqual(tabsOf(waiting), ["Board", "Transcript"]);
+  assert.deepEqual(tabsOf(waiting), ["Board", "Call"]);
   vi.restoreAllMocks();
   quit();
 
@@ -399,7 +398,7 @@ test("the Inbox leads Tabs while the plan holds an inbox item or its tab is open
   const answered = items.map((item) => ({ ...item, status: INBOX_STATUS.ANSWERED }));
   const settled = mount(false, SHOWN, false, false, [], answered);
   await settle();
-  assert.deepEqual(tabsOf(settled), ["Inbox", "Board", "Transcript"]);
+  assert.deepEqual(tabsOf(settled), ["Inbox", "Board", "Call"]);
   assert.equal(rowNamed(summaryOf(settled), "Inbox").textContent, "Inbox");
   quit();
 
@@ -409,14 +408,14 @@ test("the Inbox leads Tabs while the plan holds an inbox item or its tab is open
   installScrollIntoView();
   const empty = mount(false, SHOWN, false, false, [], []);
   await settle();
-  assert.deepEqual(tabsOf(empty), ["Board", "Transcript"]);
+  assert.deepEqual(tabsOf(empty), ["Board", "Call"]);
   press(empty, '.desktop-toolbar [aria-label="Open a tab"]');
   const open = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].find(
     (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Inbox",
   );
   assert.ok(open, "the column's + offers the Inbox");
   act(() => open.click());
-  assert.deepEqual(tabsOf(empty), ["Inbox", "Board", "Transcript"]);
+  assert.deepEqual(tabsOf(empty), ["Inbox", "Board", "Call"]);
   assert.equal(rowNamed(summaryOf(empty), "Inbox").textContent, "Inbox");
 });
 
@@ -494,11 +493,11 @@ test("a panel's row opens the panel on its tab, and a column with room still hol
   const page = mount();
   layOutColumn(1040);
 
-  act(() => rowNamed(summaryOf(page), "Transcript").click());
+  act(() => rowNamed(summaryOf(page), "Call").click());
 
   assert.equal(
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
-    "Transcript",
+    "Call",
   );
   assert.equal(modeOf(page), "column");
   assert.equal(summaryButton(page).getAttribute("aria-pressed"), "true");
@@ -645,7 +644,7 @@ test("a column too narrow to keep the document at its measure beside the summary
   layOutColumn(1039);
   const rail = summaryOf(page);
   assert.equal(modeOf(page), "rail");
-  assert.deepEqual(listed(rail), [["Tabs", ["Board", "Transcript"]]]);
+  assert.deepEqual(listed(rail), [["Tabs", ["Board", "Call"]]]);
   assert.equal(rail.querySelector(".plan-summary-heading"), null, "a rail says no headings");
   assert.equal(hover(rowNamed(rail, "Board")), "Board");
 
@@ -667,7 +666,7 @@ test("an open panel that leaves the column too narrow folds the summary to its r
   const hung = card();
   assert.ok(hung, "the card hangs");
   assert.equal(buttonOn(page), true);
-  assert.deepEqual(listed(hung)[0], ["Tabs", ["Board", "Transcript"]]);
+  assert.deepEqual(listed(hung)[0], ["Tabs", ["Board", "Call"]]);
   assert.equal(modeOf(page), "rail", "the rail stays under the card");
 });
 
@@ -727,7 +726,7 @@ test("the rail's chevron hangs the whole summary as a card, which Escape takes d
   const hung = card();
   assert.ok(hung, "the card hangs");
   assert.equal(chevron.getAttribute("aria-expanded"), "true");
-  assert.deepEqual(listed(hung)[0], ["Tabs", ["Board", "Transcript"]]);
+  assert.deepEqual(listed(hung)[0], ["Tabs", ["Board", "Call"]]);
   assert.ok(document.activeElement === rowNamed(hung, "Board"), "its first row takes the focus");
 
   const escapeKey = pressEscape();
@@ -826,12 +825,12 @@ test("choosing a row of the card takes it down and opens the row", () => {
   const hung = card();
   assert.ok(hung);
 
-  act(() => rowNamed(hung, "Transcript").click());
+  act(() => rowNamed(hung, "Call").click());
 
   assert.equal(card(), null);
   assert.equal(
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
-    "Transcript",
+    "Call",
   );
 });
 
