@@ -613,6 +613,35 @@ test("a provider's tools are read from its server once, and served from what was
   assert.equal(sessions(), 2);
 });
 
+test("a provider read-only by its allow-list answers only the tools it allows, whatever its server lists", async () => {
+  const slack = INTEGRATION_PROVIDER.SLACK;
+  const state = backing({ rows: new Map([[USER_ID, new Map([[slack, CONNECTED]])]]) });
+  const connect = connectState({
+    grants: new Set([USER_ID]),
+    server: mcpServerFake({
+      token: ISSUED_TOKEN,
+      pages: [
+        [
+          { name: "slack_search_public", description: "Search public channels." },
+          { name: "slack_send_message", description: "Send a message." },
+          { name: "slack_read_thread", description: "Read a thread." },
+        ],
+      ],
+    }),
+  });
+  const answer = await groupAnswer(
+    state,
+    connect,
+    signedIn("GET", "/api/account/integrations/tools?provider=slack")(),
+  );
+  assert.deepEqual(await answer.json(), {
+    tools: [
+      { name: "slack_search_public", description: "Search public channels." },
+      { name: "slack_read_thread", description: "Read a thread." },
+    ],
+  });
+});
+
 test("a path the group declares no route for is refused", async () => {
   const response = await groupAnswer(
     backing(),
