@@ -1,6 +1,6 @@
+import { AGENT_TOOL, EVE_TOOL, RETIRED_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   CODING_AGENT_TODO_STATUS,
-  CODING_AGENT_TODOS_TOOL,
   type CodingAgentTodos,
   codingAgentTodosInputSchema,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -8,13 +8,11 @@ import {
   INBOX_BLOCK,
   INBOX_FIELD,
   INBOX_RESPONSE,
-  INBOX_TOOL,
   type InboxPost,
   type InboxPostBlock,
   inboxPostInputSchema,
 } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
@@ -40,27 +38,6 @@ import { CALL_KIND, type CallKind, commandDescription, pageName, type SaidCall }
  * through it too, its row naming the item the Inbox tab draws. Nothing
  * here draws.
  */
-
-/** The tools a coding agent has, eve's, the hosted public reads, and Luke's own notes on the plan, to-do list, and inbox, by the names its parts carry, beside the provider-run web reads a transcript written before still names. */
-export const AGENT_TOOL = {
-  BASH: "bash",
-  READ_FILE: "read_file",
-  WRITE_FILE: "write_file",
-  APPLY_PATCH: "apply_patch",
-  GREP: "grep",
-  GLOB: "glob",
-  WEB_FETCH: "web_fetch",
-  WEB_SEARCH: "web_search",
-  SEARCH_WEB: "search_web",
-  READ_WEB_PAGE: "read_web_page",
-  LOAD_SKILL: "load_skill",
-  EDIT_PLAN: "edit_plan",
-  WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
-  POST_TO_INBOX: INBOX_TOOL.POST,
-  CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
-  READ_INBOX: INBOX_TOOL.READ,
-  SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
-} as const;
 
 export interface ToolCallView {
   readonly kind: CallKind;
@@ -391,7 +368,7 @@ function knownToolView(
         input: input === undefined ? textBlock("") : jsonBlock(input),
         output: output === undefined ? undefined : wordsOutput(output, "content"),
       };
-    case AGENT_TOOL.WEB_FETCH:
+    case RETIRED_TOOL.WEB_FETCH:
       return {
         kind: CALL_KIND.WEB_PAGE,
         subject: pageName(stringAt(input, "url") ?? ""),
@@ -406,7 +383,7 @@ function knownToolView(
         output: output === undefined ? undefined : wordsOutput(output, "text"),
       };
     case AGENT_TOOL.SEARCH_WEB:
-    case AGENT_TOOL.WEB_SEARCH:
+    case RETIRED_TOOL.WEB_SEARCH:
       return {
         kind: CALL_KIND.WEB_SEARCH,
         subject: stringAt(input, "query") ?? "",
@@ -475,6 +452,94 @@ function saidToolView(
   };
 }
 
+/** A repository command's answer as the planning model's tool journals it: the command's own output, or why it ran nothing. */
+function repositoryOutput(output: WireValue): ToolBlock {
+  const reason = stringAt(output, "reason");
+  if (stringAt(output, "status") === "not-run" && reason !== undefined) {
+    return textBlock(`Not run: ${reason}`);
+  }
+  return commandOutput(output);
+}
+
+/** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any. */
+function shownLines(input: WireValue | undefined): string {
+  const path = stringAt(input, "path") ?? "";
+  const start = isRecord(input) && isWireNumber(input.startLine) ? input.startLine : undefined;
+  if (start === undefined) return path;
+  const end = isRecord(input) && isWireNumber(input.endLine) ? input.endLine : start;
+  return end === start ? `${path}:${start}` : `${path}:${start}-${end}`;
+}
+
+/** A planning call whose input is one field the row names it by, its answer as its JSON. */
+function namedCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+  field: string | undefined,
+): ToolCallView {
+  return {
+    kind,
+    subject: field === undefined ? "" : (stringAt(input, field) ?? ""),
+    input: input === undefined ? textBlock("") : jsonBlock(input),
+    output: output === undefined ? undefined : jsonBlock(output),
+  };
+}
+
+/**
+ * A call of one of the planning model's own tools, or one eve gives a
+ * planning session, drawn from its part as a coding agent's call is: its
+ * kind and the one input a reader looks for first. A look at the board
+ * answers with an image of it, which is nothing to read, so it shows none.
+ */
+function planningToolView(
+  tool: string,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView | undefined {
+  switch (tool) {
+    case AGENT_TOOL.RUN_IN_REPOSITORY: {
+      const command = stringAt(input, "command") ?? "";
+      const description = commandDescription(stringAt(input, "description"));
+      return {
+        kind: CALL_KIND.COMMAND,
+        subject: command,
+        ...(description === undefined ? undefined : { description }),
+        input: { kind: TOOL_BLOCK.COMMAND, text: command },
+        output: output === undefined ? undefined : repositoryOutput(output),
+      };
+    }
+    case AGENT_TOOL.SHOW_CODE:
+      return {
+        ...namedCall(CALL_KIND.SHOW_CODE, input, output, undefined),
+        subject: shownLines(input),
+      };
+    case AGENT_TOOL.DRAW_ON_BOARD:
+      return namedCall(CALL_KIND.DRAW_ON_BOARD, input, output, undefined);
+    case AGENT_TOOL.LOOK_AT_BOARD:
+      return namedCall(CALL_KIND.LOOK_AT_BOARD, input, undefined, undefined);
+    case AGENT_TOOL.QUEUE_QUESTION:
+      return namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question");
+    case AGENT_TOOL.WITHDRAW_QUESTION:
+      return namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question");
+    case AGENT_TOOL.LIST_CODING_AGENTS:
+      return namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined);
+    case AGENT_TOOL.READ_CODING_AGENT:
+      return namedCall(CALL_KIND.READ_AGENT, input, output, "agentId");
+    case AGENT_TOOL.MESSAGE_CODING_AGENT:
+      return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
+    case AGENT_TOOL.START_CODING_AGENT:
+      return namedCall(CALL_KIND.START_AGENT, input, output, "task");
+    case AGENT_TOOL.END_CALL:
+      return namedCall(CALL_KIND.END_CALL, input, output, undefined);
+    case EVE_TOOL.TASK_WAIT:
+      return namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined);
+    case EVE_TOOL.TASK_CANCEL:
+      return namedCall(CALL_KIND.WORKER_CANCEL, input, output, undefined);
+    default:
+      return undefined;
+  }
+}
+
 /** How one tool call is drawn: its row and its body, from what its wire said of it, or else the part's input and output. */
 export function toolCallView(input: {
   readonly tool: string;
@@ -484,7 +549,8 @@ export function toolCallView(input: {
 }): ToolCallView {
   if (input.said !== undefined) return saidToolView(input.said, input.input, input.output);
   return (
-    knownToolView(input.tool, input.input, input.output) ?? {
+    knownToolView(input.tool, input.input, input.output) ??
+    planningToolView(input.tool, input.input, input.output) ?? {
       kind: CALL_KIND.OTHER,
       subject: input.tool,
       input: input.input === undefined ? textBlock("") : jsonBlock(input.input),

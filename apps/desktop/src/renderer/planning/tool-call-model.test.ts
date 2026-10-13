@@ -362,3 +362,41 @@ test("a coding agent's hosted public reads draw as the web reads they are: a sea
     text: "Invites expire.\n(output truncated)",
   });
 });
+
+test("the planning model's own calls draw from their parts as a coding agent's do: a repository command by its command and purpose, its answer or why it ran nothing, a shown range by its file and lines, a question by its words", () => {
+  const ran = toolCallView({
+    tool: "run_in_repository",
+    input: { command: "ls src", description: "List the sources" },
+    output: { status: "ran", exitCode: 0, stdout: "queue.ts\n", stderr: "" },
+  });
+  assert.equal(ran.kind, CALL_KIND.COMMAND);
+  assert.equal(ran.subject, "ls src");
+  assert.equal(ran.description, "List the sources");
+  assert.deepEqual(ran.output, { kind: TOOL_BLOCK.TEXT, text: "queue.ts" });
+  const refused = toolCallView({
+    tool: "run_in_repository",
+    input: { command: "ls" },
+    output: { status: "not-run", reason: "The plan names no repository." },
+  });
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Not run: The plan names no repository.",
+  });
+
+  const shown = toolCallView({
+    tool: "show_code",
+    input: { path: "src/invites.ts", startLine: 12, endLine: 30 },
+    output: undefined,
+  });
+  assert.deepEqual([shown.kind, shown.subject], [CALL_KIND.SHOW_CODE, "src/invites.ts:12-30"]);
+  const asked = toolCallView({
+    tool: "queue_question",
+    input: { question: "Who can invite?", recommendation: "Admins." },
+    output: undefined,
+  });
+  assert.deepEqual([asked.kind, asked.subject], [CALL_KIND.QUEUE_QUESTION, "Who can invite?"]);
+  const looked = toolCallView({ tool: "look_at_board", input: {}, output: { image: "…" } });
+  assert.deepEqual([looked.kind, looked.output], [CALL_KIND.LOOK_AT_BOARD, undefined]);
+  const waited = toolCallView({ tool: "task_wait", input: {}, output: "1 task settled." });
+  assert.equal(waited.kind, CALL_KIND.WORKER_WAIT);
+});

@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -61,7 +62,6 @@ import {
 import { CopyMessageAction } from "./copy-message";
 import type { SkillSource } from "./skill-picker";
 import {
-  AGENT_TOOL,
   cardTitle,
   delegationView,
   todoFocus,

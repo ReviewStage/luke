@@ -1,3 +1,4 @@
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -33,7 +34,7 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
-import { AGENT_TOOL, todosView } from "./tool-call-model";
+import { todosView } from "./tool-call-model";
 import {
   CALL_KIND,
   type CallKind,
@@ -832,7 +833,11 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
 
 /** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.said?.kind === CALL_KIND.WORKER;
+  return (
+    part.tool === CODING_AGENT_DELEGATE_TOOL ||
+    part.tool === EVE_TOOL.WORKER ||
+    part.said?.kind === CALL_KIND.WORKER
+  );
 }
 
 /** Whether a part is a delegation to a worker (`delegates`). */
@@ -848,7 +853,10 @@ export function isDelegation(
  * refused, which answers no agent.
  */
 export function startedAgentOf(part: AgentPart): string | undefined {
-  if (part.kind !== AGENT_PART.TOOL || part.said?.kind !== CALL_KIND.START_AGENT) return undefined;
+  if (part.kind !== AGENT_PART.TOOL) return undefined;
+  const starts =
+    part.said?.kind === CALL_KIND.START_AGENT || part.tool === AGENT_TOOL.START_CODING_AGENT;
+  if (!starts) return undefined;
   const agent = isRecord(part.output) ? part.output.agent : undefined;
   return isRecord(agent) && isWireString(agent.id) ? agent.id : undefined;
 }
