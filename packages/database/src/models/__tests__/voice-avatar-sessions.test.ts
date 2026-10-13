@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { db } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -11,6 +12,7 @@ import {
   closeAvatarSession,
   openAvatarSession,
   openAvatarSessionsOf,
+  openAvatarSessionsOfEndedCalls,
 } from "../voice-avatar-sessions.js";
 
 /**
@@ -120,5 +122,41 @@ it.layer(getTestDB())("the voice avatar sessions", (it) => {
       assert.deepEqual(again, Option.none());
       assert.equal((yield* openAvatarSessionsOf(call)).length, 1);
     }),
+  );
+
+  it.effect(
+    "the sessions read as left on ended calls are the open ones of closed calls alone",
+    () =>
+      Effect.gen(function* () {
+        const ended = yield* openCall;
+        const running = yield* openCall;
+        const leftOpen = `avatar-${randomUUID()}`;
+        const alreadyClosed = `avatar-${randomUUID()}`;
+        const onRunning = `avatar-${randomUUID()}`;
+        for (const liveAvatarSessionId of [leftOpen, alreadyClosed]) {
+          yield* openAvatarSession({ ...ended, liveAvatarSessionId, startedAt: STARTED_AT });
+        }
+        yield* openAvatarSession({
+          ...running,
+          liveAvatarSessionId: onRunning,
+          startedAt: STARTED_AT,
+        });
+        yield* closeAvatarSession({
+          liveAvatarSessionId: alreadyClosed,
+          endedAt: STARTED_AT,
+          reason: AVATAR_END_REASON.USER,
+        });
+        yield* db
+          .update(voiceSessions)
+          .set({ closedAt: STARTED_AT })
+          .where(eq(voiceSessions.id, ended.voiceSessionId));
+
+        const read = yield* openAvatarSessionsOfEndedCalls({ limit: 1_000 });
+        const ours = read
+          .map((open) => open.liveAvatarSessionId)
+          .filter((id) => [leftOpen, alreadyClosed, onRunning].includes(id));
+
+        assert.deepEqual(ours, [leftOpen]);
+      }),
   );
 });

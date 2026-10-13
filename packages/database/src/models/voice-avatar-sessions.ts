@@ -15,7 +15,9 @@ import { InstantColumnSchema } from "./columns.js";
  * first close writes when and why it ended and the seconds it ran, and every
  * later close (the service's stop racing the hang-up, the sweep finding a
  * row the service already closed) changes nothing and answers those same
- * seconds. The open sessions of a call are read by the account that owns it.
+ * seconds. The open sessions of a call are read by the account that owns it;
+ * the one read across accounts is the sweep's, of the sessions still open on
+ * calls that have already closed, and it names no account's words.
  */
 
 type AvatarSessionEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
@@ -39,6 +41,11 @@ export interface AvatarSessionClosing {
 export interface AvatarSessionsQuery {
   readonly userId: string;
   readonly voiceSessionId: string;
+}
+
+/** How many of the sessions left open on closed calls one sweep reads. */
+export interface EndedCallAvatarsQuery {
+  readonly limit: number;
 }
 
 /** An avatar session still open, as a stop reads it. */
@@ -155,6 +162,22 @@ const findOpen = SqlSchema.findAll({
       .orderBy(asc(voiceAvatarSessions.startedAt)),
 });
 
+const findOpenOnEndedCalls = SqlSchema.findAll({
+  Request: Schema.Struct({ limit: Schema.Number }),
+  Result: Schema.Struct({ liveAvatarSessionId: Schema.String, startedAt: InstantColumnSchema }),
+  execute: ({ limit }) =>
+    db
+      .select({
+        liveAvatarSessionId: voiceAvatarSessions.liveAvatarSessionId,
+        startedAt: voiceAvatarSessions.startedAt,
+      })
+      .from(voiceAvatarSessions)
+      .innerJoin(voiceSessions, eq(voiceSessions.id, voiceAvatarSessions.voiceSessionId))
+      .where(and(isNull(voiceAvatarSessions.endedAt), isNotNull(voiceSessions.closedAt)))
+      .orderBy(asc(voiceAvatarSessions.startedAt))
+      .limit(limit),
+});
+
 /**
  * Records an avatar session as started on the voice session named, and
  * answers the row's id; nothing where the account does not own that voice
@@ -191,4 +214,15 @@ export function openAvatarSessionsOf(
   query: AvatarSessionsQuery,
 ): AvatarSessionEffect<readonly OpenAvatarSession[]> {
   return findOpen(query);
+}
+
+/**
+ * The avatar sessions still open on calls already closed, oldest first and
+ * at most `limit`, across every account: what the sweep stops, since a call
+ * that has ended has no voice left for its avatar to show.
+ */
+export function openAvatarSessionsOfEndedCalls(
+  query: EndedCallAvatarsQuery,
+): AvatarSessionEffect<readonly OpenAvatarSession[]> {
+  return findOpenOnEndedCalls(query);
 }

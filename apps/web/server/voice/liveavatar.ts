@@ -27,10 +27,9 @@ import {
   type WireValue,
 } from "../core.js";
 
-/** Where the deployment holds Luke's LiveAvatar key and the stock avatar a call shows. */
+/** Where the deployment holds Luke's LiveAvatar key. */
 export const LIVEAVATAR_ENVIRONMENT = {
   API_KEY: "LIVEAVATAR_API_KEY",
-  AVATAR_ID: "LUKE_AVATAR_ID",
 } as const;
 
 const LIVEAVATAR_DEFAULTS = {
