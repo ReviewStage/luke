@@ -147,10 +147,11 @@ function readPageFile(
   sandbox: NonNullable<PageToolBinding["sandbox"]>,
   path: string,
 ): Effect.Effect<Result.Result<string, string>> {
-  if (isSecretFile(path)) return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.SECRET));
+  // Note that the rule reads the path as resolved, because `x/.env/.` names the `.env` it spells around.
+  const resolved = posix.resolve(sandbox.checkout, path);
+  if (isSecretFile(resolved)) return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.SECRET));
   return Effect.gen(function* () {
     const opened = yield* Effect.tryPromise(() => sandbox.door());
-    const resolved = posix.resolve(sandbox.checkout, path);
     const stream = yield* Effect.tryPromise(() => opened.readFile({ path: resolved }));
     if (stream === null) return Result.fail(`${SHOW_PAGE_REFUSAL.NO_FILE} ${path}`);
     const text = yield* readBoundedText(stream);

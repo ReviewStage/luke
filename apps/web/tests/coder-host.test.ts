@@ -952,7 +952,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       }),
   );
 
-  it("a sandbox counts as opened by a sandbox tool's call or a message received with files, and by no words alone or other call", () => {
+  it("a sandbox counts as opened by a sandbox tool's call, a page read from a file, or a message received with files, and by no words alone or other call", () => {
     const turnId = "turn_0";
     const sequence = 0;
     const received = (
@@ -962,14 +962,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         type: "message.received",
         data: { turnId, sequence, message: "Match this mock", parts },
       });
-    const requested = (toolName: string) =>
+    const requested = (toolName: string, input: Record<string, string> = {}) =>
       stamped({
         type: "actions.requested",
         data: {
           turnId,
           sequence,
           stepIndex: 0,
-          actions: [{ kind: "tool-call", callId: "call-1", toolName, input: {} }],
+          actions: [{ kind: "tool-call", callId: "call-1", toolName, input }],
         },
       });
     assert.equal(
@@ -985,6 +985,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
     assert.equal(opensSandbox(received([{ type: "text", text: "Match this mock" }])), false);
     assert.equal(opensSandbox(received(undefined)), false);
     assert.equal(opensSandbox(requested(CODER_TOOL.SEARCH_WEB)), false);
+    assert.equal(
+      opensSandbox(requested(CODER_TOOL.SHOW_PAGE, { title: "Funnel", path: "f.html" })),
+      true,
+    );
+    assert.equal(
+      opensSandbox(requested(CODER_TOOL.SHOW_PAGE, { title: "Funnel", html: "<p>" })),
+      false,
+    );
   });
 
   it.effect("a title call that fails leaves the agent untitled", () =>

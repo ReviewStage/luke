@@ -91,14 +91,18 @@ export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
 
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
- * a sandbox tool, or a message received with files, which eve stages in the
- * sandbox before the turn opens, opening it to do so.
+ * a sandbox tool, or for a page read from a file in the sandbox, or a
+ * message received with files, which eve stages in the sandbox before the
+ * turn opens, opening it to do so.
  */
 export function opensSandbox(event: MessageStreamEvent): boolean {
   switch (event.type) {
     case "actions.requested":
       return event.data.actions.some(
-        (action) => action.kind === "tool-call" && SANDBOX_TOOLS.has(action.toolName),
+        (action) =>
+          action.kind === "tool-call" &&
+          (SANDBOX_TOOLS.has(action.toolName) ||
+            (action.toolName === CODER_TOOL.SHOW_PAGE && "path" in action.input)),
       );
     case "message.received":
       return event.data.parts?.some((part) => part.type === "file") ?? false;

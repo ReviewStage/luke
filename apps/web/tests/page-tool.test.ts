@@ -162,6 +162,10 @@ it.layer(getTestDB())("show_page", (it) => {
         refused(SHOW_PAGE_REFUSAL.SECRET),
       );
       assert.deepEqual(
+        yield* show(agent, { title: "Funnel", path: "nested/../.env/." }),
+        refused(SHOW_PAGE_REFUSAL.SECRET),
+      );
+      assert.deepEqual(
         yield* show(agent, { title: "Funnel", path: "missing.html" }),
         refused(`${SHOW_PAGE_REFUSAL.NO_FILE} missing.html`),
       );
