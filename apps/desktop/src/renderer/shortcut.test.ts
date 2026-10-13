@@ -28,8 +28,9 @@ test("a window chord reads as its glyphs set tight, modifiers in the order macOS
   );
 });
 
-test("a key is spelt as a Mac menu spells it: ↩ for Return, ⌫ for Delete, Esc, and the arrows", () => {
-  assert.equal(drawn({ chord: { key: SHORTCUT_KEY.ENTER } }).textContent, "⌘↩");
+test("a key is spelt as a Mac menu spells it: ⏎ for Return, ⌫ for Delete, Esc, and the arrows", () => {
+  // ⏎ is the system face's own Return mark; it has no ↩, which another face would draw off the line.
+  assert.equal(drawn({ chord: { key: SHORTCUT_KEY.ENTER } }).textContent, "⌘⏎");
   assert.equal(drawn({ chord: { key: SHORTCUT_KEY.BACKSPACE } }).textContent, "⌘⌫");
   assert.equal(drawn({ chord: { key: SHORTCUT_KEY.PLUS } }).textContent, "⌘+");
   assert.equal(drawn({ chord: { key: SHORTCUT_KEY.MINUS } }).textContent, "⌘−");
@@ -43,6 +44,24 @@ test("a system-wide key's accelerator is spelt by the same rule as the window's 
   // Whatever order an accelerator names its modifiers in, the chord reads in macOS's.
   assert.equal(drawn({ accelerator: "Command+Shift+K" }).textContent, "⇧⌘K");
   assert.equal(drawn({ accelerator: "CommandOrControl+Option+Ctrl+J" }).textContent, "⌃⌥⌘J");
+});
+
+test("each key is a glyph of its own, which the stylesheet sets on the capitals' line", () => {
+  const glyphs = (props: Parameters<typeof Shortcut>[0]) =>
+    [...drawn(props).children].map((glyph) => [glyph.className, glyph.textContent]);
+  assert.deepEqual(glyphs({ chord: APP_SHORTCUTS[APP_COMMAND.INBOX].chord }), [
+    ["shortcut-glyph", "⇧"],
+    ["shortcut-glyph", "⌘"],
+    ["shortcut-glyph", "I"],
+  ]);
+  assert.deepEqual(
+    glyphs({ accelerator: "Alt+Space" }),
+    [
+      ["shortcut-glyph", "⌥"],
+      ["shortcut-glyph", "Space"],
+    ],
+    "a key's name is one glyph, never a glyph per letter",
+  );
 });
 
 test("a chord is hidden from a reader unless it is spoken, since its control already names it", () => {

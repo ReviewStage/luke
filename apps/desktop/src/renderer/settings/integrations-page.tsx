@@ -4,7 +4,6 @@ import {
 } from "@sidecar/hosted/integration-view";
 import {
   INTEGRATION_NAME,
-  INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
@@ -38,17 +37,6 @@ import { SettingsGroup } from "./settings-group";
  * build; nothing the service said beyond its status words is drawn.
  */
 
-/**
- * What a provider asks of the developer before they sign in, where its own
- * sign-in hides a choice worth making: the one instruction a row carries
- * besides where it stands. Only Sentry's does.
- */
-function connectHint(provider: IntegrationProvider): string | undefined {
-  return provider === INTEGRATION_PROVIDER.SENTRY
-    ? "Untick write access on Sentry's sign-in to keep it read-only."
-    : undefined;
-}
-
 const PAGE_LINE = {
   CONNECTED: "Connected",
   SIGNED_OUT: "Sign in to connect integrations.",
@@ -60,7 +48,7 @@ const PAGE_LINE = {
 /**
  * The line under a row's name: where the connection stands, or nothing where
  * the row's own control already says it — a Connect, Not available, or a row
- * whose status has not been read — save a provider's hint beside its Connect.
+ * whose status has not been read.
  */
 function rowLine(
   provider: IntegrationProvider,
@@ -75,7 +63,6 @@ function rowLine(
     case INTEGRATION_STATUS.EXPIRED:
       return "Sign-in expired.";
     case INTEGRATION_STATUS.DISCONNECTED:
-      return connectHint(provider);
     case undefined:
     case INTEGRATION_STATUS.UNAVAILABLE:
       return undefined;

@@ -41,6 +41,8 @@ let opens = true;
 let readFails = false;
 /** Where a Connect waits before the host answers it, when the test holds it. */
 let connectHeld: Promise<void> | undefined;
+/** Where the providers but Linear stand: offering nothing, unless the test gives them a connector. */
+let others: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -58,9 +60,9 @@ function answer(request: Act): Promise<ActOutcome> {
         done({
           integrations: {
             linear: standing,
-            notion: INTEGRATION_STATUS.UNAVAILABLE,
-            sentry: INTEGRATION_STATUS.UNAVAILABLE,
-            slack: INTEGRATION_STATUS.UNAVAILABLE,
+            notion: others,
+            sentry: others,
+            slack: others,
           },
         }),
       );
@@ -85,6 +87,7 @@ beforeEach(() => {
   opens = true;
   connectHeld = undefined;
   readFails = false;
+  others = INTEGRATION_STATUS.UNAVAILABLE;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -155,6 +158,17 @@ test("a disconnected account is offered Connect, which sends the browser and rea
     sent.map((request) => request.kind),
     [ACT_KIND.INTEGRATIONS_STATUS, ACT_KIND.INTEGRATIONS_CONNECT, ACT_KIND.INTEGRATIONS_STATUS],
   );
+});
+
+test("every provider not yet connected is its mark, its name, and Connect, with no instruction under it", async () => {
+  others = INTEGRATION_STATUS.DISCONNECTED;
+  const page = await mount();
+  const rows = [...page.querySelectorAll<HTMLElement>("[data-search-anchor]")];
+  assert.equal(rows.length, 4, "every provider has its row");
+  for (const row of rows) {
+    assert.equal(line(row), undefined, "Connect says it all");
+    assert.ok(button(row, "Connect"));
+  }
 });
 
 test("a sign-in found expired while Connect was answering stays expired once the browser is sent", async () => {

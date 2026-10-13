@@ -324,6 +324,7 @@ function choose(words: string): void {
 test("⌘K lists the commands the window can run now under Actions, each with its chord at the row's end", () => {
   mountWindow(PANEL_TAB.PLANS);
   openPalette();
+
   pressFilter("Actions");
   const listed = rows();
   for (const offered of ["Copy plan · ⇧⌘C", "Permanently delete plan · ⌘⌫", "Settings · ⌘,"]) {
@@ -361,21 +362,63 @@ test("All lists each kind's best few under its heading, and a kind's filter list
   assert.ok(rows().length > 5, "the Actions filter lists every action offered");
 });
 
-test("⌘] and ⌘[ step through the filters, wrapping at the ends, and never reach the window's Back and Forward", () => {
-  const asked = mountWindow(PANEL_TAB.PLANS);
+/** Puts the search field's caret, or its selection, where given. */
+function caret(input: HTMLInputElement, start: number, end = start): void {
+  input.setSelectionRange(start, end);
+}
+
+/** Presses an arrow in the field, answering whether the field kept it to move its caret. */
+function arrow(input: HTMLInputElement, key: "ArrowLeft" | "ArrowRight"): boolean {
+  const event = new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true });
+  act(() => {
+    input.dispatchEvent(event);
+  });
+  return !event.defaultPrevented;
+}
+
+test("← and → step through the filters in an empty field, wrapping at the ends", () => {
+  mountWindow(PANEL_TAB.PLANS);
   const input = openPalette();
-  press(input, { key: "]", code: "BracketRight", metaKey: true });
+  assert.equal(arrow(input, "ArrowRight"), false, "the step is the palette's, not the caret's");
   assert.equal(chosenFilter(), "Plans");
   assert.deepEqual(headings(), ["Plans"]);
-  press(input, { key: "]", code: "BracketRight", metaKey: true });
+  arrow(input, "ArrowRight");
   assert.equal(chosenFilter(), "Agents");
-  press(input, { key: "[", code: "BracketLeft", metaKey: true });
-  press(input, { key: "[", code: "BracketLeft", metaKey: true });
+  arrow(input, "ArrowLeft");
+  arrow(input, "ArrowLeft");
   assert.equal(chosenFilter(), "All");
-  press(input, { key: "[", code: "BracketLeft", metaKey: true });
+  arrow(input, "ArrowLeft");
   assert.equal(chosenFilter(), "Settings", "stepping back from All wraps to the last filter");
-  assert.deepEqual(asked.ran, [], "the window went neither back nor forward");
   assert.ok(document.querySelector(PALETTE), "the palette still stands");
+});
+
+test("with words in the field, ← and → move the caret, and step the filter only where it can go no further", () => {
+  mountWindow(PANEL_TAB.PLANS);
+  const input = openPalette();
+  search(input, "invite");
+  caret(input, 3);
+  assert.equal(arrow(input, "ArrowLeft"), true, "inside the words, ← moves the caret");
+  assert.equal(arrow(input, "ArrowRight"), true, "inside the words, → moves the caret");
+  caret(input, 0, 6);
+  assert.equal(arrow(input, "ArrowRight"), true, "a selection is collapsed first");
+  assert.equal(chosenFilter(), "All");
+  caret(input, 6);
+  arrow(input, "ArrowRight");
+  assert.equal(chosenFilter(), "Plans", "at the end, → steps to the next filter");
+  assert.equal(arrow(input, "ArrowLeft"), true, "at the end, ← still moves the caret");
+  caret(input, 0);
+  arrow(input, "ArrowLeft");
+  assert.equal(chosenFilter(), "All", "at the start, ← steps back");
+  assert.equal(input.value, "invite", "the words stay as typed");
+});
+
+test("⌘[ and ⌘] no longer step the filters", () => {
+  mountWindow(PANEL_TAB.PLANS);
+  const input = openPalette();
+  press(input, { key: "]", code: "BracketRight", metaKey: true });
+  press(input, { key: "[", code: "BracketLeft", metaKey: true });
+  press(input, { key: "]", code: "BracketRight", metaKey: true });
+  assert.equal(chosenFilter(), "All");
 });
 
 test("every plan is listed beside its repository, an archived one marked so and opened like the rest", () => {
@@ -646,14 +689,14 @@ test("a read that did not land says so, and the next opening asks again", async 
   assert.deepEqual(asked.reads, [OPEN.id, OPEN.id]);
 });
 
-test("the palette's foot says its keys", () => {
+test("the palette's foot says its keys, and not Escape, which every dialog closes on", () => {
   mountWindow(PANEL_TAB.PLANS);
   openPalette();
   const foot = document.querySelector(".command-palette-footer");
   assert.ok(foot, "the palette has a foot");
   assert.deepEqual(
     [...foot.querySelectorAll(".command-palette-footer-hint")].map((hint) => hint.textContent),
-    ["↑↓Select", "↩Open", "⌘[⌘]Change filter", "EscClose"],
+    ["↑↓Select", "⏎Open", "←→Filter"],
   );
 });
 
