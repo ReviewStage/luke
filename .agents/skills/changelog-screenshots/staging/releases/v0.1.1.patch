@@ -1,0 +1,482 @@
+diff --git a/apps/desktop/src/main.ts b/apps/desktop/src/main.ts
+index 125fe9d0f..e8e823fc0 100644
+--- a/apps/desktop/src/main.ts
++++ b/apps/desktop/src/main.ts
+@@ -169,6 +169,17 @@ import {
+   feedbackSubmission,
+   isFeedbackKind,
+ } from "./shared/feedback";
++import {
++  isShotRun,
++  SHOT_CAPTURE_SETTLE_MS,
++  SHOT_MICROPHONE_STATUS,
++  shotAccountSnapshot,
++  shotCalendars,
++  shotFixture,
++  shotHostedUsage,
++  shotSettings,
++  shotUpdate,
++} from "./shared/shots";
+ import { parseVoiceHotkey } from "./shared/voice-hotkey";
+ import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
+ import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
+@@ -181,11 +192,13 @@ const fixtureName = argumentValue("--fixture");
+ // asked for directly.
+ const startPeeked = process.argv.includes("--peek");
+ const startInSlot = process.argv.includes("--slot");
+-const fixture = fixtureSnapshot(fixtureName ?? "smoke");
+ const captureMode = captureOutput !== undefined;
+ // `--fixture` is enough on its own to make a run deterministic: the panel renders
+ // the fixture snapshot and no provider is observed. Capture runs always imply it.
+ const fixtureMode = captureMode || fixtureName !== undefined;
++// Throwaway: a changelog shot draws acme's roster in place of the smoke one.
++const shotRun = isShotRun(fixtureMode, profile);
++const fixture = shotRun ? shotFixture() : fixtureSnapshot(fixtureName ?? "smoke");
+ const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
+ // A development build may be pointed at a local account service; a packaged one
+ // may not. The override redirects the whole sign-in — including the identity
+@@ -214,6 +227,12 @@ const settingsStore = new SettingsStore({
+     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
+   },
+ });
++// Throwaway: a shot's every settings reply (the bootstrap's, each write's, each
++// push) is what a signed-in Mac with its keys stored would resolve.
++if (shotRun) {
++  const resolveSettings = settingsStore.snapshot.bind(settingsStore);
++  settingsStore.snapshot = async () => shotSettings(await resolveSettings(), profile);
++}
+ const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
+ let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
+ let signInRunning: Promise<AccountSnapshot> | undefined;
+@@ -1085,13 +1104,15 @@ function registerIpc(): void {
+       captureMode,
+       fixtureMode,
+       accountRequired: runMode.requiresAccount,
+-      account,
++      // Throwaway: a shot is signed in as Dean.
++      account: shotRun ? shotAccountSnapshot() : account,
+       packaged: app.isPackaged,
+       platform: process.platform,
+       electronVersion: process.versions.electron,
+       chromiumVersion: process.versions.chrome,
+       nodeVersion: process.versions.node,
+-      microphoneStatus: microphoneStatus(),
++      // Throwaway: a shot's Mac has granted the microphone.
++      microphoneStatus: shotRun ? SHOT_MICROPHONE_STATUS : microphoneStatus(),
+       // Both keys travel as accelerators rather than labels: the renderer needs
+       // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
+       // and only the accelerator can produce the pair.
+@@ -1101,7 +1122,8 @@ function registerIpc(): void {
+       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
+       ...(outputAudio ? { outputAudio } : {}),
+       display: panels.diagnostic(display),
+-      update: updateService.snapshot(),
++      // Throwaway: a shot's build has checked and is current.
++      update: shotRun ? shotUpdate(updateService.snapshot()) : updateService.snapshot(),
+       // Bootstrapped through the same relevance gate every broadcast passes:
+       // a panel that opens late must not learn of rows the roster has already
+       // let go and then hold them past the next broadcast's dedupe.
+@@ -1119,7 +1141,12 @@ function registerIpc(): void {
+         : {}),
+       // The calendar is a capability like the rosters: nothing of it is
+       // shown, or held quiet, before the account gate opens.
+-      calendars: accountCapabilitiesActive() ? observedCalendars : [],
++      // Throwaway: a shot's calendar list is Dean's, as Google listed it.
++      calendars: shotRun
++        ? shotCalendars(profile)
++        : accountCapabilitiesActive()
++          ? observedCalendars
++          : [],
+       meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+       settings: await settingsStore.snapshot(),
+     };
+@@ -2329,6 +2356,8 @@ function registerIpc(): void {
+     if (!trustedSender(event)) throw new Error("Untrusted renderer");
+     // Nothing rather than an error on a keyed or signed-out run: no allowance
+     // is in play, and the page words itself without numbers.
++    // Throwaway: a shot's allowance is partly spent, with plenty left.
++    if (shotRun) return shotHostedUsage(Date.now());
+     return hostedUsageReader?.read();
+   });
+ 
+@@ -2341,7 +2370,8 @@ function registerIpc(): void {
+     // A capture run holds a single window, and the ready message is its own.
+     const window = BrowserWindow.fromWebContents(event.sender);
+     if (!window || window.isDestroyed()) return;
+-    await new Promise((resolve) => setTimeout(resolve, 350));
++    // Throwaway: a shot waits for its page to open and scroll to its card.
++    await new Promise((resolve) => setTimeout(resolve, shotRun ? SHOT_CAPTURE_SETTLE_MS : 350));
+     const image = await window.webContents.capturePage(undefined, {
+       stayHidden: true,
+       stayAwake: true,
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index 91dfb9e6b..fa568bf2f 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -52,6 +52,7 @@ import {
+ } from "../shared/credential-providers";
+ import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
+ import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
++import { isShotRun, SHOT_PROFILE, SHOT_SCROLL_DELAY_MS, scrollShotCard } from "../shared/shots";
+ import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
+ import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
+ import { type CalendarConnectEntry, CalendarConnectSlot } from "./calendar-connect-slot";
+@@ -1824,6 +1825,12 @@ export function App(): React.JSX.Element {
+           setSettingsView(credentialSettingsPage(firstProvider.id));
+           beginEntry(firstProvider.id);
+         }
++        // Throwaway: a changelog shot opens on its Settings page, scrolled to its card.
++        if (isShotRun(value.fixtureMode, value.profile)) {
++          changeTab(PANEL_TAB.SETTINGS);
++          if (value.profile === SHOT_PROFILE.CALENDAR) setSettingsView(SETTINGS_VIEW.CONNECTIONS);
++          window.setTimeout(() => scrollShotCard(value.profile), SHOT_SCROLL_DELAY_MS);
++        }
+       }
+       setMicrophoneStatus(value.microphoneStatus);
+       // Only fill in what no push has said yet, like the issue roster: the
+diff --git a/apps/desktop/src/shared/dean-avatar.ts b/apps/desktop/src/shared/dean-avatar.ts
+new file mode 100644
+index 000000000..05eb3f683
+--- /dev/null
++++ b/apps/desktop/src/shared/dean-avatar.ts
+@@ -0,0 +1,7 @@
++/**
++ * dean-avatar.ts -- generated: Dean Stratakos's GitHub photo (160px JPEG) as a data URL, for the shot profiles' signed-in account.
++ *
++ * Regenerate with: base64 -w0 avatar.jpg. Throwaway: never committed.
++ */
++export const DEAN_AVATAR_DATA_URL =
++  "data:image/jpeg;base64,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";
+diff --git a/apps/desktop/src/shared/shots.ts b/apps/desktop/src/shared/shots.ts
+new file mode 100644
+index 000000000..b15cbc68b
+--- /dev/null
++++ b/apps/desktop/src/shared/shots.ts
+@@ -0,0 +1,327 @@
++// shots.ts -- Throwaway: the changelog screenshots staged for 0.1.1, never committed.
++//
++// Two profiles, each run as
++// `--fixture smoke --expanded --profile shot-<name> --capture-evidence <png>`
++// and each opening the expanded panel on Settings, signed in as Dean Stratakos:
++//
++// - `shot-allowance`: the front page, led by "What Luke runs on" with the
++//   included daily allowance chosen over a stored OpenAI key and both of the
++//   day's meters partly spent.
++// - `shot-calendar`: the Connections page scrolled to Integrations, Google
++//   Calendar connected as dean@example.com with two of its calendars counted
++//   and "Quiet during meetings" on.
++//
++// A fixture run is signed out, refuses every credential, carries no calendar
++// sign-in, and reads no allowance, so the shot stages the account, the settings
++// snapshot, the usage read, and the calendar list itself. Every hook is gated
++// on `isShotRun` (fixture mode and one of these profiles) at its call site.
++
++import {
++  FIXTURE_EPOCH_MS,
++  type FixtureSnapshot,
++  type HostedUsageAnswer,
++  PROVIDER_ID,
++  SESSION_CONTROL_KIND,
++  SESSION_LOCATION,
++  SESSION_URGENCY,
++} from "@sidecar/core";
++import {
++  ACCOUNT_PROVIDER,
++  ACCOUNT_STATUS,
++  type AccountSnapshot,
++  type AppSettings,
++  CREDENTIAL_SOURCE,
++  type CredentialSource,
++  type MicrophoneStatus,
++  type ObservedAccountCalendars,
++  SECRET_STORAGE,
++  UPDATE_STATUS,
++  type UpdateSnapshot,
++  VOICE_SOURCE,
++} from "./contracts";
++import { type CredentialProviderId } from "./credential-providers";
++import { DEAN_AVATAR_DATA_URL } from "./dean-avatar";
++
++export const SHOT_PROFILE = {
++  ALLOWANCE: "shot-allowance",
++  CALENDAR: "shot-calendar",
++} as const;
++
++export type ShotProfile = (typeof SHOT_PROFILE)[keyof typeof SHOT_PROFILE];
++
++const SHOT_PROFILE_LIST: readonly string[] = Object.values(SHOT_PROFILE);
++
++/** How long a shot's capture waits after the window reports ready. */
++export const SHOT_CAPTURE_SETTLE_MS = 3_000;
++
++/** How long after the bootstrap the renderer scrolls the page to its card. */
++export const SHOT_SCROLL_DELAY_MS = 800;
++
++/** The address Dean signs in with, and the Google account his calendar is on. */
++const DEAN_EMAIL = "dean@example.com";
++
++/** The account the shots are signed in as: Dean, with his GitHub photo. */
++const shotAccount: AccountSnapshot = {
++  status: ACCOUNT_STATUS.SIGNED_IN,
++  email: DEAN_EMAIL,
++  name: "Dean Stratakos",
++  pictureUrl: DEAN_AVATAR_DATA_URL,
++  provider: ACCOUNT_PROVIDER.GITHUB,
++};
++
++const CLAUDE_MODEL = "claude-opus-5";
++const CODEX_MODEL = "gpt-5.6-luna";
++
++function minutesAgo(minutes: number): number {
++  return FIXTURE_EPOCH_MS - minutes * 60_000;
++}
++
++/**
++ * 0.1.0's acme roster (its `shot-one-panel`), carried over so the wings across
++ * the panel's top count acme's agents rather than the smoke fixture's. Nine
++ * sessions on acme's work, each worded the way its provider reports it at
++ * 0.1.0: Claude Code and Codex name the tool they run or their parting words,
++ * Cursor its run's result, while Jules and Copilot title a row by its
++ * repository and say nothing (the row states its own state), and Conductor
++ * titles a lone chat by its workspace. Controls are the ones each adapter
++ * advertises in that state. Ages are minutes before the fixture's own epoch,
++ * which is the clock fixture rows are read against.
++ */
++const acmeFixture: FixtureSnapshot = {
++  scenario: "smoke",
++  sessions: [
++    {
++      id: "shot-claude-usage-billing",
++      title: "Usage-based billing",
++      providerId: PROVIDER_ID.CLAUDE_CODE,
++      provider: "Claude Code",
++      detail: "Bash: pnpm test src/metering",
++      repository: "ledger",
++      branch: "dean/usage-billing",
++      model: CLAUDE_MODEL,
++      urgency: SESSION_URGENCY.WORKING,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(0.2),
++    },
++    {
++      id: "shot-codex-webhook-retries",
++      title: "Webhook retries",
++      providerId: PROVIDER_ID.CODEX,
++      provider: "Codex",
++      detail: "Backoff runs 30s to 1h. Give up after 8 attempts, or keep retrying for 24 hours?",
++      repository: "relay",
++      branch: "dean/webhook-retries",
++      model: CODEX_MODEL,
++      urgency: SESSION_URGENCY.ATTENTION,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(1),
++    },
++    {
++      id: "shot-claude-teammate-invitations",
++      title: "Add teammate invitations",
++      providerId: PROVIDER_ID.CLAUDE_CODE,
++      provider: "Claude Code",
++      detail: "Opened #214: an invite is a pending membership, accepted at /invites/:token.",
++      repository: "relay",
++      branch: "dean/teammate-invitations",
++      model: CLAUDE_MODEL,
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(4),
++    },
++    {
++      id: "shot-cursor-invite-emails",
++      title: "Invite emails",
++      providerId: PROVIDER_ID.CURSOR,
++      provider: "Cursor",
++      detail: "Opened draft #216: invite emails now go out through Postmark, +96 −4.",
++      repository: "acme/relay",
++      branch: "cursor/invite-emails-4e1a",
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(7),
++      // A finished Cursor run takes a follow-up and offers its archive.
++      canMessage: true,
++      actions: [{ id: "archive-agent", label: "Archive" }],
++    },
++    {
++      id: "shot-jules-onboarding",
++      title: "acme/web",
++      providerId: PROVIDER_ID.JULES,
++      provider: "Jules",
++      detail: "",
++      repository: "acme/web",
++      branch: "main",
++      urgency: SESSION_URGENCY.ATTENTION,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(9),
++      // Holding for a plan approval: Jules takes a message and the approval.
++      canMessage: true,
++      actions: [{ id: "approve-plan", label: "Approve the plan" }],
++    },
++    {
++      id: "shot-conductor-audit-export",
++      title: "Stream audit rows as CSV",
++      providerId: PROVIDER_ID.CONDUCTOR,
++      provider: "Conductor",
++      detail: "",
++      repository: "acme/relay",
++      model: CLAUDE_MODEL,
++      urgency: SESSION_URGENCY.WORKING,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(14),
++      workspace: { id: "shot-conductor-audit", name: "audit-log-export" },
++      // Mid-turn: a Conductor chat takes a steer and offers its stop.
++      canMessage: true,
++      actions: [{ id: "cancel-turn", label: "Stop this turn", kind: SESSION_CONTROL_KIND.STOP }],
++    },
++    {
++      id: "shot-copilot-onboarding",
++      title: "acme/web",
++      providerId: PROVIDER_ID.COPILOT,
++      provider: "Copilot",
++      detail: "",
++      repository: "acme/web",
++      branch: "copilot/onboarding-checklist",
++      urgency: SESSION_URGENCY.WORKING,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(22),
++    },
++    {
++      id: "shot-opencode-dark-mode",
++      title: "Dark mode for the dashboard",
++      providerId: PROVIDER_ID.OPENCODE,
++      provider: "OpenCode",
++      detail: "",
++      repository: "web",
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(26),
++    },
++    {
++      id: "shot-devin-invoice-pdf",
++      title: "Invoice PDF redesign",
++      providerId: PROVIDER_ID.DEVIN,
++      provider: "Devin",
++      detail: "",
++      repository: "acme/ledger",
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(140),
++      // An exited Devin session offers its archive and takes no message.
++      actions: [{ id: "archive-session", label: "Archive" }],
++    },
++  ],
++};
++
++/**
++ * Dean's Google calendars as Google lists them, in Google's own colours. His
++ * own and acme engineering's meetings count; the holidays calendar holds no
++ * meetings, so it is left out.
++ */
++const CALENDAR = {
++  DEAN: { id: DEAN_EMAIL, label: "Dean Stratakos", color: "#039be5" },
++  ENGINEERING: {
++    id: "c_acme-engineering@group.calendar.google.com",
++    label: "acme engineering",
++    color: "#33b679",
++  },
++  HOLIDAYS: {
++    id: "en.usa#holiday@group.v.calendar.google.com",
++    label: "Holidays in United States",
++    color: "#0b8043",
++  },
++} as const;
++
++const shotCalendarList: readonly ObservedAccountCalendars[] = [
++  {
++    accountId: DEAN_EMAIL,
++    calendars: [CALENDAR.DEAN, CALENDAR.ENGINEERING, CALENDAR.HOLIDAYS],
++  },
++];
++
++/** Whether this run stages a shot: fixture mode and one of the shot profiles. */
++export function isShotRun(fixtureMode: boolean, profile: string | undefined): boolean {
++  return fixtureMode && profile !== undefined && SHOT_PROFILE_LIST.includes(profile);
++}
++
++/** The roster a shot run draws in place of the smoke fixture's. */
++export function shotFixture(): FixtureSnapshot {
++  return acmeFixture;
++}
++
++/** The signed-in account a shot run bootstraps with. */
++export function shotAccountSnapshot(): AccountSnapshot {
++  return shotAccount;
++}
++
++/** A shot's Mac has granted the microphone, so the Voice row wears no mark. */
++export const SHOT_MICROPHONE_STATUS: MicrophoneStatus = "granted";
++
++/** A shot's build has checked and is current, so the Updates row says so. */
++export function shotUpdate(update: UpdateSnapshot): UpdateSnapshot {
++  return { status: UPDATE_STATUS.UP_TO_DATE, currentVersion: update.currentVersion };
++}
++
++/** The calendars Dean's Google account offered on the latest pass. */
++export function shotCalendars(profile: string): readonly ObservedAccountCalendars[] {
++  return profile === SHOT_PROFILE.CALENDAR ? shotCalendarList : [];
++}
++
++/**
++ * The settings a signed-in Mac with its keys stored would resolve to: every
++ * provider's key kept in the Keychain (agents, Linear, and OpenAI alike, so
++ * every row on Connections reads connected), voice available, and the account's
++ * allowance the chosen source over the stored key. `shot-calendar` adds the
++ * calendar sign-in this build would carry, Dean's account with its counted
++ * calendars, and the quiet switch on.
++ */
++export function shotSettings(settings: AppSettings, profile: string): AppSettings {
++  const stored = Object.fromEntries(
++    Object.keys(settings.credentialSources).map((id) => [id, CREDENTIAL_SOURCE.ENCRYPTED_FILE]),
++  ) as Record<CredentialProviderId, CredentialSource>;
++  const staged: AppSettings = {
++    ...settings,
++    credentialSources: stored,
++    secretStorage: SECRET_STORAGE.AVAILABLE,
++    voiceAvailable: true,
++    voiceSource: VOICE_SOURCE.ACCOUNT,
++  };
++  if (profile !== SHOT_PROFILE.CALENDAR) return staged;
++  return {
++    ...staged,
++    calendarSignInAvailable: true,
++    calendarAccounts: [
++      { id: DEAN_EMAIL, selectedCalendarIds: [CALENDAR.DEAN.id, CALENDAR.ENGINEERING.id] },
++    ],
++    quietDuringMeetings: true,
++  };
++}
++
++/**
++ * Today's allowance, partly spent with plenty left on both meters, resetting
++ * where the service resets it: the end of the UTC day in hand.
++ */
++export function shotHostedUsage(now: number): HostedUsageAnswer {
++  const day = new Date(now);
++  const resetsAt = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + 1);
++  return {
++    voice: { used: 13, limit: 50, remaining: 37, resetsAt },
++    attention: { used: 178, limit: 500, remaining: 322, resetsAt },
++  };
++}
++
++/**
++ * Scrolls the open Settings page so the shot's card leads it. The allowance
++ * already leads the front page; the calendar's Integrations section is found
++ * by its Google row and brought to the top of the page's scroll.
++ */
++export function scrollShotCard(profile: string): void {
++  if (profile !== SHOT_PROFILE.CALENDAR) return;
++  const page = document.querySelector<HTMLElement>(".settings");
++  const card = page
++    ?.querySelector('[aria-label="Add another Google account"]')
++    ?.closest<HTMLElement>(".settings-section");
++  if (!page || !card) return;
++  page.scrollTop += card.getBoundingClientRect().top - page.getBoundingClientRect().top;
++}

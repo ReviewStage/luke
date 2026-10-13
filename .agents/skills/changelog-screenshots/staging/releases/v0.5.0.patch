@@ -1,0 +1,240 @@
+diff --git a/apps/desktop/src/main/desktop-app.ts b/apps/desktop/src/main/desktop-app.ts
+index 6330902e5..1c1c90b36 100644
+--- a/apps/desktop/src/main/desktop-app.ts
++++ b/apps/desktop/src/main/desktop-app.ts
+@@ -116,6 +116,13 @@ import {
+ } from "electron";
+ import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+ import { BRIDGE, channels } from "#shared/bridge";
++// Throwaway: changelog screenshot staging.
++import {
++  requestedUserDataDirectory,
++  SHOT_CAPTURE_SETTLE_MS,
++  stagesCalendarGateShot,
++  stagesShot,
++} from "#shared/shots";
+ import {
+   ACCOUNT_STATUS,
+   type AccountSnapshot,
+@@ -214,8 +221,12 @@ app.setName(appName);
+ // manifest name, so the state directory is pointed at the chosen name by
+ // hand — and session data alongside it, since its default only follows a
+ // `userData` that has not been resolved yet.
+-app.setPath("userData", path.join(app.getPath("appData"), appName));
+-app.setPath("sessionData", path.join(app.getPath("appData"), appName));
++// Throwaway: a shot run's state lives under its own `--user-data-dir`, never
++// a running Luke's (the flag is otherwise ignored by the lines below).
++const stateDirectory =
++  requestedUserDataDirectory(process.argv) ?? path.join(app.getPath("appData"), appName);
++app.setPath("userData", stateDirectory);
++app.setPath("sessionData", stateDirectory);
+ 
+ const captureOutput = argumentValue("--capture-evidence");
+ const profile = argumentValue("--profile") ?? "idle";
+@@ -920,6 +931,9 @@ function calendarOnboardingStateFromDisk(): CalendarOnboardingState | undefined
+ 
+ /** Whether the onboarding gate stands, as the panels should currently draw it. */
+ function calendarOnboardingGateOwed(): boolean {
++  // Throwaway: the calendar gate shot stands the step a fixture run, which
++  // requires no account and so never reaches a first sign-in, never owes.
++  if (stagesCalendarGateShot({ fixtureMode, profile })) return true;
+   return runMode.requiresAccount && calendarOnboardingOwed(calendarOnboardingState);
+ }
+ 
+@@ -1981,7 +1995,10 @@ function registerIpc(): void {
+     // A capture run holds a single window, and the ready message is its own.
+     const window = BrowserWindow.fromWebContents(context.sender);
+     if (!window || window.isDestroyed()) return;
+-    await new Promise((resolve) => setTimeout(resolve, 350));
++    // Throwaway: a shot waits out its async draws (the release waits 350 ms).
++    const settleMs = stagesShot({ fixtureMode, profile }) ? SHOT_CAPTURE_SETTLE_MS : 350;
++    await new Promise((resolve) => setTimeout(resolve, settleMs));
++    if (window.isDestroyed()) return;
+     const image = await window.webContents.capturePage(undefined, {
+       stayHidden: true,
+       stayAwake: true,
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index 32ef16a43..535ad7546 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -69,6 +69,12 @@ import {
+ } from "#shared/wire/session";
+ import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
+ import { appSettingsView } from "#shared/wire/settings";
++// Throwaway: changelog screenshot staging.
++import {
++  SHOT_CALENDAR_GATE_CAPTIONS,
++  stagedCalendarGateSettings,
++  stagesCalendarGateShot,
++} from "#shared/shots";
+ import type { UpdateSnapshot } from "#shared/wire/update";
+ import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
+ import type { CalendarGateControl } from "./calendar-gate";
+@@ -184,6 +190,8 @@ import {
+   volumeHintDismissed,
+   volumeHintText,
+ } from "./volume-hint";
++// Throwaway: the calendar gate shot speaks in Luke's turn.
++import { WAVEFORM_VOICE } from "./waveform";
+ 
+ /**
+  * How long the settings tab keeps saying a note to the founders was sent. Long
+@@ -2063,6 +2071,14 @@ export function App(): React.JSX.Element {
+   // capture has no system output to read, so the state is asked for directly.
+   const fixtureMuted = bootstrap?.profile === "muted";
+   const fixtureSpeaking = bootstrap?.profile === "speaking" || fixtureMuted;
++  // Throwaway: the calendar gate shot draws Luke speaking the gate's own
++  // beat — his face and meter in the wing, its caption at the panel's foot —
++  // without the fixture sentence or the chips it earns.
++  const shotCalendarGate = stagesCalendarGateShot({
++    fixtureMode: bootstrap?.fixtureMode === true,
++    profile: bootstrap?.profile ?? "",
++  });
++  const wingSpeaking = fixtureSpeaking || shotCalendarGate;
+   const {
+     analyser,
+     microphoneStatus,
+@@ -2117,7 +2133,7 @@ export function App(): React.JSX.Element {
+   // caption strip, under the field or the key press that asked. It yields to
+   // live words, so it can never be drawn over a reply being spoken.
+   const voiceErrorNotice = voiceErrorToShow({
+-    fixtureSpeaking,
++    fixtureSpeaking: wingSpeaking,
+     voice: voiceTurn,
+     error: voiceError,
+   });
+@@ -2127,7 +2143,7 @@ export function App(): React.JSX.Element {
+   // refusal that happens during it belongs there. The failure outranks it: a
+   // fault is the more urgent thing to read.
+   const voiceNoticeShown = voiceNoticeToShow({
+-    fixtureSpeaking,
++    fixtureSpeaking: wingSpeaking,
+     voice: voiceTurn,
+     notice: voiceNotice,
+   });
+@@ -2135,7 +2151,7 @@ export function App(): React.JSX.Element {
+   // failure borrowing their strip, or a notice borrowing it more quietly.
+   const liveStripText = voiceErrorNotice ?? voiceNoticeShown;
+   const liveCaptionTexts =
+-    lukeCaptions ?? (liveStripText === undefined ? undefined : [liveStripText]);
++    (shotCalendarGate ? SHOT_CALENDAR_GATE_CAPTIONS : lukeCaptions) ?? (liveStripText === undefined ? undefined : [liveStripText]);
+   // Words is the resting tone, kept even when nothing is drawn: a chips-only
+   // frame still snapshots into the strip hold, and one that defaulted to a
+   // coloured tone would paint the empty caption as a status line under a
+@@ -3038,7 +3054,8 @@ export function App(): React.JSX.Element {
+   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
+   const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
+   const shownStopHotkey = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
+-  const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
++  const hasAudioSignal = wingSpeaking || analyser !== undefined;
++  const shownVoiceTurn = shotCalendarGate ? WAVEFORM_VOICE.LUKE : voiceTurn;
+   const outputIsSilent = outputSilent(outputAudio);
+   // Live words win; the held snapshot only ever finishes being read. A held
+   // caption is drawn exactly as it was, its tone included.
+@@ -3117,7 +3134,10 @@ export function App(): React.JSX.Element {
+   // does not lower it: the panel body hands the gate the Connections page's
+   // own calendar block to review, until Done or the skip answers the step and
+   // the record's broadcast takes it down.
+-  const gateSettings = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
++  const gateSettings = stagedCalendarGateSettings(
++    settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings),
++    shotCalendarGate,
++  );
+   const calendarGate: CalendarGateControl | undefined =
+     calendarOnboardingOwed &&
+     (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
+@@ -3162,7 +3182,7 @@ export function App(): React.JSX.Element {
+       className="app-stage"
+       // Whose turn it is, so the capsule can make room for a meter it has to
+       // draw beside the face rather than in place of it.
+-      data-voice={voiceTurn}
++      data-voice={shownVoiceTurn}
+       // Whether there are words to draw under the shape — a caption or a
+       // failure borrowing its strip — so the surface can grow the room they
+       // are drawn in.
+@@ -3413,8 +3433,8 @@ export function App(): React.JSX.Element {
+         tally={tally}
+         analyser={analyser}
+         onVoiceActivity={handleVoiceActivity}
+-        {...(voiceTurn ? { voice: voiceTurn } : undefined)}
+-        fixtureSpeaking={fixtureSpeaking}
++        {...(shownVoiceTurn ? { voice: shownVoiceTurn } : undefined)}
++        fixtureSpeaking={wingSpeaking}
+         hasAudioSignal={hasAudioSignal}
+         voiceOpening={talkOpening}
+         announcementsHeld={announcementsHeld}
+diff --git a/apps/desktop/src/shared/shots.ts b/apps/desktop/src/shared/shots.ts
+new file mode 100644
+index 000000000..b88965eaf
+--- /dev/null
++++ b/apps/desktop/src/shared/shots.ts
+@@ -0,0 +1,69 @@
++/**
++ * shots.ts -- Throwaway: the changelog screenshot staging for 0.5.0, never
++ * committed. One profile, `shot-calendar-gate`, staged only in fixture mode:
++ * the expanded panel standing on onboarding's calendar gate (this Mac's
++ * Calendar or Google), Luke speaking the gate's own beat with its caption at
++ * the panel's foot, captured by `--capture-evidence`.
++ */
++
++export const SHOT_PROFILE = {
++  CALENDAR_GATE: "shot-calendar-gate",
++} as const;
++
++export type ShotProfile = (typeof SHOT_PROFILE)[keyof typeof SHOT_PROFILE];
++
++/**
++ * How long a shot's capture waits after its window reports ready, so the
++ * panel's measured height and every async draw have landed (the tag waits
++ * 350 ms).
++ */
++export const SHOT_CAPTURE_SETTLE_MS = 3_000;
++
++/**
++ * The caption the calendar onboarding beat draws: its script is fixed by the
++ * build (`CALENDAR_ONBOARDING_SPEECH_HEAD`: one short sentence "to the effect
++ * of: 'Connect your calendar so I don't talk during your meetings.'"), and
++ * the caption is that reply's transcript, one segment.
++ */
++export const SHOT_CALENDAR_GATE_CAPTIONS: readonly string[] = [
++  "Connect your calendar so I don't talk during your meetings.",
++];
++
++/** Whether this run stages the calendar gate shot: its profile, in fixture mode only. */
++export function stagesCalendarGateShot(input: { fixtureMode: boolean; profile: string }): boolean {
++  return input.fixtureMode && input.profile === SHOT_PROFILE.CALENDAR_GATE;
++}
++
++/** Whether this run stages any shot, for the capture's longer settle. */
++export function stagesShot(input: { fixtureMode: boolean; profile: string }): boolean {
++  return input.fixtureMode && input.profile.startsWith("shot-");
++}
++
++/**
++ * The settings the gate is drawn from, with both sources offered for the
++ * shot. A fixture run refuses credentials, so the store reports neither the
++ * Apple Calendar connection nor the Google sign-in as available, and a gate
++ * offered no source is never drawn; a signed-in 0.5.0 on a Mac with the
++ * release's OAuth client offers both.
++ */
++export function stagedCalendarGateSettings<
++  T extends { appleCalendarAvailable: boolean; calendarSignInAvailable: boolean },
++>(settings: T, staged: boolean): T {
++  if (!staged) return settings;
++  return { ...settings, appleCalendarAvailable: true, calendarSignInAvailable: true };
++}
++
++/**
++ * The state directory a shot run asked for with Chromium's `--user-data-dir`
++ * (either `--user-data-dir=<dir>` or `--user-data-dir <dir>`): 0.5.0 points
++ * `userData` at appData/<appName> by hand, which would share a running
++ * Luke's state and single-instance lock.
++ */
++export function requestedUserDataDirectory(argv: readonly string[]): string | undefined {
++  const flag = "--user-data-dir";
++  for (const [index, argument] of argv.entries()) {
++    if (argument.startsWith(`${flag}=`)) return argument.slice(flag.length + 1) || undefined;
++    if (argument === flag) return argv[index + 1];
++  }
++  return undefined;
++}

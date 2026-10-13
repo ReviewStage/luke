@@ -155,6 +155,27 @@ for the batch. The first launch after a build may still be downloading
 Electron's binary, so capture again if that one fails. A batch of ten takes about two minutes after a
 three-minute build.
 
+### The notch era (before 0.7.0)
+
+Before 0.7.0 Luke drew no ordinary window: a borderless panel hung from the
+notch at a high window level, and onboarding was a full-display overlay, so
+`window.sh` finds nothing to capture. Build with `LUKE_SHOT_PATCH_DIST=0` (the
+window patches would pull the panel off the top edge), have the staging raise
+the tag's capture settle to about 3 s, isolate its state on `--user-data-dir`
+where the tag overrides it (v0.3.9–v0.5.0), and pick the window it captures,
+then capture with the tag's own flag at 4 pixels a point:
+
+```sh
+electron . --user-data-dir=<tmp> --fixture smoke --expanded --profile shot-<name> \
+  --capture-evidence <out.png> --force-device-scale-factor=4
+```
+
+Frame it with a layout: `--layout top` hangs the panel flush from the top of
+the standard canvas, centred, as it hung from the notch, and takes a crop
+counted from where a standard window's corner would be (the panel's top is at
+y = -90); `--layout bleed` lays a full-display overlay across the wallpaper.
+Both take `--zoom 2` for the 4x capture.
+
 ## 4. Frame, review, and land
 
 Frame with the repository's own script, from the synced checkout:

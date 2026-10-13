@@ -926,6 +926,8 @@ quoted, and nothing leaves your Mac until you press Send.
 [#1029](https://github.com/ReviewStage/luke/pull/1029),
 [#1462](https://github.com/ReviewStage/luke/pull/1462))
 
+![The Conversation tab: you ask what needs you, Luke answers about two agents, searches his notebook for what was said about invite expiry, and messages the Add teammate invitations agent to finish #214.](apps/web/public/changelog/0.6.0/the-conversation-tab.png)
+
 ### Luke's notebook
 
 Luke keeps a notebook on the service: what he knows about you, the decisions
@@ -939,6 +941,8 @@ he wrote it.
 [#1477](https://github.com/ReviewStage/luke/pull/1477),
 [#1478](https://github.com/ReviewStage/luke/pull/1478),
 [#1479](https://github.com/ReviewStage/luke/pull/1479))
+
+![Settings › Memory: the notebook Luke keeps, read-only, with who's who, what was settled on Teammate invitations, and which agent runs where.](apps/web/public/changelog/0.6.0/lukes-notebook.png)
 
 ### Your Conductor key lives in the vault
 
@@ -1089,7 +1093,7 @@ meeting quiet can hold announcements from your first sign-in. Skip it and Luke
 carries on without one.
 ([#561](https://github.com/ReviewStage/luke/pull/561))
 
-![The calendar gate at the end of onboarding, offering this Mac's Calendar or Google.](apps/web/public/changelog/0.5.0/onboarding-ends-at-a-calendar.png)
+![The panel at the end of onboarding offering Apple Calendar or Google Calendar, or to set it up later, while Luke says he will keep quiet during your meetings.](apps/web/public/changelog/0.5.0/onboarding-ends-at-a-calendar.png)
 
 ### Improvements
 
@@ -1105,8 +1109,6 @@ carries on without one.
 - Luke names every workspace he creates — your name when you gave one,
   otherwise a short name for the work — instead of Conductor's random-city
   fallback ([#636](https://github.com/ReviewStage/luke/pull/636))
-
-![Luke's face asleep beside the housing while announcements are paused.](apps/web/public/changelog/0.5.0/pause-announcements.png)
 
 ### Fixes
 
@@ -1217,8 +1219,6 @@ see and the context the model still holds, and the whole tab stays out of
 session recordings.
 ([#513](https://github.com/ReviewStage/luke/pull/513),
 [#569](https://github.com/ReviewStage/luke/pull/569))
-
-![The History tab holding the conversation, with a session chip and the Ask Luke composer.](apps/web/public/changelog/0.3.13/history-composer.png)
 
 ### Improvements
 
@@ -1350,7 +1350,7 @@ Luke introduces himself to new users.
 ([#497](https://github.com/ReviewStage/luke/pull/497),
 [#508](https://github.com/ReviewStage/luke/pull/508))
 
-![Luke's onboarding takeover, with his face centered over the desktop.](apps/web/public/changelog/0.3.10/onboarding.png)
+![Luke's introduction over the dimmed desktop: his face awake in the middle and his first words, "Hi! I'm Luke.", beneath it.](apps/web/public/changelog/0.3.10/onboarding.png)
 
 ### Improvements
 
@@ -1743,7 +1743,7 @@ OpenAI key.
 [#204](https://github.com/ReviewStage/luke/pull/204),
 [#216](https://github.com/ReviewStage/luke/pull/216))
 
-!["What Luke runs on" in Settings: the included daily allowance chosen over an OpenAI key, with its talking and session-check meters part-spent.](apps/web/public/changelog/0.1.1/free-daily-allowance.png)
+!["What Luke runs on" in Settings: the included daily allowance chosen over an OpenAI key, its talking and session-check meters with plenty left.](apps/web/public/changelog/0.1.1/free-daily-allowance.png)
 
 ### Google Calendar
 
@@ -1751,7 +1751,7 @@ Luke reads when your meetings start and end, and holds his updates until the
 meeting is over.
 ([#195](https://github.com/ReviewStage/luke/pull/195))
 
-![The Google Calendar card in Settings: a connected account with its calendars chosen and "Quiet during meetings" switched on.](apps/web/public/changelog/0.1.1/google-calendar.png)
+![The Google Calendar card in Settings: connected, two calendars chosen, and "Quiet during meetings" on.](apps/web/public/changelog/0.1.1/google-calendar.png)
 
 ### Improvements
 
@@ -1813,7 +1813,7 @@ session to open it where it runs.
 [#59](https://github.com/ReviewStage/luke/pull/59),
 [#166](https://github.com/ReviewStage/luke/pull/166))
 
-![The panel expanded from the notch over the desktop, listing agent sessions with their status, recaps, and follow-up fields.](apps/web/public/changelog/0.1.0/one-panel-for-every-agent.png)
+![The panel hanging from the top of the screen, listing acme's agent sessions across Claude Code, Codex, Cursor, and more, two needing you, beside the Ask Luke composer.](apps/web/public/changelog/0.1.0/one-panel-for-every-agent.png)
 
 ### Talk to Luke
 
@@ -1826,7 +1826,7 @@ workspaces and spawns agents, and reads and acts on Linear issues.
 [#70](https://github.com/ReviewStage/luke/pull/70),
 [#89](https://github.com/ReviewStage/luke/pull/89))
 
-![The capsule beside the notch with the voice meter lit while Luke listens.](apps/web/public/changelog/0.1.0/talk-to-luke.png)
+![The capsule beside the notch with Luke's voice meter lit and his words beneath it: Claude Code opened #214 and has one question about how long invite links last.](apps/web/public/changelog/0.1.0/talk-to-luke.png)
 
 ### Announcements
 

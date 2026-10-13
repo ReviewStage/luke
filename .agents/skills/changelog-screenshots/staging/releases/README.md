@@ -8,6 +8,14 @@ adjusting, and capture with the same profile, zoom, and crop.
 
 | Release | Tag | Picture | Profile | Zoom | Crop (`x,y,width,height` points) |
 | --- | --- | --- | --- | --- | --- |
+| 0.1.0 | `v0.1.0` | `one-panel-for-every-agent.png` | `shot-one-panel` (`--expanded`) | 2 | `--layout top`, `380,-90,840,700` |
+| 0.1.0 | `v0.1.0` | `talk-to-luke.png` | `shot-talk` (`--compact --peek`) | 2 | `--layout top`, `540,-90,520,347` |
+| 0.1.1 | `v0.1.1` | `free-daily-allowance.png` | `shot-allowance` (`--expanded`) | 2 | `--layout top`, `500,-90,600,400` |
+| 0.1.1 | `v0.1.1` | `google-calendar.png` | `shot-calendar` (`--expanded`) | 2 | `--layout top`, `500,-5,600,400` |
+| 0.3.10 | `v0.3.10` | `onboarding.png` | `shot-onboarding` | 2 | `--layout bleed`, whole |
+| 0.5.0 | `v0.5.0` | `onboarding-ends-at-a-calendar.png` | `shot-calendar-gate` (`--expanded`) | 2 | `--layout top`, `450,-90,700,467` |
+| 0.6.0 | `v0.6.0` | `lukes-notebook.png` | `shot-notebook` (`--expanded`) | 2 | `--layout top`, `500,0,600,400` |
+| 0.6.0 | `v0.6.0` | `the-conversation-tab.png` | `shot-conversation` (`--expanded`) | 2 | `--layout top`, `457,-90,686,540` |
 | 0.7.0 | `v0.7.0` | `plan-a-feature-with-luke.png` | `shot-plan-a-feature` | 1 | whole window |
 | 0.8.0 | `v0.8.0` | `a-new-home-for-your-plans.png` | `shot-home` | 1 | whole window |
 | 0.8.0 | `v0.8.0` | `a-side-panel-for-the-board-the-code-and-the-transcript.png` | `shot-board` | 1 | whole window |
@@ -24,3 +32,9 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.12.0 | `6d47d20f` | `pin-archive-and-group-plans.png` | `shot-plans` | 1 | `-70,-70,720,1140` |
 
 0.12.0 was shot from `6d47d20f`, the head of its version pull request (#2421), before the tag existed; `v0.12.0` itself is `0dec8cda`.
+
+The notch-era releases (before 0.7.0) drew no ordinary window, so their
+pictures are taken with the tag's own capture and framed with a layout: build
+with `LUKE_SHOT_PATCH_DIST=0`, then from `apps/desktop` run
+`electron . --user-data-dir=<tmp> --fixture smoke [--expanded] --profile <profile> --capture-evidence <out.png> --force-device-scale-factor=4`
+and frame with `--layout top` or `bleed` and `--zoom 2`.
