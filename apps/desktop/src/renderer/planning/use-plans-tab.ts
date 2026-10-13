@@ -80,6 +80,7 @@ import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
+  type HistorySpot,
   type PlanHistoryControl,
   type PlanHistorySource,
   usePlanHistory,
@@ -287,14 +288,17 @@ export interface VersionHistoryControl extends PlanHistoryControl {
    * where it is not the open one.
    */
   onOpen: (planId: string, save?: number) => void;
+  /** Opens a plan's version history where it stood when it was left, as Back and Forward go to it. */
+  onReturn: (planId: string, spot: HistorySpot | undefined) => void;
   /** Leaves the version history for the plan, its side panel as it was. */
   onClose: () => void;
 }
 
-/** The plan whose version history stands, and the save whose revision it opened on. */
+/** The plan whose version history stands, and the save whose revision it opened on or where it stood before. */
 interface HistoryOpening {
   readonly planId: string;
   readonly save: number | undefined;
+  readonly spot: HistorySpot | undefined;
 }
 
 /**
@@ -909,6 +913,7 @@ export function usePlansTab(input: {
     name: region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
     shown: shown && historyOpen,
     seek: historyFor?.save,
+    returnTo: historyFor?.spot,
     // The Undo puts back the version that stood before the restore, itself a restore.
     onRestored: (undo) =>
       toast(
@@ -968,9 +973,9 @@ export function usePlansTab(input: {
   };
 
   // A plan's version history opens over the plan, so another plan opens first.
-  const openHistory = (planId: string, save?: number) => {
-    if (planId !== boundFor) select(planId);
-    setHistoryFor({ planId, save });
+  const openHistory = (opening: HistoryOpening) => {
+    if (opening.planId !== boundFor) select(opening.planId);
+    setHistoryFor(opening);
   };
 
   // A plan's own tab, its Inbox, and an agent's are in its column, so a
@@ -1059,7 +1064,8 @@ export function usePlansTab(input: {
     history: {
       ...history,
       open: historyOpen,
-      onOpen: openHistory,
+      onOpen: (planId, save) => openHistory({ planId, save, spot: undefined }),
+      onReturn: (planId, spot) => openHistory({ planId, save: undefined, spot }),
       onClose: () => setHistoryFor(undefined),
     },
     onSelect: select,

@@ -705,7 +705,10 @@ with jsdiff (`planning/plan-history-model.ts`), sections paired by their
 headings, the assumptions among them as the section they are. The first
 version has nothing before it and is drawn with nothing marked. The view is one step of the window's back and forward
 whichever version is chosen, so Back, Escape, and ⌘[ return to the plan as
-it was left, its side panel untouched.
+it was left, its side panel untouched. Whatever is opened from it — a
+version's Open, a tab from ⌘K — is a visit after it, so ⌘[ comes back to the
+view on the version and the sections it was left on, and ⌘] goes on to what
+was opened.
 
 Restore this version asks first, in the window's dialog, and then puts the
 revision's text back through the plan's one locked save

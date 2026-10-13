@@ -6,7 +6,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
-import type { NavigationHistory } from "../navigation-history";
+import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
@@ -173,7 +173,7 @@ export function DesktopShell({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
-  history: NavigationHistory;
+  history: WindowHistory;
   sidebar: SidebarCollapse;
   /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
   call: CallCardInput | undefined;
@@ -238,6 +238,7 @@ export function DesktopShell({
           plans={plans}
           account={account}
           onExit={history.canGoBack ? history.onBack : plans.history.onClose}
+          onRestored={history.onLeaveVersionHistory}
         />
         <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
         <CaptionStrip {...captions} />

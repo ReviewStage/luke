@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type PlanSummary } from "@sidecar/hosted/plan-wire";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { PLAN_ACTOR, type PlanRevisionLine, type PlanSummary } from "@sidecar/hosted/plan-wire";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { captionStripProps } from "#testing/captions";
-import { plansControl, versionHistoryControl } from "#testing/plans-control";
+import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { runAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { DesktopShell } from "./desktop/desktop-shell";
@@ -16,8 +15,14 @@ import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { PLANS_PAGE } from "./planning/planning-model";
-import { HISTORY_READ } from "./planning/use-plan-history";
+import {
+  type HistorySpot,
+  type PlanHistorySource,
+  usePlanHistory,
+} from "./planning/use-plan-history";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const ignore = () => undefined;
 
@@ -44,21 +49,33 @@ const EXPORTS: PlanSummary = {
 };
 const EVERY_PLAN = [INVITATIONS, BILLING, EXPORTS];
 
-/** An older version of whichever plan's version history stands, read and drawn, with something to restore. */
-const OLDER_VERSION = {
-  line: {
-    seq: 1,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: false },
-    startedAt: 1,
-    changes: 1,
-  },
-  current: false,
-  read: {
-    kind: HISTORY_READ.READY,
-    document: { body: "# Plan", assumptions: [] },
-    previous: null,
-  },
-} as const;
+/** One revision of whichever plan's version history stands, Luke's on a call, changing the plan's two sections. */
+function revisionLine(seq: number): PlanRevisionLine {
+  return {
+    seq,
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: seq, duringCall: true },
+    callId: "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    startedAt: seq,
+    changes: 2,
+  };
+}
+
+/** Every plan's history, its newest revision and an older one to restore, each answered at once; every restore is carried. */
+const HISTORY_SOURCE: PlanHistorySource = {
+  readPage: () => Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
+  readRevision: (_planId, seq) =>
+    Promise.resolve({
+      revision: {
+        seq,
+        document: {
+          body: "## Goal\n\nAny member.\n\n## Decisions\n\nInvites expire.",
+          assumptions: [],
+        },
+        previous: null,
+      },
+    }),
+  restore: () => Promise.resolve(true),
+};
 
 /** What the window shows for a place: a Settings page's title, the new-plan page, a plan's version history, or the open plan's name. */
 const NEW_PLAN_PAGE = "new plan";
@@ -73,7 +90,8 @@ let menuListener: ((command: AppCommand) => void) | undefined;
  * keymap, the menu bar, the mouse's buttons, and its Escape past the nearer
  * layers, which runs Settings' exit or the version history's. The version
  * history stands while the plan it was opened on is the open one, as the
- * plans' own control holds it.
+ * plans' own control holds it, over the plans' own history read at once, and
+ * a version's Open leaves it for the plan.
  */
 function Window({
   start,
@@ -90,7 +108,9 @@ function Window({
   const [tab, setTab] = useState(start);
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [open, setOpen] = useState(restored);
-  const [historyFor, setHistoryFor] = useState<string | undefined>(undefined);
+  const [historyFor, setHistoryFor] = useState<
+    { planId: string; spot: HistorySpot | undefined } | undefined
+  >(undefined);
   const sidebar = useSidebarCollapse(false);
   useAppKeymap(true);
   useMenuCommands(true);
@@ -109,6 +129,21 @@ function Window({
   // way leaves the open plan as it is.
   const held = [...listed, ...archived];
   const shown = held.length === 0 || held.some((plan) => plan.id === open) ? open : undefined;
+  const historyOpen = historyFor !== undefined && historyFor.planId === shown;
+  const versions = usePlanHistory({
+    source: HISTORY_SOURCE,
+    planId: shown,
+    editedAt: undefined,
+    name: undefined,
+    shown: historyOpen,
+    seek: undefined,
+    returnTo: historyFor?.spot,
+    onRestored: ignore,
+  });
+  const openHistory = (planId: string, spot: HistorySpot | undefined) => {
+    setOpen(planId);
+    setHistoryFor({ planId, spot });
+  };
   const plans = plansControl({
     page: shown === undefined ? PLANS_PAGE.NEW : PLANS_PAGE.DOCUMENT,
     plans: listed,
@@ -117,17 +152,14 @@ function Window({
     onSelect: setOpen,
     onLeavePlan: () => setOpen(undefined),
     onNewPlan: () => setOpen(undefined),
-    history: versionHistoryControl({
-      viewing: OLDER_VERSION,
-      // A restore the service carries, which the shell leaves the version history on.
-      onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      open: historyFor !== undefined && historyFor === shown,
-      onOpen: (planId) => {
-        setOpen(planId);
-        setHistoryFor(planId);
-      },
+    history: {
+      ...versions,
+      open: historyOpen,
+      onOpen: (planId) => openHistory(planId, undefined),
+      onReturn: openHistory,
       onClose: () => setHistoryFor(undefined),
-    }),
+    },
+    onShowSource: () => setHistoryFor(undefined),
   });
   const onTabChange = (next: PanelTab) => {
     setTab(next);
@@ -217,8 +249,34 @@ function openVersionHistory(plan: PlanSummary): void {
   );
 }
 
-/** Restores the version drawn, answering the question it asks, and lets the restore land. */
+/** Lets the history's reads land. */
+async function landed(): Promise<void> {
+  await act(async () => undefined);
+}
+
+/** The version row whose revision is lit, by its revision, and the open sections' lit section, if any is open. */
+function chosenVersion() {
+  const rows = [...document.body.querySelectorAll(".version-row")];
+  const lit = rows.findIndex((row) => row.getAttribute("aria-current") === "true");
+  const track = document.body.querySelector(".version-log-track");
+  const section = document.body.querySelector(
+    '.version-section-row[aria-current="true"] .version-section-name',
+  );
+  return {
+    // The rows list the newest revision first.
+    revision: rows.length - lit,
+    section:
+      track?.getAttribute("data-opened") === "true"
+        ? (section?.textContent ?? undefined)
+        : undefined,
+  };
+}
+
+/** Chooses the older version, then restores it, answering the question it asks, and lets the restore land. */
 async function restoreVersion(): Promise<void> {
+  await landed();
+  click(document.body.querySelectorAll<HTMLButtonElement>(".version-row")[1]);
+  await landed();
   click(
     [...document.body.querySelectorAll<HTMLButtonElement>(".version-page button")].find(
       (button) => button.textContent === "Restore this version",
@@ -509,6 +567,38 @@ test("a version history opened from another plan's row opens over that plan, and
 
   pressEscape();
   assert.equal(where(), INVITATIONS.name);
+});
+
+test("Back from what a version's Open opened returns to the version history on the version and section it stood on, and Forward to what it opened", async () => {
+  show();
+  openPlan(INVITATIONS);
+  openVersionHistory(INVITATIONS);
+  await landed();
+  const older = document.body.querySelectorAll(".version-item")[1];
+  click(older?.querySelector<HTMLButtonElement>(".version-row-sections"));
+  await landed();
+  click(
+    [...document.body.querySelectorAll<HTMLButtonElement>(".version-section-row")].find(
+      (row) => row.querySelector(".version-section-name")?.textContent === "Decisions",
+    ),
+  );
+  assert.deepEqual(chosenVersion(), { revision: 1, section: "Decisions" });
+
+  click(
+    document.body.querySelector<HTMLButtonElement>(
+      ".version-sections-head button[aria-label='Open in Transcript']",
+    ),
+  );
+  assert.equal(where(), INVITATIONS.name);
+  assert.equal(command("["), true);
+  await landed();
+  assert.equal(where(), VERSION_HISTORY);
+  assert.deepEqual(chosenVersion(), { revision: 1, section: "Decisions" }, "where it was left");
+  assert.equal(command("]"), true);
+  assert.equal(where(), INVITATIONS.name);
+  command("[");
+  command("[");
+  assert.equal(where(), INVITATIONS.name, "the plan it was opened from is behind it");
 });
 
 test("a restore lands on the plan it restored, as Back would from its own plan, and on that plan though another was open", async () => {

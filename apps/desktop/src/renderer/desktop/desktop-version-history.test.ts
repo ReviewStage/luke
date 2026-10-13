@@ -213,6 +213,7 @@ function mount(
       name: "Teammate invitations",
       shown: open,
       seek,
+      returnTo: undefined,
       onRestored: (undo) => {
         if (undo !== undefined) service.undos.push(undo);
       },
@@ -225,7 +226,13 @@ function mount(
         kind: DOCUMENT_REGION.READY,
         plan: planOf(service.current, archivedNow),
       },
-      history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
+      history: {
+        ...history,
+        open,
+        onOpen: () => setOpen(true),
+        onReturn: () => setOpen(true),
+        onClose: () => setOpen(false),
+      },
       agents: codingAgentsControl({ agents: [INVITE_AGENT] }),
       onShowSource: (planId, source) => shownSources.push({ planId, source }),
     });
@@ -235,6 +242,7 @@ function mount(
       plans,
       account: READER,
       onExit: () => setOpen(false),
+      onRestored: () => setOpen(false),
     });
   }
   const container = document.createElement("div");
@@ -1154,6 +1162,7 @@ it.effect(
           name: "Teammate invitations",
           shown: true,
           seek: opened.seek,
+          returnTo: undefined,
           onRestored: () => undefined,
         });
         selected = () => history.selected;

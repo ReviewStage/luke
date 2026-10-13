@@ -4,7 +4,7 @@ import type {
   PlanningRevisionsAnswer,
 } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { revisionOfSave } from "./plan-history-model";
 
 /**
@@ -21,11 +21,12 @@ import { revisionOfSave } from "./plan-history-model";
  * left or another plan opens, and opens again on the newest. Opened from a
  * section's "Edited by", it opens instead on the revision that made the
  * section's last save, reading older pages until one shows it, and on the
- * newest where none can be read. Restoring the version is the service's
- * write; the plan it answers arrives in the document through main's view
- * like any other save, and the history reads again on it. A restore is undone by
- * restoring the version that stood before it, which the caller is handed to
- * offer.
+ * newest where none can be read. Gone back to, it opens where it stood when
+ * it was left: on the version chosen then, with the sections then open.
+ * Restoring the version is the service's write; the plan it answers arrives
+ * in the document through main's view like any other save, and the history
+ * reads again on it. A restore is undone by restoring the version that stood
+ * before it, which the caller is handed to offer.
  */
 
 /** Where a read of the history or of one version stands. */
@@ -70,6 +71,23 @@ export interface PlanHistorySource {
   restore: (planId: string, seq: number) => Promise<boolean>;
 }
 
+/**
+ * The revision whose sections are open, and the one of them drawn by its
+ * heading, the first until another is chosen. Note that the section is
+ * held by its heading rather than its place, because a save that joins the
+ * revision while it is open can add a section before it.
+ */
+export interface OpenedSections {
+  readonly seq: number;
+  readonly heading: string | undefined;
+}
+
+/** Where a version history stands: the revision chosen, none while the newest is followed, and the revision whose sections are open. */
+export interface HistorySpot {
+  readonly revision: number | undefined;
+  readonly opened: OpenedSections | undefined;
+}
+
 /** What the version history draws, and its presses. */
 export interface PlanHistoryControl {
   list: HistoryList;
@@ -78,6 +96,14 @@ export interface PlanHistoryControl {
   /** The version drawn, once the list holds the revision chosen. */
   viewing: ViewedVersion | undefined;
   onSelect: (seq: number) => void;
+  /** Where the version history stands while it does, which it opens on again given as `returnTo`. */
+  spot: HistorySpot | undefined;
+  /** Chooses a revision and opens the sections it changed, the first drawn. */
+  onOpenSections: (seq: number) => void;
+  /** Draws another of the open revision's sections, by its heading. */
+  onChooseSection: (heading: string | undefined) => void;
+  /** Closes the open revision's sections, back to every version. */
+  onCloseSections: () => void;
   onRetry: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
@@ -101,24 +127,31 @@ interface HeldList {
  * A version chosen on one plan: its revision, none while the newest is
  * followed, so a save landing moves the view onto it; the moment of the save
  * it was opened to find, until the pages read show which revision made it;
- * its content as read and the revision that read was for; and how many times
- * it was asked for, so choosing one whose read failed reads it again.
+ * its content as read and the revision that read was for; how many times
+ * it was asked for, so choosing one whose read failed reads it again; and the
+ * revision whose sections are open, drawn only while it is the one chosen.
  */
 interface HeldVersion {
   readonly planId: string;
   readonly seq: number | undefined;
   readonly seeking: number | undefined;
+  readonly opened: OpenedSections | undefined;
   readonly read: VersionRead;
   readonly readOf: number | undefined;
   readonly asked: number;
 }
 
-/** The version history opened on a plan: following the newest, or seeking a save's revision, nothing read yet. */
-function openedOn(planId: string, seek: number | undefined): HeldVersion {
+/** The version history opened on a plan: following the newest, seeking a save's revision, or where it stood before, nothing read yet. */
+function openedOn(
+  planId: string,
+  seek: number | undefined,
+  returnTo: HistorySpot | undefined,
+): HeldVersion {
   return {
     planId,
-    seq: undefined,
+    seq: returnTo?.revision,
     seeking: seek,
+    opened: returnTo?.opened,
     read: { kind: HISTORY_READ.READING },
     readOf: undefined,
     asked: 1,
@@ -164,7 +197,8 @@ function versionOf(answer: PlanningRevisionAnswer): VersionRead {
  * version drawn again; `shown` whether the plan's version history is on
  * screen, which is what reads it and what a version chosen stands on; and
  * `seek` the moment of the save whose revision it opens on, read as it
- * opens, none to open on the plan as it stands.
+ * opens, none to open on the plan as it stands or, given `returnTo`, where
+ * it stood on an earlier visit.
  */
 export function usePlanHistory(input: {
   source: PlanHistorySource;
@@ -173,13 +207,14 @@ export function usePlanHistory(input: {
   name: string | undefined;
   shown: boolean;
   seek: number | undefined;
+  returnTo: HistorySpot | undefined;
   /**
    * Says a restore landed, with the way to undo it: a restore of the
    * version that stood before it, where the history read names one.
    */
   onRestored: (undo: (() => Promise<boolean>) | undefined) => void;
 }): PlanHistoryControl {
-  const { source, planId, editedAt, name, shown, seek, onRestored } = input;
+  const { source, planId, editedAt, name, shown, seek, returnTo, onRestored } = input;
   const [list, setList] = useState<HeldList | undefined>(undefined);
   const [version, setVersion] = useState<HeldVersion | undefined>(undefined);
   const [retries, setRetries] = useState(0);
@@ -202,7 +237,7 @@ export function usePlanHistory(input: {
   // Until one is chosen, the plan as it stands is, whichever revision that is now.
   const newest = revisions[0]?.seq;
   if (reading && planId !== undefined && chosen === undefined) {
-    setVersion(openedOn(planId, seek));
+    setVersion(openedOn(planId, seek, returnTo));
   }
   // A save sought is its revision once the pages read show it, kept as chosen
   // from then on. Note that it is sought only in a list as new as the plan's
@@ -289,6 +324,7 @@ export function usePlanHistory(input: {
           planId,
           seq: chosenSeq === newest ? undefined : chosenSeq,
           seeking: undefined,
+          opened: undefined,
           read: { kind: HISTORY_READ.READING },
           readOf: undefined,
           asked: (same ? held.asked : 0) + 1,
@@ -298,6 +334,13 @@ export function usePlanHistory(input: {
     [planId, newest],
   );
   const onRetry = useCallback(() => setRetries((was) => was + 1), []);
+  const onOpenSections = (sectionsOf: number) => {
+    onSelect(sectionsOf);
+    setVersion((held) => held && { ...held, opened: { seq: sectionsOf, heading: undefined } });
+  };
+  const onChooseSection = (heading: string | undefined) =>
+    setVersion((held) => held?.opened && { ...held, opened: { ...held.opened, heading } });
+  const onCloseSections = () => setVersion((held) => held && { ...held, opened: undefined });
 
   const onLoadEarlier = async (): Promise<boolean> => {
     if (planId === undefined || held?.kind !== HISTORY_READ.READY || held.earlier === undefined) {
@@ -350,6 +393,20 @@ export function usePlanHistory(input: {
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
 
+  // A newer version arriving while the newest's sections are open moves the
+  // history on to it, as it does over the list, so the sections give way.
+  const opened = chosen?.opened?.seq === seq ? chosen?.opened : undefined;
+  // Note that the spot is the same object while it stands as it was, because
+  // the window's history records it on every change.
+  const standing = chosen !== undefined;
+  const revision = chosen?.seq;
+  const openedSeq = opened?.seq;
+  const heading = opened?.heading;
+  const spot = useMemo((): HistorySpot | undefined => {
+    if (!standing) return undefined;
+    return { revision, opened: openedSeq === undefined ? undefined : { seq: openedSeq, heading } };
+  }, [standing, revision, openedSeq, heading]);
+
   const line = revisions.find((each) => each.seq === seq);
   return {
     list: held ?? { kind: HISTORY_READ.READING },
@@ -364,6 +421,10 @@ export function usePlanHistory(input: {
             read: chosen.readOf === seq ? chosen.read : { kind: HISTORY_READ.READING },
           },
     onSelect,
+    spot,
+    onOpenSections,
+    onChooseSection,
+    onCloseSections,
     onRetry,
     onLoadEarlier,
     onRestore,
