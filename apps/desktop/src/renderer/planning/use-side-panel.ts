@@ -1,6 +1,7 @@
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CHANGES_LABEL, changesLabelOf } from "./changes-model";
 import { fileName } from "./code-pane-model";
 import {
   type AgentStripTab,
@@ -53,8 +54,12 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
  * nowhere, so a launch opens none. An agent's Changes tab, opened from the
- * Changes chip at its tab's foot or from the "+", is held to the plan's
- * agents on the same terms, one per agent, and is pinned nowhere. A file's tab, opened from a
+ * Changes chip at its tab's foot, the "+", the plan's summary, or ⌘K, is
+ * the one kind besides the fixed three kept as they are: one per agent,
+ * since each agent works in a sandbox and a pull request of its own, it is
+ * opened on the plan it was opened on and held to that plan's agents, and
+ * it is kept with the plan's other choices, so it stands, and stands
+ * chosen, across a launch, and pins to the sidebar. A file's tab, opened from a
  * snippet in the Code tab or from the "+", is the one kind that stands many
  * times, one per file: it is held to the files Luke showed on the open plan
  * the same way, closes, and is kept nowhere. A page's tab, opened from the
@@ -94,7 +99,7 @@ import { MAIN_TAB } from "./use-main-tabs";
  * they keep their place until a launch and then drop out of the order,
  * leaving the rest as they stood.
  *
- * A fixed tab or a file's may be pinned to the sidebar, and so may a coding
+ * A fixed tab, a file's, or a Changes tab may be pinned to the sidebar, and so may a coding
  * agent's or the Inbox from the plan's column, where it stands under Pinned beside the
  * pinned plans, newest pinned first, and opens its plan on that tab from
  * any plan. The pins are kept here, with the rest of the window's tab
@@ -109,7 +114,7 @@ import { MAIN_TAB } from "./use-main-tabs";
  *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at
- * mount. What an earlier version kept still reads: the fixed tabs it held
+ * mount, a Changes tab with the fixed ones. What an earlier version kept still reads: the fixed tabs it held
  * open, or every tab before they could close, give the order alone, so a
  * set an earlier launch held open opens no tab on a plan that has not used
  * it, and a kind since retired (`RETIRED_SIDE_PANEL_TAB`) reads as never
@@ -252,7 +257,13 @@ const sidePanelTabSchema = Schema.Literals([
   ...SIDE_PANEL_TABS,
   ...Object.values(RETIRED_SIDE_PANEL_TAB),
 ]);
-const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Schema.String })]);
+/** An agent's Changes tab as it is kept, on the plan it was opened on. */
+const changesTabSchema = Schema.Struct({ changes: Schema.String });
+const anyTabSchema = Schema.Union([
+  sidePanelTabSchema,
+  Schema.Struct({ agent: Schema.String }),
+  changesTabSchema,
+]);
 
 /**
  * How many tabs are kept pinned to the sidebar, the latest pinned. Note that
@@ -261,12 +272,13 @@ const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Sc
  */
 const PINS_KEPT = 100;
 
-/** The tab a pin opens: a fixed one, an agent's, the plan's Inbox, or a file's. */
+/** The tab a pin opens: a fixed one, an agent's, the plan's Inbox, a file's, or an agent's Changes. */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
   Schema.Struct({ agent: Schema.String }),
   Schema.Literal(MAIN_TAB.INBOX),
   Schema.Struct({ file: Schema.String }),
+  changesTabSchema,
 ]);
 
 /**
@@ -303,9 +315,10 @@ const stripPinSchema = Schema.Union([
  * The fixed tabs the developer opened on one plan though it held nothing of
  * them, those they closed on it, in the strip's order, the tabs they
  * viewed on it, the latest last, and the strip's order since a tab first
- * opened or moved on it. A kind is in `opened` or `closed` or neither. The tabs
- * viewed and the order are kept as the chosen tab is, of fixed tabs alone,
- * since no other stands again across a launch. `pinned` is what an
+ * opened or moved on it, and the agents' Changes tabs open on it, in the
+ * order opened. A kind is in `opened` or `closed` or neither. The tabs
+ * viewed and the order are kept as the chosen tab is, of fixed and Changes
+ * tabs alone, since no other stands again across a launch. `pinned` is what an
  * earlier version pinned in the strip, read once into the sidebar's pins and
  * written no more.
  */
@@ -315,14 +328,17 @@ const planTabsSchema = Schema.Struct({
   pinned: Schema.optional(Schema.Array(stripPinSchema)),
   recent: Schema.optional(Schema.Array(anyTabSchema)),
   order: Schema.optional(Schema.Array(anyTabSchema)),
+  changes: Schema.optional(Schema.Array(changesTabSchema)),
 });
 
-/** A plan's own choices as the hook holds them: today's kinds alone, and tabs viewed and an order that may hold any tab, which the record keeps none of. */
+/** A plan's own choices as the hook holds them: today's kinds alone, its open Changes tabs, and tabs viewed and an order that may hold any tab, which the record keeps only the kept kinds of. */
 interface PlanTabs {
   readonly opened: readonly FixedSidePanelTab[];
   readonly closed: readonly FixedSidePanelTab[];
   readonly recent?: readonly SidePanelTab[] | undefined;
   readonly order?: readonly SidePanelTab[] | undefined;
+  /** The agents' Changes tabs open on the plan, in the order opened. */
+  readonly changes?: readonly ChangesStripTab[] | undefined;
 }
 
 /**
@@ -351,15 +367,13 @@ export type SidePanelState = typeof sidePanelStateSchema.Type;
  * and the file tabs open, in the strip's order. Those are this view's
  * rather than the preference's, so they are kept nowhere, and a subagent's
  * or a file's tab chosen is written as no tab, which the next launch reads
- * as the first.
+ * as the first. A Changes tab is the plan's own choice, kept in `plans`.
  */
 interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pins"> {
   readonly tabs: readonly FixedSidePanelTab[];
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly SubagentStripTab[];
   readonly files: readonly OpenFile[];
-  /** The open Changes tabs, by agent, in the order opened. */
-  readonly changes: readonly ChangesStripTab[];
   /** The open page tabs, by page, in the order opened. */
   readonly pages: readonly PageStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
@@ -414,7 +428,7 @@ export interface SidePanelControl {
   subagents: readonly SubagentStripTab[];
   /** The open file tabs, in the strip's order; they follow the subagent tabs, and only those of files shown on the open plan are drawn. */
   files: readonly OpenFile[];
-  /** The open Changes tabs in the order opened, after the file tabs; only those of the plan's agents are drawn. */
+  /** The Changes tabs open on the open plan, in the order opened, after the file tabs; only those of the plan's agents are drawn. */
   changes: readonly ChangesStripTab[];
   /** The open page tabs in the order opened, after the Changes tabs; only those of the open plan's pages are drawn. */
   pages: readonly PageStripTab[];
@@ -514,6 +528,9 @@ function planTabs(held: HeldState, planId: string | undefined): PlanTabs {
 /** A plan with no page, the same array every render. */
 const NO_PAGES: readonly string[] = [];
 
+/** A plan with no Changes tab open, the same array every render. */
+const NO_CHANGES: readonly ChangesStripTab[] = [];
+
 /** A plan no tab was opened or moved on. */
 const NO_ORDER: readonly SidePanelTab[] = [];
 
@@ -574,9 +591,15 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, the Inbox, or a file's. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, the Inbox, a file's, or an agent's Changes. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return FIXED_TABS.has(tab) || isAgentTab(tab) || tab === MAIN_TAB.INBOX || isFileTab(tab);
+  return (
+    FIXED_TABS.has(tab) ||
+    isAgentTab(tab) ||
+    tab === MAIN_TAB.INBOX ||
+    isFileTab(tab) ||
+    isChangesTab(tab)
+  );
 }
 
 /** A pin of a tab in the plan's own column rather than the side panel: an agent's, or the Inbox. */
@@ -611,15 +634,22 @@ function withoutPin(held: HeldState, planId: string, tab: PinnableTab): HeldStat
   return { ...held, pins: held.pins.filter((each) => !pinOf(each, planId, tab)) };
 }
 
-/** The state with each agent pinned on the plan named as `labels` names it, and the state as it is where every one already was. */
+/** The name a pin of an agent's tab or its Changes tab wears for the agent `labels` names, by agent id; none for any other pin, or an agent named nowhere. */
+function agentPinLabel(tab: PinnableTab, labels: ReadonlyMap<string, string>): string | undefined {
+  if (isAgentTab(tab)) return labels.get(tab.agent);
+  if (!isChangesTab(tab)) return undefined;
+  const agent = labels.get(tab.changes);
+  return agent === undefined ? undefined : changesLabelOf(agent);
+}
+
+/** The state with each agent, and each agent's Changes, pinned on the plan named as `labels` names the agent, and the state as it is where every one already was. */
 function withPinsRenamed(
   held: HeldState,
   planId: string,
   labels: ReadonlyMap<string, string>,
 ): HeldState {
   const renamed = (pin: PinnedTab) => {
-    const label =
-      pin.plan === planId && isAgentTab(pin.tab) ? labels.get(pin.tab.agent) : undefined;
+    const label = pin.plan === planId ? agentPinLabel(pin.tab, labels) : undefined;
     return label === undefined || label === pin.label ? pin : { ...pin, label };
   };
   const pins = held.pins.map(renamed);
@@ -652,14 +682,30 @@ function withoutViewed(held: HeldState, planId: string | undefined, tab: SidePan
   }));
 }
 
+/** The state with the agent's Changes tab open on the plan, after those open there; as it was where it already is. */
+function withChangesOpened(
+  held: HeldState,
+  planId: string | undefined,
+  tab: ChangesStripTab,
+): HeldState {
+  return withPlanTabs(held, planId, (was) => {
+    const open = was.changes ?? NO_CHANGES;
+    return open.some((each) => sameTab(each, tab)) ? was : { ...was, changes: [...open, tab] };
+  });
+}
+
 /**
  * The state with the tab open and chosen. A fixed tab opens on the open
- * plan, where it stands though the plan holds nothing of it; a subagent's
- * opens at the end of its own run, and one already open is chosen as it
- * stands, whichever path named its call.
+ * plan, where it stands though the plan holds nothing of it, and so does a
+ * Changes tab; a subagent's opens at the end of its own run, and one
+ * already open is chosen as it stands, whichever path named its call.
  */
 function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined): HeldState {
-  const opened = isFixedTab(tab) ? withChoice(held, planId, tab, true) : held;
+  const opened = isFixedTab(tab)
+    ? withChoice(held, planId, tab, true)
+    : isChangesTab(tab)
+      ? withChangesOpened(held, planId, tab)
+      : held;
   const open = isSubagentTab(tab) ? held.subagents.find((each) => sameTab(each, tab)) : undefined;
   const subagents =
     isSubagentTab(tab) && open === undefined ? [...held.subagents, tab] : held.subagents;
@@ -667,10 +713,6 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isFileTab(tab) && !held.files.some((each) => each.path === tab.file)
       ? [...held.files, { path: tab.file, range: undefined, opened: 0 }]
       : held.files;
-  const changes =
-    isChangesTab(tab) && !held.changes.some((each) => sameTab(each, tab))
-      ? [...held.changes, tab]
-      : held.changes;
   const pages =
     isPageTab(tab) && !held.pages.some((each) => sameTab(each, tab))
       ? [...held.pages, tab]
@@ -679,11 +721,10 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
-    changes === held.changes &&
     pages === held.pages &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, changes, pages, tab: chosen };
+    : { ...opened, subagents, files, pages, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -832,6 +873,13 @@ function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
 }
 
+/** The Changes tabs open on the plan that it draws (`drawsChanges`), in the order opened. */
+function drawnChanges(held: HeldState, drawn: DrawnTabs): readonly ChangesStripTab[] {
+  return (planTabs(held, drawn.plan.id).changes ?? NO_CHANGES).filter((each) =>
+    drawsChanges(each, drawn),
+  );
+}
+
 /** The open subagent tabs the plan draws, in the order opened. */
 function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentStripTab[] {
   return held.subagents.filter((each) => drawsSubagent(each, drawn));
@@ -847,7 +895,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnFixed(held, drawn.plan),
     ...drawnSubagents(held, drawn),
     ...drawnFiles(held, drawn).map((file) => ({ file })),
-    ...held.changes.filter((each) => drawsChanges(each, drawn)),
+    ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
@@ -872,7 +920,7 @@ function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[
 
 /** The tab the panel shows on the plan: the chosen one as `shownTab` holds it to the plan. */
 function shownIn(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
-  return shownTab(held.tab, fallbackTabs(held, drawn), drawn);
+  return shownTab(held.tab, fallbackTabs(held, drawn), drawn, drawnChanges(held, drawn));
 }
 
 /**
@@ -903,7 +951,10 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
         ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
         : undefined
       : isChangesTab(tab)
-        ? { ...held, changes: held.changes.filter((each) => !sameTab(each, tab)) }
+        ? withPlanTabs(held, drawn.plan.id, (was) => ({
+            ...was,
+            changes: (was.changes ?? NO_CHANGES).filter((each) => !sameTab(each, tab)),
+          }))
         : isPageTab(tab)
           ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
           : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
@@ -945,15 +996,19 @@ function withTabLast(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): Held
 /**
  * The state with the tab written at the end of the order of `planId`, a
  * plan whose strip is not drawn here, where that strip is sure not to draw
- * it: a fixed tab closed there, or a file with no tab open. Every other
+ * it: a fixed tab closed there, a Changes tab not open there, or a file with
+ * no tab open. Every other
  * fixed kind is written before it, in the order a plan whose order holds
  * none of them draws them, so it stands after whichever the plan draws.
  * Any other tab changes nothing, since it may stand there already.
  */
 function withTabLastOn(held: HeldState, planId: string, tab: SidePanelTab): HeldState {
+  const choices = planTabs(held, planId);
   const absent = isFixedTab(tab)
-    ? planTabs(held, planId).closed.includes(tab)
-    : isFileTab(tab) && !held.files.some((each) => each.path === tab.file);
+    ? choices.closed.includes(tab)
+    : isChangesTab(tab)
+      ? !(choices.changes ?? NO_CHANGES).some((each) => sameTab(each, tab))
+      : isFileTab(tab) && !held.files.some((each) => each.path === tab.file);
   if (!absent) return held;
   const others = held.tabs.filter((each) => !sameTab(each, tab));
   const order = openedOrder(orderOn(held, planId), others, tab);
@@ -1005,29 +1060,31 @@ function current<T>(tab: T): tab is Exclude<T, RetiredSidePanelTab> {
   return !RETIRED_TABS.has(tab);
 }
 
-/** Whether a kept choice of tab is one of this panel's today: a fixed kind not retired, never an agent's, which the plan's column holds now. */
-function panelChoice(tab: typeof anyTabSchema.Type): tab is FixedSidePanelTab {
+/** Whether a kept choice of tab is one of this panel's today: a fixed kind not retired, or an agent's Changes, never an agent's own, which the plan's column holds now. */
+function panelChoice(tab: typeof anyTabSchema.Type): tab is FixedSidePanelTab | ChangesStripTab {
   return !isAgentTab(tab) && current(tab);
 }
 
 /** Each plan's kept choices without the kinds retired since they were kept, nor an agent's, nor the strip pins `stripPins` reads. */
 function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
   return Object.fromEntries(
-    Object.entries(plans ?? {}).map(([plan, { opened, closed, recent, order }]) => [
+    Object.entries(plans ?? {}).map(([plan, { opened, closed, recent, order, changes }]) => [
       plan,
       {
         opened: opened.filter(current),
         closed: closed.filter(current),
         ...(recent === undefined ? undefined : { recent: recent.filter(panelChoice) }),
         ...(order === undefined ? undefined : { order: order.filter(panelChoice) }),
+        ...(changes === undefined ? undefined : { changes }),
       },
     ]),
   );
 }
 
-/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, or any agent's. */
+/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, any Changes tab's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
+  if (isChangesTab(tab)) return CHANGES_LABEL;
   if (tab === MAIN_TAB.INBOX) return "Inbox";
   return isAgentTab(tab) ? "Coding agent" : SIDE_PANEL_TAB_KIND[tab].label;
 }
@@ -1072,7 +1129,6 @@ function settled(state: SidePanelState): HeldState {
     width: clampWidth(state.width),
     subagents: [],
     files: [],
-    changes: [],
     pages: [],
     plans: currentPlans(state.plans),
     pins:
@@ -1085,26 +1141,32 @@ function settled(state: SidePanelState): HeldState {
   };
 }
 
-/** Whether a chosen or viewed tab is kept across a launch: a fixed tab, the one kind that stands again after it. */
-function keptChoice(tab: SidePanelTab): tab is FixedSidePanelTab {
-  return isFixedTab(tab);
+/** Whether a chosen or viewed tab is kept across a launch: a fixed tab or a Changes tab, the kinds that stand again after it. */
+function keptChoice(tab: SidePanelTab): tab is FixedSidePanelTab | ChangesStripTab {
+  return isFixedTab(tab) || isChangesTab(tab);
 }
 
-/** Each plan's choices as they are kept: its tabs viewed and its order as `keptChoice` keeps them, and neither where it has none. */
+/** Each plan's choices as they are kept: its tabs viewed and its order as `keptChoice` keeps them, its open Changes tabs, and none of them where it has none. */
 function storedPlans(plans: HeldState["plans"]): NonNullable<SidePanelState["plans"]> {
   const kept = (tabs: readonly SidePanelTab[]) => {
     const each = tabs.filter(keptChoice);
     return each.length === 0 ? undefined : each;
   };
   return Object.fromEntries(
-    Object.entries(plans).map(([plan, { opened, closed, recent = [], order = [] }]) => [
+    Object.entries(plans).map(([plan, { opened, closed, recent = [], order = [], changes }]) => [
       plan,
-      { opened, closed, recent: kept(recent), order: kept(order) },
+      {
+        opened,
+        closed,
+        recent: kept(recent),
+        order: kept(order),
+        changes: changes === undefined || changes.length === 0 ? undefined : changes,
+      },
     ]),
   );
 }
 
-/** What is kept of the state: the preference without the subagent and file tabs, and without a subagent's or a file's tab chosen. */
+/** What is kept of the state: the preference without the subagent, file, and page tabs, and without one of theirs chosen. */
 function stored(state: HeldState): SidePanelState {
   const kept = {
     open: state.open,
@@ -1143,7 +1205,8 @@ function readStored(): HeldState {
 
 /**
  * The tab the panel shows for the one kept: a fixed tab the open plan does
- * not draw, a subagent tab the plan does not draw (`drawsSubagent`), or a
+ * not draw, a subagent tab the plan does not draw (`drawsSubagent`), a
+ * Changes tab not among `changes`, those the plan draws (`drawnChanges`), or a
  * file tab of a file not shown on the open plan, reads as the first of
  * `tabs` (`fallbackTabs`), or as none where the plan draws none. With the
  * plan's agents not yet read, a delegated worker's tab stands, so a tab is
@@ -1156,11 +1219,12 @@ function shownTab(
   kept: SidePanelTab | undefined,
   tabs: readonly SidePanelTab[],
   drawn: Omit<DrawnTabs, "plan">,
+  changes: readonly ChangesStripTab[],
 ): SidePanelTab | undefined {
   if (kept === undefined) return tabs[0];
   if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
   if (isFileTab(kept)) return drawn.files.includes(kept.file) ? kept : tabs[0];
-  if (isChangesTab(kept)) return drawsChanges(kept, drawn) ? kept : tabs[0];
+  if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
@@ -1449,7 +1513,7 @@ export function useSidePanel(
     used,
     pins: state.pins,
     subagents: state.subagents,
-    changes: state.changes,
+    changes: planTabs(state, planId).changes ?? NO_CHANGES,
     pages: state.pages,
     files: state.files,
     tab: shownIn(state, drawn),

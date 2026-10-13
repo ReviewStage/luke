@@ -5,6 +5,8 @@ import {
 import {
   CODING_AGENT_STATUS,
   type CodingAgentChangedFile,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CopyIcon, DownloadIcon } from "@sidecar/panel";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
@@ -17,10 +19,13 @@ import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
+import { AgentGlyph } from "./agent-tab";
 import {
+  CHANGES_LABEL,
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
+  changesLabelOf,
   DIFF_ROW,
   fileNotice,
   filePatch,
@@ -31,7 +36,7 @@ import {
 } from "./changes-model";
 import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
 import { fileName } from "./code-pane-model";
-import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
+import { agentStillWriting, agentTabLabel, pullRequestNumberLabel } from "./coding-agent-model";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
@@ -251,18 +256,48 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
   );
 }
 
-/** What the Changes tab is called with no agent to name. */
-const CHANGES_LABEL = "Changes";
-
-/** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
-export function changesLabelOf(agentLabel: string): string {
-  return `${CHANGES_LABEL}: ${agentLabel}`;
-}
-
 /** The Changes tab's name: its agent's own, after the word for what it shows. */
 export function changesTabLabel(agentId: string, control: CodingAgentsControl): string {
   const agent = control.agents?.find((each) => each.id === agentId);
   return agent === undefined ? CHANGES_LABEL : changesLabelOf(agentTabLabel(agent, control.models));
+}
+
+/**
+ * The card a Changes tab hangs, and its row in the plan's summary, in a tab
+ * card's look: the pull request's title with its number at the right, the
+ * coding agent whose pull request it is under the title, wearing its glyph
+ * as its own tab does, and under them how many files it changes and the
+ * lines it adds and removes, as GitHub counts them.
+ */
+export function ChangesCard({
+  agent,
+  agentLabel,
+  pullRequest,
+}: {
+  agent: CodingAgentSummary;
+  /** The agent's name as its tab wears it. */
+  agentLabel: string;
+  pullRequest: CodingAgentPullRequest;
+}): React.JSX.Element {
+  const count = pullRequest.changedFiles;
+  return (
+    <div className="tab-card" data-tab-card="">
+      <div className="tab-card-head">
+        <div className="tab-card-title">
+          <span className="tab-card-name">{pullRequest.title}</span>
+          <span className="tab-card-agent" data-changes-agent="">
+            <AgentGlyph agent={agent} />
+            <span>{agentLabel}</span>
+          </span>
+        </div>
+        <span className="tab-card-time">{pullRequestNumberLabel(pullRequest)}</span>
+      </div>
+      <p className="tab-card-note">
+        {count} {count === 1 ? "file" : "files"} changed{" "}
+        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
+      </p>
+    </div>
+  );
 }
 
 export function AgentChangesTab({

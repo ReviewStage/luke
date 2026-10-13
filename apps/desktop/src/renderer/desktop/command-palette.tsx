@@ -60,7 +60,7 @@ import {
 } from "#shared/shortcuts";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { changesLabelOf } from "../planning/agent-changes-tab";
+import { changesLabelOf } from "../planning/changes-model";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";

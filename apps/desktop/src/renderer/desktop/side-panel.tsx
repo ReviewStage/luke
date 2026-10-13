@@ -25,7 +25,7 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
-import { AgentChangesTab, changesTabLabel } from "../planning/agent-changes-tab";
+import { AgentChangesTab, ChangesCard, changesTabLabel } from "../planning/agent-changes-tab";
 import { AgentGlyph, AgentMark, AgentSubagentTab, SubagentMark } from "../planning/agent-tab";
 import {
   AgentTabCard,
@@ -225,9 +225,10 @@ export const ADD_SECTION = {
   PAGES: "Pages",
 } as const;
 
-/** An agent's Changes tab as the "+" offers it: the agent, the name its tab wears, and the pull request the tab draws. */
+/** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, and the pull request the tab draws. */
 export interface ChangesOffer {
   readonly agentId: string;
+  readonly agent: CodingAgentSummary;
   readonly label: string;
   readonly pullRequest: CodingAgentPullRequest;
 }
@@ -246,8 +247,23 @@ export function changesOffers(agents: CodingAgentsControl): readonly ChangesOffe
     const pullRequest = agents.pullRequests.get(agent.id);
     if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
     offered.add(pullRequest.url);
-    return [{ agentId: agent.id, label: agentTabLabel(agent, agents.models), pullRequest }];
+    return [{ agentId: agent.id, agent, label: agentTabLabel(agent, agents.models), pullRequest }];
   });
+}
+
+/**
+ * The Changes tab an agent's Changes chip opens: the tab of the first agent,
+ * in the order started, on the same pull request, as `changesOffers` offers
+ * it, so the chip and the "+" never stand two tabs on one pull request's
+ * files; the agent's own where no other shares its pull request, or where
+ * its pull request is not yet held.
+ */
+export function changesTabOf(agents: CodingAgentsControl, agentId: string): ChangesStripTab {
+  const url = agents.pullRequests.get(agentId)?.url;
+  const first = (agents.agents ?? []).find(
+    (agent) => url !== undefined && agents.pullRequests.get(agent.id)?.url === url,
+  );
+  return { changes: first?.id ?? agentId };
 }
 
 /** The empty panel's row that opens a tab of the kind. */
@@ -372,8 +388,8 @@ export function planWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
 }
 
 /**
- * The glyph a tab's pin wears in the sidebar: its kind's, a file's, the
- * Inbox's tray, or an agent's as its tab wears it, where it stands included, wherever the
+ * The glyph a tab's pin wears in the sidebar: its kind's, a file's, a
+ * Changes tab's diff, the Inbox's tray, or an agent's as its tab wears it, where it stands included, wherever the
  * window last read the agent (`agent`), and otherwise the mark of the
  * harness it ran in when it was pinned.
  */
@@ -387,6 +403,7 @@ export function pinnedTabIcon(
     return <AgentMark provider={pin.model === undefined ? undefined : providerOf(pin.model)} />;
   }
   if (tab === MAIN_TAB.INBOX) return <InboxIcon />;
+  if (isChangesTab(tab)) return <FileDiffIcon />;
   return isFileTab(tab) ? <FileTypeIcon name={fileName(tab.file)} /> : TAB_ICON[tab];
 }
 
@@ -510,11 +527,28 @@ function stripTabs(input: {
     ),
     close: () => panel.onClose({ file: path }),
   }));
-  const changesTabs = changes.map((tab) => ({
-    tab,
-    look: look(tab, { icon: <FileDiffIcon />, label: changesTabLabel(tab.changes, agents) }),
-    close: () => panel.onClose(tab),
-  }));
+  // A Changes tab hangs its pull request's card, naming the agent whose it is.
+  const changesTabs = changes.map((tab) => {
+    const agent = agents.agents?.find((each) => each.id === tab.changes);
+    const pullRequest = agents.pullRequests.get(tab.changes);
+    const card =
+      agent === undefined || pullRequest === undefined ? undefined : (
+        <ChangesCard
+          agent={agent}
+          agentLabel={agentTabLabel(agent, agents.models)}
+          pullRequest={pullRequest}
+        />
+      );
+    return {
+      tab,
+      look: look(tab, {
+        icon: <FileDiffIcon />,
+        label: changesTabLabel(tab.changes, agents),
+        card,
+      }),
+      close: () => panel.onClose(tab),
+    };
+  });
   const pageTabs = pages.map(({ tab, line }) => ({
     tab,
     look: look(tab, { icon: <AppWindowIcon />, label: line.title }),
@@ -528,15 +562,16 @@ function stripTabs(input: {
  * subagents and the files, then the "+". A fixed tab's own word is all it
  * needs to say, so it hangs no pill, while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
- * (`agent-tab-card.tsx`); no tab has a chord. A tab something arrived on
+ * (`agent-tab-card.tsx`), and a Changes tab its pull request's, naming the
+ * agent whose it is (`ChangesCard`); no tab has a chord. A tab something arrived on
  * while another was shown reads in semibold until shown. Every tab, of
  * whatever kind, stands at the strip's end once opened, a subagent's
  * wearing the worker's glyph with a ring while it runs, until the developer
  * drags or steps any tab to any place, which the plan keeps
  * (`use-side-panel.ts`). A tab pinned to the sidebar is drawn and moved as
  * any other. Every tab's right-click offers Close, Close others, which
- * closes every tab but it and chooses it, and a fixed tab's and a file's
- * Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
+ * closes every tab but it and chooses it, and a fixed tab's, a file's, and
+ * a Changes tab's Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
  * tab draws (`transcript-copy.ts`) and answered with the window's toast.
  * The "+" stands after all of them, apart from the strip, so it is never

@@ -1,11 +1,11 @@
-import type { CodingAgentPullRequest, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LinesChanged } from "../planning/agent-published";
+import { ChangesCard } from "../planning/agent-changes-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
-import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
+import { agentTabLabel } from "../planning/coding-agent-model";
 import { type InboxBoardView, NEEDS_YOU } from "../planning/inbox-model";
 import { sameTab } from "../planning/tab-strip-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
@@ -330,27 +330,6 @@ function FileCard({ path, note }: { path: string; note: string | undefined }): R
   );
 }
 
-/**
- * A pull request's row's card, in a tab card's look: its title with its
- * number at the right, and under them how many files it changes and the
- * lines it adds and removes, as GitHub counts them.
- */
-function ChangesCard({ pullRequest }: { pullRequest: CodingAgentPullRequest }): React.JSX.Element {
-  const count = pullRequest.changedFiles;
-  return (
-    <div className="tab-card" data-tab-card="">
-      <div className="tab-card-head">
-        <span className="tab-card-name">{pullRequest.title}</span>
-        <span className="tab-card-time">{pullRequestNumberLabel(pullRequest)}</span>
-      </div>
-      <p className="tab-card-note">
-        {count} {count === 1 ? "file" : "files"} changed{" "}
-        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </p>
-    </div>
-  );
-}
-
 /** Luke's note on the newest lines of the file he showed with one, if any. */
 function newestNote(shown: readonly PlanCodeShowing[], path: string): string | undefined {
   return shown.findLast(({ code }) => code.ref.path === path && code.note !== undefined)?.code.note;
@@ -361,7 +340,7 @@ function newestNote(shown: readonly PlanCodeShowing[], path: string): string | u
  * agent's its tab's card, read from what its tab last held; a subagent's
  * its tab's card, from the session the plan's work holds; a file's its path
  * and Luke's note; a pull request's its title, number, and what it
- * changes; the Inbox's what waits. The panel's kinds hang none, as their
+ * changes, under the agent whose it is; the Inbox's what waits. The panel's kinds hang none, as their
  * tabs hang none, since their names say all there is.
  */
 function withCards(
@@ -401,7 +380,10 @@ function withCards(
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;
-      return { ...entry, card: <ChangesCard pullRequest={offer.pullRequest} /> };
+      const card = (
+        <ChangesCard agent={offer.agent} agentLabel={offer.label} pullRequest={offer.pullRequest} />
+      );
+      return { ...entry, card };
     }
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;

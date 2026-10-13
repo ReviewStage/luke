@@ -4184,6 +4184,19 @@ body:has(.app-stage[data-capture="true"])
   font-size: 11.5px;
 }
 
+/* A Changes card's agent under its pull request's title, a size under the
+   name as a model is, wearing the agent's glyph at a pin's size. */
+.tab-card-agent {
+  --state-glyph-size: 12px;
+
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
 .tab-card-time {
   flex: 0 0 auto;
   color: var(--text-tertiary);
