@@ -15,7 +15,6 @@ import type { WireBoundaryInput } from "@sidecar/wire";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   beginIntegrationSignIn,
@@ -38,7 +37,6 @@ import { noNetwork } from "./support/no-network";
  * test's variables, asking a Connect that grants everything.
  */
 
-const NOW = 1_800_000_000_000;
 const ORIGIN = "https://luke.test";
 const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
@@ -55,11 +53,11 @@ const openAccount = (email: string) =>
 /** The group over the test's database and a deployment with these variables, each bearer the account it names. */
 const standing = (variables: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
-    yield* TestClock.setTime(NOW);
+    const clock = yield* Clock.Clock;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      Layer.succeed(Clock.Clock, clock),
       integrationConnectOver(variables),
       noNetwork,
     );
@@ -75,7 +73,8 @@ const standing = (variables: Readonly<Record<string, string>>) =>
         completeSignIn: completeIntegrationSignIn,
         deleteConnection: deleteIntegrationConnection,
         mintState: mintIntegrationState,
-        now: () => NOW,
+        // The test's own clock, which also stamps a sign-in begun.
+        now: () => clock.currentTimeMillisUnsafe(),
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -180,5 +179,17 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       assert.equal(yield* group.slackStatus(pat), INTEGRATION_STATUS.DISCONNECTED);
       assert.equal(yield* group.slackStatus(colleague), INTEGRATION_STATUS.UNAVAILABLE);
     }),
+  );
+
+  it.effect(
+    "an allowlist set to blanks, or to entries of neither shape, offers the integration to no account rather than every one",
+    () =>
+      Effect.gen(function* () {
+        const anyone = yield* openAccount("quinn@elsewhere.example");
+        for (const listed of ["   ", "@", " @ , luke.example, @@elsewhere.example, quinn@"]) {
+          const group = yield* standing({ ...SLACK_CONNECTOR, SLACK_ALLOWED_ACCOUNTS: listed });
+          assert.equal(yield* group.slackStatus(anyone), INTEGRATION_STATUS.UNAVAILABLE, listed);
+        }
+      }),
   );
 });

@@ -246,7 +246,6 @@ function IntegrationRows(): React.JSX.Element {
   const offered = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => statuses.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
   );
-  if (offered.length === 0) return <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p>;
   return (
     <>
       {statuses.readFailed ? (
@@ -257,17 +256,21 @@ function IntegrationRows(): React.JSX.Element {
           <RetryButton onRetry={() => void statuses.read()} />
         </>
       ) : null}
-      <SettingsGroup>
-        {offered.map((provider) => (
-          <IntegrationRow
-            key={provider}
-            provider={provider}
-            status={statuses.statusOf(provider)}
-            health={connectionHealth(provider, reads[provider])}
-            statuses={statuses}
-          />
-        ))}
-      </SettingsGroup>
+      {offered.length === 0 ? (
+        <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p>
+      ) : (
+        <SettingsGroup>
+          {offered.map((provider) => (
+            <IntegrationRow
+              key={provider}
+              provider={provider}
+              status={statuses.statusOf(provider)}
+              health={connectionHealth(provider, reads[provider])}
+              statuses={statuses}
+            />
+          ))}
+        </SettingsGroup>
+      )}
     </>
   );
 }

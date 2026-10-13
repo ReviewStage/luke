@@ -969,8 +969,11 @@ allowlist variable beside its connector's (`LINEAR_ALLOWED_ACCOUNTS`,
 `SLACK_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
 every account whose email is at that domain, or one exact email, matched
 without regard to case against the email on the account's user row.
-Unset, the provider is offered to every account. The list lives in the
-project's Vercel environment alone, never in code:
+Unset or empty, the provider is offered to every account. The list fails
+closed: one of nothing but blanks offers the provider to nobody, and an
+entry of neither shape (a bare `@`, a domain without its `@`) is ignored
+rather than read as matching anything. The list lives in the project's
+Vercel environment alone, never in code:
 
 ```
 vercel env add SLACK_ALLOWED_ACCOUNTS production   # e.g. @example.com,someone@example.org

@@ -249,22 +249,30 @@ export function revokeIntegrationGrants(
   );
 }
 
+/** An allowlist entry for every email at one domain: `@`, then a host name of at least two labels. */
+const DOMAIN_ENTRY_PATTERN = /^@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+/** An allowlist entry for one email: a local part, `@`, then a domain as above. */
+const EMAIL_ENTRY_PATTERN = /^[^@\s]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
 /**
  * The accounts an allowlist variable names: comma-separated entries, each
  * `@domain.com` for every email at that domain or one exact email, matched
- * without regard to case. Unset or blank names no list, which offers the
- * provider to every account.
+ * without regard to case. Note that the list fails closed, because it is
+ * what keeps an internal app from strangers: an unset variable names no
+ * list, which offers the provider to every account, but one set to
+ * nothing but blanks names an empty list, and an entry of neither shape
+ * (a bare `@`, say, which every email ends in) is dropped rather than read
+ * as matching anything.
  */
-function allowedAccountsOf(value: string | undefined): AllowedAccounts | undefined {
-  const listed = text(value);
-  if (listed === undefined) return undefined;
-  const entries = listed
+function allowedAccountsOf(value: string): AllowedAccounts {
+  const entries = value
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry) => entry !== "");
   return {
-    domains: entries.filter((entry) => entry.startsWith("@")),
-    emails: entries.filter((entry) => !entry.startsWith("@")),
+    domains: entries.filter((entry) => DOMAIN_ENTRY_PATTERN.test(entry)),
+    emails: entries.filter((entry) => EMAIL_ENTRY_PATTERN.test(entry)),
   };
 }
 
@@ -324,9 +332,11 @@ function connectorFromEnvironment(provider: IntegrationProvider) {
     ([connectorRead, allowedRead]): ConnectorService => {
       const connector = text(Option.getOrUndefined(connectorRead));
       if (connector === undefined) return UNCONFIGURED_CONNECTOR;
-      const allowedAccounts = allowedAccountsOf(Option.getOrUndefined(allowedRead));
       const configured = vercelConnector(connector);
-      return allowedAccounts === undefined ? configured : { ...configured, allowedAccounts };
+      return Option.match(allowedRead, {
+        onNone: () => configured,
+        onSome: (listed) => ({ ...configured, allowedAccounts: allowedAccountsOf(listed) }),
+      });
     },
   );
 }

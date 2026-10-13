@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INTEGRATION_CALL_FAILURE } from "@sidecar/hosted/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -18,11 +19,14 @@ import { IntegrationsSection } from "./integrations-page";
  * Settings › Integrations over a bridge answering where every provider
  * stands as the service would: a provider the deployment offers the
  * account has a row, and one it does not, which the service answers as
- * unavailable, has none; an account offered none is told so.
+ * unavailable, has none; an account offered none is told so, and a read
+ * that fails still offers to read again.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
 let withheld: readonly IntegrationProvider[] = [];
+/** Whether the next read of where they stand fails. */
+let refuseRead = false;
 
 const roots: Root[] = [];
 
@@ -41,14 +45,20 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
 
 beforeEach(() => {
   withheld = [];
+  refuseRead = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
-          request.kind === ACT_KIND.INTEGRATIONS_STATUS
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: { integrations: serviceStatuses() } }
-            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+          request.kind !== ACT_KIND.INTEGRATIONS_STATUS
+            ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
+            : refuseRead
+              ? {
+                  status: ACT_OUTCOME_STATUS.DONE,
+                  value: { failure: INTEGRATION_CALL_FAILURE.UNANSWERED },
+                }
+              : { status: ACT_OUTCOME_STATUS.DONE, value: { integrations: serviceStatuses() } },
         ),
       recordSurfaceEvent: () => undefined,
     },
@@ -96,4 +106,20 @@ test("an account offered no provider is told so, with no row", async () => {
 
   assert.deepEqual(rowNames(page), []);
   assert.match(page.textContent ?? "", /No integrations are available for this account\./u);
+});
+
+test("a read that fails after one that offered nothing still says so and offers to read again", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST;
+  const page = await mount();
+  refuseRead = true;
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+
+  assert.match(page.textContent ?? "", /Your integrations could not be read\./u);
+  assert.ok(
+    [...page.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
+    "Retry is offered",
+  );
 });
