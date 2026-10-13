@@ -114,9 +114,18 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.GITHUB_CONNECT]: { kind: ACT_KIND.GITHUB_CONNECT },
   [ACT_KIND.GITHUB_DISCONNECT]: { kind: ACT_KIND.GITHUB_DISCONNECT },
-  [ACT_KIND.WORKSPACE_JOIN]: {
-    kind: ACT_KIND.WORKSPACE_JOIN,
-    payload: { installationId: 4_200_017 },
+  [ACT_KIND.WORKSPACE_CREATE]: { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Acme" } },
+  [ACT_KIND.WORKSPACE_INVITE]: {
+    kind: ACT_KIND.WORKSPACE_INVITE,
+    payload: { workspaceId: "workspace-acme" },
+  },
+  [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
+    kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT,
+    payload: { workspaceId: "workspace-acme" },
+  },
+  [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: {
+    kind: ACT_KIND.WORKSPACE_GITHUB_DISCONNECT,
+    payload: { workspaceId: "workspace-acme" },
   },
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
     kind: ACT_KIND.WORKSPACE_MEMBERS_READ,

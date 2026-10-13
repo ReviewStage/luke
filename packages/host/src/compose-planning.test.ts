@@ -12,6 +12,7 @@ import {
   type GitHubRepositoriesAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
+  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted";
 import {
   BOARD_ELEMENT_TYPE,
@@ -57,11 +58,9 @@ import {
   planningTreeAnswerSchema,
   planningViewSchema,
   type RepositoryCallFailure,
-  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
 import {
-  type AvailableWorkspace,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
@@ -156,15 +155,15 @@ interface FakeService extends PlanningClient {
   pinsFail: boolean;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
-  /** The workspaces the account may join, as the service lists them. */
-  joinable: AvailableWorkspace[];
+  /** The Luke GitHub App install address a connection answers. */
+  installUrl: string;
   /** Whether the workspaces list is refused, as a service that did not answer refuses it. */
   workspacesFail: boolean;
   /** Where a workspaces read waits after reading the table and before answering, so a test can hold one on the wire. */
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
-  /** Whether a removal or a leave is refused as the account's role not allowing it. */
+  /** Whether a write is refused as the account's role not allowing it. */
   notPermitted: boolean;
   /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
   connection: GitHubConnection | undefined;
@@ -177,23 +176,23 @@ const PERSONAL: Workspace = {
   name: "Ada Lovelace",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
-  active: true,
+  github: null,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.ADMIN,
-  active: true,
+  github: { login: "acme", active: true },
 };
-const RELAY: AvailableWorkspace = { installationId: 4_200_017, name: "relay-labs" };
-const RELAY_JOINED: Workspace = {
+const RELAY: Workspace = {
   id: "workspace-relay",
-  name: RELAY.name,
+  name: "Relay Labs",
   personal: false,
-  role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
 };
+const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -268,7 +267,7 @@ function fakeService(plans: Plan[]): FakeService {
     pins: [],
     pinsFail: false,
     memberships: [PERSONAL],
-    joinable: [],
+    installUrl: INSTALL_URL,
     workspacesFail: false,
     workspacesGate: Effect.void,
     members: {},
@@ -296,19 +295,35 @@ function fakeService(plans: Plan[]): FakeService {
       list: () =>
         Effect.gen(function* () {
           service.reads.push("workspaces");
-          const answer = service.workspacesFail
-            ? undefined
-            : { workspaces: service.memberships, available: service.joinable };
+          const answer = service.workspacesFail ? undefined : { workspaces: service.memberships };
           yield* service.workspacesGate;
           return answer;
         }),
-      join: (installationId) =>
+      create: (name) =>
         Effect.sync(() => {
-          service.reads.push(`join:${installationId}`);
-          if (installationId !== RELAY.installationId) return UNANSWERED_WORKSPACE;
-          service.joinable = service.joinable.filter((each) => each !== RELAY);
-          service.memberships = [...service.memberships, RELAY_JOINED];
-          return { ok: true, answer: RELAY_JOINED } as const;
+          service.reads.push(`create:${name}`);
+          if (name !== RELAY.name) return UNANSWERED_WORKSPACE;
+          service.memberships = [...service.memberships, RELAY];
+          return { ok: true, answer: RELAY } as const;
+        }),
+      githubConnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`connect:${workspaceId}`);
+          return service.notPermitted
+            ? NOT_PERMITTED_WORKSPACE
+            : ({ ok: true, answer: service.installUrl } as const);
+        }),
+      githubDisconnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`disconnect:${workspaceId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const disconnected = service.memberships.find((each) => each.id === workspaceId);
+          if (disconnected === undefined) return UNANSWERED_WORKSPACE;
+          const now = { ...disconnected, github: null };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
         }),
       members: (workspaceId) =>
         Effect.sync(() => {
@@ -1369,28 +1384,24 @@ it.effect("a sign-out drops the view the window drew", () =>
       plans: [],
       listStatus: PLANNING_READ.IDLE,
       workspaces: [],
-      available: [],
       document: { status: PLANNING_READ.IDLE },
     });
   }),
 );
 
 it.effect(
-  "the list read carries the account's workspaces and the ones it may join, and a sign-out clears both",
+  "the list read carries the account's workspaces with their GitHub organizations, and a sign-out clears them",
   () =>
     Effect.gen(function* () {
       const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.memberships = [PERSONAL, ACME];
-      service.joinable = [RELAY];
       const { call, last, planning } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
-      assert.deepEqual(last()?.available, [RELAY]);
 
       yield* planning.reset;
       assert.deepEqual(last()?.workspaces, []);
-      assert.deepEqual(last()?.available, []);
     }),
 );
 
@@ -1398,7 +1409,6 @@ it.effect("a workspaces read the service did not answer keeps the workspaces alr
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.memberships = [PERSONAL, ACME];
-    service.joinable = [RELAY];
     const { call, last } = yield* subject(service);
     yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
@@ -1408,31 +1418,70 @@ it.effect("a workspaces read the service did not answer keeps the workspaces alr
 
     assert.deepEqual(last()?.plans, []);
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
-    assert.deepEqual(last()?.available, [RELAY]);
   }),
 );
 
 it.effect(
-  "joining a workspace reaches the service and the view then holds it, and no longer offers it",
+  "a workspace made reaches the service and the view then holds it, the plans not read again",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      service.joinable = [RELAY];
       const { call, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
 
-      const joined = yield* call(GATEWAY_METHOD.WORKSPACES_JOIN, {
-        installationId: RELAY.installationId,
+      const made = yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
+
+      assert.deepEqual(made, { workspace: RELAY });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
+      assert.deepEqual(service.reads.slice(before), [`create:${RELAY.name}`, "workspaces"]);
+    }),
+);
+
+it.effect(
+  "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const begun = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id });
+      const disconnected = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
+        workspaceId: ACME.id,
       });
 
-      assert.deepEqual(joined, { workspace: RELAY_JOINED });
-      assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY_JOINED]);
-      assert.deepEqual(last()?.available, []);
-      assert.deepEqual(service.reads.slice(-3).sort(), [
-        `join:${RELAY.installationId}`,
-        "list",
+      assert.deepEqual(begun, { url: INSTALL_URL });
+      assert.deepEqual(disconnected, { workspace: { ...ACME, github: null } });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, github: null }]);
+      assert.deepEqual(service.reads.slice(before), [
+        `connect:${ACME.id}`,
+        `disconnect:${ACME.id}`,
         "workspaces",
       ]);
+    }),
+);
+
+it.effect(
+  "a connection or a disconnection the account's role does not allow answers not-permitted",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.notPermitted = true;
+      const { call } = yield* subject(service);
+      const refused = { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
+        refused,
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
+        refused,
+      );
     }),
 );
 
@@ -1634,7 +1683,15 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
     const unanswered = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
 
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_JOIN, { installationId: RELAY.installationId }),
+      yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
       unanswered,
     );
     assert.deepEqual(

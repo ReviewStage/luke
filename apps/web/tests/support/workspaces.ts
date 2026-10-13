@@ -21,7 +21,7 @@ import { SqlClient } from "effect/unstable/sql";
  * owns, made the first time it is asked for. The rows are written straight
  * over the plugin's tables, as the plugin would leave them, since a test
  * stands no Better Auth, and `fakeWorkspaceSeams` is the plugin's
- * server-only create and add over the same tables; a test of the plugin's own write
+ * server-only create over the same tables; a test of the plugin's own write
  * is `workspace-store.test.ts`.
  */
 
@@ -89,7 +89,7 @@ export const openInstallationWorkspace = (ownerId: string, installation: TestIns
 /**
  * The plugin's server-only create, over the test's own database: the
  * organization, then its owner, refusing a slug that is taken as the plugin
- * does; and its server-only add, a member row.
+ * does.
  */
 export const fakeWorkspaceSeams = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
@@ -119,13 +119,6 @@ export const fakeWorkspaceSeams = Effect.gen(function* () {
       }).pipe(
         Effect.catchTag("SqlError", (failure) =>
           Effect.fail(new Cause.UnknownError(failure, "Failed to create organization")),
-        ),
-        Effect.provideService(SqlClient.SqlClient, client),
-      ),
-    addMember: (join) =>
-      joinWorkspace(join.organizationId, join.userId).pipe(
-        Effect.catchTag("SqlError", (failure) =>
-          Effect.fail(new Cause.UnknownError(failure, "Failed to add member")),
         ),
         Effect.provideService(SqlClient.SqlClient, client),
       ),

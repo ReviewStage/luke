@@ -112,10 +112,11 @@ import {
   planningStartRequestSchema,
   planningTreeAnswerSchema,
   planningTreeParamsSchema,
-  planningWorkspaceJoinParamsSchema,
+  planningWorkspaceCreateParamsSchema,
   planningWorkspaceLeaveParamsSchema,
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
+  planningWorkspaceParamsSchema,
 } from "@sidecar/hosted/planning-view";
 import {
   type Workspace,
@@ -238,15 +239,20 @@ export const ACT_KIND = {
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
   /**
-   * The account's workspaces, asked of the service: the workspace of a
-   * GitHub App installation it reaches joined, answered as joined; one
+   * The account's workspaces: one made under a name, answered as made, which
+   * the account owns; the service's invite page for one opened in the
+   * browser, where its owners and admins invite people; a GitHub
+   * organization connected to one, the Luke GitHub App's install address the
+   * service answers opened in the browser, or disconnected from it; one
    * workspace's members read; one member removed, answered with the members
-   * who remain; and one workspace left. A join, a removal, and a leave read
-   * the workspaces again, so they arrive on the document. A join GitHub no
-   * longer shows the account, and a write its role does not allow, are each
-   * refused in words that say so.
+   * who remain; and one workspace left. Every write reads the workspaces
+   * again, so they arrive on the document; a write the account's role does
+   * not allow is refused in words that say so.
    */
-  WORKSPACE_JOIN: "workspace.join",
+  WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_INVITE: "workspace.invite",
+  WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
+  WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_LEAVE: "workspace.leave",
@@ -433,21 +439,6 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
  */
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
-
-/**
- * What an act that needs the account's GitHub is refused with where none is
- * connected, or the one connected must be connected again: a join. A window
- * that draws it offers Connect GitHub beside it.
- */
-export const GITHUB_CONNECT_REFUSAL = "Connect GitHub in Settings to join this workspace." as const;
-
-/**
- * What a join is refused with where the service does not show the account
- * the installation, or refuses it the workspace: GitHub no longer shows it
- * that installation, so there is nothing of its to join.
- */
-export const WORKSPACE_JOIN_NOT_FOUND_REFUSAL =
-  "GitHub doesn't show you that installation." as const;
 
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 
@@ -707,10 +698,25 @@ export const ACT = {
   [ACT_KIND.GITHUB_CONNECT]: press("Could not open GitHub's connection page on this system."),
   [ACT_KIND.GITHUB_DISCONNECT]: press("Could not open GitHub's connection page on this system."),
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
-  [ACT_KIND.WORKSPACE_JOIN]: {
-    payload: actSchema(planningWorkspaceJoinParamsSchema),
+  [ACT_KIND.WORKSPACE_CREATE]: {
+    payload: actSchema(planningWorkspaceCreateParamsSchema),
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not join that workspace on this system.",
+    refusal: "Could not make that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_INVITE]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open the invite page on this system.",
+  },
+  [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not connect GitHub to that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not disconnect GitHub from that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
     payload: actSchema(planningWorkspaceMembersParamsSchema),
