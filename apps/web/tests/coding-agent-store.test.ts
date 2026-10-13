@@ -18,7 +18,7 @@ import {
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
-import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { conversations } from "@sidecar/database/schemas/storage";
