@@ -10,7 +10,7 @@
  * function over chunks and a test needs no clock.
  */
 
-import { Encoding } from "effect";
+import { Base64 } from "effect/encoding";
 import { PCM_SAMPLE_RATE } from "./contract";
 import { AVATAR_FEED_KIND, type AvatarFeed } from "./feed";
 
@@ -80,7 +80,7 @@ function quietThrough(quietSamples: number, chunk: Int16Array): ChunkQuiet {
 function audioFeed(chunk: Int16Array): AvatarFeed {
   const bytes = new DataView(new ArrayBuffer(chunk.length * 2));
   for (const [index, sample] of chunk.entries()) bytes.setInt16(index * 2, sample, true);
-  return { kind: AVATAR_FEED_KIND.AUDIO, pcm: Encoding.encodeBase64(new Uint8Array(bytes.buffer)) };
+  return { kind: AVATAR_FEED_KIND.AUDIO, pcm: Base64.encode(new Uint8Array(bytes.buffer)) };
 }
 
 /** Keeps the latest chunks that fit the pre-roll, dropping the oldest first. */
