@@ -13,7 +13,6 @@ import {
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
   ORGANIZATION_OPTIONS,
-  USER_PROFILE_HOOKS,
 } from "./auth-policy.js";
 import { authProxy } from "./auth-proxy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
@@ -59,7 +58,6 @@ export const auth = betterAuth({
   hooks: { before: refuseWithoutSessionSecret },
   database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
-  databaseHooks: USER_PROFILE_HOOKS,
   // Admin access is a plain-text `role` on the user, managed by Better Auth:
   // the migrations declared it on the `user` table, and returned on
   // the session so the dashboard reads it without a query of its own. `input:
