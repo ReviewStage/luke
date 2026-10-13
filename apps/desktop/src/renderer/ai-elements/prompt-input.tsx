@@ -15,19 +15,17 @@ import { cn } from "./utils";
  * prompt-input.tsx -- AI Elements' PromptInput as Luke's one composer: the card a message is written in, and the row of controls under it.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to the card the New Plan page established, on the corner and the
+ * restyled on the corner and the
  * hairline the window's menus and cards share: one card on the sidebar's
  * ground, ringed as every field is while its textarea holds the caret
  * (base.css), and nothing drawn behind it, so no shadow darkens the page or the
  * transcript around the card. The textarea
  * sizing itself to its words from one line to about eight and scrolling
  * past that, and under it a footer with whatever the owner puts at its
- * left and the round submit at its right. The New Plan page and the agent
- * tab's message box draw this one card, so a change here is the look of
- * both. One thing differs between them and it is one variable: the type
- * (`--composer-type`), which an owner sets on the card, and from which the
- * field's line and so its least and greatest heights follow; the radius,
- * border, padding, placeholder, and button are the same at either size.
+ * left and the round submit at its right. The agent tab's message box and
+ * the Inbox's draw this one card, so a change here is the look of both.
+ * Its type is one variable (`--composer-type`), set on the card, from which
+ * the field's line and so its least and greatest heights follow.
  * The field is the panel's font and no border because base.css resets a
  * textarea to that, where Tailwind's preflight would have; the utilities
  * here say only what the reset does not. The registry's attachments,
@@ -66,12 +64,10 @@ export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit">
 /** The name the textarea stands under in its form, which the form reads the words back by. */
 const MESSAGE_FIELD = "message";
 
-/** The card's one size: the type its field is set in, which an owner raises for a hero card. */
-export const COMPOSER_TYPE = {
+/** The card's one size: the type its field is set in. */
+const COMPOSER_TYPE = {
   /** A message box under a transcript. */
   DEFAULT: "[--composer-type:13px]",
-  /** The New Plan page's card, the window's home. */
-  HERO: "[--composer-type:17px]",
 } as const;
 
 export function PromptInput({

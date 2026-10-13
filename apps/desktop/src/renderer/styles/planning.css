@@ -1493,7 +1493,7 @@ button.skill-chip:hover,
 }
 
 /* The foot's right: the model chip, the context ring, the microphone, and
-   the round Send or Stop; the New Plan card's microphone, left of Start.
+   the round Send or Stop.
    It may narrow, so a long model name is cut short before the presses are. */
 .agent-composer-actions {
   display: flex;

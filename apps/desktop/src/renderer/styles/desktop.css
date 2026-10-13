@@ -1943,36 +1943,74 @@ body,
 
 /* The new-plan page -------------------------------------------------------- */
 
-/* The window's home, drawn as a devtool's new-task page: a heading over one
-   composer, the pair sitting a little above the column's middle. */
-.desktop-compose {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  overflow-y: auto;
-  padding: var(--space-24) var(--page-inset) 12vh;
+/* The window's home, drawn as the plan's document is about to be: the page
+   is a `.desktop-document`, so its column, measure, and type are the plan's,
+   and the name is the plan's title field. What stands here is what a plan's
+   page has no need of: the repository's labelled line, the Create plan row,
+   and the template's sections faint under them. */
+.new-plan > * + * {
+  margin-top: var(--space-16);
 }
 
-/* The page's card is the shared composer (../ai-elements/prompt-input.tsx)
-   at its hero type; what stands here is the page around it. */
-.plan-compose {
-  display: flex;
+.new-plan-name {
+  display: block;
   width: 100%;
-  max-width: 680px;
-  margin: 0 auto;
-  flex-direction: column;
-  gap: var(--space-24);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  letter-spacing: inherit;
+  line-height: 1.25;
+  field-sizing: content;
+  resize: none;
 }
 
-.plan-compose-title {
+.new-plan-name::placeholder {
+  color: var(--text-tertiary);
+}
+
+.new-plan-property,
+.new-plan-actions {
+  display: flex;
+  min-height: var(--control-height);
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.new-plan-property-label {
+  width: 88px;
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.new-plan-actions .primary-button .shortcut {
+  --shortcut-ink: var(--on-accent-muted);
+}
+
+.new-plan-hint,
+.new-plan-note {
   margin: 0;
-  color: var(--text-primary);
-  font-size: 28px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* The sections the plan will start as, a step back from the developer's own
+   words and fading out down the page, since none of them are written yet. */
+.new-plan > .new-plan-template {
+  margin-top: var(--space-24);
+  padding-top: var(--space-24);
+  border-top: 1px solid var(--hairline);
+  opacity: 0.4;
+  mask-image: linear-gradient(to bottom, #000 30%, transparent);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.new-plan-template > * + * {
+  margin-top: 1.5em;
 }
 
 .repository-chip {
@@ -2444,13 +2482,6 @@ body:has(.app-stage[data-capture="true"])
 
 [role="group"]:first-child > .plan-compose-menu-section {
   padding-top: var(--space-2);
-}
-
-.plan-compose-note {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  text-align: center;
 }
 
 /* Inbox ---------------------------------------------------------------------- */

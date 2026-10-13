@@ -28,7 +28,6 @@ const GLIDERS = [
   ".desktop-agent > *",
   ".desktop-call-bar .call-bar",
   ".desktop-empty > *",
-  ".desktop-compose > *",
 ].join(", ");
 
 /** The pane, read before a change whether or not it is leaving, so one brought back mid-exit carries on from where it was. */

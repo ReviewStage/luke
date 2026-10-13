@@ -45,7 +45,7 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
- * the one the New Plan page draws, at its default type. Its foot is laid
+ * at its default type. Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+" that attaches
  * files and, once the agent has pushed, the pull request's or the branch's
  * chip, which opens it on GitHub (`agent-published.tsx`); at the right,

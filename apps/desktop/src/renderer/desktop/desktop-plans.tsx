@@ -566,13 +566,16 @@ export function DesktopPlans({
           {secondCall}
         </SkillFiles>
       );
-    // The page names itself in its heading, so its strip is the drag handle alone.
+    // The page is titled by the name being typed, so its strip is the drag
+    // handle alone, and it is laid out as the plan's document will be.
     case PLANS_PAGE.NEW:
       return (
         <>
           <div className="desktop-drag-strip" />
-          <div className="desktop-compose">
-            <NewPlanForm newPlan={plans.newPlan} repositories={plans.repositories} />
+          <div className="desktop-document">
+            <div className="plan-document-scroll">
+              <NewPlanForm newPlan={plans.newPlan} repositories={plans.repositories} />
+            </div>
           </div>
           {secondCall}
         </>
