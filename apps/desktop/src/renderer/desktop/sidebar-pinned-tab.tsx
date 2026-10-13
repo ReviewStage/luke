@@ -230,15 +230,7 @@ export function SidebarPinnedTab({
     <li className="sidebar-plan-item sidebar-pinned-tab">
       <Tooltip
         label={pin.label}
-        card={
-          <PinnedTabCard
-            pin={pin}
-            plan={plan}
-            agent={agent}
-            gone={gone}
-            plans={plans}
-          />
-        }
+        card={<PinnedTabCard pin={pin} plan={plan} agent={agent} gone={gone} plans={plans} />}
         cardBeside
       >
         <button
