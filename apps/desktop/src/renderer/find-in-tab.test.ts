@@ -243,6 +243,7 @@ test("a match folded away in a closed fold is found, and showing it opens the fo
   assert.equal(tally(tab.container), "1 of 1");
   assert.equal(painted.current(), "--filter");
   assert.equal(ran.open, true, "the fold holding the match is opened");
+  assert.equal(ran.dataset.disclosure, undefined, "and opened at once, with no motion");
   assert.equal(read.open, false);
 
   key(field(tab.container), { key: "Escape" });
