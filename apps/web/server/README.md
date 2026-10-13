@@ -1000,7 +1000,7 @@ path override from `route-path` (`server/function-dispatch.ts`): it once
 read `path`, and every File tab read was answered 404.
 
 `GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
-History tab (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
+version history (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
 newest first, each its writer as the "Edited by" line names it, when it
 began and last moved, how many changes it made, and for a restore the
 revision it brought back; `?before=<seq>` reads the page before that
@@ -1009,7 +1009,7 @@ before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
 revision's content and the content before it, null for the first, each
 formatted under the plan's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
-puts that revision's fields and assumptions back through the plan's one
+puts that revision's text back through the plan's one
 locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
@@ -1032,15 +1032,21 @@ included; an account that must sign in with GitHub again is
 `github-sign-in-required` (403); and a GitHub the service could not read is
 `unavailable`, the plan standing as it was. A change naming null clears it.
 
-Nothing in the group writes a document. The one writer is a planning call's
-notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on
-the fixed template (`packages/hosted/src/plan-template.ts`): a point added
-under a field, a phrase corrected, or a line
-struck. `saveNotes` (`server/hosted/plan-notes.ts`) takes them in order over
-the fields the plan holds, passing over a note that names a phrase the plan
-does not hold, formats the body, and saves it under a binding of account and
-plan the service built rather than anything the model sends, answering the
-document as saved or why nothing was: a body past its bound once formatted,
+A plan's text has one write, `server/hosted/plan-notes.ts`, and four
+writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
+whole text against the base it was made on (`saveDeveloperEdit`), saved
+where the text still holds that base, laid over what Luke wrote meanwhile
+where it can be, and answered as a conflict with the text as it stands, with
+nothing saved, where it cannot (`packages/hosted/src/plan-edit.ts`); a
+restore above is the second. A planning call's notetaker
+(`server/voice/plan-scribe.ts`) and a coding agent's `edit_plan`
+(`server/hosted/coder-host/plan-edit.ts`) answer with notes
+(`packages/hosted/src/plan-template.ts`): a point added under a heading, a
+phrase corrected, or a line struck. `saveNotes` takes them in order over the
+text as it stands, passing over a note that names a phrase the plan does not
+hold, and saves it under a binding of account and plan the service built
+rather than anything the model sends, answering the document as saved or
+why nothing was: a text past its bound,
 a plan deleted meanwhile, which a save never recreates because it is an
 `update` over the row that stands, and a store that could not be reached,
 each leaving the prior document in place.
