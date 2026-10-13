@@ -178,6 +178,7 @@ const shownSources: { planId: string; source: RevisionSource }[] = [];
 function planOf(document: PlanDocument, archived: boolean): Plan {
   return {
     id: PLAN_ID,
+    workspaceId: "workspace-personal",
     name: "Teammate invitations",
     createdAt: 0,
     updatedAt: 0,

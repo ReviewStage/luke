@@ -7,7 +7,19 @@ import {
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -26,24 +38,33 @@ import { InstantColumnSchema } from "./store/database.js";
 import type { ConversationTarget } from "./store/index.js";
 import {
   awaitingLinesOf,
+  awaitingLinesOfReached,
   type LatestTurn,
   latestTurnsOf,
+  latestTurnsOfReached,
   type TurnUsageRow,
   turnUsagesOf,
 } from "./store/message-reads.js";
+import { planReachableBy, reachablePlan } from "./workspace-store.js";
 
 /**
- * coding-agent-store.ts -- the coding agents started on an account's plans, each one conversation and one row linking it to its plan.
+ * coding-agent-store.ts -- the coding agents started on a workspace's plans, each one conversation and one row linking it to its plan.
  *
- * Every statement names the account beside the plan or the agent, so an id
- * another account owns reads and starts exactly as one that names nothing.
- * Starting an agent is one transaction under the plan's own row lock: the
- * lock is the ownership check and what serialises two Starts of one plan,
- * so a retry carrying the key of a Start already made finds that agent
- * rather than opening a second conversation beside it, and says which it
- * did, since only a Start that made the agent opens its eve session. The
- * agent's conversation is a `coding_agent` conversation of the same
- * account, opened here and named on the row; its messages and turns are the
+ * An agent belongs to its plan's workspace: every member reads, renames,
+ * and re-chooses it, whichever of them started it. Every statement names the
+ * account beside the plan or the agent and gates on that account's
+ * membership of the plan's workspace (`workspace-store.ts`), so an agent of
+ * a workspace the account is not in reads and starts exactly as an id that
+ * names nothing. The one read keyed by the account alone is a Start's retry
+ * key, which is the starter's own. Starting an agent is one transaction
+ * under the plan's own row lock: the lock is the membership check and what
+ * serialises two Starts of one plan, so a retry carrying the key of a Start
+ * already made finds that agent rather than opening a second conversation
+ * beside it, and says which it did, since only a Start that made the agent
+ * opens its eve session. The agent's conversation is a `coding_agent`
+ * conversation of the account that started it, opened here and named on the
+ * row, which carries that account as `userId`, so a member reads the
+ * conversation under its starter; its messages and turns are the
  * relay's to write, and the newest turn is what the agent's status is read
  * from. A Start whose eve session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
@@ -90,6 +111,8 @@ export type CodingAgentStoreEffect<A> = Effect.Effect<
 /** One coding agent as the service holds it: what the tabs read, and what the agent's own turns run on. */
 export interface CodingAgent {
   readonly id: string;
+  /** The account that started the agent, whose conversation it runs in and whose provider key pays for it. */
+  readonly userId: string;
   readonly planId: string;
   readonly conversationId: string;
   readonly model: string;
@@ -117,7 +140,14 @@ export interface CodingAgentStarted {
 
 /** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`store/message-reads.ts`), re-exported here beside the agents it is read for. */
 export type CodingAgentLatestTurn = LatestTurn;
-export { awaitingLinesOf, latestTurnsOf, type TurnUsageRow, turnUsagesOf };
+export {
+  awaitingLinesOf,
+  awaitingLinesOfReached,
+  latestTurnsOf,
+  latestTurnsOfReached,
+  type TurnUsageRow,
+  turnUsagesOf,
+};
 
 /** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's task in its place. */
 export type CodingAgentBriefText =
@@ -138,6 +168,7 @@ export type NewCodingAgent = CodingAgentBriefText & {
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const CODING_AGENT_COLUMNS = {
   id: codingAgent.id,
+  userId: codingAgent.userId,
   planId: codingAgent.planId,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
@@ -154,6 +185,7 @@ const CODING_AGENT_COLUMNS = {
 
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
+  userId: Schema.String,
   planId: Schema.String,
   conversationId: Schema.String,
   model: Schema.String,
@@ -170,15 +202,30 @@ const CodingAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The plan row under its own lock, where the account owns it, with whether it is archived. */
-const lockOwnedPlan = SqlSchema.findOneOption({
+/** The condition that the account is a member of the workspace of the plan the agent row a statement reads was started on. */
+function agentReachableBy(userId: string): SQL {
+  return exists(
+    db
+      .select({ id: plan.id })
+      .from(plan)
+      .where(and(eq(plan.id, codingAgent.planId), planReachableBy(userId))),
+  );
+}
+
+/** The agent under this id, where the account is a member of its plan's workspace; any other id reads as no agent. */
+function reachableAgent(userId: string, agentId: string): SQL | undefined {
+  return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
+}
+
+/** The plan row under its own lock, where the account is a member of its workspace, with whether it is archived. */
+const lockReachablePlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planId }) =>
     db
       .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
       .from(plan)
-      .where(and(eq(plan.id, planId), eq(plan.userId, userId)))
+      .where(reachablePlan(userId, planId))
       .for("update"),
 });
 
@@ -253,7 +300,7 @@ const updateAgentChoice = SqlSchema.findOneOption({
     db
       .update(codingAgent)
       .set({ model, effort, contextWindow })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .where(reachableAgent(userId, agentId))
       .returning(CODING_AGENT_COLUMNS),
 });
 
@@ -264,10 +311,7 @@ const updateAgentBranch = SqlSchema.void({
     branch: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, agentId, branch }) =>
-    db
-      .update(codingAgent)
-      .set({ branch })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    db.update(codingAgent).set({ branch }).where(reachableAgent(userId, agentId)),
 });
 
 const updateAgentTitle = SqlSchema.findOneOption({
@@ -281,7 +325,7 @@ const updateAgentTitle = SqlSchema.findOneOption({
     db
       .update(codingAgent)
       .set({ title })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .where(reachableAgent(userId, agentId))
       .returning(CODING_AGENT_COLUMNS),
 });
 
@@ -296,7 +340,7 @@ const updateAgentArchived = SqlSchema.findOneOption({
     db
       .update(codingAgent)
       .set({ archivedAt })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .where(reachableAgent(userId, agentId))
       .returning(CODING_AGENT_COLUMNS),
 });
 
@@ -307,9 +351,7 @@ const fillAgentTitle = SqlSchema.findAll({
     db
       .update(codingAgent)
       .set({ title })
-      .where(
-        and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), isNull(codingAgent.title)),
-      )
+      .where(and(reachableAgent(userId, agentId), isNull(codingAgent.title)))
       .returning({ id: codingAgent.id }),
 });
 
@@ -332,19 +374,13 @@ const updateAgentStep = SqlSchema.void({
     lastStep: AgentStepColumnSchema,
   }),
   execute: ({ userId, agentId, lastStep }) =>
-    db
-      .update(codingAgent)
-      .set({ lastStep })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    db.update(codingAgent).set({ lastStep }).where(reachableAgent(userId, agentId)),
 });
 
 const updateAgentCompaction = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, at: Schema.Date }),
   execute: ({ userId, agentId, at }) =>
-    db
-      .update(codingAgent)
-      .set({ compactedAt: at })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    db.update(codingAgent).set({ compactedAt: at }).where(reachableAgent(userId, agentId)),
 });
 
 const findAgentContext = SqlSchema.findOneOption({
@@ -364,7 +400,7 @@ const findAgentContext = SqlSchema.findOneOption({
         compactedAt: codingAgent.compactedAt,
       })
       .from(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .where(reachableAgent(userId, agentId))
       .limit(1),
 });
 
@@ -379,10 +415,10 @@ const findAgentsOfPlan = SqlSchema.findAll({
     db
       .select(CODING_AGENT_COLUMNS)
       .from(codingAgent)
+      .innerJoin(plan, eq(plan.id, codingAgent.planId))
       .where(
         and(
-          eq(codingAgent.userId, userId),
-          eq(codingAgent.planId, planId),
+          reachablePlan(userId, planId),
           includeArchived ? undefined : isNull(codingAgent.archivedAt),
         ),
       )
@@ -396,10 +432,7 @@ const updateAgentPublished = SqlSchema.void({
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
   execute: ({ userId, agentId, published }) =>
-    db
-      .update(codingAgent)
-      .set({ published })
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    db.update(codingAgent).set({ published }).where(reachableAgent(userId, agentId)),
 });
 
 const findAgentsOfPlans = SqlSchema.findAll({
@@ -412,10 +445,11 @@ const findAgentsOfPlans = SqlSchema.findAll({
     db
       .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
       .from(codingAgent)
+      .innerJoin(plan, eq(plan.id, codingAgent.planId))
       .where(
         and(
-          eq(codingAgent.userId, userId),
-          inArray(codingAgent.planId, [...planIds]),
+          inArray(plan.id, [...planIds]),
+          planReachableBy(userId),
           isNull(codingAgent.archivedAt),
         ),
       )
@@ -428,10 +462,10 @@ const findAgentsOnBranches = SqlSchema.findAll({
     branches: Schema.Array(Schema.String),
     limit: Schema.Number,
   }),
-  Result: Schema.Struct({ ...CodingAgentRowSchema.fields, userId: Schema.String }),
+  Result: CodingAgentRowSchema,
   execute: ({ repository, branches, limit }) =>
     db
-      .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
+      .select(CODING_AGENT_COLUMNS)
       .from(codingAgent)
       .where(
         and(eq(codingAgent.repository, repository), inArray(codingAgent.branch, [...branches])),
@@ -447,7 +481,7 @@ const findAgent = SqlSchema.findOneOption({
     db
       .select(CODING_AGENT_COLUMNS)
       .from(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .where(reachableAgent(userId, agentId))
       .limit(1),
 });
 
@@ -458,7 +492,7 @@ const findAgentOfConversation = SqlSchema.findOneOption({
     db
       .select(CODING_AGENT_COLUMNS)
       .from(codingAgent)
-      .where(and(eq(codingAgent.conversationId, conversationId), eq(codingAgent.userId, userId)))
+      .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
       .limit(1),
 });
 
@@ -468,24 +502,22 @@ const deleteAgentRow = SqlSchema.findAll({
   execute: ({ userId, agentId }) =>
     db
       .delete(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .where(reachableAgent(userId, agentId))
       .returning({ conversationId: codingAgent.conversationId }),
 });
 
+/** By id alone, because the agent row the delete before it took passed the plan's gate and named this conversation. */
 const deleteConversationRow = SqlSchema.void({
-  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
-  execute: ({ userId, conversationId }) =>
-    db
-      .delete(conversations)
-      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
+  Request: Schema.String,
+  execute: (conversationId) => db.delete(conversations).where(eq(conversations.id, conversationId)),
 });
 
 /**
- * Starts an agent on the account's plan: a `coding_agent` conversation and
+ * Starts an agent on a plan of the account's workspace: a `coding_agent` conversation of the account's and
  * the row that binds it to the plan, with the plan text or the task, and
  * the repository, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * Nothing where the account owns no such plan. An archived plan starts no
+ * Nothing where the account reaches no such plan. An archived plan starts no
  * agent, read under the same lock, though a retry still answers the agent
  * its Start made before the archive.
  */
@@ -500,8 +532,8 @@ export function createCodingAgent(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const owned = yield* lockOwnedPlan({ userId, planId: started.planId });
-        if (Option.isNone(owned)) return Option.none();
+        const reached = yield* lockReachablePlan({ userId, planId: started.planId });
+        if (Option.isNone(reached)) return Option.none();
         const existing = yield* findAgentByKey({
           userId,
           idempotencyKey: started.idempotencyKey,
@@ -509,7 +541,7 @@ export function createCodingAgent(
         if (Option.isSome(existing)) {
           return Option.some({ agent: existing.value, created: false });
         }
-        if (owned.value.archived) return yield* new PlanArchived();
+        if (reached.value.archived) return yield* new PlanArchived();
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -537,7 +569,7 @@ export function createCodingAgent(
 /**
  * Discards an agent a Start could not open an eve session for: its row and
  * its conversation, with every message and turn the conversation holds,
- * which is none. Answers whether the account held such an agent.
+ * which is none. Answers whether the account reached such an agent.
  */
 export function discardCodingAgent(
   userId: string,
@@ -548,14 +580,14 @@ export function discardCodingAgent(
       Effect.gen(function* () {
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return false;
-        yield* deleteConversationRow({ userId, conversationId: deleted.conversationId });
+        yield* deleteConversationRow(deleted.conversationId);
         return true;
       }),
     ),
   );
 }
 
-/** Every agent started on the account's plan, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account owns no such plan. */
+/** Every agent started on the plan, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such plan. */
 export function listCodingAgents(
   userId: string,
   planId: string,
@@ -570,7 +602,7 @@ export interface PublishedCodingAgent {
   readonly published: CodingAgentPullRequest | null;
 }
 
-/** Every agent standing on the account's plans named, each with what it published, in the order they were started, an archived one left out; a plan another account owns names none. */
+/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out; a plan of a workspace the account is not in names none. */
 export function listPublishedCodingAgents(
   userId: string,
   planIds: readonly string[],
@@ -581,7 +613,7 @@ export function listPublishedCodingAgents(
   );
 }
 
-/** The pull request from the account's agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent the account does not own. */
+/** The pull request from the agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent of a workspace the account is not in. */
 export function recordCodingAgentPublished(
   userId: string,
   agentId: string,
@@ -610,11 +642,11 @@ export function listCodingAgentsOnBranches(
 ): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
   if (branches.length === 0) return Effect.succeed([]);
   return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
-    rows.map(({ userId, ...agent }) => ({ userId, agent })),
+    rows.map((agent) => ({ userId: agent.userId, agent })),
   );
 }
 
-/** The account's agent under this id, or nothing for an agent the account does not own. */
+/** The agent under this id, or nothing for an agent of a workspace the account is not in. */
 export function readCodingAgent(
   userId: string,
   agentId: string,
@@ -622,7 +654,7 @@ export function readCodingAgent(
   return findAgent({ userId, agentId });
 }
 
-/** The account's agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent the account does not own. */
+/** The agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent of a workspace the account is not in. */
 export function updateCodingAgentChoice(
   userId: string,
   agentId: string,
@@ -637,7 +669,7 @@ export function updateCodingAgentChoice(
   });
 }
 
-/** The branch checked out in the account's agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent the account does not own. */
+/** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */
 export function updateCodingAgentBranch(
   userId: string,
   agentId: string,
@@ -646,7 +678,7 @@ export function updateCodingAgentBranch(
   return updateAgentBranch({ userId, agentId, branch });
 }
 
-/** The account's agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent the account does not own. */
+/** The agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent of a workspace the account is not in. */
 export function renameCodingAgent(
   userId: string,
   agentId: string,
@@ -675,7 +707,7 @@ export function fillCodingAgentTitle(
   return Effect.map(fillAgentTitle({ userId, agentId, title }), (rows) => rows.length > 0);
 }
 
-/** The account's agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for another account's or no agent's. */
+/** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
 export function readCodingAgentOfConversation(
   userId: string,
   conversationId: string,
@@ -691,7 +723,7 @@ export interface CodingAgentContextRow {
   readonly compactedAt: Date | null;
 }
 
-/** The newest model step of the account's agent's own conversation, which replaces the one before it; nothing written for an agent the account does not own. */
+/** The newest model step of the agent's own conversation, which replaces the one before it; nothing written for an agent of a workspace the account is not in. */
 export function recordCodingAgentStep(
   userId: string,
   agentId: string,
@@ -700,7 +732,7 @@ export function recordCodingAgentStep(
   return updateAgentStep({ userId, agentId, lastStep });
 }
 
-/** When eve compacted the account's agent's own conversation; nothing written for an agent the account does not own. */
+/** When eve compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */
 export function recordCodingAgentCompaction(
   userId: string,
   agentId: string,
@@ -709,7 +741,7 @@ export function recordCodingAgentCompaction(
   return updateAgentCompaction({ userId, agentId, at });
 }
 
-/** What the account's agent's own conversation holds in its model's context, or nothing for an agent the account does not own. */
+/** What the agent's own conversation holds in its model's context, or nothing for an agent of a workspace the account is not in. */
 export function readCodingAgentContext(
   userId: string,
   agentId: string,

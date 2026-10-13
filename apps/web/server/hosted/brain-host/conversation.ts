@@ -11,18 +11,28 @@ import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
 
-export { claimRuntimeSession, conversationOwnedBy } from "./recorded-session.js";
+import { conversationReachableBy } from "./recorded-session.js";
+
+export {
+  claimRuntimeSession,
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "./recorded-session.js";
 
 /**
  * The host's own check of who a session is for. eve authenticates a request
  * and pins the caller who created a session as its initiator, but it knows
- * nothing of conversations: which account a conversation belongs to is a
- * fact of the store, and the host enforces it here, before every tool call
- * and every write. A session is admitted for a conversation only when the
- * conversation the session was opened for exists, is not cleared, belongs to
- * the current caller, and the current caller is the one who opened the
- * session, so account B can neither speak into A's session nor be shown A's
- * rows through it. A conversation runs in one eve session at a time, the
+ * nothing of conversations: who reaches a conversation is a fact of the
+ * store, and the host enforces it here, before every tool call and every
+ * write. A session is admitted for a conversation only when the conversation
+ * the session was opened for exists, is not cleared, and the current caller
+ * reaches it: the account that opened it, or a member of the workspace whose
+ * plan or coding agent it is (`recorded-session.ts`). A member speaks into
+ * the session a teammate opened, so account B, a stranger to A's workspace,
+ * can neither speak into A's session nor be shown A's rows through it, while
+ * a teammate of A's can. The admission names both accounts: the caller, who
+ * gates every read, is metered, and binds the tools, and the conversation's
+ * owner, the opener, whose id addresses its rows. A conversation runs in one eve session at a time, the
  * one its row records: a session that is not the recorded one — one the
  * conversation rotated away from, whose hooks may still be firing — is
  * refused too, so two sessions never write one conversation. The record is
@@ -32,6 +42,9 @@ export { claimRuntimeSession, conversationOwnedBy } from "./recorded-session.js"
  */
 
 export interface AdmittedConversation {
+  /** The account the current request acts for: it reads, pays, and acts through the tools. */
+  readonly caller: string;
+  /** The conversation as the store addresses it, under the account that opened it. */
   readonly target: ConversationTarget;
   /** The eve session id the conversation row last recorded, where one has been. */
   readonly runtimeSessionId: string | undefined;
@@ -46,7 +59,7 @@ type ConversationFailure = SqlError | Schema.SchemaError;
 /**
  * How a session stands to the conversation's record: it must be the recorded
  * session, it is the one claiming the record now, or it is a subagent's child
- * session, which no record names. A child is admitted on ownership alone where
+ * session, which no record names. A child is admitted on reach alone where
  * eve tells a resolver nothing of its lineage; the current-session check for
  * it stands where its tools run, through the root eve does name there
  * (`conversationSessionOf`).
@@ -64,8 +77,6 @@ const ConversationRowSchema = Schema.Struct({
   runtimeSessionId: Schema.NullOr(Schema.String),
 });
 
-const OwnerRowSchema = Schema.Struct({ userId: Schema.String });
-
 const findConversation = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConversationRowSchema,
@@ -79,17 +90,19 @@ const findConversation = SqlSchema.findOneOption({
       .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
 });
 
-const findRuntimeSessionOwner = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: OwnerRowSchema,
-  execute: (runtimeSessionId) =>
-    db
-      .select({ userId: conversations.userId })
-      .from(conversations)
-      .where(
-        and(eq(conversations.runtimeSessionId, runtimeSessionId), isNull(conversations.deletedAt)),
-      ),
-});
+/**
+ * Whether the account reaches the conversation whose row the admission read:
+ * at once for its opener, and through the workspace for anyone else.
+ */
+function reaches(
+  account: string,
+  conversationId: string,
+  owner: string,
+): Effect.Effect<boolean, ConversationFailure, SqlClient.SqlClient> {
+  return owner === account
+    ? Effect.succeed(true)
+    : conversationReachableBy(account, conversationId);
+}
 
 export function admitConversation(
   auth: SessionAuth,
@@ -101,34 +114,30 @@ export function admitConversation(
     return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NO_PRINCIPAL));
   }
   const initiator = auth.initiator ?? current;
-  if (actedForAccount(initiator) !== account) {
-    return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
-  }
   const conversationId = conversationIdOf(initiator);
   if (!conversationId) return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION));
-  return Effect.map(findConversation(conversationId), (found) => {
+  return Effect.gen(function* () {
+    const found = yield* findConversation(conversationId);
     if (Option.isNone(found)) return Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION);
     const row = found.value;
-    if (row.userId !== account) {
-      return Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER);
+    // Note that a caller who does not reach the conversation is refused for the seat it took:
+    // in a session another account opened, or in one it opened itself over another's row.
+    if (!(yield* reaches(account, conversationId, row.userId))) {
+      return Result.fail(
+        actedForAccount(initiator) === account
+          ? BRAIN_HOST_REFUSAL.NOT_OWNER
+          : BRAIN_HOST_REFUSAL.NOT_INITIATOR,
+      );
     }
     if (session.standing === SESSION_STANDING.CURRENT && row.runtimeSessionId !== session.id) {
       return Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION);
     }
     return Result.succeed({
+      caller: account,
       target: { userId: row.userId, conversationId },
       runtimeSessionId: row.runtimeSessionId ?? undefined,
     });
   });
-}
-
-/** The account whose standing conversation recorded this runtime session; nothing while none has. */
-export function runtimeSessionOwner(
-  runtimeSessionId: string,
-): Effect.Effect<string | undefined, ConversationFailure, SqlClient.SqlClient> {
-  return Effect.map(findRuntimeSessionOwner(runtimeSessionId), (found) =>
-    Option.getOrUndefined(Option.map(found, (row) => row.userId)),
-  );
 }
 
 const insertChildConversation = SqlSchema.findAll({

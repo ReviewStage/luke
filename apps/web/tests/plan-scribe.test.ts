@@ -10,13 +10,14 @@ import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import { listRevisions } from "../server/hosted/plan-revisions";
-import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
+import { readPlan } from "../server/hosted/plan-store";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The planning call's notetaker over a real plan row: a scripted model stands
@@ -25,7 +26,7 @@ import { testSqlClient } from "./support/sql-client";
  * the plan's saved document.
  */
 
-const RELAY_PLAN: NewPlan = {
+const RELAY_PLAN: TestPlan = {
   name: "Teammate invitations",
 };
 
@@ -38,7 +39,7 @@ const OUTCOME = "A member invites a teammate by email.";
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, RELAY_PLAN);
+  const plan = yield* startPlan(userId, RELAY_PLAN);
   return { userId, planId: plan.id };
 });
 

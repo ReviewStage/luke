@@ -25,15 +25,11 @@ import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
-import {
-  createPlan,
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-} from "../../server/hosted/plan-store";
+import { openPlanConversation, readPlan, savePlanText } from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
+import { startPlan } from "../../tests/support/workspaces";
 import {
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,
@@ -120,7 +116,7 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
 async function planConversation(run: Run, planId: string): Promise<string> {
   const opened = await run(openPlanConversation(LOCAL_DEV_PRINCIPAL, planId));
   assert.ok(Option.isSome(opened));
-  return opened.value;
+  return opened.value.conversationId;
 }
 
 /** The document the plan holds now, failing the eval where it does not read. */
@@ -175,7 +171,7 @@ export default defineEval({
       // The planning model is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
-      const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const plan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
       await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
       const planConversationId = await planConversation(run, plan.id);
       const planning = await openSession(planConversationId, PLAN_WORDS.FIRST);
@@ -218,7 +214,7 @@ export default defineEval({
       // the planning turn stays open until the worker's result reaches the
       // model inside it: one turn on record, settled, holding the call, the
       // words before the wait, and the words after it.
-      const researchPlan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const researchPlan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
       const researchConversationId = await planConversation(run, researchPlan.id);
       const research = await openSession(
         researchConversationId,
@@ -258,7 +254,7 @@ export default defineEval({
       // A repository read on a plan with no repository yet runs nothing and
       // says so: the refusal reaches the model as the tool's result, ahead of
       // any sandbox, and the model repeats why.
-      const readingPlan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const readingPlan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
       const readingConversationId = await planConversation(run, readingPlan.id);
       const reading = await openSession(readingConversationId, `${SCRIPTED_READ}ls`);
       const readingSession = await t.target.attachSession(reading.sessionId);

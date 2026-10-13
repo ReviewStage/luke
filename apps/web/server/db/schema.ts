@@ -7,6 +7,7 @@ export * from "./devices-schema.js";
 export * from "./favorite-schema.js";
 export * from "./inbox-schema.js";
 export * from "./linear-schema.js";
+export * from "./personal-workspace-schema.js";
 export * from "./plan-revision-schema.js";
 export * from "./plan-schema.js";
 export * from "./preferences-schema.js";

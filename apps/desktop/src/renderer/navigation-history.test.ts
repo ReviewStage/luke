@@ -23,6 +23,7 @@ const ignore = () => undefined;
 
 const INVITATIONS: PlanSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Invitations",
   createdAt: 1,
   updatedAt: 1,
@@ -30,6 +31,7 @@ const INVITATIONS: PlanSummary = {
 };
 const BILLING: PlanSummary = {
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
+  workspaceId: "workspace-personal",
   name: "Billing",
   createdAt: 2,
   updatedAt: 2,
@@ -37,6 +39,7 @@ const BILLING: PlanSummary = {
 };
 const EXPORTS: PlanSummary = {
   id: "5d2e8b4a-9f1c-4a3e-b7d6-1e0f2a3b4c5d",
+  workspaceId: "workspace-personal",
   name: "Exports",
   createdAt: 3,
   updatedAt: 3,

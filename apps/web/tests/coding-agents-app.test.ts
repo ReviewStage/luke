@@ -108,7 +108,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { createPlan, savePlanText, updatePlan } from "../server/hosted/plan-store";
+import { savePlanText, updatePlan } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { sentLineStands } from "../server/hosted/store/message-reads";
 import {
@@ -118,6 +118,7 @@ import {
   type RepositoryScript,
 } from "./support/github-app-fake";
 import { testSqlClient } from "./support/sql-client";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -412,7 +413,7 @@ const openPlan = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* openGithubUser();
-    const plan = yield* createPlan(owner, {
+    const plan = yield* startPlan(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
@@ -733,15 +734,12 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(startAs(undefined, plan.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
-        const unreachable = yield* createPlan(owner, {
-          name: "Ledger",
-          repository: "Acme/Ledger",
-        });
+        const unreachable = yield* startPlan(owner, { name: "Ledger", repository: "Acme/Ledger" });
         assert.deepEqual(
           yield* ask(startAs(owner, unreachable.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
         );
-        const bare = yield* createPlan(owner, { name: "Bare" });
+        const bare = yield* startPlan(owner, { name: "Bare" });
         assert.deepEqual(
           yield* ask(startAs(owner, bare.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
@@ -1918,6 +1916,86 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
 
         yield* updatePlan(owner, plan.id, { archived: false });
         yield* sent("Rename it.");
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a member of the plan's workspace lists, reads, and messages an agent a teammate started, the line landing in the starter's conversation",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { other, plan, agent, sessionId, ask, transcript } = yield* startedAgent(eve, {
+          running: false,
+        });
+        const asOther = (text: string) =>
+          ask(messageAs(other, agent.id, { text, clientKey: randomUUID() }));
+        assert.deepEqual(
+          yield* asOther("Before I joined."),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        yield* joinWorkspace(plan.workspaceId, other);
+
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, other, { id: plan.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map((each) => [each.id, each.status]),
+          [[agent.id, CODING_AGENT_STATUS.COMPLETED]],
+        );
+        const read = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
+        );
+        assert.deepEqual(userTexts(read), [SNAPSHOT]);
+
+        const sent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* asOther("Rename the subject line too."),
+        );
+        assert.equal(sent.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [[`Bearer ${other}`, sessionId]],
+        );
+        assert.deepEqual(yield* transcript(), {
+          lines: [SNAPSHOT, "Rename the subject line too."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
+      }),
+  );
+
+  it.effect(
+    "a member steers the running turn of an agent a teammate started: the words reach the starter's session and stand under the starter, so a repeat under the key sends nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, target, sessionId, ask, transcript } =
+          yield* startedAgent(eve, { running: true });
+        yield* joinWorkspace(plan.workspaceId, other);
+        const clientKey = randomUUID();
+        const steer = () =>
+          ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
+
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
+          [[`Bearer ${other}`, sessionId, target.conversationId]],
+        );
+        assert.equal(
+          yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
+          true,
+        );
+        assert.deepEqual(yield* transcript(), {
+          lines: [SNAPSHOT, "Use seven days, not five."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
+
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
         assert.equal(eve.sent.length, 1);
       }),
   );

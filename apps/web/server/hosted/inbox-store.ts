@@ -9,21 +9,26 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, exists, ne, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { codingAgent } from "../db/coding-agent-schema.js";
 import { inboxItem } from "../db/inbox-schema.js";
+import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
+import { planReachableBy } from "./workspace-store.js";
 
 /**
  * inbox-store.ts -- the developer's inbox: the items a plan's coding agents post, close, and read, and the developer's answers to them.
  *
  * Every statement names the account beside the plan, the agent, or the
- * item, so an id another account owns reads and writes exactly as one that
- * names nothing. An agent posts an item under a key of its own, which is
+ * item. An item is its agent's, written under the member who started the
+ * agent, and the plan's inbox is the workspace's: every member of the
+ * plan's workspace reads and answers it, gated on that membership
+ * (`workspace-store.ts`), so an item of a workspace the account is not in
+ * reads and writes exactly as one that names nothing. An agent posts an item under a key of its own, which is
  * one row per agent and key: posting under a key it used before writes
  * that row again, moves its revision on, and opens it again whether it was
  * answered or closed, so the agent keeps an item current rather than
@@ -138,7 +143,17 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** The agent's row under its own lock, where the account owns it, which serializes one agent's posts. */
+/** The condition that the account is a member of the workspace of the plan the item a statement reads was posted on. */
+function itemReachableBy(userId: string): SQL {
+  return exists(
+    db
+      .select({ id: plan.id })
+      .from(plan)
+      .where(and(eq(plan.id, inboxItem.planId), planReachableBy(userId))),
+  );
+}
+
+/** The agent's row under its own lock, where the account started it and still reaches its plan, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -146,8 +161,11 @@ const lockAgent = SqlSchema.findOneOption({
     db
       .select({ id: codingAgent.id })
       .from(codingAgent)
-      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-      .for("update"),
+      .innerJoin(plan, eq(plan.id, codingAgent.planId))
+      .where(
+        and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), planReachableBy(userId)),
+      )
+      .for("update", { of: codingAgent }),
 });
 
 /** How many items the agent holds open under a key other than the one given. */
@@ -240,7 +258,7 @@ const closeItem = SqlSchema.findOneOption({
       .returning(INBOX_COLUMNS),
 });
 
-/** Where a read looks: one plan's items, or one agent's, always the account's own. */
+/** Where a read looks: one plan's items, any member's agents' alike, or one agent's own, under the member who started it. */
 const INBOX_SCOPE = {
   PLAN: "plan",
   AGENT: "agent",
@@ -254,14 +272,11 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the account's, under the plan or the agent given. */
+/** The rows a scope names: the plan's, where the account is a member of its workspace, or the agent's, under the account that started it. */
 function inScope(scope: InboxScope) {
-  return and(
-    eq(inboxItem.userId, scope.userId),
-    scope.scope === INBOX_SCOPE.PLAN
-      ? eq(inboxItem.planId, scope.id)
-      : eq(inboxItem.agentId, scope.id),
-  );
+  return scope.scope === INBOX_SCOPE.PLAN
+    ? and(eq(inboxItem.planId, scope.id), itemReachableBy(scope.userId))
+    : and(eq(inboxItem.agentId, scope.id), eq(inboxItem.userId, scope.userId));
 }
 
 /** The order every read keeps: the latest changed first, and by id among those changed at one instant, so two reads of the same rows agree. */
@@ -348,7 +363,7 @@ const findItem = SqlSchema.findOneOption({
     db
       .select(INBOX_COLUMNS)
       .from(inboxItem)
-      .where(and(eq(inboxItem.userId, userId), eq(inboxItem.id, itemId))),
+      .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
 });
 
 /** The answer written on the item where it is open at the revision named; nothing where it is not. */
@@ -368,8 +383,8 @@ const answerItem = SqlSchema.findOneOption({
       .set({ status: INBOX_STATUS.ANSWERED, answer, answerKey, updatedAt: now })
       .where(
         and(
-          eq(inboxItem.userId, userId),
           eq(inboxItem.id, itemId),
+          itemReachableBy(userId),
           eq(inboxItem.revision, revision),
           eq(inboxItem.status, INBOX_STATUS.OPEN),
         ),
@@ -474,7 +489,7 @@ export function planInboxStamps(
   );
 }
 
-/** The account's item, with the key its answer was taken under; nothing for one the account does not own. */
+/** The item, with the key its answer was taken under; nothing for one of a workspace the account is not in. */
 export function readInboxItem(
   userId: string,
   itemId: string,
@@ -497,8 +512,8 @@ const withdrawAnswer = SqlSchema.findOneOption({
       .set({ status: INBOX_STATUS.OPEN, answer: null, answerKey: null, updatedAt: now })
       .where(
         and(
-          eq(inboxItem.userId, userId),
           eq(inboxItem.id, itemId),
+          itemReachableBy(userId),
           eq(inboxItem.answerKey, answerKey),
           eq(inboxItem.status, INBOX_STATUS.ANSWERED),
         ),

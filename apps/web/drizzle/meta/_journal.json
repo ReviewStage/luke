@@ -645,6 +645,27 @@
       "when": 1791410000000,
       "tag": "0092_plan_revision_assumptions_default",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1791420000000,
+      "tag": "0093_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1791430000000,
+      "tag": "0094_personal_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791440000000,
+      "tag": "0095_plan_organization",
+      "breakpoints": true
     }
   ]
 }

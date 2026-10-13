@@ -6,8 +6,9 @@ import { Effect, Option } from "effect";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { writePlanTemplate } from "../server/hosted/account-store";
-import { createPlan, readPlan } from "../server/hosted/plan-store";
+import { readPlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A plan as one document: a new plan is a copy of its account's template,
@@ -34,7 +35,7 @@ it.layer(testSqlClient)("a new plan as one document", (it) => {
       Effect.gen(function* () {
         const userId = yield* openUser;
 
-        const started = yield* createPlan(userId, RELAY);
+        const started = yield* startPlan(userId, RELAY);
 
         assert.deepEqual(started.document, { body: DEFAULT_PLAN_TEMPLATE, assumptions: [] });
         assert.equal(started.lastEdit, undefined);
@@ -51,9 +52,9 @@ it.layer(testSqlClient)("a new plan as one document", (it) => {
         const template = "## Why\n\n## What\n\n## Risks\n";
         yield* writePlanTemplate(userId, template);
 
-        const started = yield* createPlan(userId, RELAY);
+        const started = yield* startPlan(userId, RELAY);
         yield* writePlanTemplate(userId, "## Something else\n");
-        const othersPlan = yield* createPlan(other, RELAY);
+        const othersPlan = yield* startPlan(other, RELAY);
 
         assert.equal((yield* opened(userId, started.id)).document.body, template);
         assert.equal(othersPlan.document.body, DEFAULT_PLAN_TEMPLATE);

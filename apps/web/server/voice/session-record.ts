@@ -43,13 +43,13 @@ import { InstantColumnSchema } from "../hosted/store/database.js";
  * the newer one attached, and that late stamp must not hand a live call to
  * the sweep.
  *
- * The row also names the plan the call was opened about, checked to be the
- * account's before anything is spent, and that binding is what a
+ * The row also names the plan the call was opened about, checked to be in a
+ * workspace the account is a member of before anything is spent, and that binding is what a
  * re-attach reads back: the attaching connection says nothing of a plan, so
  * a session cannot be moved onto another plan, or off its own, by what a
  * later connection sends. The same binding is what a new call about the
  * plan reads its earlier calls back by, so a call picks up the conversation
- * the last one left off.
+ * the last one left off, whichever member of the plan's workspace made it.
  */
 /**
  * What every method answers: an effect over the ambient client, so the socket
@@ -146,7 +146,7 @@ export interface VoiceSessionRecord {
    * session is already another account's, since the first owner keeps it.
    */
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
-  /** The plan named, where the account holds it: the check the door makes before a planning call is spent, and what the call opens knowing. */
+  /** The plan named, where the account is a member of its workspace: the check the door makes before a planning call is spent, and what the call opens knowing. */
   heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<Plan | undefined>;
   /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
@@ -237,7 +237,6 @@ const findOwnedSession = SqlSchema.findOneOption({
 });
 
 const EarlierCallsRequestSchema = Schema.Struct({
-  userId: Schema.String,
   planId: Schema.String,
   limit: Schema.Number,
 });
@@ -248,7 +247,12 @@ const EarlierSegmentSchema = Schema.Struct({
   text: Schema.String,
 });
 
-/** The newest segments of the plan's calls, newest first: the call by its start, then the segment by its place. */
+/**
+ * The newest segments of the plan's calls, whichever member of its workspace
+ * made each, newest first: the call by its start, then the segment by its
+ * place. The plan alone keys them, because the door read it through
+ * `heldPlan`, under the account's membership, before it asks.
+ */
 const findEarlierSegments = SqlSchema.findAll({
   Request: EarlierCallsRequestSchema,
   Result: EarlierSegmentSchema,
@@ -261,9 +265,7 @@ const findEarlierSegments = SqlSchema.findAll({
       })
       .from(voiceTranscriptSegments)
       .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-      .where(
-        and(eq(voiceSessions.userId, request.userId), eq(voiceSessions.planId, request.planId)),
-      )
+      .where(eq(voiceSessions.planId, request.planId))
       .orderBy(
         desc(voiceSessions.startedAt),
         desc(voiceSessions.id),
@@ -460,7 +462,6 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
     earlierCalls: (input) =>
       Effect.map(
         findEarlierSegments({
-          userId: input.userId,
           planId: input.planId,
           limit: EARLIER_CALL_SEGMENTS,
         }),

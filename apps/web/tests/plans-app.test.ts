@@ -65,7 +65,7 @@ import {
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { PLAN_REVISION } from "../server/hosted/plan-revisions";
-import { createPlan } from "../server/hosted/plan-store";
+import { personalWorkspaceOf } from "../server/hosted/workspace-store";
 import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
@@ -84,6 +84,7 @@ import {
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
 import { testSqlClient } from "./support/sql-client";
+import { fakeWorkspaceSeams, joinWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -171,6 +172,7 @@ const answer = (
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
+        workspaces: yield* fakeWorkspaceSeams,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -486,7 +488,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
-        const plan = yield* createPlan(owner, { name: RELAY.name });
+        const plan = yield* startPlan(owner, { name: RELAY.name });
         const states = [
           PULL_REQUEST_STATE.OPEN,
           PULL_REQUEST_STATE.CLOSED,
@@ -528,7 +530,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
-        const plan = yield* createPlan(owner, { name: RELAY.name });
+        const plan = yield* startPlan(owner, { name: RELAY.name });
         const pages = [PULL_REQUEST.url, "https://github.com/Acme/Ledger/pull/128"];
         for (const url of pages) {
           const agent = yield* startAgent(owner, plan.id);
@@ -556,8 +558,8 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
-        const quiet = yield* createPlan(owner, { name: LEDGER.name });
-        const busy = yield* createPlan(owner, { name: RELAY.name });
+        const quiet = yield* startPlan(owner, { name: LEDGER.name });
+        const busy = yield* startPlan(owner, { name: RELAY.name });
         const failed = yield* startAgent(owner, busy.id);
         yield* TestClock.adjust("1 minute");
         const first = yield* startAgent(owner, busy.id);
@@ -671,6 +673,76 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       assert.ok(plan);
       assert.equal(plan.openedAt, plan.createdAt);
     }),
+  );
+
+  it.effect("a start that names no workspace lands in the account's personal one", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+
+      const started = yield* ask(request(PLANS, owner, { method: "POST", body: RELAY }));
+      yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER }));
+
+      const personal = yield* personalWorkspaceOf(owner);
+      assert.ok(Option.isSome(personal));
+      assert.equal(
+        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
+        personal.value,
+      );
+      const listed = yield* ask(request(PLANS, owner));
+      assert.deepEqual(
+        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+          (plan) => plan.workspaceId,
+        ),
+        [personal.value, personal.value],
+      );
+    }),
+  );
+
+  it.effect("a member starts a plan in a workspace a teammate made", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const shared = yield* openWorkspace(other);
+      yield* joinWorkspace(shared, owner);
+
+      const started = yield* ask(
+        request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
+      );
+
+      assert.equal(
+        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
+        shared,
+      );
+      const listed = yield* ask(request(PLANS, owner));
+      assert.deepEqual(
+        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+          plan.name,
+          plan.workspaceId,
+        ]),
+        [[RELAY.name, shared]],
+      );
+    }),
+  );
+
+  it.effect(
+    "a start in a workspace the account is not in answers as none, and starts nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const theirs = yield* openWorkspace(other);
+
+        const refused = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: theirs } }),
+        );
+        const unknown = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: "nowhere" } }),
+        );
+
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(refused, notFound);
+        assert.deepEqual(unknown, notFound);
+        const listed = yield* ask(request(PLANS, owner));
+        assert.deepEqual(readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans, []);
+      }),
   );
 
   it.effect(
@@ -1346,7 +1418,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan or account",
+    "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -1375,9 +1447,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           [ASSISTANT, "After how many days?", 9_000],
         ]);
         yield* callAbout({ userId: owner, planId, startedAt: 3_000_000 }, []);
-        yield* callAbout({ userId: other, planId, startedAt: 3_000_000 }, [
-          [USER, "Another account's words.", 0],
-        ]);
         const otherPlan = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
@@ -1413,6 +1482,82 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),
+  );
+
+  it.effect("a teammate's call about a shared plan reads in every member's transcript", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const started = readAnswer(
+        planAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+      ).plan;
+      yield* joinWorkspace(started.workspaceId, other);
+      const read = (userId: string) =>
+        Effect.map(
+          ask(request(TRANSCRIPT, userId, { id: started.id })),
+          (answered) =>
+            readAnswer(planTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
+        );
+      const { USER } = VOICE_SEGMENT_ROLE;
+
+      const ownersCall = yield* callAbout(
+        { userId: owner, planId: started.id, startedAt: 1_000_000 },
+        [[USER, "Invites should expire.", 0]],
+      );
+      const teammatesCall = yield* callAbout(
+        { userId: other, planId: started.id, startedAt: 2_000_000 },
+        [[USER, "After seven days.", 0]],
+      );
+
+      const expected = {
+        calls: [
+          {
+            id: ownersCall,
+            startedAt: 1_000_000,
+            messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.")],
+          },
+          {
+            id: teammatesCall,
+            startedAt: 2_000_000,
+            messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "After seven days.")],
+          },
+        ],
+        earlierOmitted: false,
+      };
+      assert.deepEqual(yield* read(owner), expected);
+      assert.deepEqual(yield* read(other), expected);
+    }),
+  );
+
+  it.effect("the board one member saves is read by the rest of the workspace", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const started = readAnswer(
+        planAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+      ).plan;
+      yield* joinWorkspace(started.workspaceId, other);
+
+      const saved = yield* ask(
+        request(BOARD, other, {
+          method: "PUT",
+          id: started.id,
+          body: { elements: [NOTE], appliedDrawing: 0 },
+        }),
+      );
+
+      assert.equal(saved.status, HOSTED_HTTP_STATUS.OK);
+      assert.deepEqual(
+        readAnswer(
+          boardAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(BOARD, owner, { id: started.id })),
+        ).board.elements,
+        [NOTE],
+      );
+    }),
   );
 
   it.effect(

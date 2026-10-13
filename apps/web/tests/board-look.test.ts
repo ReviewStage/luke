@@ -16,9 +16,9 @@ import {
   storedLookOutput,
 } from "../server/hosted/board-look";
 import { writeDrawing, writeScene } from "../server/hosted/board-store";
-import { createPlan } from "../server/hosted/plan-store";
 import { driven, forkClockDriven } from "./support/clock-driven";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's look at its latest drawing: the Mac's first save of
@@ -41,7 +41,7 @@ const SCENE = [
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const started = yield* createPlan(userId, { name: "Teammate invitations" });
+  const started = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: started.id, binding: { userId, planId: started.id } };
 });
 

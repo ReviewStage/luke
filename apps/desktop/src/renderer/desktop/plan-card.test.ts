@@ -27,6 +27,7 @@ const NOW = 60 * MINUTE;
 /** A plan with three agents named of five, and three pull requests named of four, as the list carries it. */
 const PLAN: PlanSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 0,
   updatedAt: NOW - 3 * MINUTE,

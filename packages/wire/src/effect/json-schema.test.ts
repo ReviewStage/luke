@@ -35,9 +35,10 @@ const text = (max?: number) =>
 /** An integer at or above its minimum, as a wire declaration reads one. */
 const wholeNumber = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
-/** A bounded text beside an optional key that is a bounded string or a null literal: a plan started with or without a repository. */
+/** A bounded text beside optional keys, a bounded text and a bounded string or a null literal: a plan started with or without a workspace and a repository. */
 const planCreateRequest = Schema.Struct({
   name: text(200),
+  workspaceId: Schema.optionalKey(text(200)),
   repository: Schema.optionalKey(Schema.NullOr(Schema.String.check(Schema.isMaxLength(140)))),
 });
 

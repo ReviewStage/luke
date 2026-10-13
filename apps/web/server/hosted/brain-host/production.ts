@@ -11,7 +11,7 @@ import { HostedEnvironment } from "../environment.js";
 import { spendHostedMeter } from "../quota.js";
 import { type StoreWriter, storeWriter } from "../store/index.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
-import { conversationOwnedBy, runtimeSessionOwner } from "./conversation.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";
 import { deploymentEveOrigin } from "./eve-origin.js";
 
@@ -37,7 +37,7 @@ export interface BrainHostSeams {
   /** The writer over the hosted tool set, composed once per instance; its composition probes every declared schema. */
   readonly writer: () => Effect.Effect<StoreWriter>;
   readonly userInfo: UserInfoEndpoint;
-  /** Who a session or a conversation belongs to, for the door. */
+  /** Who reaches a session or a conversation, for the door. */
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
@@ -73,9 +73,9 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
     return {
       writer: () => writer,
       ownership: {
-        sessionOwner: (sessionId) => run(runtimeSessionOwner(sessionId)),
-        ownsConversation: (userId, conversationId) =>
-          run(conversationOwnedBy(userId, conversationId)),
+        reachesSession: (userId, sessionId) => run(runtimeSessionReachableBy(userId, sessionId)),
+        reachesConversation: (userId, conversationId) =>
+          run(conversationReachableBy(userId, conversationId)),
       },
       deploymentSecret: () => environment.cronSecret,
       eveOrigin: deploymentEveOrigin,

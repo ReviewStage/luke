@@ -11,6 +11,11 @@
             "minLength": 1,
             "maxLength": 36
           },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -181,6 +186,7 @@
         },
         "required": [
           "id",
+          "workspaceId",
           "name",
           "createdAt",
           "updatedAt",

@@ -9,16 +9,25 @@
  * ask's bundle is the voice function, which talks to eve over HTTP and must
  * load nothing of eve's own code; a leaf with no path to the door is what
  * keeps that bundle free of it.
+ *
+ * Who reaches a conversation is decided here too, for the same bundle: the
+ * account that opened it, and every member of the workspace of the plan or
+ * the coding agent that names it, or that names its parent, one hop up, which
+ * is a subagent's session. The row's own `user_id` stays the opener's, the
+ * address every message, turn, and ask of it is written under.
  */
 
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, exists, isNull, lt, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { codingAgent } from "../../db/coding-agent-schema.js";
+import { plan } from "../../db/plan-schema.js";
 import { db } from "../../db/query.js";
 import { conversations } from "../../db/storage-schema.js";
 import type { ConversationTarget } from "../store/index.js";
+import { planReachableBy } from "../workspace-store.js";
 
 const StandingSessionSchema = Schema.Struct({
   runtimeSessionId: Schema.NullOr(Schema.String),
@@ -59,6 +68,65 @@ const findConversationOwner = SqlSchema.findOneOption({
       .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
 });
 
+/** The condition that a plan or a coding agent the account reaches through its workspace names this conversation as its own. */
+function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL | undefined {
+  return or(
+    exists(
+      db
+        .select({ one: plan.id })
+        .from(plan)
+        .where(and(eq(plan.conversationId, conversationId), planReachableBy(userId))),
+    ),
+    exists(
+      db
+        .select({ one: codingAgent.id })
+        .from(codingAgent)
+        .innerJoin(plan, eq(plan.id, codingAgent.planId))
+        .where(and(eq(codingAgent.conversationId, conversationId), planReachableBy(userId))),
+    ),
+  );
+}
+
+/**
+ * The condition that the account reaches the standing conversation row a
+ * statement reads: it opened it, or the conversation, or the one it was
+ * delegated from, is a plan's or a coding agent's in a workspace the account
+ * is a member of.
+ */
+function reachableConversation(userId: string): SQL | undefined {
+  return and(
+    isNull(conversations.deletedAt),
+    or(
+      eq(conversations.userId, userId),
+      namedByReachableWork(userId, conversations.id),
+      namedByReachableWork(userId, conversations.parentConversationId),
+    ),
+  );
+}
+
+const findReachableConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, conversationId }) =>
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(and(eq(conversations.id, conversationId), reachableConversation(userId))),
+});
+
+const findReachableSession = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, runtimeSessionId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, runtimeSessionId }) =>
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(eq(conversations.runtimeSessionId, runtimeSessionId), reachableConversation(userId)),
+      )
+      .limit(1),
+});
+
 const claimSession = SqlSchema.void({
   Request: ClaimSchema,
   execute: (claim) =>
@@ -97,15 +165,30 @@ export function recordedRuntimeSession(
   );
 }
 
-/** Whether a conversation stands and belongs to the account. */
-export function conversationOwnedBy(
+/** The account a standing conversation belongs to, which is whom its messages and turns are addressed under; nothing for a cleared or missing one. */
+export function conversationOwnerOf(
+  conversationId: string,
+): Effect.Effect<Option.Option<string>, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(
+    findConversationOwner(conversationId),
+    Option.map((row) => row.userId),
+  );
+}
+
+/** Whether a conversation stands and the account reaches it: its own, or its workspace's work. */
+export function conversationReachableBy(
   userId: string,
   conversationId: string,
 ): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  return Effect.map(
-    findConversationOwner(conversationId),
-    (found) => Option.isSome(found) && found.value.userId === userId,
-  );
+  return Effect.map(findReachableConversation({ userId, conversationId }), Option.isSome);
+}
+
+/** Whether the account reaches the standing conversation that recorded this runtime session; no account reaches one none has recorded. */
+export function runtimeSessionReachableBy(
+  userId: string,
+  runtimeSessionId: string,
+): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(findReachableSession({ userId, runtimeSessionId }), Option.isSome);
 }
 
 /**

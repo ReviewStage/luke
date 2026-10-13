@@ -30,10 +30,11 @@ import {
   type PlanWriter,
   readRevision,
 } from "../server/hosted/plan-revisions";
-import { createPlan, deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
+import { deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT } from "./support/plan-documents";
 import { testSqlClient } from "./support/sql-client";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * A plan's history, through the plan's one write and the store's reads:
@@ -54,11 +55,16 @@ const DRAFT_NOTES: readonly PlanNote[] = [
   added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
 ];
 
-const openPlan = Effect.gen(function* () {
+const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
-  return { userId, planId: plan.id };
+  return userId;
+});
+
+const openPlan = Effect.gen(function* () {
+  const userId = yield* openUser;
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
+  return { userId, planId: plan.id, workspaceId: plan.workspaceId };
 });
 
 const startAgent = (userId: string, planId: string) =>
@@ -439,6 +445,22 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           },
         });
       }),
+  );
+
+  it.effect("a member of the plan's workspace reads the history a teammate wrote", () =>
+    Effect.gen(function* () {
+      const { userId, planId, workspaceId } = yield* openPlan;
+      const teammate = yield* openUser;
+      yield* joinWorkspace(workspaceId, teammate);
+      yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
+
+      assert.deepEqual(yield* revisionsOf(teammate, planId), yield* revisionsOf(userId, planId));
+      assert.deepEqual(
+        yield* readRevision(teammate, planId, 1),
+        yield* readRevision(userId, planId, 1),
+      );
+      assert.equal(Option.isSome(yield* readRevision(teammate, planId, 1)), true);
+    }),
   );
 
   it.effect("another account reads no history of a plan it does not own", () =>

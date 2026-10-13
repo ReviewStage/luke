@@ -36,11 +36,12 @@ import {
   LINEAR_ROW_STATUS,
   readLinearConnection,
 } from "../server/hosted/linear-store";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { openPlanConversation } from "../server/hosted/plan-store";
 import { storeWriter } from "../server/hosted/store";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The one Linear connection all four agents register, through the token
@@ -97,8 +98,8 @@ const planningHost = Effect.gen(function* () {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     eveOrigin: () => undefined,
@@ -119,8 +120,8 @@ const codingHost = Effect.gen(function* () {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
@@ -185,10 +186,10 @@ const plannedSession = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+    const plan = yield* startPlan(userId, { name: "Teammate invitations" });
     const opened = yield* openPlanConversation(userId, plan.id);
     assert.ok(Option.isSome(opened));
-    const conversationId = opened.value;
+    const conversationId = opened.value.conversationId;
     const auth = seat(userId, conversationId);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
@@ -201,7 +202,7 @@ const plannedSession = (
 const codingSession = (host: CoderHost) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, {
+    const plan = yield* startPlan(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });

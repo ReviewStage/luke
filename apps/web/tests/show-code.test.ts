@@ -6,7 +6,6 @@ import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import type { GitHubApp } from "../server/github/github-app";
-import { createPlan } from "../server/hosted/plan-store";
 import {
   REPOSITORY_REFUSAL,
   REPOSITORY_SANDBOX_CONTRACT,
@@ -16,6 +15,7 @@ import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's `show_code`, reading the lines it names from the
@@ -58,7 +58,7 @@ const FILES: CheckoutFiles = {
 const openPlan = (repository: string | null) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const started = yield* createPlan(userId, { name: "Teammate invitations", repository });
+    const started = yield* startPlan(userId, { name: "Teammate invitations", repository });
     const sandbox = sandboxDouble(() => undefined, { files: FILES });
     const call: RepositoryCall = {
       plan: { userId, planId: started.id },

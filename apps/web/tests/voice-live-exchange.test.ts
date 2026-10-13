@@ -25,12 +25,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import {
-  createPlan,
-  deletePlan,
-  openPlanConversation,
-  readPlan,
-} from "../server/hosted/plan-store";
+import { deletePlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -56,6 +51,7 @@ import {
   readVoiceSessionByLiveSessionId,
   readVoiceTranscriptSegmentsBySession,
 } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The hosted live exchange composed whole over the real store on PGlite: a
@@ -186,10 +182,10 @@ interface PlanTarget extends ConversationTarget {
 
 async function account(): Promise<PlanTarget> {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, { name: "Teammate invitations" }));
+  const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
-  );
+  ).conversationId;
   return { userId, conversationId, planId: plan.id };
 }
 
@@ -264,9 +260,9 @@ async function stand(
   const standing = await database.run(
     Scope.provide(
       hostedLiveExchange({
-        userId: target.userId,
+        accountId: target.userId,
         liveSessionId,
-        conversationId: target.conversationId,
+        conversation: { userId: target.userId, conversationId: target.conversationId },
         writer,
         eve,
         createId: () => randomUUID(),

@@ -21,6 +21,7 @@ import { useSidebarCollapse } from "./sidebar-collapse";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
