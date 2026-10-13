@@ -33,6 +33,61 @@
   scroll-padding-top: calc(var(--settings-header-height) + var(--settings-gap));
 }
 
+/* A page's own name, at the head of its column: the page list says where
+   Settings is, and this says which page the column holds. */
+.settings-page-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* A group of a page (`settings-group.tsx`): its name above the card, small
+   and muted, as macOS and Linear head a group, and the card holding the rows
+   with a hairline between each and the next, edge to edge. The card's corner
+   is a button's, so the page draws one corner throughout. */
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.settings-group-title {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+.settings-card > .settings-row {
+  min-height: var(--settings-row-height);
+  padding: var(--space-12) var(--space-16);
+}
+
+.settings-card > * + * {
+  border-top: 1px solid var(--hairline);
+}
+
+/* A row's refusal stands under the row it belongs to, inside the same rule. */
+.settings-card > .error-message {
+  padding: 0 var(--space-16) var(--space-12);
+}
+
+.settings-card > .settings-row + .error-message {
+  margin-top: calc(-1 * var(--space-4));
+  border-top: 0;
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;
@@ -43,23 +98,22 @@
   background: var(--section-fill);
 }
 
-/* A section names itself in sentence case, as the sidebar's own heading does;
-   the settings page's zoom brings this to the sidebar heading's 12px. */
+/* A section names itself in sentence case, as the sidebar's own heading does. */
 .settings-section h2 {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 /* Sized to the heading it labels rather than to a grid: the glyph is a letter
    in the line, not an element beside it. */
 .settings-icon {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
   opacity: 0.85;
 }
@@ -72,7 +126,7 @@
   min-height: 32px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 /* A page's head: the way back beside the page's own name, above the sections
@@ -222,13 +276,14 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-2);
 }
 
 .settings-copy strong {
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 620;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 /* The word a row wears while its value differs from the default, riding the
@@ -238,7 +293,7 @@
 .settings-changed {
   margin-left: 6px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -250,15 +305,15 @@
    and the hidden text's; the glyph alone is the mark. */
 .settings-attention {
   display: inline-flex;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: color-mix(in srgb, var(--state-attention) 22%, transparent);
   color: var(--state-attention);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
@@ -275,7 +330,7 @@
 .settings-note {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -332,12 +387,21 @@
 /* Scoped under the picker, because the chip and menu classes they add to are
    written in desktop.css, after this sheet, and would otherwise win back the
    composer's pill and 340px width at equal specificity. */
+/* The chip wears a row button's face, a hairline and no fill, so a picker and
+   the buttons beside it read as one set of controls. */
 .settings-picker .settings-picker-chip {
-  width: 190px;
-  height: 28px;
-  padding: 0 8px 0 10px;
-  border-radius: 8px;
-  font-size: 12px;
+  width: 200px;
+  height: var(--control-height);
+  padding: 0 var(--space-8) 0 var(--space-12);
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-picker .settings-picker-chip:is(:hover, [aria-expanded="true"]):not(:disabled) {
+  background: var(--selected);
 }
 
 .settings-picker .settings-picker-chip .plan-compose-chip-name {
@@ -398,20 +462,20 @@
   flex-wrap: wrap;
   gap: 2px;
   margin: 0;
-  padding: 2px;
+  padding: var(--space-2);
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   background: var(--raised);
 }
 
 .settings-segment {
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 7px;
+  height: calc(var(--control-height) - 2 * var(--space-2));
+  padding: 0 var(--space-12);
+  border-radius: calc(var(--control-radius) - var(--space-2));
   background: none;
   color: var(--text-secondary);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 560;
   white-space: nowrap;
   transition:
     background-color var(--duration-hover) ease,
@@ -459,8 +523,8 @@
 }
 
 .account-avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
   border-radius: 50%;
   object-fit: cover;
@@ -618,8 +682,8 @@
   min-width: 0;
   flex: 1 1 auto;
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 620;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.3;
   overflow-wrap: anywhere;
   transform: none;
@@ -657,7 +721,7 @@
   background: var(--input-fill);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 13px;
   letter-spacing: 0.4px;
   transition:
     border-color var(--duration-hover) ease,
@@ -694,7 +758,7 @@
 .error-message {
   margin: 0;
   color: var(--danger-text);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* Settings › Coding agents › API keys: a provider's name and what is true of
@@ -734,13 +798,13 @@
    sit at a list's density rather than a form's, each the command's name in
    regular weight and its chord's caps in the one column every row's chord
    ends in, the way a menu prints its key equivalents. The caps stand at a
-   small control's height once the page's zoom is applied, and the buttons
-   beside the two keys Luke can change are small controls to match. */
+   small control's height, and the buttons beside the two keys Luke can
+   change are small controls to match. */
 .shortcut-section {
   gap: var(--space-2);
-  --control-height: 24px;
-  --keycap-size: 20px;
-  --keycap-text: 11px;
+  --control-height: 28px;
+  --keycap-size: 22px;
+  --keycap-text: 12px;
 }
 
 /* The label keeps its own room above the first row, which the list's
@@ -750,7 +814,7 @@
 }
 
 .shortcut-row {
-  min-height: 28px;
+  min-height: 32px;
 }
 
 /* A row that carries a description keeps a form row's breathing room. */
@@ -769,7 +833,7 @@
 
 .shortcut-name {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
 }
 

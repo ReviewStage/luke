@@ -154,7 +154,7 @@ function results(container: ParentNode): readonly { page: string; rows: readonly
 }
 
 function shownPage(container: ParentNode): string {
-  return container.querySelector(".desktop-toolbar-title")?.textContent ?? "";
+  return container.querySelector(".settings-page")?.getAttribute("aria-label") ?? "";
 }
 
 /** The plan template's page, by the name it is labelled with, which draws its title in its document rather than its toolbar. */
@@ -162,9 +162,9 @@ function templatePage(container: ParentNode): Element | null {
   return container.querySelector('.settings-page[aria-label="Plan template"]');
 }
 
-/** The toolbar's button with these words, if it draws one. */
-function toolbarButton(container: ParentNode, words: string): HTMLButtonElement | undefined {
-  return [...container.querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
+/** The button with these words on the page's title line, if it draws one. */
+function titleLineButton(container: ParentNode, words: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>(".settings-page-head button")].find(
     (button) => button.textContent === words,
   );
 }
@@ -420,7 +420,7 @@ test("Command-F puts the caret in the search, whose empty field prints the chord
   act(() => root.unmount());
 });
 
-test("a page off its defaults offers Reset to defaults in the toolbar, not in the page, and says a refusal beside it", async () => {
+test("a page off its defaults offers Reset to defaults on its title line, once, and says a refusal beside it", async () => {
   const sent: Act[] = [];
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -437,8 +437,8 @@ test("a page off its defaults offers Reset to defaults in the toolbar, not in th
   });
   const container = mount(settingsView({ voiceAvailable: true, openAtLogin: false }));
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
-  const reset = toolbarButton(container, "Reset to defaults");
-  assert.ok(reset, "the toolbar offers the page's reset");
+  const reset = titleLineButton(container, "Reset to defaults");
+  assert.ok(reset, "the title line offers the page's reset");
   const resets = [...container.querySelectorAll("button")].filter((button) =>
     (button.getAttribute("aria-label") ?? button.textContent ?? "").startsWith("Reset"),
   );
@@ -449,7 +449,7 @@ test("a page off its defaults offers Reset to defaults in the toolbar, not in th
     { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: SETTINGS_RESET_SCOPE.APPEARANCE } },
   ]);
   assert.equal(
-    container.querySelector(".desktop-toolbar [role='alert']")?.textContent,
+    container.querySelector(".settings-page-head [role='alert']")?.textContent,
     "The settings are busy.",
   );
 });
@@ -516,7 +516,7 @@ it.effect(
       );
       const container = mount(before, yield* registryOnTestClock);
       act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
-      const reset = toolbarButton(container, "Reset to defaults");
+      const reset = titleLineButton(container, "Reset to defaults");
       assert.ok(reset);
 
       act(() => reset.click());
@@ -555,7 +555,7 @@ it.effect(
       );
       const container = mount(before, yield* registryOnTestClock);
       act(() => turnPage(SETTINGS_VIEW.VOICE));
-      const reset = toolbarButton(container, "Reset to defaults");
+      const reset = titleLineButton(container, "Reset to defaults");
       assert.ok(reset);
 
       act(() => reset.click());
@@ -569,10 +569,19 @@ it.effect(
     }),
 );
 
+test("a page names itself at the head of its own column, under no top bar", () => {
+  const container = mount(settingsView({ voiceAvailable: true }));
+  act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+
+  const page = container.querySelector(".settings-page") ?? assert.fail("no page");
+  assert.equal(page.querySelector("h1")?.textContent, "Appearance");
+  assert.equal(page.querySelector(".desktop-toolbar"), null, "the page draws no top bar");
+});
+
 test("a page at its defaults offers no reset", () => {
   const container = mount(settingsView({ voiceAvailable: true }));
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
-  assert.equal(toolbarButton(container, "Reset to defaults"), undefined);
+  assert.equal(titleLineButton(container, "Reset to defaults"), undefined);
 });
 
 test("the front page draws no Quit button, which the app menu's Quit already does", () => {
@@ -581,12 +590,12 @@ test("the front page draws no Quit button, which the app menu's Quit already doe
   assert.ok(!words.some((text) => text?.includes("Quit")));
 });
 
-test("the plan template stands as a plan's page beside the list, under its own toolbar, rather than as a page of the panel", () => {
+test("the plan template stands as a plan's page beside the list, rather than as a page of the panel", () => {
   const container = mount();
   act(() => turnPage(SETTINGS_VIEW.PLAN_TEMPLATE));
 
-  assert.ok(templatePage(container));
-  assert.equal(shownPage(container), "", "the toolbar carries no title, the document does");
+  const page = templatePage(container) ?? assert.fail("no template page");
+  assert.equal(page.querySelector(".settings-page-title"), null, "the document carries the title");
   assert.equal(container.querySelector(".settings-page-scroll"), null);
   assert.match(
     container.querySelector(".settings-page")?.textContent ?? "",

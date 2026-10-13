@@ -45,11 +45,12 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * list, and the chosen page stands beside it under its own title. The pages
  * are the panel's own, drawn by `SettingsPanel`; its front-page index, with
  * the Voice row's attention mark, and its back buttons are this list's job
- * here, and a page's reset rides the toolbar's right edge beside the page's
- * title. The plan template is the one page drawn apart from the panel: it is
- * a plan's page, document and all (`../settings/plan-template-page.tsx`), and
- * its version history takes the whole window as a plan's does, Back and
- * Escape leaving it for the page.
+ * here. The page has no top bar: its title heads its column, under the
+ * window's drag strip, and a page's reset ends the title's line. The plan
+ * template is the one page drawn apart from the panel: it is a plan's page,
+ * document and all (`../settings/plan-template-page.tsx`), and its version
+ * history takes the whole window as a plan's does, Back and Escape leaving it
+ * for the page.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -203,13 +204,12 @@ export function DesktopSettings({
         />
       ) : (
         <section className="settings-page" aria-label={shown.title}>
-          <header className="desktop-toolbar">
-            <div className="desktop-toolbar-heading">
-              <h1 className="desktop-toolbar-title">{shown.title}</h1>
-            </div>
-            {reset ? <div className="desktop-toolbar-actions">{reset}</div> : null}
-          </header>
+          <div className="desktop-drag-strip" />
           <div className="settings-page-scroll">
+            <header className="settings-page-head">
+              <h1 className="settings-page-title">{shown.title}</h1>
+              {reset}
+            </header>
             <SettingsPanel {...settings} />
           </div>
         </section>

@@ -734,7 +734,7 @@ test("a toolbar leaves the panel's toggle room only where the toggle stands", ()
 
   show(PANEL_TAB.SETTINGS);
   assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
-  assert.equal(clears(), false, "so its toolbar ends as far in as it starts");
+  assert.equal(document.body.querySelector(".desktop-toolbar"), null, "nor a toolbar to clear it");
 });
 
 /** The open plan as main's view carries it: listed in the sidebar and drawn in the column. */
