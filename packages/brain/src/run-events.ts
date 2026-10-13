@@ -85,11 +85,7 @@ type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
 
 /** Who or what opened a turn, as the turn's record takes it: attribution, never a permission. */
 export const BRAIN_TURN_ORIGIN = {
-  /**
-   * A developer's ask typed into a composer. No turn of this build opens
-   * under it — Luke is voice only — but the stored rows an earlier build
-   * wrote carry it, and the hosted store's row shape still spells it.
-   */
+  /** A developer's line typed to Luke on a plan, sent under their own bearer (`POST /api/plans/{id}/messages`). */
   TYPED: "typed",
   /** A developer's ask spoken, relayed by the voice service. */
   SPOKEN: "spoken",

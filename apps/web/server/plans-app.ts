@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
+import { askRecord } from "@sidecar/database/models/asks";
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
@@ -9,6 +10,7 @@ import {
   createPlan,
   deletePlan,
   listPlans,
+  openPlanConversation,
   readPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
@@ -22,6 +24,7 @@ import {
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   codingAgentCallIdSchema,
@@ -32,8 +35,10 @@ import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-e
 import {
   PLAN_BOUNDS,
   type PlanFileRequest,
+  type PlanMessageAnswer,
   type PlanTreeRequest,
   planFileRequestSchema,
+  planMessageRequestSchema,
   planRevisionSeqSchema,
   planTreeRequestSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -46,14 +51,20 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import {
+  ASK_ORIGIN,
+  isRecord,
+  isWireString,
   PLAN_LIST_ARCHIVED,
   PLAN_LIST_QUERY,
   planCreateRequestSchema,
   planUpdateRequestSchema,
+  type UnparsedWireValue,
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
 import type { GitHubApp } from "./github/github-app.js";
+import { ASK_REFUSAL, acceptAsk } from "./hosted/brain-ask.js";
+import { EVE_MOUNT } from "./hosted/brain-host/eve-sessions.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
@@ -181,7 +192,7 @@ const PLANS_PATH = {
   TRANSCRIPT: "/api/plans/transcript",
   /** GET reads a page of the plan's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
   WORK: "/api/plans/work",
-  /** GET reads the plan's planning conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
+  /** GET reads the plan's planning conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. POST hands Luke the developer's typed line. The rewrite moves the path's id into the `id` query. */
   MESSAGES: "/api/plans/messages",
   /** GET reads one planning worker's session past the cursor, held while it runs; the rewrite moves the path's id and the call that started the worker into the `id` and `call` queries. */
   SUBAGENT_MESSAGES: "/api/plans/subagent-messages",
@@ -259,6 +270,9 @@ const MAXIMUM_NAME_BODY_BYTES = 8_192;
 const MAXIMUM_EDIT_BODY_BYTES = PLAN_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
+/** A line is its words at their bound with every character escaped, and its key. */
+const MAXIMUM_MESSAGE_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1_024;
+
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 export interface PlansAppSeams extends EveReach {
@@ -1006,6 +1020,72 @@ const pageEndpoint = /* @__PURE__ */ Effect.fn("web/planPageEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { page: page.value });
 });
 
+/** Why a line's body was not read as one: its words run past the bound, or it is not a line at all. */
+function messageRefusal(body: UnparsedWireValue): HostedRefusal {
+  if (isRecord(body) && isWireString(body.text)) {
+    if (body.text.trim().length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+      return HOSTED_REFUSAL.MESSAGE_TOO_LONG;
+    }
+  }
+  return HOSTED_REFUSAL.INVALID_REQUEST;
+}
+
+/**
+ * POST hands Luke the developer's typed line: a typed ask in the plan's
+ * conversation under the developer's own bearer, answered with the ask it
+ * stands as. The client's key is the ask's client id, so a retry finds the
+ * first send's record and eve is handed the line once. An archived plan is
+ * refused before a conversation is opened for it, and a dispatch eve did not
+ * take is the service unavailable, with nothing left for the line but a
+ * retry under the same key.
+ */
+const typedLineEndpoint = /* @__PURE__ */ Effect.fn("web/planTypedLineEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
+  const line = readEither(planMessageRequestSchema)(body);
+  if (Result.isFailure(line)) return yield* Effect.fail(messageRefusal(body));
+  const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
+  if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (opened.value.plan.archivedAt !== undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+  }
+  const conversation = yield* hostedStoreOrUnavailable(openPlanConversation(userId, planId));
+  if (Option.isNone(conversation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const eve = yield* eveFor(seams, request, EVE_MOUNT.PLANNING);
+  const outcome = yield* hostedStoreOrUnavailable(
+    acceptAsk(
+      { asks: askRecord(), eve },
+      {
+        accountId: userId,
+        userId: conversation.value.ownerId,
+        question: line.success.text,
+        origin: ASK_ORIGIN.TYPED,
+        clientId: line.success.clientKey,
+        conversationId: conversation.value.conversationId,
+      },
+    ),
+  );
+  if (Result.isFailure(outcome)) {
+    return yield* Effect.fail(
+      outcome.failure.refusal === ASK_REFUSAL.NOT_FOUND
+        ? HOSTED_REFUSAL.NOT_FOUND
+        : HOSTED_REFUSAL.UNAVAILABLE,
+    );
+  }
+  const answer: PlanMessageAnswer = {
+    ask: { id: outcome.success.id, queuedAt: outcome.success.queuedAt },
+  };
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, answer);
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -1015,7 +1095,16 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, PLANS_PATH.MESSAGES, hostedRefusing(messagesEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      PLANS_PATH.MESSAGES,
+      // One path reads the plan's conversation (GET) and takes a typed line into it (POST).
+      hostedRefusing(
+        Effect.flatMap(HttpServerRequest.HttpServerRequest, (incoming) =>
+          incoming.method === HTTP_METHOD.POST ? typedLineEndpoint(seams) : messagesEndpoint(seams),
+        ),
+      ),
+    ),
     HttpRouter.add(
       ANY_METHOD,
       PLANS_PATH.SUBAGENT_MESSAGES,
