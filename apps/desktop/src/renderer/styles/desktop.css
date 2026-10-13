@@ -911,6 +911,12 @@ body,
   height: 14px;
 }
 
+/* A glyph wearing where its work stands, an agent's, keeps to the slot's
+   own size, so its row stands as tall as a plan's. */
+.sidebar-pinned-tab-glyph .state-glyph {
+  --state-glyph-size: 14px;
+}
+
 .sidebar-pinned-tab-name {
   min-width: 0;
   flex: 1;
@@ -1134,9 +1140,11 @@ body,
 }
 
 /* The plan's toolbar leads with its tab rather than a title, so it starts
-   the tab's pill a row's inset in, as the side panel's row starts its own. */
+   the tab's pill a row's inset in, as the side panel's row starts its own;
+   the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
 .desktop-plan-main .desktop-toolbar,
-.desktop-toolbar:has(.tab-skeleton) {
+.desktop-toolbar:has(.tab-skeleton),
+.inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
 }
 
@@ -2555,11 +2563,22 @@ body:has(.app-stage[data-capture="true"])
   padding-left: calc(var(--control-glyph) + var(--glyph-gap));
 }
 
-/* The pane's agent crumb leads with the agent's mark, as its tab does. */
-.inbox-crumb-agent {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
+/* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
+   by the strip's gap and the breadcrumbs' chevron. The path clips what runs
+   past it, though not the keyboard's ring on a crumb, and a crumb under the
+   pointer's press takes the chosen tab's fill, where a tab pressed lands. */
+.inbox-crumbs {
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-reach);
+}
+
+.inbox-crumbs ol {
+  gap: var(--list-gap);
+}
+
+.inbox-crumb:active {
+  background: var(--raised-strong);
+  color: var(--text-primary);
 }
 
 .inbox-view-items {
@@ -2572,7 +2591,7 @@ body:has(.app-stage[data-capture="true"])
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
    keeps its own inset then. */
 .desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
-  padding-left: var(--content-inset);
+  padding-left: var(--column-inset);
 }
 
 /* Settings ------------------------------------------------------------------- */
@@ -4274,8 +4293,10 @@ body:has(.app-stage[data-capture="true"])
 /* The plan's tab alone in its column takes the room the heading has rather
    than a most of its own, and gives way to the toolbar's buttons by
    truncating its label, down to a few of its characters, rather than by
-   scrolling. Beside an agent's it is a tab like any other. */
-.desktop-toolbar-heading .tab[data-quiet="true"] {
+   scrolling. Beside an agent's it is a tab like any other. The Inbox pane's
+   crumbs give way alike, within a tab's most. */
+.desktop-toolbar-heading .tab[data-quiet="true"],
+.inbox-crumbs .tab {
   min-width: calc(
     var(--tab-start) +
     var(--control-glyph) +
@@ -4283,8 +4304,11 @@ body:has(.app-stage[data-capture="true"])
     3.5ch +
     var(--tab-end)
   );
-  max-width: none;
   flex: 0 1 auto;
+}
+
+.desktop-toolbar-heading .tab[data-quiet="true"] {
+  max-width: none;
 }
 
 /* While the plan is read, one block in its tab's place: a tab's height and
