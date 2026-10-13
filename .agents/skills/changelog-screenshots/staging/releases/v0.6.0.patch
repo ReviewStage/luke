@@ -15,10 +15,34 @@ index dc62bdaeb..19e913423 100644
    app.setPath("sessionData", stateRoot);
  
 diff --git a/apps/desktop/src/main/ipc/register-desktop-ipc.ts b/apps/desktop/src/main/ipc/register-desktop-ipc.ts
-index 08be300ea..44575c58e 100644
+index 08be300ea..825f5febc 100644
 --- a/apps/desktop/src/main/ipc/register-desktop-ipc.ts
 +++ b/apps/desktop/src/main/ipc/register-desktop-ipc.ts
-@@ -173,7 +173,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
+@@ -3,10 +3,11 @@ import path from "node:path";
+ import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+ import { BrowserWindow, clipboard, ipcMain } from "electron";
+ import { ACT, ACT_KIND } from "#shared/messages/acts";
+-import type { AppStateSnapshot } from "#shared/messages/app-state";
++import { type AppStateSnapshot, RUN_PROFILE } from "#shared/messages/app-state";
+ import { ActRefused, type ActRows, createActRouter } from "../act-router";
+ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
+ import type { DesktopServices } from "../services/compose-desktop";
++import { shotNotebook } from "../shots/notebook";
+ import { accountActRows } from "./account-session";
+ import { sessionActRows } from "./session-acts";
+ import { settingsActRows } from "./settings-rows";
+@@ -153,6 +154,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
+       if (!sender.panel || sender.introduction) {
+         throw new ActRefused(ACT[ACT_KIND.NOTEBOOK_READ].refusal);
+       }
++      // Throwaway: the changelog shot of the Memory page reads acme's notebook.
++      if (launch.fixtureMode && launch.profile === RUN_PROFILE.SHOT_NOTEBOOK) {
++        return Promise.resolve(shotNotebook(Date.now()));
++      }
+       return operator.host.readNotebook();
+     },
+     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
+@@ -173,7 +178,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
        if (!launch.captureOutput) return;
        const window = BrowserWindow.fromWebContents(context.sender);
        if (!window || window.isDestroyed()) return;
@@ -28,60 +52,181 @@ index 08be300ea..44575c58e 100644
        const image = await window.webContents.capturePage(undefined, {
          stayHidden: true,
          stayAwake: true,
+diff --git a/apps/desktop/src/main/shots/notebook.ts b/apps/desktop/src/main/shots/notebook.ts
+new file mode 100644
+index 000000000..70bad25ac
+--- /dev/null
++++ b/apps/desktop/src/main/shots/notebook.ts
+@@ -0,0 +1,94 @@
++// notebook.ts -- Throwaway: the notebook the changelog shot of 0.6.0's Memory page reads, never committed.
++
++import type { NotebookFile, NotebookReadResult } from "@sidecar/gateway";
++
++/**
++ * What Luke keeps about Dean and acme's work, answered in place of the
++ * service's `notebook.read` on a fixture run under the `shot-notebook`
++ * profile: MEMORY.md (who's who, what was settled on Teammate invitations,
++ * which agent runs where), USER.md (dated directives on how Dean likes to be
++ * told things), and the two newest dated notes, with older ones counted
++ * behind them. Every date is counted back from the moment the page asks,
++ * which is a few seconds after launch, and the latest writes follow the
++ * Conversation shot's thread: Dean chose 7 days about ten minutes ago.
++ */
++
++const MINUTE = 60_000;
++const DAY = 24 * 60 * MINUTE;
++
++/** A day as the notebook spells it, `YYYY-MM-DD`, on the Mac's own calendar. */
++function dayStamp(at: number): string {
++  const date = new Date(at);
++  const month = String(date.getMonth() + 1).padStart(2, "0");
++  const day = String(date.getDate()).padStart(2, "0");
++  return `${date.getFullYear()}-${month}-${day}`;
++}
++
++function file(path: string, content: string, updatedAt: number): NotebookFile {
++  return { path, content, chars: content.length, updatedAt };
++}
++
++function memoryFile(now: number): string {
++  return [
++    "## People",
++    "",
++    "- **Dana Moreno**: acme's admin. Reviews and merges relay PRs; wants #214 before Friday.",
++    "- **Jordan Lee**: member. Owns the dashboard shell in acme/web.",
++    "",
++    "## Teammate invitations (acme/relay)",
++    "",
++    `- Invite links last **7 days**, so an unused invite can't linger. Settled ${dayStamp(now)}, over 14.`,
++    "- The sender or any admin may withdraw an invite.",
++    '- A withdrawn or accepted link reads "This invite is no longer valid".',
++    "- Invite mail goes out through Postmark, from a React Email template.",
++    "",
++    "## Agents",
++    "",
++    "- **Add teammate invitations**: Claude Code in Conductor, on #214.",
++    "- **Invite emails**: Codex in Conductor, on #216 (the Postmark template).",
++    "- **Webhook retries** (Claude Code) and **Usage-based billing** (Codex) run locally on Dean's Mac.",
++    "",
++  ].join("\n");
++}
++
++function userFile(now: number): string {
++  const on = (daysAgo: number) => dayStamp(now - daysAgo * DAY);
++  return [
++    `- ${on(21)}: Dean Stratakos, engineer at acme. Works mostly in acme/relay, some acme/ledger.`,
++    `- ${on(21)}: Keep updates short: what changed, what needs him, then the PR number.`,
++    `- ${on(18)}: Don't interrupt during meetings; hold briefings until the meeting ends.`,
++    `- ${on(12)}: Put a decision as two options, with Luke's lean first.`,
++    `- ${on(6)}: Speak up right away only for an agent that is blocked; batch the "done" news.`,
++    `- ${on(2)}: Mornings are for review; save long summaries for after lunch.`,
++    "",
++  ].join("\n");
++}
++
++function todayNote(): string {
++  return [
++    "- Add teammate invitations asked whether an invite link lasts 7 days or 14. Dean chose 7 and told it to finish #214.",
++    "- Invite emails is still writing the Postmark template for #216.",
++  ].join("\n\n");
++}
++
++function yesterdayNote(): string {
++  return [
++    "- Webhook retries finished: retries back off up to an hour, and the tests pass.",
++    "- Usage-based billing rolls metered usage into the invoice draft. Done in acme/ledger.",
++    "- Dana asked to see #214 before Friday.",
++  ].join("\n\n");
++}
++
++/** The notebook as the service would answer it now: curated files first, the newest notes after. */
++export function shotNotebook(now: number): NotebookReadResult {
++  const yesterday = now - DAY - 3 * 60 * MINUTE;
++  return {
++    files: [
++      file("MEMORY.md", memoryFile(now), now - 9 * MINUTE),
++      file("USER.md", userFile(now), now - 2 * DAY - 40 * MINUTE),
++      file(`memory/${dayStamp(now)}.md`, todayNote(), now - 10 * MINUTE),
++      file(`memory/${dayStamp(yesterday)}.md`, yesterdayNote(), yesterday),
++    ],
++    omittedNotes: 7,
++  };
++}
 diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
-index 81f09b99d..5b33b2e4e 100644
+index 81f09b99d..95f5beddb 100644
 --- a/apps/desktop/src/renderer/app.tsx
 +++ b/apps/desktop/src/renderer/app.tsx
-@@ -42,6 +42,7 @@ import {
+@@ -42,6 +42,8 @@ import {
    type PanelPresentation,
  } from "./panel-state";
  import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 +import { isConversationShot, SHOT_NOW, stageConversationShot } from "./shots/conversation";
++import { isNotebookShot, stageNotebookShot } from "./shots/notebook";
  import { applySessionReplay } from "./session-replay";
  import { focusSearchField } from "./session-search";
  import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
-@@ -133,7 +134,12 @@ export function App(): React.JSX.Element {
+@@ -133,7 +135,18 @@ export function App(): React.JSX.Element {
    // Everything main holds, on the one channel it holds it on, and this
    // window's own facts beside it. There is no second reading to reconcile
    // against: what arrives is the whole document at a version that only rises.
 -  const state = useAppState();
 +  const appState = useAppState();
-+  // Throwaway: the changelog shot of the Conversation tab stages acme's thread and roster.
++  // Throwaway: the changelog shot of the Conversation tab stages acme's thread and roster,
++  // and the shot of the Memory page signs Dean in over the same roster.
 +  const state = useMemo(
-+    () => (appState && isConversationShot(appState) ? stageConversationShot(appState) : appState),
++    () =>
++      appState && isConversationShot(appState)
++        ? stageConversationShot(appState)
++        : appState && isNotebookShot(appState)
++          ? stageNotebookShot(appState)
++          : appState,
 +    [appState],
 +  );
    const account = state?.account;
    const sessionsSettled = state?.sessions.settled === true;
    const calendars = state?.calendars ?? EMPTY_CALENDARS;
-@@ -142,7 +148,10 @@ export function App(): React.JSX.Element {
+@@ -142,8 +155,18 @@ export function App(): React.JSX.Element {
    const conductorKeyOnboardingOwed = state?.onboarding.conductorKeyOwed === true;
    const outputAudio = state?.audio.outputAudio;
    const display = state?.window.display;
 -  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
+-  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
 +  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(
-+    // Throwaway: the changelog shot opens on the Conversation tab.
-+    isConversationShot(state) ? PANEL_TAB.CONVERSATION : PANEL_TAB.SESSIONS,
++    // Throwaway: the changelog shots open on the Conversation tab and on Settings › Memory.
++    isConversationShot(state)
++      ? PANEL_TAB.CONVERSATION
++      : isNotebookShot(state)
++        ? PANEL_TAB.SETTINGS
++        : PANEL_TAB.SESSIONS,
 +  );
-   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
++  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(
++    // Throwaway: the changelog shot of the notebook opens on the Memory page.
++    isNotebookShot(state) ? SETTINGS_VIEW.MEMORY : SETTINGS_VIEW.ROOT,
++  );
    // The settings search's field, on the sessions search's own terms: the
    // magnifier beside the tab bar answers for it, and its query lives with the
-@@ -546,6 +555,8 @@ export function App(): React.JSX.Element {
+   // field in the settings panel — closing here is what lets that query go.
+@@ -546,6 +569,13 @@ export function App(): React.JSX.Element {
      opened.current = true;
      const { run, window: pane } = state;
      applyAuthoritativeMode(pane.mode);
 +    // Throwaway: the changelog shot opens on the Conversation tab.
 +    if (isConversationShot(state)) changeTab(PANEL_TAB.CONVERSATION);
++    // Throwaway: the changelog shot of the notebook opens on Settings › Memory.
++    if (isNotebookShot(state)) {
++      changeTab(PANEL_TAB.SETTINGS);
++      setSettingsView(SETTINGS_VIEW.MEMORY);
++    }
      if (run.startPeeked && pane.mode === "compact") {
        applyPresentation(PANEL_PRESENTATION.PEEK);
      }
-@@ -753,7 +764,12 @@ export function App(): React.JSX.Element {
+@@ -753,7 +783,12 @@ export function App(): React.JSX.Element {
    // Which clock the rows' ages are honest against. Fixture observations are
    // measured back from the fixture's own epoch precisely so that no capture
    // run reads them against the time it happened to run at.
 -  const now = state.run.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
-+  // Throwaway: the changelog shot reads its thread against the launch.
-+  const now = isConversationShot(state)
++  // Throwaway: the changelog shots read their thread and roster against the launch.
++  const now = isConversationShot(state) || isNotebookShot(state)
 +    ? SHOT_NOW
 +    : state.run.fixtureMode
 +      ? FIXTURE_EPOCH_MS
@@ -91,7 +236,7 @@ index 81f09b99d..5b33b2e4e 100644
    const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
 diff --git a/apps/desktop/src/renderer/shots/conversation.ts b/apps/desktop/src/renderer/shots/conversation.ts
 new file mode 100644
-index 000000000..cd6899356
+index 000000000..fc1020803
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/conversation.ts
 @@ -0,0 +1,338 @@
@@ -185,7 +330,7 @@ index 000000000..cd6899356
 + * two finished chats from earlier in the week. The wings draw these marks,
 + * and the chips resolve against these titles.
 + */
-+const ACME_SESSIONS: readonly FixtureSession[] = [
++export const ACME_SESSIONS: readonly FixtureSession[] = [
 +  conductorChat(
 +    SESSION.INVITATIONS,
 +    TITLE.INVITATIONS,
@@ -433,16 +578,78 @@ index 000000000..cd6899356
 +    introduction: { playing: false },
 +  };
 +}
+diff --git a/apps/desktop/src/renderer/shots/dean-avatar.ts b/apps/desktop/src/renderer/shots/dean-avatar.ts
+new file mode 100644
+index 000000000..4b9274298
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/dean-avatar.ts
+@@ -0,0 +1,7 @@
++/**
++ * dean-avatar.ts -- generated: Dean Stratakos's GitHub photo (160px JPEG) as a data URL, for the shot profiles' signed-in account.
++ *
++ * Throwaway: never committed. Copied from the changelog-screenshots skill.
++ */
++export const DEAN_AVATAR_DATA_URL =
++  "data:image/jpeg;base64,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";
+diff --git a/apps/desktop/src/renderer/shots/notebook.ts b/apps/desktop/src/renderer/shots/notebook.ts
+new file mode 100644
+index 000000000..a120b2b17
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/notebook.ts
+@@ -0,0 +1,41 @@
++// notebook.ts -- Throwaway: the changelog shot of 0.6.0's Memory page, never committed.
++
++import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
++import { type AppStateSnapshot, RUN_PROFILE } from "#shared/messages/app-state";
++import { ACME_SESSIONS } from "./conversation";
++import { DEAN_AVATAR_DATA_URL } from "./dean-avatar";
++
++/**
++ * Luke's notebook on Settings › Memory, signed in as Dean Stratakos. The page
++ * opens on its own and asks main for the notebook, which answers acme's
++ * (`main/shots/notebook.ts`); this side signs the account in, puts acme's
++ * roster in the wings, and keeps the onboarding gates and the introduction
++ * out of the way. Gated on fixture mode and the profile; any other run draws
++ * exactly what the release draws.
++ */
++
++/** Dean, built once, so a render reads the same object each time. */
++const DEAN = {
++  status: ACCOUNT_STATUS.SIGNED_IN,
++  name: "Dean Stratakos",
++  email: "dean@example.com",
++  provider: ACCOUNT_PROVIDER.GITHUB,
++  pictureUrl: DEAN_AVATAR_DATA_URL,
++} as const;
++
++/** Whether this run is the shot: a fixture run launched with its profile. */
++export function isNotebookShot(state: AppStateSnapshot | undefined): boolean {
++  return state?.run.fixtureMode === true && state.run.profile === RUN_PROFILE.SHOT_NOTEBOOK;
++}
++
++/** The document as the shot draws it: Dean signed in, acme's roster, nothing in front of the panel. */
++export function stageNotebookShot(state: AppStateSnapshot): AppStateSnapshot {
++  return {
++    ...state,
++    account: DEAN,
++    run: { ...state.run, fixture: { ...state.run.fixture, sessions: ACME_SESSIONS } },
++    sessions: { ...state.sessions, settled: true },
++    onboarding: { calendarOwed: false, conductorKeyOwed: false },
++    introduction: { playing: false },
++  };
++}
 diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
-index 0242c7d1b..61c98c750 100644
+index 0242c7d1b..3d8a8bb9e 100644
 --- a/apps/desktop/src/shared/messages/app-state.ts
 +++ b/apps/desktop/src/shared/messages/app-state.ts
-@@ -28,6 +28,8 @@ export const RUN_PROFILE = {
+@@ -28,6 +28,10 @@ export const RUN_PROFILE = {
    SPEAKING: "speaking",
    MUTED: "muted",
    DUPLEX: "duplex",
 +  /** Throwaway: the changelog shot of the Conversation tab. */
 +  SHOT_CONVERSATION: "shot-conversation",
++  /** Throwaway: the changelog shot of Luke's notebook on Settings › Memory. */
++  SHOT_NOTEBOOK: "shot-notebook",
  } as const;
  
  export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

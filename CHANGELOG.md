@@ -942,6 +942,8 @@ he wrote it.
 [#1478](https://github.com/ReviewStage/luke/pull/1478),
 [#1479](https://github.com/ReviewStage/luke/pull/1479))
 
+![Settings › Memory: the notebook Luke keeps, read-only, with who's who, what was settled on Teammate invitations, and which agent runs where.](apps/web/public/changelog/0.6.0/lukes-notebook.png)
+
 ### Your Conductor key lives in the vault
 
 Connect on the Connections row stores your Conductor key in your account's
@@ -1090,6 +1092,8 @@ Onboarding now ends by asking for a calendar — your Mac's own or Google — so
 meeting quiet can hold announcements from your first sign-in. Skip it and Luke
 carries on without one.
 ([#561](https://github.com/ReviewStage/luke/pull/561))
+
+![The panel at the end of onboarding offering Apple Calendar or Google Calendar, or to set it up later, while Luke says he will keep quiet during your meetings.](apps/web/public/changelog/0.5.0/onboarding-ends-at-a-calendar.png)
 
 ### Improvements
 

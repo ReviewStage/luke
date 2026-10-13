@@ -10,6 +10,8 @@ adjusting, and capture with the same profile, zoom, and crop.
 | --- | --- | --- | --- | --- | --- |
 | 0.1.0 | `v0.1.0` | `one-panel-for-every-agent.png` | `shot-one-panel` (`--expanded`) | 2 | `--layout top`, `380,-90,840,700` |
 | 0.3.10 | `v0.3.10` | `onboarding.png` | `shot-onboarding` | 2 | `--layout bleed`, whole |
+| 0.5.0 | `v0.5.0` | `onboarding-ends-at-a-calendar.png` | `shot-calendar-gate` (`--expanded`) | 2 | `--layout top`, `450,-90,700,467` |
+| 0.6.0 | `v0.6.0` | `lukes-notebook.png` | `shot-notebook` (`--expanded`) | 2 | `--layout top`, `500,0,600,400` |
 | 0.6.0 | `v0.6.0` | `the-conversation-tab.png` | `shot-conversation` (`--expanded`) | 2 | `--layout top`, `457,-90,686,540` |
 | 0.7.0 | `v0.7.0` | `plan-a-feature-with-luke.png` | `shot-plan-a-feature` | 1 | whole window |
 | 0.8.0 | `v0.8.0` | `a-new-home-for-your-plans.png` | `shot-home` | 1 | whole window |
