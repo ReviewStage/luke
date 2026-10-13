@@ -58,10 +58,10 @@ reads no account's words and runs no model.
 ## Testing
 
 ```
-./scripts/check.sh                       # everything CI runs
+./scripts/check.sh                       # CI's checks, bar the Postgres migration
 pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:store       # store tests on a real Postgres
-pnpm --filter @luke/web test:agent       # offline brain eval, scripted model
+pnpm --filter @luke/web test:store       # store tests on a real Postgres, by hand
+pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
 `check.sh` must exit 0. A Mac or UI change also needs `./scripts/verify.sh`
@@ -74,7 +74,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
-  process (`test:store`), then `verify.sh` evidence for a Mac, a window, or
+  process (`test:store`, which CI does not run), then `verify.sh` evidence for a Mac, a window, or
   a live provider.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
@@ -85,7 +85,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   `Layer` on its `Context.Tag`; elsewhere `vi.spyOn` over `vi.mock`, restored
   with `vi.restoreAllMocks()`.
 - Assert what a caller observes, never private state or call counts.
-- Use the shared builders before inline setup: `packages/host/src/testing/`,
+- Use the shared builders before inline setup:
   `apps/web/tests/support/`, `packages/wire/src/testing/`, and
   `temporaryDirectory` from `@sidecar/runtime/testing`.
 - A test that needs a database provides `getTestDB()`
