@@ -503,3 +503,15 @@ test("the front page draws no Quit button, which the app menu's Quit already doe
   const words = [...container.querySelectorAll("button")].map((button) => button.textContent);
   assert.ok(!words.some((text) => text?.includes("Quit")));
 });
+
+test("the plan template stands as a plan's page beside the list, under its own toolbar, rather than as a page of the panel", () => {
+  const container = mount();
+  act(() => turnPage(SETTINGS_VIEW.PLAN_TEMPLATE));
+
+  assert.equal(shownPage(container), "Plan template");
+  assert.equal(container.querySelector(".settings-page-scroll"), null);
+  assert.match(
+    container.querySelector(".settings-page")?.textContent ?? "",
+    /Sign in to edit the template/u,
+  );
+});

@@ -739,64 +739,6 @@
   flex: 1 0 100%;
 }
 
-/* Settings › Plan template: the help beside the reset, then the template,
-   or, should the editor fail to load, the template in the code face as
-   Markdown whose marks are typed as written. The box grows with its words,
-   so the page scrolls rather than a well inside it, and the failed save's
-   words stand beside its Retry. */
-.plan-template-head,
-.plan-template-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-8);
-}
-
-.plan-template-line {
-  justify-content: flex-start;
-}
-
-.plan-template-input {
-  width: 100%;
-  min-height: 360px;
-  padding: var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--input-fill);
-  color: var(--text-primary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11.5px;
-  line-height: 1.55;
-  field-sizing: content;
-  resize: none;
-}
-
-.plan-template-input:focus {
-  background: var(--input-fill-focus);
-}
-
-/* The template in the plan's own editor, in the box the plain one stands in,
-   its headings standing a section's gap apart as a plan's do. */
-.plan-template-editor {
-  min-height: 360px;
-  padding: var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--input-fill);
-  color: var(--text-primary);
-}
-
-.plan-template-editor:focus-within {
-  background: var(--input-fill-focus);
-}
-
-.plan-template-editor
-  .plan-document-text
-  > .markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
-  margin-top: var(--plan-section-gap);
-}
-
 /* The Keyboard shortcuts page: a reference list more than a form, so its rows
    sit at a list's density rather than a form's, each the command's name in
    regular weight and its chord's caps in the one column every row's chord

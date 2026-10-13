@@ -61,7 +61,7 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
 );
 
 /** The plan editor's own bundle, loaded once per window. */
-export const planEditorAtom = bundleAtom(
+const planEditorAtom = bundleAtom(
   { script: PLAN_EDITOR_ASSET.SCRIPT },
   () => window.lukePlanEditor,
   EDITOR_LOAD_FAILED,
@@ -412,7 +412,7 @@ function useDraftHandOver(
 }
 
 /** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
-export function MountedPlanEditor({
+function MountedPlanEditor({
   module,
   props,
   handle,
