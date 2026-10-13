@@ -81,8 +81,6 @@ export const workspaceCreateRequestSchema = EffectSchema.Struct({
   ),
 });
 
-export type WorkspaceCreateRequest = typeof workspaceCreateRequestSchema.Type;
-
 /** The workspace a GitHub organization is connected to or disconnected from (POST), by an owner or admin of it. */
 export const workspaceGithubRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
@@ -92,8 +90,6 @@ export const workspaceGithubRequestSchema = EffectSchema.Struct({
 export const workspaceGithubConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
-
-export type WorkspaceGithubConnectAnswer = typeof workspaceGithubConnectAnswerSchema.Type;
 
 /** One member of a workspace: the account, its name and email, and its role. */
 export const workspaceMemberSchema = EffectSchema.Struct({
