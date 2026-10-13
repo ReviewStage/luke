@@ -33,7 +33,7 @@ import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { PLANS_PAGE } from "../planning/planning-model";
+import { PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { PLAN_LOOK, usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -872,6 +872,71 @@ test("resting on a plan's row hangs its card beside the row, naming its agents a
     [...card.querySelectorAll('[aria-label="Pull requests"] > li')].map((line) => line.textContent),
     ["#128 Invite by email+12 −3"],
   );
+});
+
+/** The pointer moving from one place in the window to another, as React hears it: out of the first, over the second. */
+function cross(from: Element, to: Element): void {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
+    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+/** Each tooltip standing in the window, by whether it is a card. */
+function standing(): string[] {
+  return [...document.body.querySelectorAll('[role="tooltip"]')].map((each) =>
+    each.querySelector(".plan-card") === null ? `pill: ${each.textContent}` : "card",
+  );
+}
+
+test("a plan row's card stands while the pointer is on the row's Pin and Archive, whose hints yield to it, and a press on one does its work and takes the card down", () => {
+  const marked: [string, PlanMark][] = [];
+  const container = mount(DEAN, {
+    plans: {
+      plans: [listedPlan("Invites")],
+      onMarkPlan: (planId, mark) => marked.push([planId, mark]),
+    },
+  });
+  const row = container.querySelector<HTMLElement>(".sidebar-plan");
+  const pin = container.querySelector<HTMLElement>('.sidebar-plan-mark[aria-label="Pin"]');
+  const archive = container.querySelector<HTMLElement>('.sidebar-plan-mark[aria-label="Archive"]');
+  assert.ok(row && pin && archive);
+
+  restOn(row);
+  cross(row, pin);
+  cross(pin, archive);
+  assert.deepEqual(standing(), ["card"], "the row's buttons are part of the row");
+  act(() => {
+    archive.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    archive.click();
+  });
+
+  assert.deepEqual(standing(), []);
+  assert.deepEqual(marked, [["plan-Invites", PLAN_MARK.ARCHIVE]]);
+});
+
+test("a pinned tab's card stands while the pointer is on its Unpin, and a right-click on the row takes it down", () => {
+  const billing = listedPlan("Billing");
+  const container = mount(DEAN, {
+    plans: withPins([{ plan: billing.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 1 }], {
+      plans: [billing],
+    }),
+  });
+  const row = container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
+  const unpin = container.querySelector<HTMLElement>('[aria-label="Unpin Board"]');
+  assert.ok(row && unpin);
+
+  restOn(row);
+  cross(row, unpin);
+  assert.deepEqual(standing(), ["card"], "Unpin is part of the row");
+  cross(unpin, row);
+  assert.deepEqual(standing(), ["card"]);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 2 }));
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }));
+  });
+
+  assert.deepEqual(standing(), []);
 });
 
 test("a plan card's pull request opens on GitHub and its agent opens the plan on its tab, either taking the card down", () => {

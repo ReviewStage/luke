@@ -36,6 +36,7 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  * as the plan stays open, whichever of the plan's tabs is shown, until the
  * plan's own row is pressed or another plan opens. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the plan rows' Pin and Archive style, and
+ * part of the row to its card, as theirs are, and
  * a right-click offers Unpin, beside an agent's two copies of its
  * transcript while its plan is open.
  *
@@ -227,6 +228,7 @@ export function SidebarPinnedTab({
   const copied = useTranscriptCopier();
   const menu = useActionMenu(plans.shown && inSight);
   const row = useRef<HTMLButtonElement | null>(null);
+  const item = useRef<HTMLLIElement | null>(null);
   const gone = pinGone(pin, plans);
   const agent = pinAgent(pin, plan, plans);
   // The row is what the menu rings and hands focus back to, even when the
@@ -237,7 +239,7 @@ export function SidebarPinnedTab({
     menu.show(atPointer(event), row.current);
   };
   return (
-    <li className="sidebar-plan-item sidebar-pinned-tab">
+    <li ref={item} className="sidebar-plan-item sidebar-pinned-tab">
       <Tooltip
         label={pin.label}
         card={
@@ -251,6 +253,7 @@ export function SidebarPinnedTab({
           />
         }
         cardBeside
+        cardRegion={item}
       >
         <button
           ref={row}

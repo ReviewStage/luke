@@ -6,7 +6,7 @@ import { MOTION_DELAY_MS } from "@sidecar/surface";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
-import { act, type ButtonHTMLAttributes, createElement } from "react";
+import { act, type ButtonHTMLAttributes, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -637,5 +637,105 @@ it.effect(
       act(() => control("#128 · Retry the upload").click());
       assert.deepEqual(chosen, ["#128"]);
       assert.equal(says(), undefined);
+    }),
+);
+
+/** A list row that hangs a card from its name, with an Archive button over its end, the row named as the card's region. */
+function RegionRow(): React.JSX.Element {
+  const item = useRef<HTMLLIElement | null>(null);
+  return createElement(
+    "li",
+    { ref: item },
+    createElement(Tooltip, {
+      label: "Fix the flaky test",
+      card: createElement("p", null, CARD_WORDS),
+      cardBeside: true,
+      cardRegion: item,
+      children: button({}, "Fix the flaky test"),
+    }),
+    createElement(Tooltip, {
+      label: "Archive",
+      children: button({ "aria-label": "Archive" }),
+    }),
+  );
+}
+
+function mountRegionRow(registry: AtomRegistry): HTMLElement {
+  const container = document.body.appendChild(document.createElement("ul"));
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(registry, createElement(RegionRow))));
+  const row = container.querySelector("li");
+  assert.ok(row);
+  return row;
+}
+
+/** The pointer leaving a row and everything in it, from one of its controls, as the window reports it. */
+function leaveRow(row: Element, from: Element, to: Element): void {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
+    row.dispatchEvent(new MouseEvent("pointerleave", { relatedTarget: to }));
+    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+it.effect(
+  "a row's card stands while the pointer is on the row's own buttons, whose pills yield to it, and lingers once the pointer leaves the row",
+  () =>
+    Effect.gen(function* () {
+      const row = mountRegionRow(yield* registryOnTestClock);
+      shownCard();
+
+      cross(control("Fix the flaky test"), control("Archive"));
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS, "the row's Archive is part of the row");
+      cross(control("Archive"), control("Fix the flaky test"));
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS);
+
+      leaveRow(row, control("Fix the flaky test"), document.body);
+      yield* advance(100);
+      assert.equal(says(), CARD_WORDS, "it lingers for the pointer crossing to it");
+      yield* advance(100);
+      assert.equal(pill(), null);
+
+      hover("Archive");
+      rest(MOTION_DELAY_MS.HINT);
+      assert.equal(says(), "Archive", "with no card standing, the button's own pill shows");
+    }),
+);
+
+it.effect("the pointer crossing from a row's button onto its card keeps the card", () =>
+  Effect.gen(function* () {
+    const row = mountRegionRow(yield* registryOnTestClock);
+    const card = shownCard();
+
+    cross(control("Fix the flaky test"), control("Archive"));
+    leaveRow(row, control("Archive"), card);
+    yield* advance(5_000);
+    assert.equal(says(), CARD_WORDS);
+  }),
+);
+
+it.effect(
+  "a press anywhere in a row takes its card down: its own, a right-click, or a button's",
+  () =>
+    Effect.gen(function* () {
+      mountRegionRow(yield* registryOnTestClock);
+      const press = (name: string, button: number) =>
+        act(() => {
+          control(name).dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button }));
+        });
+
+      for (const [name, button] of [
+        ["Fix the flaky test", 0],
+        ["Fix the flaky test", 2],
+        ["Archive", 0],
+      ] as const) {
+        shownCard();
+        cross(control("Fix the flaky test"), control(name));
+        press(name, button);
+        assert.equal(pill(), null, `a press on ${name} with button ${button}`);
+        cross(control(name), document.body);
+      }
     }),
 );
