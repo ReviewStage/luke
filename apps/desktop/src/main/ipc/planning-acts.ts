@@ -32,7 +32,12 @@ import type {
 } from "@sidecar/hosted/planning-view";
 import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
-import { ACT, ACT_KIND, WORKSPACE_NOT_PERMITTED_REFUSAL } from "#shared/messages/acts";
+import {
+  ACT,
+  ACT_KIND,
+  WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+} from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
@@ -136,19 +141,20 @@ function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
 }
 
 /**
- * A workspace act the host answered without its answer, refused: in words
- * that say the account's role does not allow it where that is why, in its
- * kind's own words otherwise.
+ * A workspace act the host answered without its answer, refused: a join the
+ * service would not grant in words that say GitHub does not show the
+ * installation, a write the account's role does not allow in words that
+ * say so, and anything else in its kind's own words.
  */
 function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure) {
-  return Effect.fail(
-    new ActRefused({
-      message:
-        failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
-          ? WORKSPACE_NOT_PERMITTED_REFUSAL
-          : ACT[kind].refusal,
-    }),
-  );
+  const refused = failure !== WORKSPACE_CALL_FAILURE.UNANSWERED;
+  const message =
+    kind === ACT_KIND.WORKSPACE_JOIN && refused
+      ? WORKSPACE_JOIN_NOT_FOUND_REFUSAL
+      : failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
+        ? WORKSPACE_NOT_PERMITTED_REFUSAL
+        : ACT[kind].refusal;
+  return Effect.fail(new ActRefused({ message }));
 }
 
 export function planningActRows(

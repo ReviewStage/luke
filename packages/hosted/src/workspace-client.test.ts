@@ -133,43 +133,54 @@ it.effect(
     }),
 );
 
-it.effect("tells a refusal the account's role earned apart from one that is no answer at all", () =>
-  Effect.gen(function* () {
-    const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
-    const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
-    const notPermitted = fakeCloudApi({
-      "POST /api/workspaces/join": forbidden,
-      "GET /api/workspaces/members": forbidden,
-      "POST /api/workspaces/members/remove": forbidden,
-      "POST /api/workspaces/leave": forbidden,
-    });
-    const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
-    const notFound = fakeCloudApi({
-      "POST /api/workspaces/join": missing,
-      "GET /api/workspaces/members": missing,
-      "POST /api/workspaces/members/remove": missing,
-      "POST /api/workspaces/leave": missing,
-    });
-    const workspaces = client();
-    const every = (layer: typeof notPermitted.layer) =>
-      Effect.provide(
-        Effect.all([
-          workspaces.join(JOINABLE.installationId),
-          workspaces.members(SHARED.id),
-          workspaces.removeMember(SHARED.id, GRACE.userId),
-          workspaces.leave(SHARED.id),
-        ]),
-        layer,
-      );
+it.effect(
+  "tells a refusal the account's role earned, and one of a thing not shown it, apart from no answer at all",
+  () =>
+    Effect.gen(function* () {
+      const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
+      const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
+      const notPermitted = fakeCloudApi({
+        "POST /api/workspaces/join": forbidden,
+        "GET /api/workspaces/members": forbidden,
+        "POST /api/workspaces/members/remove": forbidden,
+        "POST /api/workspaces/leave": forbidden,
+      });
+      const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
+      const notFound = fakeCloudApi({
+        "POST /api/workspaces/join": missing,
+        "GET /api/workspaces/members": missing,
+        "POST /api/workspaces/members/remove": missing,
+        "POST /api/workspaces/leave": missing,
+      });
+      const failing = { answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR };
+      const serverError = fakeCloudApi({
+        "POST /api/workspaces/join": failing,
+        "GET /api/workspaces/members": failing,
+        "POST /api/workspaces/members/remove": failing,
+        "POST /api/workspaces/leave": failing,
+      });
+      const workspaces = client();
+      const every = (layer: typeof notPermitted.layer) =>
+        Effect.provide(
+          Effect.all([
+            workspaces.join(JOINABLE.installationId),
+            workspaces.members(SHARED.id),
+            workspaces.removeMember(SHARED.id, GRACE.userId),
+            workspaces.leave(SHARED.id),
+          ]),
+          layer,
+        );
 
-    const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
-    const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
-    assert.deepEqual(yield* every(notPermitted.layer), [refused, refused, refused, refused]);
-    assert.deepEqual(yield* every(notFound.layer), [
-      unanswered,
-      unanswered,
-      unanswered,
-      unanswered,
-    ]);
-  }),
+      const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const missed = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
+      const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
+      assert.deepEqual(yield* every(notPermitted.layer), [refused, refused, refused, refused]);
+      assert.deepEqual(yield* every(notFound.layer), [missed, missed, missed, missed]);
+      assert.deepEqual(yield* every(serverError.layer), [
+        unanswered,
+        unanswered,
+        unanswered,
+        unanswered,
+      ]);
+    }),
 );

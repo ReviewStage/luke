@@ -59,7 +59,7 @@ import {
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
+import { Clock, Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
@@ -101,11 +101,13 @@ import type { RunMode } from "./run-mode.js";
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
  * The workspaces the account is a member of, and those of the GitHub App
- * installations it reaches and may join, are read with the list and carried
- * on the view beside it. A join, a removal of a member, and a leave are
- * carried to the service on the developer's word, and a workspace's members
- * are read for the window that asks and held nowhere here; each reads the
- * list and the workspaces again, so the view says what the service now holds.
+ * installations it reaches and may join, are carried on the view beside the
+ * plans and read apart from them, because the service asks GitHub before it
+ * answers: on the first refresh after a launch or a sign-in, when the panel
+ * comes forward, at most once a minute either way, and after a workspace
+ * call moved them. A join, a removal of a member, and a leave are carried to
+ * the service on the developer's word, and a workspace's members are read
+ * for the window that asks and held nowhere here.
  */
 
 /**
@@ -119,6 +121,14 @@ const TRANSCRIPT_SETTLE = Duration.seconds(5);
 
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
+
+/**
+ * How long a read of the account's workspaces stands before a refresh or the
+ * panel coming forward reads them again. Note that the service reads which
+ * GitHub App installations the account reaches before it answers, so the
+ * read is held apart from the plans' and asked for sparingly.
+ */
+const WORKSPACES_READ_EVERY = Duration.minutes(1);
 
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
@@ -297,18 +307,39 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   const readList = Effect.gen(function* () {
     const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
-    const workspaces = yield* Effect.provide(client.workspaces.list(), FetchHttpClient.layer);
     // A failed read keeps the list it last read: the panel says the read
-    // failed beside the plans it already drew rather than emptying them,
-    // and the workspaces those plans name stay as they were read.
-    write({
-      ...(listed.ok
+    // failed beside the plans it already drew rather than emptying them.
+    write(
+      listed.ok
         ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
-        : { listStatus: PLANNING_READ.FAILED }),
-      ...(workspaces === undefined
-        ? undefined
-        : { workspaces: workspaces.workspaces, available: workspaces.available }),
-    });
+        : { listStatus: PLANNING_READ.FAILED },
+    );
+  });
+
+  /** When the workspaces were last asked for, none since a sign-out; and how many sign-outs there have been, so a read out across one is dropped. */
+  let workspacesAskedAt: number | undefined;
+  let workspacesEpoch = 0;
+
+  /**
+   * Reads the account's workspaces and the ones it may join, apart from the
+   * plans, which never wait on it. A failed read keeps the workspaces it
+   * last read, as a failed list read keeps the plans.
+   */
+  const readWorkspaces = Effect.gen(function* () {
+    const epoch = workspacesEpoch;
+    workspacesAskedAt = yield* Clock.currentTimeMillis;
+    const answer = yield* Effect.provide(client.workspaces.list(), FetchHttpClient.layer);
+    if (answer === undefined || epoch !== workspacesEpoch) return;
+    write({ workspaces: answer.workspaces, available: answer.available });
+  });
+
+  /** Reads the workspaces where none was asked for since a sign-out, or the last ask is older than its bound. */
+  const readWorkspacesWhenStale = Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const fresh =
+      workspacesAskedAt !== undefined &&
+      now - workspacesAskedAt < Duration.toMillis(WORKSPACES_READ_EVERY);
+    if (!fresh) yield* readWorkspaces;
   });
 
   // A failed read keeps the pins it last read, as a failed list read keeps the plans.
@@ -630,21 +661,30 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   /**
-   * One workspace call, then the list and the workspaces read again, whatever
-   * it answered: a join, a removal, or a leave moves what the account holds,
-   * and a refusal or a members read can find it already moved elsewhere.
+   * One workspace call, then what it may have moved read again, whatever it
+   * answered, since a refusal can find it already moved elsewhere: the
+   * workspaces after a removal, and the plans beside them after a join or a
+   * leave, which bring a workspace's plans into the list or take them out.
    */
   function workspaceCall<Answer>(
     call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
+    moves: { readonly plans: boolean },
   ): Effect.Effect<WorkspaceCallResult<Answer>> {
-    return serial(Effect.tap(Effect.provide(call, FetchHttpClient.layer), () => readList));
+    return Effect.tap(Effect.provide(call, FetchHttpClient.layer), () =>
+      moves.plans
+        ? Effect.all([readWorkspaces, serial(readList)], { concurrency: "unbounded" })
+        : readWorkspaces,
+    );
   }
 
   const methods: GatewayMethodTable = {
+    // The workspaces are read beside the plans rather than before them, and
+    // only where the last read is stale: the first refresh after a launch or
+    // a sign-in reads them, and the rest seldom.
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
-        yield* serial(
+        const plans = serial(
           Effect.gen(function* () {
             yield* readList;
             yield* readRepositoryPins;
@@ -655,6 +695,14 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (planId !== undefined) yield* readWork(planId);
           }),
         );
+        yield* Effect.all([plans, readWorkspacesWhenStale], { concurrency: "unbounded" });
+        return {};
+      }),
+    // The panel coming forward, which may follow a teammate's change or an
+    // installation made on GitHub, read no oftener than the bound allows.
+    [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
+      Effect.gen(function* () {
+        if (gate()) yield* readWorkspacesWhenStale;
         return {};
       }),
     [GATEWAY_METHOD.PLANNING_OPEN]: (params) =>
@@ -1003,19 +1051,25 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (Result.isFailure(read))
           return yield* invalid("joining a workspace names its installation");
         if (!gate()) return carried<PlanningWorkspaceJoinAnswer>(WORKSPACE_UNANSWERED);
-        const joined = yield* workspaceCall(client.workspaces.join(read.success.installationId));
+        const joined = yield* workspaceCall(client.workspaces.join(read.success.installationId), {
+          plans: true,
+        });
         return carried<PlanningWorkspaceJoinAnswer>(
           joined.ok ? { workspace: joined.answer } : { failure: joined.failure },
         );
       }),
     // The members are answered to the window that asked and held nowhere:
-    // it keeps what it read, and reads again as it opens.
+    // it keeps what it read, and reads again as it opens. A read moves
+    // nothing, so nothing else is read with it.
     [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
       Effect.gen(function* () {
         const read = readEither(planningWorkspaceMembersParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("reading members names a workspace");
         if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const members = yield* workspaceCall(client.workspaces.members(read.success.workspaceId));
+        const members = yield* Effect.provide(
+          client.workspaces.members(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
         return carried<PlanningWorkspaceMembersAnswer>(
           members.ok ? { members: members.answer } : { failure: members.failure },
         );
@@ -1028,7 +1082,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }
         if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, userId } = read.success;
-        const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
+        const remaining = yield* workspaceCall(
+          client.workspaces.removeMember(workspaceId, userId),
+          {
+            plans: false,
+          },
+        );
         return carried<PlanningWorkspaceMembersAnswer>(
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
         );
@@ -1038,7 +1097,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const read = readEither(planningWorkspaceLeaveParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("leaving a workspace names it");
         if (!gate()) return carried<PlanningWorkspaceLeaveAnswer>(WORKSPACE_UNANSWERED);
-        const left = yield* workspaceCall(client.workspaces.leave(read.success.workspaceId));
+        const left = yield* workspaceCall(client.workspaces.leave(read.success.workspaceId), {
+          plans: true,
+        });
         return carried<PlanningWorkspaceLeaveAnswer>(
           left.ok ? { left: true } : { failure: left.failure },
         );
@@ -1078,6 +1139,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       yield* endPlanCall(undefined);
       yield* serial(
         Effect.sync(() => {
+          workspacesAskedAt = undefined;
+          workspacesEpoch += 1;
           view = idleView();
           publish();
         }),

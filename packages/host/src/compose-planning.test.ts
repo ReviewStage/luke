@@ -151,6 +151,8 @@ interface FakeService extends PlanningClient {
   joinable: AvailableWorkspace[];
   /** Whether the workspaces list is refused, as a service that did not answer refuses it. */
   workspacesFail: boolean;
+  /** Where a workspaces read waits after reading the table and before answering, so a test can hold one on the wire. */
+  workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
   /** Whether a removal or a leave is refused as the account's role not allowing it. */
@@ -249,16 +251,19 @@ function fakeService(plans: Plan[]): FakeService {
     memberships: [PERSONAL],
     joinable: [],
     workspacesFail: false,
+    workspacesGate: Effect.void,
     members: {},
     notPermitted: false,
     // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
       list: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           service.reads.push("workspaces");
-          return service.workspacesFail
+          const answer = service.workspacesFail
             ? undefined
             : { workspaces: service.memberships, available: service.joinable };
+          yield* service.workspacesGate;
+          return answer;
         }),
       join: (installationId) =>
         Effect.sync(() => {
@@ -1385,7 +1390,7 @@ it.effect(
       assert.deepEqual(joined, { workspace: RELAY_JOINED });
       assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY_JOINED]);
       assert.deepEqual(last()?.available, []);
-      assert.deepEqual(service.reads.slice(-3), [
+      assert.deepEqual(service.reads.slice(-3).sort(), [
         `join:${RELAY.installationId}`,
         "list",
         "workspaces",
@@ -1394,7 +1399,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace's members are read and removed on the service, and each reads the view again",
+  "a workspace's members are read on the service with nothing else, and a removal reads the workspaces again and not the plans",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -1412,13 +1417,68 @@ it.effect(
       assert.deepEqual(remaining, { members: [ADA] });
       assert.deepEqual(service.reads, [
         `members:${ACME.id}`,
-        "list",
-        "workspaces",
         `remove:${ACME.id}:${GRACE.userId}`,
-        "list",
         "workspaces",
       ]);
     }),
+);
+
+it.effect("the plan list is drawn ready while the workspaces read is still out", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const service = fakeService([invites]);
+    service.memberships = [PERSONAL, ACME];
+    const held = yield* Deferred.make<void>();
+    service.workspacesGate = Deferred.await(held);
+    const { call, last } = yield* subject(service);
+
+    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.PLANNING_REFRESH));
+    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+    assert.equal(last()?.listStatus, PLANNING_READ.READY);
+    assert.deepEqual(last()?.plans, [summary(invites)]);
+    assert.deepEqual(last()?.workspaces, []);
+
+    yield* Deferred.succeed(held, undefined);
+    yield* Fiber.join(refreshing);
+    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+  }),
+);
+
+it.effect(
+  "the workspaces are read on the first refresh, again only once a minute has passed or after a sign-out, and never after a plan's own write",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning } = yield* subject(service);
+      const workspaceReads = () => service.reads.filter((read) => read === "workspaces").length;
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: INVITES });
+      assert.equal(workspaceReads(), 1);
+
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.equal(workspaceReads(), 2);
+
+      yield* planning.reset;
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.equal(workspaceReads(), 3);
+    }),
+);
+
+it.effect("behind a closed account gate the panel coming forward reads no workspaces", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call } = yield* subject(service, { signedIn: false });
+
+    yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+
+    assert.deepEqual(service.reads, []);
+  }),
 );
 
 it.effect("leaving a workspace reaches the service and the view then holds it no more", () =>

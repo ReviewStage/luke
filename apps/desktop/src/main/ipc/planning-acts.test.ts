@@ -16,6 +16,7 @@ import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   COLOURED_CODE_MAX_CHARS,
+  WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
@@ -56,7 +57,7 @@ function fixture() {
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
-  /** Whether the host answers a workspace call as the account's role not allowing it. */
+  /** Whether the host refuses a workspace call: a write as the account's role not allowing it, a join as not found. */
   const host = { notPermitted: false };
   const refusal = () =>
     host.notPermitted
@@ -153,7 +154,11 @@ function fixture() {
       workspaceJoin: (params) =>
         Effect.sync(() => {
           asked.push(`join:${params.installationId}`);
-          return params.installationId === RELAY.installationId ? { workspace: ACME } : refusal();
+          if (params.installationId === RELAY.installationId) return { workspace: ACME };
+          // The service answers a join it would not grant as not found.
+          return host.notPermitted
+            ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
+            : refusal();
         }),
       workspaceMembers: (params) =>
         Effect.sync(() => {
@@ -296,7 +301,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace act the account's role does not allow is refused in words that say so, and one unanswered in its kind's own",
+  "a workspace act the account's role does not allow, and a join GitHub does not show, are each refused in words that say so, and one unanswered in its kind's own",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -313,6 +318,10 @@ it.effect(
         { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
         PANEL,
       );
+      const notShown = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
+        PANEL,
+      );
       f.host.notPermitted = false;
       const unjoined = yield* f.router.performAct(
         { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
@@ -325,6 +334,10 @@ it.effect(
       };
       assert.deepEqual(removed, notPermitted);
       assert.deepEqual(left, notPermitted);
+      assert.deepEqual(notShown, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
+      });
       assert.deepEqual(unjoined, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.WORKSPACE_JOIN].refusal,

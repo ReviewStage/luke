@@ -262,6 +262,17 @@ export function composeDesktop(
           }),
         ),
       );
+      // A panel coming forward reads the account's workspaces again, which
+      // may follow a teammate's change or an installation made on GitHub;
+      // the host reads them no oftener than once a minute.
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          windows.onPanelFocusChanged((focused) => {
+            if (focused) void run(operator.host.workspacesRefresh());
+          }),
+        ),
+        (unsubscribe) => Effect.sync(unsubscribe),
+      );
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,

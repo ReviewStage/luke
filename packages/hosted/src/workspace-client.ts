@@ -12,7 +12,7 @@ import type { AccountToken } from "./account-token.js";
 import type { PlanCallResult } from "./plan-client.js";
 import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "./planning-view.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
-import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
+import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
 import {
   WORKSPACE_MEMBERS_QUERY,
   type Workspace,
@@ -41,7 +41,19 @@ export type WorkspaceCallResult<Answer> = PlanCallResult<Answer, WorkspaceCallFa
 
 const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
-const NOT_PERMITTED = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const;
+/** The refusals a workspace call is told apart by, by the service's own word for each. */
+const WORKSPACE_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_PERMITTED]: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
+  [HOSTED_API_ERROR.NOT_FOUND]: WORKSPACE_CALL_FAILURE.NOT_FOUND,
+} as const;
+
+/** The failure a refusal the service named answers with, where it is one of `named`; unanswered otherwise. */
+function failureOf(
+  refusal: HostedApiError | undefined,
+  named: Readonly<Partial<Record<HostedApiError, WorkspaceCallFailure>>>,
+): WorkspaceCallFailure {
+  return (refusal === undefined ? undefined : named[refusal]) ?? WORKSPACE_CALL_FAILURE.UNANSWERED;
+}
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
@@ -52,7 +64,7 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
-/** One call whose answer the schema reads, a refusal the service named not-permitted told apart from every other end. */
+/** One call whose answer the schema reads, a refusal the service named not-permitted or not-found told apart from every other end. */
 function refusable<Answer, Encoded>(
   call: AccountCallEffects,
   request: Parameters<AccountCallEffects["send"]>[0],
@@ -68,7 +80,7 @@ function refusable<Answer, Encoded>(
       return read === undefined ? UNANSWERED : succeeded(read);
     }
     const refusal = Result.getOrUndefined(readEither(hostedErrorSchema)(payload));
-    return refusal === HOSTED_API_ERROR.NOT_PERMITTED ? NOT_PERMITTED : UNANSWERED;
+    return { ok: false, failure: failureOf(refusal, WORKSPACE_REFUSALS) };
   });
 }
 
