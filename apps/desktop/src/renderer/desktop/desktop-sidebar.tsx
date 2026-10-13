@@ -224,6 +224,7 @@ function PinnedRows({
             current={context.marked(plan.id, pin)}
             inSight={context.inSight}
             onOpen={() => onOpenTab(pin)}
+            onOpenPlan={() => context.onOpen(plan.id)}
           />
         ),
       )}
