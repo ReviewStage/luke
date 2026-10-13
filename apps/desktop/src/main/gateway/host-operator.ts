@@ -17,12 +17,16 @@ import {
 } from "@sidecar/gateway";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentParams,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
@@ -35,10 +39,12 @@ import {
   type CodingAgentRenameParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
+  codingAgentInboxAttachmentViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -294,6 +300,14 @@ export interface HostOperator {
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
   ): Effect.Effect<CodingAgentInboxAnsweredView>;
+  /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
+  codingAgentAccountInbox(
+    params: CodingAgentAccountInboxParams,
+  ): Effect.Effect<CodingAgentAccountInboxAnswerView>;
+  /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
+  codingAgentInboxAttachment(
+    params: CodingAgentInboxAttachmentParams,
+  ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -827,6 +841,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
+      ),
+    codingAgentAccountInbox: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: params.after }),
+        codingAgentAnswer(codingAgentAccountInboxAnswerViewSchema),
+      ),
+    codingAgentInboxAttachment: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
+          itemId: params.itemId,
+          attachmentId: params.attachmentId,
+        }),
+        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

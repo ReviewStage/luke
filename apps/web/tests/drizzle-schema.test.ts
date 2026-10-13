@@ -57,6 +57,7 @@ const UNDECLARED_TABLES: ReadonlySet<string> = new Set([MIGRATIONS_TABLE]);
 const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
   "bigint",
   "boolean",
+  "bytea",
   "double precision",
   "integer",
   "jsonb",

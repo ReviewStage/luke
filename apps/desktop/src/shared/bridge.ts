@@ -244,6 +244,17 @@ export const BRIDGE = {
     ),
   }),
   /**
+   * An inbox notification clicked: the panel is to open the plan on its
+   * Inbox tab. An event, as an agent's notification's click is, because it
+   * is an ask the window answers once.
+   */
+  onShowInbox: entry({
+    kind: "subscribe",
+    channel: "app:show-inbox",
+    args: noArgs,
+    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+  }),
+  /**
    * The floating call window moved under a pointer that did not: a drag of
    * its own. The page is told so the hover its buttons were left with is not
    * believed, since the engine keeps the hover the pointer had before.
@@ -288,6 +299,25 @@ export const BRIDGE = {
         isWireString(value.words) &&
         isWireString(value.detail) &&
         isWireBoolean(value.failed),
+    ),
+  }),
+  /**
+   * An inbox item opened while the window was focused away from its plan's
+   * Inbox tab: the panel says so in its toast, whose View opens that tab.
+   * An event, as an agent's end is, because it is said once and never
+   * bootstrapped from.
+   */
+  onInboxItemOpened: entry({
+    kind: "subscribe",
+    channel: "app:inbox-item-opened",
+    args: noArgs,
+    result: result<{ planId: string; itemId: string; words: string; detail: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.planId) &&
+        isWireString(value.itemId) &&
+        isWireString(value.words) &&
+        isWireString(value.detail),
     ),
   }),
   /**

@@ -225,10 +225,10 @@ test("searching for notifications finds the switch on General, and pressing it l
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
   type(field(container), "notifications");
   assert.deepEqual(results(container), [
-    { page: "General", rows: ["Notify me when a coding agent finishes"] },
+    { page: "General", rows: ["Notify me when a coding agent finishes or needs me"] },
   ]);
 
-  act(() => result(container, "Notify me when a coding agent finishes").click());
+  act(() => result(container, "Notify me when a coding agent finishes or needs me").click());
   assert.equal(shownPage(container), "General");
   const row = container.querySelector(
     `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${APP_SETTING_ID.AGENT_NOTIFICATIONS}"]`,

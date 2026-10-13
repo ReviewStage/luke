@@ -1,19 +1,27 @@
+import { randomUUID } from "node:crypto";
+import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
+  type InboxBlock,
+  type InboxImageType,
   type InboxItem,
   type InboxPost,
+  type InboxPostBlock,
   type InboxReply,
   inboxBlockSchema,
+  inboxImageTypeSchema,
   inboxReplySchema,
   inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { and, desc, eq, exists, ne, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, exists, isNull, ne, notInArray, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { codingAgent } from "../db/coding-agent-schema.js";
+import { inboxAttachment } from "../db/inbox-attachment-schema.js";
 import { inboxItem } from "../db/inbox-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
@@ -34,13 +42,23 @@ import { planReachableBy } from "./workspace-store.js";
  * answered or closed, so the agent keeps an item current rather than
  * posting it twice. A row keeps the item's blocks and its response as the
  * wire's own JSON under the version of the vocabulary that wrote them,
- * decoded on every read against the wire's closed shapes. A post counts the agent's open items against the bound
+ * decoded on every read against the wire's closed shapes. An image block
+ * is posted by a path and kept by an attachment: the caller reads the
+ * file's bytes from the agent's sandbox and hands them in beside the post,
+ * and the post writes each as a row of the item's
+ * (`db/inbox-attachment-schema.ts`) under an id minted here, which the
+ * block kept on the item names in the path's place; the item's attachments
+ * its new blocks no longer name go with the same write, so a picture the
+ * agent dropped from an item is dropped from the store. A post counts the agent's open items against the bound
  * under a lock on the agent's own row, so two posts of one step cannot both
  * slip under it. An answer is taken only by the revision it names and only
  * while the item is open, so an answer to an item the agent has since
  * changed is refused rather than taken for what it now asks; an answer sent
- * again under the key it was taken by finds it taken. Every function is an
- * effect over the ambient `SqlClient` and names no database of its own.
+ * again under the key it was taken by finds it taken. What waits across
+ * the account, every open item on a plan it has not archived, is read on
+ * its own index, so a desktop can hold that read whichever plan is open.
+ * Every function is an effect over the ambient `SqlClient` and names no
+ * database of its own.
  */
 
 type InboxStoreFailure = SqlError | Schema.SchemaError;
@@ -77,6 +95,12 @@ export interface InboxStamp {
 export interface StoredInboxItem {
   readonly item: InboxItem;
   readonly answerKey: string | null;
+}
+
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+export interface InboxImage {
+  readonly contentType: InboxImageType;
+  readonly bytes: Uint8Array;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -197,6 +221,75 @@ const PostWriteSchema = Schema.Struct({
   needsReply: Schema.Boolean,
   now: Schema.Date,
 });
+
+const AttachmentWriteSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  planId: Schema.String,
+  itemId: Schema.String,
+  contentType: inboxImageTypeSchema,
+  byteCount: Schema.Number,
+  bytes: Schema.Uint8Array,
+  now: Schema.Date,
+});
+
+/** One picture written as a row of the item's, under the id the block names. */
+const insertAttachment = SqlSchema.void({
+  Request: AttachmentWriteSchema,
+  execute: ({ now, ...attachment }) =>
+    db.insert(inboxAttachment).values({ ...attachment, createdAt: now }),
+});
+
+/** The item's attachments no block of its names any longer, deleted. */
+const deleteOtherAttachments = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, kept: Schema.Array(Schema.String) }),
+  execute: ({ itemId, kept }) =>
+    db
+      .delete(inboxAttachment)
+      .where(
+        kept.length === 0
+          ? eq(inboxAttachment.itemId, itemId)
+          : and(eq(inboxAttachment.itemId, itemId), notInArray(inboxAttachment.id, [...kept])),
+      ),
+});
+
+/** The attachment, where it is the item's and the account reaches the item's plan: its type and its bytes. */
+const findAttachment = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    attachmentId: Schema.String,
+  }),
+  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  execute: ({ userId, itemId, attachmentId }) =>
+    db
+      .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
+      .from(inboxAttachment)
+      .innerJoin(inboxItem, eq(inboxItem.id, inboxAttachment.itemId))
+      .where(
+        and(
+          eq(inboxAttachment.itemId, itemId),
+          eq(inboxAttachment.id, attachmentId),
+          itemReachableBy(userId),
+        ),
+      ),
+});
+
+/** The blocks as the item keeps them: each image block naming the attachment minted for it, in the order the images were handed in, and every other block as posted. */
+function storedBlocks(
+  blocks: readonly InboxPostBlock[],
+  attachmentIds: readonly string[],
+): readonly InboxBlock[] {
+  let next = 0;
+  return blocks.map((block): InboxBlock => {
+    if (block.type !== INBOX_BLOCK.IMAGE) return block;
+    const attachmentId = attachmentIds[next];
+    next += 1;
+    // The caller hands one picture per image block; fewer is its contract broken, not an outcome.
+    if (attachmentId === undefined) throw new Error("an image block has no picture handed in");
+    return { type: INBOX_BLOCK.IMAGE, attachmentId, alt: block.alt };
+  });
+}
 
 /** The item written under the agent's key: a new row at revision one, or the standing one written again, its revision moved on and opened again. */
 const upsertItem = SqlSchema.findOne({
@@ -345,6 +438,72 @@ const findSettledStamps = SqlSchema.findAll({
       .limit(limit),
 });
 
+/**
+ * The account's open items on the plans it has not archived: the rows the
+ * account's read of what waits names. Note that the plan is joined by its
+ * key from each item the account's own index finds, so leaving archived
+ * plans out reads no plan the account has no open item on.
+ */
+function accountWaiting(userId: string) {
+  return and(
+    eq(inboxItem.userId, userId),
+    eq(inboxItem.status, INBOX_STATUS.OPEN),
+    isNull(plan.archivedAt),
+  );
+}
+
+const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
+
+/** One open item as the account's read carries it, with its agent as its row names it now. */
+const WaitingRowSchema = Schema.Struct({
+  id: Schema.String,
+  planId: Schema.String,
+  agentId: Schema.String,
+  agentTitle: Schema.NullOr(Schema.String),
+  agentModel: Schema.String,
+  title: Schema.String,
+  revision: Schema.Number,
+  status: Schema.Literals(Object.values(INBOX_STATUS)),
+  postedAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
+});
+
+const findWaitingItems = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: WaitingRowSchema,
+  execute: ({ userId }) =>
+    db
+      .select({
+        id: inboxItem.id,
+        planId: inboxItem.planId,
+        agentId: inboxItem.agentId,
+        agentTitle: codingAgent.title,
+        agentModel: codingAgent.model,
+        title: inboxItem.title,
+        revision: inboxItem.revision,
+        status: inboxItem.status,
+        postedAt: inboxItem.postedAt,
+        updatedAt: inboxItem.updatedAt,
+      })
+      .from(inboxItem)
+      .innerJoin(plan, eq(plan.id, inboxItem.planId))
+      .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+      .where(accountWaiting(userId))
+      .orderBy(...LATEST_FIRST),
+});
+
+const findWaitingStamps = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: StampRowSchema,
+  execute: ({ userId }) =>
+    db
+      .select(STAMP_COLUMNS)
+      .from(inboxItem)
+      .innerJoin(plan, eq(plan.id, inboxItem.planId))
+      .where(accountWaiting(userId))
+      .orderBy(...LATEST_FIRST),
+});
+
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
 function scopeItems(
   scope: InboxScope,
@@ -395,13 +554,17 @@ const answerItem = SqlSchema.findOneOption({
 /**
  * The agent's post written: a new item under its key, or the one standing
  * under it written again and opened; refused where the agent would hold
- * more open items than the bound, or is no longer the account's. Note that
- * the post's own key is not counted, because writing it again opens no
- * second item.
+ * more open items than the bound, or is no longer the account's. The
+ * pictures are the post's image blocks' bytes in the blocks' own order, one
+ * each, read by the caller; each is written as an attachment of the item's
+ * under an id minted here, and the item's other attachments are deleted.
+ * Note that the post's own key is not counted, because writing it again
+ * opens no second item.
  */
 export function postInboxItem(
   agent: InboxAgent,
   post: InboxPost,
+  images: readonly InboxImage[] = [],
 ): InboxStoreEffect<Result.Result<InboxItem, InboxPostRefusal>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -415,19 +578,51 @@ export function postInboxItem(
         if (open >= INBOX_BOUNDS.MAX_OPEN_PER_AGENT) {
           return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
         }
+        const now = yield* DateTime.nowAsDate;
+        const attachments = yield* Effect.sync(() =>
+          images.map((image) => ({ ...image, id: randomUUID() })),
+        );
         const row = yield* upsertItem({
           ...agent,
           key: post.key,
           title: post.title,
-          blocks: post.blocks ?? [],
+          blocks: storedBlocks(
+            post.blocks ?? [],
+            attachments.map((attachment) => attachment.id),
+          ),
           response: post.response,
           needsReply: post.needsReply ?? true,
-          now: yield* DateTime.nowAsDate,
+          now,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
+        yield* Effect.forEach(attachments, (attachment) =>
+          insertAttachment({
+            id: attachment.id,
+            userId: agent.userId,
+            planId: agent.planId,
+            itemId: row.id,
+            contentType: attachment.contentType,
+            byteCount: attachment.bytes.byteLength,
+            bytes: attachment.bytes,
+            now,
+          }),
+        );
+        yield* deleteOtherAttachments({
+          itemId: row.id,
+          kept: attachments.map((attachment) => attachment.id),
+        });
         return Result.succeed(storedItem(row).item);
       }),
     ),
   );
+}
+
+/** The picture, where it is the item's: its type and its bytes; nothing where the account reaches no such item or the item carries no such picture. */
+export function readInboxAttachment(
+  userId: string,
+  itemId: string,
+  attachmentId: string,
+): InboxStoreEffect<Option.Option<InboxImage>> {
+  return findAttachment({ userId, itemId, attachmentId });
 }
 
 /** The agent's item under the key closed with why; nothing where it has none under the key. */
@@ -548,5 +743,34 @@ export function answerInboxItem(
       answerItem({ userId, itemId, revision, answer, answerKey, now }),
       Option.map((row) => storedItem(row).item),
     ),
+  );
+}
+
+/** One item that waits as the account's read holds it: the entry the wire carries, and where it stands, which a cursor digests. */
+type AccountWaitingRow = AccountInboxEntry & Pick<InboxStamp, "status">;
+
+/**
+ * Every item that waits on the developer across the account's plans, the
+ * latest changed first: open, and on a plan the account has not archived.
+ * Note that none is left out for being old, because one left unanswered
+ * while many others changed must still be counted; the open bound per
+ * agent keeps these few.
+ */
+export function accountWaitingItems(
+  userId: string,
+): InboxStoreEffect<readonly AccountWaitingRow[]> {
+  return Effect.map(findWaitingItems({ userId }), (rows) =>
+    rows.map((row) => ({
+      ...row,
+      postedAt: row.postedAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+    })),
+  );
+}
+
+/** Where each item `accountWaitingItems` reads stands, the same items and none of their words: what a held read of the account compares between looks. */
+export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
+  return Effect.map(findWaitingStamps({ userId }), (rows) =>
+    rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }

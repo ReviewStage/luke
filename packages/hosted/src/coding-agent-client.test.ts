@@ -698,6 +698,45 @@ it.effect(
     }),
 );
 
+/** One item that waits across the account, as the service answers it. */
+const WAITING = {
+  id: ITEM_ID,
+  planId: PLAN_ID,
+  agentId: AGENT_ID,
+  agentTitle: "Fix invitations",
+  agentModel: "anthropic/claude-opus-5.5",
+  title: "Push to the release branch?",
+  revision: 2,
+  postedAt: 1_800_000_000_000,
+  updatedAt: 1_800_000_060_000,
+};
+
+it.effect(
+  "reads what waits across the account past the cursor at the account's inbox address, still read when the service holds it past an ordinary call's deadline",
+  () =>
+    Effect.gen(function* () {
+      const asked = yield* Deferred.make<string>();
+      let answer: (response: Response) => void = () => undefined;
+      const held = fakeHttpClientLayer((url) => {
+        Deferred.doneUnsafe(asked, Effect.succeed(url));
+        return new Promise<Response>((resolve) => {
+          answer = resolve;
+        });
+      });
+
+      const reading = yield* Effect.forkChild(Effect.provide(client().accountInbox("7"), held));
+      assert.equal(yield* Deferred.await(asked), "https://tryluke.dev/api/inbox?after=7");
+      yield* TestClock.adjust(Duration.seconds(20));
+      answer(jsonResponse({ items: [WAITING], cursor: "8", readAt: 1_800_000_120_000 }));
+
+      assert.deepEqual(yield* Fiber.join(reading), {
+        items: [WAITING],
+        cursor: "8",
+        readAt: 1_800_000_120_000,
+      });
+    }),
+);
+
 it.effect(
   "answers an inbox item at its own address with the answer as sent, and reads each refusal a message names as its own failure",
   () =>
@@ -746,6 +785,48 @@ it.effect(
         );
         assert.deepEqual(refused, { failure }, error);
       }
+    }),
+);
+
+it.effect(
+  "reads an item's image at its own address as its bytes in base64 under the type the service served, reads a refusal as its own failure, and reads a type no image block may be as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+      const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3]);
+      const asked: string[] = [];
+      const serving = (contentType: string, body: BodyInit, status: number = HTTP_STATUS.OK) =>
+        fakeHttpClientLayer((url, init) => {
+          asked.push(
+            `${init.method ?? ""} ${url} ${new Headers(init.headers).get("authorization") ?? ""}`,
+          );
+          return new Response(body, { status, headers: { "content-type": contentType } });
+        });
+
+      const read = yield* Effect.provide(
+        client().inboxAttachment(ITEM_ID, ATTACHMENT_ID),
+        serving("image/png", bytes),
+      );
+      const missing = yield* Effect.provide(
+        client().inboxAttachment(ITEM_ID, ATTACHMENT_ID),
+        serving(
+          "application/json",
+          JSON.stringify({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          HTTP_STATUS.NOT_FOUND,
+        ),
+      );
+      const page = yield* Effect.provide(
+        client().inboxAttachment(ITEM_ID, ATTACHMENT_ID),
+        serving("text/html", "<p>Sign in</p>"),
+      );
+
+      assert.deepEqual(read, { contentType: "image/png", base64: "iVBORw0KGgoAAQID" });
+      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(page, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(
+        asked[0],
+        `GET https://tryluke.dev/api/inbox/${ITEM_ID}/attachments/${ATTACHMENT_ID} Bearer token-1`,
+      );
     }),
 );
 

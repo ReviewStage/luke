@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
+import type { AccountInboxAnswer } from "@sidecar/hosted/account-inbox-wire";
 import type { InboxAnswer } from "@sidecar/hosted/inbox-wire";
-import { Effect, Schedule } from "effect";
+import { Clock, type Duration, Effect, Schedule } from "effect";
 import {
+  accountWaitingItems,
+  accountWaitingStamps,
   type InboxStamp,
   type InboxStoreEffect,
   planInboxItems,
@@ -10,7 +13,7 @@ import {
 import { CODER } from "./bounds.js";
 
 /**
- * inbox-page.ts -- a plan's inbox as the desktop reads it: every item its agents posted, held open while nothing changed since the reader's cursor.
+ * inbox-page.ts -- a plan's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
  *
  * The cursor is a digest of where every item stands, so a post, a close,
  * an answer, and a new item each move it, and a reader that holds it hears
@@ -21,6 +24,12 @@ import { CODER } from "./bounds.js";
  * Inbox tab hears an item the moment it lands without asking on a clock of
  * its own; a read past the hold answers the inbox unchanged, and the reader
  * asks again.
+ *
+ * The account's read is the same hold over the account's open items, the
+ * desktop's one read that stands whichever plan is open: it is what says an
+ * item landed while the developer was elsewhere. Note that it looks every
+ * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
+ * it for as long as it is signed in rather than while a tab is on screen.
  */
 
 /** How many characters of the digest a cursor carries: far more than any two inboxes of a plan could share by chance. */
@@ -43,21 +52,53 @@ function cursorOf(
   return createHash("sha256").update(JSON.stringify(standing)).digest("hex").slice(0, CURSOR_CHARS);
 }
 
+/**
+ * Waits until the stamps move past the reader's cursor, or the hold ends:
+ * each look reads where the items stand and none of their words, and the
+ * caller reads them whole once this returns.
+ */
+function heldUntilMoved(
+  stamps: InboxStoreEffect<readonly InboxStamp[]>,
+  after: string,
+  poll: Duration.Duration,
+): InboxStoreEffect<void> {
+  const moved = Effect.map(stamps, (standing) => cursorOf(standing) !== after);
+  return moved.pipe(
+    Effect.repeat({ schedule: Schedule.spaced(poll), until: (changed) => changed }),
+    Effect.timeoutOption(CODER.MESSAGES_HOLD),
+    Effect.asVoid,
+  );
+}
+
 /** The plan's inbox as it stands, held while its cursor is still the reader's. */
 export function planInboxPast(
   userId: string,
   planId: string,
   after: string,
 ): InboxStoreEffect<InboxAnswer> {
-  const read = Effect.map(planInboxItems(userId, planId), (items) => ({
-    items,
-    cursor: cursorOf(items),
-  }));
-  // Each look inside the hold reads where the items stand and none of their words; the items are read whole once they moved.
-  const moved = Effect.map(planInboxStamps(userId, planId), (stamps) => cursorOf(stamps) !== after);
-  return moved.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: (changed) => changed }),
-    Effect.timeoutOption(CODER.MESSAGES_HOLD),
-    Effect.flatMap(() => read),
+  return heldUntilMoved(planInboxStamps(userId, planId), after, CODER.MESSAGES_POLL).pipe(
+    Effect.andThen(planInboxItems(userId, planId)),
+    Effect.map((items) => ({ items, cursor: cursorOf(items) })),
+  );
+}
+
+/**
+ * What waits on the developer across the account, held while its cursor is
+ * still the reader's, and when it was read. Note that the instant is taken
+ * before the items are, because an item written between the two would
+ * otherwise read as changed before an answer that does not hold it.
+ */
+export function accountInboxPast(
+  userId: string,
+  after: string,
+): InboxStoreEffect<AccountInboxAnswer> {
+  const read = Effect.gen(function* () {
+    const readAt = yield* Clock.currentTimeMillis;
+    const rows = yield* accountWaitingItems(userId);
+    const items = rows.map(({ status: _status, ...entry }) => entry);
+    return { items, cursor: cursorOf(rows), readAt };
+  });
+  return heldUntilMoved(accountWaitingStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
+    Effect.andThen(read),
   );
 }

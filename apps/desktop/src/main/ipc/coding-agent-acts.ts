@@ -6,6 +6,8 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentParams,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
@@ -40,9 +42,10 @@ import type { AgentNotices } from "../agent-notices";
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
  * (`main/agent-notices.ts`), which hold where each agent stands so an end
- * the panel is not looking at is still announced. The plan's inbox is
- * answered to the panel alone: no notice watches it. Nothing else is held
- * here.
+ * the panel is not looking at is still announced, and which plan's Inbox
+ * the panel shows, so an item it is looking at is not. The plan's inbox is
+ * answered to the panel alone: the notices watch what waits across the
+ * account on a read of their own. Nothing else is held here.
  *
  * The account's own provider keys, which an agent runs on, are asked here
  * too, from Settings in the same panel: a save's key passes through to the
@@ -81,6 +84,9 @@ export interface CodingAgentActsDependencies {
     codingAgentInboxAnswer(
       params: CodingAgentInboxAnswerParams,
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
+    codingAgentInboxAttachment(
+      params: CodingAgentInboxAttachmentParams,
+    ): Effect.Effect<CodingAgentInboxAttachmentView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -93,6 +99,7 @@ export interface CodingAgentActsDependencies {
     | "observePublished"
     | "observePlanGone"
     | "shown"
+    | "shownInbox"
   >;
 }
 
@@ -116,7 +123,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PLAN_TEMPLATE_WRITE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
-  | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER;
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -196,9 +204,10 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);
       return notedAgent(host.codingAgentStop(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
+      notices.shownInbox(inboxPlanId);
     },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);
@@ -237,6 +246,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);
       return host.codingAgentInboxAnswer(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, sender);
+      return host.codingAgentInboxAttachment(params);
     },
   };
 }

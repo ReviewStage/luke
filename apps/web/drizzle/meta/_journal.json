@@ -650,28 +650,42 @@
       "idx": 93,
       "version": "7",
       "when": 1791420000000,
-      "tag": "0093_organization",
+      "tag": "0093_inbox_item_user_status_updated",
       "breakpoints": true
     },
     {
       "idx": 94,
       "version": "7",
       "when": 1791430000000,
-      "tag": "0094_personal_workspace",
+      "tag": "0094_inbox_attachment",
       "breakpoints": true
     },
     {
       "idx": 95,
       "version": "7",
       "when": 1791440000000,
-      "tag": "0095_plan_organization",
+      "tag": "0095_organization",
       "breakpoints": true
     },
     {
       "idx": 96,
       "version": "7",
       "when": 1791450000000,
-      "tag": "0096_github_installation",
+      "tag": "0096_personal_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1791460000000,
+      "tag": "0097_plan_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1791470000000,
+      "tag": "0098_github_installation",
       "breakpoints": true
     }
   ]

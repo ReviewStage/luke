@@ -7,12 +7,15 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentParams,
+  type CodingAgentInboxAttachmentView,
 } from "@sidecar/hosted/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -136,7 +139,7 @@ const NEWER = Schema.decodeUnknownSync(inboxItemSchema)({
     response: { type: INBOX_RESPONSE.NONE },
   }),
   version: INBOX_WIRE_VERSION + 1,
-  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Before Friday." }, { type: "image" }],
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Before Friday." }, { type: "table" }],
   response: { type: "schedule" },
 });
 
@@ -191,6 +194,24 @@ function fileDoors(answers: Readonly<Record<string, PlanningFileAnswer[]>> = {})
   return { doors, reads, opened };
 }
 
+const ATTACHMENT = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+
+/** A one-pixel PNG, as the host hands an image's bytes back. */
+const PIXEL =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+/** An item with a screenshot the agent took, asking whether it reads right. */
+const SHOT = item({
+  id: "a1b2c3d4-0000-4000-8000-000000000008",
+  key: "landing",
+  title: "Does the landing page read right?",
+  blocks: [
+    { type: INBOX_BLOCK.MARKDOWN, text: "Rendered at 1280 wide." },
+    { type: INBOX_BLOCK.IMAGE, attachmentId: ATTACHMENT, alt: "The landing page at 1280 wide" },
+  ],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+});
+
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -210,10 +231,14 @@ const opened: string[] = [];
 function service(
   pages: CodingAgentInboxAnswerView[],
   answers: ((sent: CodingAgentInboxAnswerParams) => CodingAgentInboxAnsweredView)[],
+  images: CodingAgentInboxAttachmentView[] = [],
 ) {
   const sent: CodingAgentInboxAnswerParams[] = [];
   const reads: string[] = [];
   const listReads: number[] = [];
+  const imageReads: CodingAgentInboxAttachmentParams[] = [];
+  // A read held past the pages, answered by `deliver`.
+  let waiting: ((page: CodingAgentInboxAnswerView) => void) | undefined;
   const agents = codingAgentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -221,7 +246,11 @@ function service(
     readInbox: ({ after }) => {
       reads.push(after);
       const page = pages.shift();
-      return page === undefined ? new Promise(() => undefined) : Promise.resolve(page);
+      return page === undefined
+        ? new Promise((resolve) => {
+            waiting = resolve;
+          })
+        : Promise.resolve(page);
     },
     answerInbox: (params) => {
       sent.push(params);
@@ -230,8 +259,18 @@ function service(
         next === undefined ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : next(params),
       );
     },
+    readInboxImage: (params) => {
+      imageReads.push(params);
+      const next = images.shift();
+      return Promise.resolve(next ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    },
   });
-  return { agents, sent, reads, listReads };
+  /** Answers the read held past the pages with the page given. */
+  const deliver = (page: CodingAgentInboxAnswerView) => {
+    waiting?.(page);
+    waiting = undefined;
+  };
+  return { agents, sent, reads, listReads, imageReads, deliver };
 }
 
 /**
@@ -244,13 +283,15 @@ function Tab({
   planId = PLAN,
   chosen = true,
   code,
+  waiting = false,
 }: {
   agents: CodingAgentsControl;
   planId?: string;
   chosen?: boolean;
   code: InboxCodeDoors;
+  waiting?: boolean;
 }) {
-  const inbox = usePlanInbox({ planId, shown: true, agents });
+  const inbox = usePlanInbox({ planId, shown: true, waiting, agents });
   return chosen
     ? createElement(InboxBoard, {
         control: inbox,
@@ -267,6 +308,7 @@ function mounted(
   agents: CodingAgentsControl,
   registry: Parameters<typeof onRegistry>[0],
   code: InboxCodeDoors = fileDoors().doors,
+  waiting = false,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -274,7 +316,9 @@ function mounted(
   roots.push(root);
   const draw = (planId: string, chosen: boolean) =>
     act(() =>
-      root.render(onRegistry(registry, createElement(Tab, { agents, planId, chosen, code }))),
+      root.render(
+        onRegistry(registry, createElement(Tab, { agents, planId, chosen, code, waiting })),
+      ),
     );
   draw(PLAN, true);
   return {
@@ -541,6 +585,28 @@ it.effect(
       mount(agents, yield* registryOnTestClock);
       yield* settle;
       assert.deepEqual(reads, []);
+    }),
+);
+
+it.effect(
+  "a plan whose agents this window has not read holds its inbox read open where main says an item waits on it, and draws the item",
+  () =>
+    Effect.gen(function* () {
+      const reads: string[] = [];
+      const agents = codingAgentsControl({
+        agents: [],
+        agentIds: [],
+        readInbox: ({ after }) => {
+          reads.push(after);
+          return after === INBOX_CURSOR_START
+            ? Promise.resolve({ items: [SETTINGS], cursor: "1" })
+            : new Promise(() => undefined);
+        },
+      });
+      const { page } = mounted(agents, yield* registryOnTestClock, fileDoors().doors, true);
+      yield* settle;
+      assert.deepEqual(reads, [INBOX_CURSOR_START, "1"]);
+      assert.ok(card(page, SETTINGS.id));
     }),
 );
 
@@ -816,5 +882,138 @@ it.effect(
       yield* settle;
       assert.equal(notice(RETRIES.id), null);
       assert.equal(card(page, RETRIES.id).querySelectorAll(".code-line").length, 7);
+    }),
+);
+
+it.effect(
+  "an image block is drawn from the bytes the host fetched, read once per attachment however often the inbox is read again, under the agent's words, and a press opens it larger over the window, outside the recording",
+  () =>
+    Effect.gen(function* () {
+      const { agents, imageReads } = service(
+        [
+          { items: [SHOT], cursor: "1" },
+          { items: [{ ...SHOT, revision: 2, updatedAt: 2_000 }], cursor: "2" },
+        ],
+        [],
+        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      const shot = card(page, SHOT.id);
+      const picture = shot.querySelector<HTMLImageElement>("[data-inbox-image] img");
+      assert.ok(picture, "the picture is drawn");
+      assert.equal(picture.src, `data:${INBOX_IMAGE_TYPE.PNG};base64,${PIXEL}`);
+      assert.equal(picture.alt, "The landing page at 1280 wide");
+      assert.deepEqual(imageReads, [{ itemId: SHOT.id, attachmentId: ATTACHMENT }]);
+      assert.ok(picture.closest(".inbox-board.ph-no-capture"), "the recording leaves it out");
+
+      press(buttonNamed(shot, "Open The landing page at 1280 wide"));
+      const viewer = document.body.querySelector(".attachment-viewer-backdrop.ph-no-capture");
+      assert.ok(viewer, "the viewer opens over the window, outside the recording");
+      assert.equal(
+        viewer.querySelector<HTMLImageElement>("img.attachment-viewer-image")?.src,
+        picture.src,
+      );
+      press(viewer.querySelector("img.attachment-viewer-image"));
+      assert.equal(document.body.querySelector(".attachment-viewer-backdrop"), null);
+    }),
+);
+
+it.effect(
+  "an image an item no longer names, once its agent posted the item again, is let go, and the item's new picture is read in its place",
+  () =>
+    Effect.gen(function* () {
+      const REPLACED = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c70";
+      const reposted = {
+        ...SHOT,
+        revision: 2,
+        updatedAt: 2_000,
+        blocks: [
+          { type: INBOX_BLOCK.IMAGE, attachmentId: REPLACED, alt: "The landing page, again" },
+        ],
+      };
+      const { agents, imageReads, deliver } = service(
+        [{ items: [SHOT], cursor: "1" }],
+        [],
+        [
+          { contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL },
+          { contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL },
+        ],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.ok(card(page, SHOT.id).querySelector("[data-inbox-image] img"), "the first is drawn");
+      deliver({ items: [reposted], cursor: "2" });
+      yield* settle;
+      assert.deepEqual(
+        imageReads.map((read) => read.attachmentId),
+        [ATTACHMENT, REPLACED],
+      );
+      const pictures = [...card(page, SHOT.id).querySelectorAll("[data-inbox-image] img")];
+      assert.deepEqual(
+        pictures.map((picture) => picture.getAttribute("alt")),
+        ["The landing page, again"],
+      );
+    }),
+);
+
+it.effect(
+  "an image inside a settled card is not read until the card is opened, and then once",
+  () =>
+    Effect.gen(function* () {
+      const settled = item({
+        ...SHOT,
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "favicon",
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.APPROVED },
+        updatedAt: 5_000,
+      });
+      const { agents, imageReads } = service(
+        [{ items: [settled, QUEUE], cursor: "1" }],
+        [],
+        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.deepEqual(imageReads, [], "a folded picture is not asked for");
+
+      press(page.querySelector("[data-inbox-settled] > summary"));
+      press(card(page, settled.id).querySelector("summary"));
+      yield* settle;
+      assert.deepEqual(imageReads, [{ itemId: settled.id, attachmentId: ATTACHMENT }]);
+      assert.ok(
+        card(page, settled.id).querySelector("[data-inbox-image] img"),
+        "the picture is drawn",
+      );
+    }),
+);
+
+it.effect(
+  "an image whose read did not answer says so with Retry, which reads it again and draws it",
+  () =>
+    Effect.gen(function* () {
+      const { agents, imageReads } = service(
+        [{ items: [SHOT], cursor: "1" }],
+        [],
+        [
+          { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          { contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL },
+        ],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      const shot = card(page, SHOT.id);
+      assert.equal(
+        shot.querySelector("[data-inbox-image-failed]")?.textContent,
+        "The image could not be loaded.Retry",
+      );
+      assert.equal(shot.querySelector("[data-inbox-image] img"), null);
+
+      press(buttonNamed(shot, "Retry"));
+      yield* settle;
+      assert.equal(imageReads.length, 2);
+      assert.ok(shot.querySelector("[data-inbox-image] img"), "the picture is drawn");
+      assert.equal(shot.querySelector("[data-inbox-image-failed]"), null);
     }),
 );

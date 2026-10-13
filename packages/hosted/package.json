@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./account-inbox-wire": "./src/account-inbox-wire.js",
     "./board-text": "./src/board-text.js",
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",

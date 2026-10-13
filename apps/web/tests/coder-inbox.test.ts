@@ -5,15 +5,19 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxImageBlock,
 } from "@sidecar/hosted/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import { user } from "../server/db/auth-schema";
+import { inboxAttachment } from "../server/db/inbox-attachment-schema";
 import { db } from "../server/db/query";
 import {
   closeInInbox,
@@ -22,11 +26,15 @@ import {
   postToInbox,
   readOwnInbox,
 } from "../server/hosted/coder-host/inbox";
+import {
+  INBOX_IMAGE_REFUSAL,
+  type InboxSandboxDoor,
+} from "../server/hosted/coder-host/inbox-image";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import { answerInboxItem, planInboxItems } from "../server/hosted/inbox-store";
-import { deletePlan } from "../server/hosted/plan-store";
+import { answerInboxItem, planInboxItems, readInboxAttachment } from "../server/hosted/inbox-store";
+import { deletePlan, readPlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
@@ -130,13 +138,65 @@ const RETRIES = {
 /** A tool's input as eve hands it over. */
 const input = (value: WireBoundaryInput) => unparsedWire(value);
 
+/** A sandbox door no post with words alone opens: one that fails if it is. */
+const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
+
+/** A post run as the tool runs one, over the sandbox given. */
+const post = (agent: PostingAgent, value: ReturnType<typeof input>, sandbox = noSandbox) =>
+  postToInbox(agent, value, sandbox);
+
+/** The first bytes of each image type, as a file of it starts, followed by what a screenshot's would be. */
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72]);
+const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70]);
+const WEBP = Uint8Array.from([
+  0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50,
+]);
+
+/** A sandbox holding the files given by absolute path, each read as a stream in chunks of the size given, and recording every path asked for. */
+function sandboxWith(files: Readonly<Record<string, Uint8Array>>, chunk = 4) {
+  const reads: string[] = [];
+  const door: InboxSandboxDoor = () =>
+    Promise.resolve({
+      readFile: ({ path }: { path: string }) => {
+        reads.push(path);
+        const bytes = files[path];
+        if (bytes === undefined) return Promise.resolve(null);
+        let at = 0;
+        return Promise.resolve(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (at >= bytes.byteLength) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(bytes.subarray(at, at + chunk));
+              at += chunk;
+            },
+          }),
+        );
+      },
+    });
+  return { door, reads };
+}
+
+/** An item with a screenshot the agent took, asking whether it reads right. */
+const SHOT = {
+  key: "landing",
+  title: "Does the landing page read right?",
+  blocks: [
+    { type: INBOX_BLOCK.MARKDOWN, text: "Rendered at 1280 wide." },
+    { type: INBOX_BLOCK.IMAGE, path: "shots/landing.png", alt: "The landing page at 1280 wide" },
+  ],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+};
+
 it.layer(testSqlClient)("the coding agent's inbox", (it) => {
   it.effect(
     "a post is one open item the plan's inbox reads; posting under the same key again replaces it, moves its revision on, and opens it again once answered",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        const posted = yield* postToInbox(agent, input(QUEUE));
+        const posted = yield* post(agent, input(QUEUE));
         assert.deepEqual(posted, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
@@ -166,10 +226,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         assert.equal(Option.getOrUndefined(taken)?.status, INBOX_STATUS.ANSWERED);
 
         yield* TestClock.adjust(Duration.seconds(1));
-        yield* postToInbox(
-          agent,
-          input({ ...QUEUE, title: "Which queue, now that Redis is gone?" }),
-        );
+        yield* post(agent, input({ ...QUEUE, title: "Which queue, now that Redis is gone?" }));
         const items = yield* planInboxItems(agent.userId, agent.planId);
         assert.equal(items.length, 1, "one item per key");
         assert.equal(items[0]?.id, first.id);
@@ -185,11 +242,11 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        yield* postToInbox(agent, input(SETTINGS));
+        yield* post(agent, input(SETTINGS));
         yield* TestClock.adjust(Duration.seconds(1));
-        yield* postToInbox(agent, input(QUEUE));
+        yield* post(agent, input(QUEUE));
         yield* TestClock.adjust(Duration.seconds(1));
-        yield* postToInbox(
+        yield* post(
           agent,
           input({ key: "ship", title: "Ship it?", response: { type: INBOX_RESPONSE.APPROVAL } }),
         );
@@ -237,11 +294,11 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        yield* postToInbox(agent, input(CREDENTIALS));
+        yield* post(agent, input(CREDENTIALS));
         yield* TestClock.adjust(Duration.seconds(1));
-        yield* postToInbox(agent, input(SETTINGS));
+        yield* post(agent, input(SETTINGS));
         yield* TestClock.adjust(Duration.seconds(1));
-        const posted = yield* postToInbox(
+        const posted = yield* post(
           agent,
           input({
             key: "renamed",
@@ -298,12 +355,12 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
           result.status === ACTION_RESULT_STATUS.REJECTED ? result.reason : undefined;
         const asking = (response: WireBoundaryInput) => input({ ...QUEUE, response });
         assert.equal(
-          refused(yield* postToInbox(agent, input({ ...QUEUE, key: "Not A Slug" }))),
+          refused(yield* post(agent, input({ ...QUEUE, key: "Not A Slug" }))),
           INBOX_REFUSAL.UNREADABLE_POST,
         );
         assert.equal(
           refused(
-            yield* postToInbox(
+            yield* post(
               agent,
               input({
                 ...SETTINGS,
@@ -316,7 +373,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         );
         assert.equal(
           refused(
-            yield* postToInbox(
+            yield* post(
               agent,
               asking({ type: INBOX_RESPONSE.CHOICE, options: [{ label: "Only" }] }),
             ),
@@ -326,7 +383,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         );
         assert.equal(
           refused(
-            yield* postToInbox(
+            yield* post(
               agent,
               asking({
                 type: INBOX_RESPONSE.CHOICE,
@@ -337,12 +394,12 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
           INBOX_REFUSAL.NO_OPTIONS,
         );
         assert.equal(
-          refused(yield* postToInbox(agent, asking({ ...QUEUE.response, recommended: "SQS" }))),
+          refused(yield* post(agent, asking({ ...QUEUE.response, recommended: "SQS" }))),
           INBOX_REFUSAL.UNKNOWN_RECOMMENDATION,
         );
         assert.equal(
           refused(
-            yield* postToInbox(
+            yield* post(
               agent,
               asking({
                 type: INBOX_RESPONSE.FORM,
@@ -357,7 +414,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         );
         assert.equal(
           refused(
-            yield* postToInbox(
+            yield* post(
               agent,
               asking({
                 type: INBOX_RESPONSE.FORM,
@@ -383,7 +440,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         const refused = (result: { readonly status: string; readonly reason?: string }) =>
           result.status === ACTION_RESULT_STATUS.REJECTED ? result.reason : undefined;
         const pointing = (block: Partial<typeof RETRY_LINES>) =>
-          postToInbox(agent, input({ ...RETRIES, blocks: [{ ...RETRY_LINES, ...block }] }));
+          post(agent, input({ ...RETRIES, blocks: [{ ...RETRY_LINES, ...block }] }));
         assert.equal(
           refused(yield* pointing({ repo: "acme/other" })),
           INBOX_REFUSAL.CODE_REPOSITORY,
@@ -427,21 +484,18 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
       Effect.gen(function* () {
         const agent = yield* openAgent;
         for (let index = 0; index < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; index += 1) {
-          const posted = yield* postToInbox(agent, input({ ...SETTINGS, key: `task-${index}` }));
+          const posted = yield* post(agent, input({ ...SETTINGS, key: `task-${index}` }));
           assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
         }
-        const over = yield* postToInbox(agent, input({ ...SETTINGS, key: "one-more" }));
+        const over = yield* post(agent, input({ ...SETTINGS, key: "one-more" }));
         assert.deepEqual(over, {
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: INBOX_REFUSAL.TOO_MANY,
         });
-        const again = yield* postToInbox(
-          agent,
-          input({ ...SETTINGS, key: "task-0", title: "New" }),
-        );
+        const again = yield* post(agent, input({ ...SETTINGS, key: "task-0", title: "New" }));
         assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED);
         yield* closeInInbox(agent, input({ key: "task-1", reason: "Not needed." }));
-        const room = yield* postToInbox(agent, input({ ...SETTINGS, key: "one-more" }));
+        const room = yield* post(agent, input({ ...SETTINGS, key: "one-more" }));
         assert.equal(room.status, ACTION_RESULT_STATUS.ACCEPTED);
       }),
   );
@@ -452,7 +506,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const other = yield* openUser;
-        yield* postToInbox(agent, input(SETTINGS));
+        yield* post(agent, input(SETTINGS));
         const [item] = yield* planInboxItems(agent.userId, agent.planId);
         assert.ok(item);
         const done = { reply: INBOX_REPLY.DONE } as const;
@@ -474,10 +528,10 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        yield* postToInbox(agent, input(SETTINGS));
+        yield* post(agent, input(SETTINGS));
         for (let index = 0; index <= INBOX_BOUNDS.MAX_ITEMS_READ; index += 1) {
           yield* TestClock.adjust(Duration.millis(1));
-          yield* postToInbox(agent, input({ ...QUEUE, key: `queue-${index}` }));
+          yield* post(agent, input({ ...QUEUE, key: `queue-${index}` }));
           yield* closeInInbox(agent, input({ key: `queue-${index}`, reason: "Settled." }));
         }
         const items = yield* planInboxItems(agent.userId, agent.planId);
@@ -496,9 +550,184 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
   it.effect("a plan's items go with the plan", () =>
     Effect.gen(function* () {
       const agent = yield* openAgent;
-      yield* postToInbox(agent, input(SETTINGS));
+      yield* post(agent, input(SETTINGS));
       yield* deletePlan(agent.userId, agent.planId);
       assert.deepEqual(yield* planInboxItems(agent.userId, agent.planId), []);
+    }),
+  );
+
+  const CHECKOUT_SHOT = "/workspace/repository/shots/landing.png";
+
+  /** The one image block of the agent's open item, as the plan's inbox reads it. */
+  const imageBlockOf = (agent: PostingAgent) =>
+    Effect.map(planInboxItems(agent.userId, agent.planId), (items) => {
+      const block = items[0]?.blocks.find(
+        (each): each is InboxImageBlock => each.type === INBOX_BLOCK.IMAGE,
+      );
+      assert.ok(block, "the item carries an image block");
+      return { itemId: items[0]?.id ?? "", block };
+    });
+
+  it.effect(
+    "a member of the plan's workspace reads the picture a teammate's agent posted, and an account outside it reads none",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const { plan } = Option.getOrThrow(yield* readPlan(agent.userId, agent.planId));
+        yield* joinWorkspace(plan.workspaceId, teammate);
+        const { door } = sandboxWith({ [CHECKOUT_SHOT]: PNG });
+        yield* post(agent, input(SHOT), door);
+        const { itemId, block } = yield* imageBlockOf(agent);
+
+        const read = yield* readInboxAttachment(teammate, itemId, block.attachmentId);
+        assert.deepEqual(
+          Option.map(read, (image) => Uint8Array.from(image.bytes)),
+          Option.some(PNG),
+        );
+        assert.ok(Option.isNone(yield* readInboxAttachment(stranger, itemId, block.attachmentId)));
+      }),
+  );
+
+  it.effect(
+    "a post with an image block reads the file from the sandbox at its path resolved from the checkout, keeps it as the item's attachment under the type its bytes say, and names the attachment in the block; posted again, the pictures the item no longer names are deleted",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const { door, reads } = sandboxWith({ [CHECKOUT_SHOT]: PNG, "/tmp/shot.jpg": JPEG });
+        const posted = yield* post(agent, input(SHOT), door);
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        assert.deepEqual(reads, [CHECKOUT_SHOT]);
+        const first = yield* imageBlockOf(agent);
+        assert.equal(first.block.alt, "The landing page at 1280 wide");
+        assert.ok(
+          !("path" in first.block),
+          "the path the agent wrote is kept nowhere the desktop reads",
+        );
+        const kept = yield* readInboxAttachment(
+          agent.userId,
+          first.itemId,
+          first.block.attachmentId,
+        );
+        assert.ok(Option.isSome(kept));
+        assert.equal(kept.value.contentType, INBOX_IMAGE_TYPE.PNG);
+        assert.deepEqual(Uint8Array.from(kept.value.bytes), PNG);
+        assert.ok(
+          Option.isNone(
+            yield* readInboxAttachment("user-other", first.itemId, first.block.attachmentId),
+          ),
+          "another account reads nothing",
+        );
+        assert.ok(
+          Option.isNone(
+            yield* readInboxAttachment(agent.userId, randomUUID(), first.block.attachmentId),
+          ),
+          "an attachment is read under its own item alone",
+        );
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        const again = yield* post(
+          agent,
+          input({
+            ...SHOT,
+            blocks: [
+              { type: INBOX_BLOCK.IMAGE, path: "/tmp/shot.jpg", alt: "The same page, mobile" },
+            ],
+          }),
+          door,
+        );
+        assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
+        const second = yield* imageBlockOf(agent);
+        assert.equal(second.itemId, first.itemId, "one item per key");
+        assert.notEqual(second.block.attachmentId, first.block.attachmentId);
+        assert.ok(
+          Option.isNone(
+            yield* readInboxAttachment(agent.userId, first.itemId, first.block.attachmentId),
+          ),
+          "the picture the item no longer names is gone",
+        );
+        const replaced = yield* readInboxAttachment(
+          agent.userId,
+          second.itemId,
+          second.block.attachmentId,
+        );
+        assert.equal(Option.getOrUndefined(replaced)?.contentType, INBOX_IMAGE_TYPE.JPEG);
+
+        yield* post(agent, input({ ...SHOT, blocks: [] }));
+        const rows = yield* db
+          .select({ id: inboxAttachment.id })
+          .from(inboxAttachment)
+          .where(eq(inboxAttachment.itemId, first.itemId));
+        assert.deepEqual(rows, [], "an item posted without pictures keeps none");
+      }),
+  );
+
+  it.effect(
+    "an image block is refused, the post with it, naming the path, where the file is not there, is not a PNG, JPEG, or WebP, runs past the bound, or the sandbox cannot be read; one at the bound is taken",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const atBound = new Uint8Array(INBOX_BOUNDS.MAX_IMAGE_BYTES);
+        atBound.set(WEBP);
+        const pastBound = new Uint8Array(INBOX_BOUNDS.MAX_IMAGE_BYTES + 1);
+        pastBound.set(PNG);
+        const { door } = sandboxWith(
+          {
+            "/workspace/repository/notes.txt": new TextEncoder().encode("# Not a picture\n"),
+            "/workspace/repository/shots/huge.png": pastBound,
+            "/workspace/repository/shots/full.webp": atBound,
+          },
+          500_000,
+        );
+        const shot = (path: string) =>
+          input({ ...SHOT, blocks: [{ type: INBOX_BLOCK.IMAGE, path, alt: "A picture" }] });
+
+        for (const [path, refusal] of [
+          ["shots/none.png", INBOX_IMAGE_REFUSAL.NO_FILE],
+          ["notes.txt", INBOX_IMAGE_REFUSAL.NOT_IMAGE],
+          ["shots/huge.png", INBOX_IMAGE_REFUSAL.TOO_LARGE],
+        ] as const) {
+          assert.deepEqual(yield* post(agent, shot(path), door), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: `${refusal} ${path}`,
+          });
+        }
+        assert.deepEqual(yield* post(agent, shot("shots/landing.png"), noSandbox), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: `${INBOX_IMAGE_REFUSAL.UNREADABLE} shots/landing.png`,
+        });
+        assert.deepEqual(yield* planInboxItems(agent.userId, agent.planId), [], "nothing posted");
+
+        const taken = yield* post(agent, shot("shots/full.webp"), door);
+        assert.equal(taken.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(taken));
+        const { itemId, block } = yield* imageBlockOf(agent);
+        const kept = yield* readInboxAttachment(agent.userId, itemId, block.attachmentId);
+        assert.equal(Option.getOrUndefined(kept)?.contentType, INBOX_IMAGE_TYPE.WEBP);
+        assert.equal(Option.getOrUndefined(kept)?.bytes.byteLength, INBOX_BOUNDS.MAX_IMAGE_BYTES);
+      }),
+  );
+
+  it.effect("an item's pictures go with its plan, and with its account", () =>
+    Effect.gen(function* () {
+      const { door } = sandboxWith({ [CHECKOUT_SHOT]: PNG });
+      const byPlan = yield* openAgent;
+      yield* post(byPlan, input(SHOT), door);
+      const byAccount = yield* openAgent;
+      yield* post(byAccount, input(SHOT), door);
+      const rowsOf = (userId: string) =>
+        db
+          .select({ id: inboxAttachment.id })
+          .from(inboxAttachment)
+          .where(eq(inboxAttachment.userId, userId));
+      assert.equal((yield* rowsOf(byPlan.userId)).length, 1);
+      assert.equal((yield* rowsOf(byAccount.userId)).length, 1);
+
+      yield* deletePlan(byPlan.userId, byPlan.planId);
+      assert.deepEqual(yield* rowsOf(byPlan.userId), []);
+
+      yield* db.delete(user).where(eq(user.id, byAccount.userId));
+      assert.deepEqual(yield* rowsOf(byAccount.userId), []);
     }),
   );
 });

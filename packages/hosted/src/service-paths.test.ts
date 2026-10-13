@@ -4,6 +4,7 @@ import {
   agentPath,
   agentPullRequestPath,
   HOSTED_SERVICE_PATH,
+  inboxAttachmentPath,
   inboxItemPath,
   planInboxPath,
   planPath,
@@ -32,4 +33,5 @@ test("a plan's inbox stands under the plan with its cursor in the query, and an 
   assert.equal(planInboxPath("a/b"), `${HOSTED_SERVICE_PATH.PLANS}/a%2Fb/inbox`);
   assert.equal(planInboxPath("a/b", "7&x"), `${HOSTED_SERVICE_PATH.PLANS}/a%2Fb/inbox?after=7%26x`);
   assert.equal(inboxItemPath("a/b"), "/api/inbox/a%2Fb");
+  assert.equal(inboxAttachmentPath("a/b", "c/d"), "/api/inbox/a%2Fb/attachments/c%2Fd");
 });

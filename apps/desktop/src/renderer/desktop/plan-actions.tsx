@@ -285,6 +285,23 @@ export function PlanActionsButton({
   );
 }
 
+/** A sidebar row's repository beneath its plan's name, led by its owner's picture at the size of its words. */
+export function SidebarPlanRepository({
+  repository,
+  pictures,
+}: {
+  repository: string;
+  /** Whether owners' pictures are fetched: a capture run draws none. */
+  pictures: boolean;
+}): React.JSX.Element {
+  return (
+    <span className="sidebar-plan-repository">
+      <RepositoryPicture repository={repository} pictures={pictures} fallback={<GitHubMark />} />
+      <span className="sidebar-plan-repository-name">{repository}</span>
+    </span>
+  );
+}
+
 /**
  * A plan in the sidebar, pinned, listed, or archived alike: its name, in the
  * body's weight unless the plan is unread, and at the row's end how long ago
@@ -334,14 +351,7 @@ export function SidebarPlan({
   };
   const repository =
     repositoryShown && plan.repository !== null ? (
-      <span className="sidebar-plan-repository">
-        <RepositoryPicture
-          repository={plan.repository}
-          pictures={plans.repositories.pictures}
-          fallback={<GitHubMark />}
-        />
-        <span className="sidebar-plan-repository-name">{plan.repository}</span>
-      </span>
+      <SidebarPlanRepository repository={plan.repository} pictures={plans.repositories.pictures} />
     ) : null;
   return (
     <li className="sidebar-plan-item">

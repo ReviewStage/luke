@@ -273,6 +273,7 @@ test("the session is told to put what it needs from the developer in their inbox
       "never in a message",
       "never to remind",
       "Never restate an open item in a message",
+      "an image where a picture says it best",
     ]) {
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }

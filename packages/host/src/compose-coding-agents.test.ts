@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
+import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -11,6 +12,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -82,6 +84,8 @@ const KEPT: ProviderKeySummary = {
   statusAt: 1,
 };
 
+const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
   agentId: AGENT_ID,
@@ -95,6 +99,19 @@ const ITEM: InboxItem = {
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,
   updatedAt: 1_800_000_060_000,
+};
+
+/** That item as what waits across the account carries it. */
+const WAITING: AccountInboxEntry = {
+  id: ITEM.id,
+  planId: PLAN_ID,
+  agentId: AGENT_ID,
+  agentTitle: null,
+  agentModel: AGENT.model,
+  title: ITEM.title,
+  revision: ITEM.revision,
+  postedAt: ITEM.postedAt,
+  updatedAt: ITEM.updatedAt,
 };
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -207,6 +224,11 @@ function fakeService() {
         asked.push(`inbox:${planId}:${after}`);
         return { items: [ITEM], cursor: "7" };
       }),
+    inboxAttachment: (itemId, attachmentId) =>
+      Effect.sync(() => {
+        asked.push(`attachment:${itemId}:${attachmentId}`);
+        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      }),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(
@@ -221,6 +243,11 @@ function fakeService() {
           },
           taken: true,
         };
+      }),
+    accountInbox: (after) =>
+      Effect.sync(() => {
+        asked.push(`account-inbox:${after}`);
+        return { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt };
       }),
   };
   return { client, asked };
@@ -331,6 +358,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { items: [ITEM], cursor: "7" },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
+        itemId: ITEM.id,
+        attachmentId: ATTACHMENT_ID,
+      }),
+      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
@@ -349,6 +383,11 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
 
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
+      { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt },
+    );
+
     assert.deepEqual(asked, [
       "models",
       "default",
@@ -363,7 +402,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
+      `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
+      `account-inbox:${INBOX_CURSOR_START}`,
     ]);
   }),
 );
@@ -395,6 +436,9 @@ it.effect(
       const noCursor = yield* Effect.flip(
         call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { planId: PLAN_ID }),
       );
+      const noAccountCursor = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, {}),
+      );
       const noRevision = yield* Effect.flip(
         call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
           itemId: ITEM.id,
@@ -406,6 +450,7 @@ it.effect(
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.equal(noCursor._tag, "InvalidParamsRefusal");
       assert.equal(noRevision._tag, "InvalidParamsRefusal");
+      assert.equal(noAccountCursor._tag, "InvalidParamsRefusal");
       assert.deepEqual(asked, []);
     }),
 );

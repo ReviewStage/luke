@@ -72,7 +72,7 @@ const migrationsThrough = (tag: string) =>
       );
     };
     yield* journal(tag);
-    const latest = entries.at(-1)?.tag ?? assert.fail("no migrations");
+    const latest = entries.at(-1)?.tag ?? tag;
     return { folder, journal, latest };
   });
 
@@ -263,7 +263,10 @@ it.effect(
             choices: ["Postgres outbox"],
           });
 
-          // What this deployment writes, the deployment before it reads through the old columns.
+          // What this deployment writes, it writes on a database its every migration ran on,
+          // and the deployment before it reads through the old columns.
+          yield* journal(latest);
+          yield* runWebMigrations(folder);
           yield* postInboxItem(agent, {
             key: "ship",
             title: "Ship it?",

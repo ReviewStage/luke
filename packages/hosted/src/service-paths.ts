@@ -43,6 +43,12 @@ export const HOSTED_SERVICE_PATH = {
    * browser on to the landing page `linear-wire.ts` names.
    */
   ACCOUNT_LINEAR_CONNECTED: "/api/account/linear/connected",
+  /**
+   * What waits on the developer across the account's plans: every open
+   * inbox item, past a cursor (GET), held open while nothing changed, as a
+   * plan's inbox is. `account-inbox-wire.ts` declares the answer.
+   */
+  INBOX: "/api/inbox",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -214,6 +220,11 @@ export function planInboxPath(planId: string, after?: string): string {
 /** One item of a plan's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
 export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
+}
+
+/** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
+export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
+  return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
 /**

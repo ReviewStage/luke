@@ -102,6 +102,10 @@ export const GATEWAY_METHOD = {
   LINEAR_CONNECT: "linear.connect",
   /** The account's Linear connection ended on the service; where it then stands. */
   LINEAR_DISCONNECT: "linear.disconnect",
+  /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
+  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
+  /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
+  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

@@ -2,17 +2,21 @@ import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@side
 import type { HostedCodingAgentClient } from "@sidecar/hosted";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
+  codingAgentAccountInboxParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentInboxAnswerParamsSchema,
+  codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -39,7 +43,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, and the plan's inbox, one item of it answered.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -48,7 +52,9 @@ import type { RunMode } from "./run-mode.js";
  * one the service holds open while the agent runs and nothing new stands,
  * and the inbox read another, held while nothing in it changed, so each of
  * the window's loops is one held read after another rather than a clock of
- * its own, and a loop ends when the window stops asking. Behind a
+ * its own, and a loop ends when the window stops asking. What waits across
+ * the account is held the same way, and asked by main's own loop rather
+ * than a window's (`agent-notices.ts`). Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -76,6 +82,8 @@ export type CodingAgentClient = Pick<
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
+  | "accountInbox"
+  | "inboxAttachment"
 >;
 
 export interface CodingAgentsDependencies {
@@ -272,6 +280,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.inbox(planId, after));
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
+      Effect.gen(function* () {
+        const { itemId, attachmentId } = yield* read(
+          codingAgentInboxAttachmentParamsSchema,
+          params,
+          "reading an inbox item's image names the item and the attachment",
+        );
+        const answer = yield* asked(client.inboxAttachment(itemId, attachmentId));
+        return carried<CodingAgentInboxAttachmentView>(answer);
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>
       Effect.gen(function* () {
         const { itemId, ...request } = yield* read(
@@ -281,6 +299,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.answerInbox(itemId, request));
         return carried<CodingAgentInboxAnsweredView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX]: (params) =>
+      Effect.gen(function* () {
+        const { after } = yield* read(
+          codingAgentAccountInboxParamsSchema,
+          params,
+          "reading what waits across the account names a cursor",
+        );
+        const answer = yield* asked(client.accountInbox(after));
+        return carried<CodingAgentAccountInboxAnswerView>(answer);
       }),
   };
 

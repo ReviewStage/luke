@@ -74,6 +74,7 @@ const DECLARED_TABLES = [
   "events",
   "github_installation",
   "hosted_usage",
+  "inbox_attachment",
   "inbox_item",
   "introduction_usage",
   "invitation",

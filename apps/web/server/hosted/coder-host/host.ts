@@ -52,6 +52,7 @@ import {
   postToInbox,
   readOwnInbox,
 } from "./inbox.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
 import {
@@ -240,11 +241,17 @@ export interface CoderHost {
   >;
 }
 
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema. */
-export interface InboxCall {
-  readonly tool: (typeof INBOX_TOOL)[keyof typeof INBOX_TOOL];
-  readonly input: UnparsedWireValue;
-}
+/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
+export type InboxCall =
+  | {
+      readonly tool: typeof INBOX_TOOL.POST;
+      readonly input: UnparsedWireValue;
+      readonly sandbox: InboxSandboxDoor;
+    }
+  | {
+      readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
+      readonly input: UnparsedWireValue;
+    };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -508,7 +515,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const agent = { userId: admitted.target.userId, planId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:
-            return yield* postToInbox({ ...agent, repository }, call.input);
+            return yield* postToInbox({ ...agent, repository }, call.input, call.sandbox);
           case INBOX_TOOL.CLOSE:
             return yield* closeInInbox(agent, call.input);
           case INBOX_TOOL.READ:

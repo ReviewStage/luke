@@ -6,6 +6,7 @@ export * from "./coding-agent-schema.js";
 export * from "./devices-schema.js";
 export * from "./favorite-schema.js";
 export * from "./github-installation-schema.js";
+export * from "./inbox-attachment-schema.js";
 export * from "./inbox-schema.js";
 export * from "./linear-schema.js";
 export * from "./personal-workspace-schema.js";

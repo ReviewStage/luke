@@ -129,6 +129,33 @@
                       "type": "object",
                       "properties": {
                         "type": {
+                          "type": "string",
+                          "enum": [
+                            "image"
+                          ]
+                        },
+                        "attachmentId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 36
+                        },
+                        "alt": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "attachmentId",
+                        "alt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
                           "type": "string"
                         }
                       },

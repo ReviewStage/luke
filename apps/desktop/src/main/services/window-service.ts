@@ -18,7 +18,7 @@ import {
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
-import type { AgentEndToast, AgentPlace } from "../agent-notices";
+import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { CallWindow } from "../window/call-window";
@@ -85,6 +85,10 @@ export interface WindowService extends DesktopService {
   showAgent: (place: AgentPlace) => void;
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
+  /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
+  showInbox: (planId: string) => void;
+  /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
+  toastInboxItem: (item: InboxItemToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -247,6 +251,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onAgentEnded, { ...place, words, detail, failed });
   }
 
+  function showInbox(planId: string): void {
+    panels.broadcast(channels.onShowInbox, { planId });
+  }
+
+  function toastInboxItem(item: InboxItemToast): void {
+    panels.broadcast(channels.onInboxItemOpened, item);
+  }
+
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
     const focused = (_event: Electron.Event, window: BrowserWindow) => {
       if (panels.owns(window.webContents)) listener(true);
@@ -377,6 +389,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     windowFactsFor,
     sendToVoice,
     showAgent,
+    showInbox,
+    toastInboxItem,
     toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,

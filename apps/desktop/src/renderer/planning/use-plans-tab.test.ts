@@ -29,7 +29,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
-import { RUN_PROFILE } from "#shared/messages/app-state";
+import { type AppInboxPlan, RUN_PROFILE } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   IDLE_VOICE_VIEW,
@@ -69,7 +69,10 @@ const OPEN: PlanningView = {
 
 /** The shown act's payload, read back as the act's own schema admits it. */
 const readShown = Schema.decodeUnknownOption(
-  Schema.Struct({ agentId: Schema.NullOr(Schema.String) }),
+  Schema.Struct({
+    agentId: Schema.NullOr(Schema.String),
+    inboxPlanId: Schema.NullOr(Schema.String),
+  }),
 );
 
 /** A voice command's payload, read back as the act's own schema admits it. */
@@ -84,6 +87,7 @@ interface Standing {
   fixtureMode: boolean;
   voice: VoiceView;
   unseenAgents: readonly string[];
+  inboxWaiting: readonly AppInboxPlan[];
   /** Whether an account is signed in to the window. */
   signedIn: boolean;
 }
@@ -99,6 +103,8 @@ function mount(
   const agentActs: ActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
+  /** Which plan's Inbox main was told is shown, each time it was told. */
+  const shownInboxes: (string | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -115,6 +121,7 @@ function mount(
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
     unseenAgents: [],
+    inboxWaiting: [],
     signedIn: true,
     ...initial,
   };
@@ -140,6 +147,7 @@ function mount(
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
+            shownInboxes.push(shown.inboxPlanId);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -154,6 +162,7 @@ function mount(
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
       unseenAgents: held.unseenAgents,
+      inboxWaiting: held.inboxWaiting,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
     });
     return null;
@@ -169,6 +178,7 @@ function mount(
     told,
     agentActs,
     shownAgents,
+    shownInboxes,
     voiceCommands,
     payloads,
     control: () => {
@@ -2023,6 +2033,46 @@ test("main is told which agent's tab is shown, and none once the column moves of
     AGENT_ID,
     null,
   ]);
+});
+
+test("main is told which plan's Inbox is shown, and none once the column moves off it or the tab goes away", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.INBOX));
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.INBOX));
+  tab.stand({ shown: false });
+  assert.deepEqual(tab.shownInboxes, [null, PLAN.id, null, PLAN.id, null]);
+  assert.deepEqual(tab.shownAgents, [null, null, AGENT_ID, null, null]);
+});
+
+test("the sidebar's Inbox opens its plan on the Inbox tab, though this window has read no agent of it, out from under a side panel filling the window", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
+      inboxWaiting: [{ planId: PLAN.id, items: ["5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a"] }],
+    },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await settle();
+  act(() => tab.control().sidePanel.onToggle());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+
+  act(() => tab.control().onShowInbox(PLAN.id));
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.INBOX);
+  assert.equal(tab.control().sidePanel.fullScreen, false);
 });
 
 /** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */

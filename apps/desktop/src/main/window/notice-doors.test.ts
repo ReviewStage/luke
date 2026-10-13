@@ -28,6 +28,7 @@ function doors() {
   const clicked: string[] = [];
   const surface = electronNoticeDoors({
     toPanels: () => undefined,
+    inboxToPanels: () => undefined,
     onRefused: (next) => refused.push(next),
     report: (line) => reported.push(line),
   });
