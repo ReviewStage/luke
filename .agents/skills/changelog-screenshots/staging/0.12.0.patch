@@ -1,5 +1,5 @@
 diff --git a/apps/desktop/bundle-budget.json b/apps/desktop/bundle-budget.json
-index ceb07287..e58140cb 100644
+index ceb07287..d6667244 100644
 --- a/apps/desktop/bundle-budget.json
 +++ b/apps/desktop/bundle-budget.json
 @@ -1,10 +1,10 @@
@@ -10,7 +10,7 @@ index ceb07287..e58140cb 100644
 -    "renderer/whiteboard.js": 467697,
 -    "renderer/file-tree.js": 70635,
 -    "renderer/plan-editor.js": 161390,
-+    "renderer/renderer.js": 786840,
++    "renderer/renderer.js": 787105,
 +    "renderer/whiteboard.js": 468605,
 +    "renderer/file-tree.js": 71587,
 +    "renderer/plan-editor.js": 161414,
@@ -4017,10 +4017,10 @@ index 00000000..44e0a5cd
 +}
 diff --git a/apps/desktop/src/renderer/shots/skills.ts b/apps/desktop/src/renderer/shots/skills.ts
 new file mode 100644
-index 00000000..06550bf7
+index 00000000..6a4ec4b0
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/skills.ts
-@@ -0,0 +1,470 @@
+@@ -0,0 +1,506 @@
 +/**
 + * skills.ts -- shot F, "Skills": a `/` typed in the running agent's box, the skill picker open over the repository's skills, a sent message's skill chip above it, and that skill's SKILL.md in a File tab.
 + *
@@ -4375,6 +4375,42 @@ index 00000000..06550bf7
 +          {
 +            content:
 +              "export * as welcome from './welcome-email';\nexport * as resetPassword from './reset-password-email';\n",
++          },
++        ),
++        toolPart(
++          "read_file",
++          "call_r5b",
++          { filePath: "/workspace/repository/src/mail/layout.tsx" },
++          { content: "export function Layout({ preview, children }: LayoutProps) { … }\n" },
++        ),
++        toolPart(
++          "read_file",
++          "call_r5c",
++          { filePath: "/workspace/repository/src/mail/previews/welcome-email.ts" },
++          { content: "export default { workspace: { name: 'Acme' }, user: { name: 'Dana' } };\n" },
++        ),
++        toolPart(
++          "apply_patch",
++          "call_r6",
++          { root: "/workspace/repository", patchText: "*** Begin Patch\n*** Add File: src/mail/templates/invite-email.tsx\n*** End Patch" },
++          {
++            files: [
++              { operation: "add", path: "src/mail/templates/invite-email.tsx" },
++              { operation: "add", path: "src/mail/previews/invite-email.ts" },
++              { operation: "update", path: "src/mail/templates/index.ts" },
++            ],
++          },
++        ),
++        toolPart(
++          "bash",
++          "call_r7",
++          { command: "pnpm test src/mail" },
++          {
++            status: "completed",
++            exitCode: 0,
++            stdout: " ✓ src/mail/templates.test.ts (6 tests)\n\n Test Files  1 passed (1)\n      Tests  6 passed (6)",
++            stderr: "",
++            truncated: false,
 +          },
 +        ),
 +      ],

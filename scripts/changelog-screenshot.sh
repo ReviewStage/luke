@@ -9,9 +9,10 @@ set -euo pipefail
 # With no capture given it opens macOS's window capture, so click Luke's
 # window; the capture keeps the window's shadow, which the frame draws over the
 # wallpaper. `--from` frames a capture already taken the same way (⇧⌘4, then
-# Space, then the window). `--crop` frames only that part of the window, in
-# its points from the top-left corner, for a close-up of one control rather
-# than the whole window. The framing itself is scripts/lib/frame-screenshot.swift,
+# Space, then the window). `--crop` cuts the framed picture to that part of
+# the window, in its points from the top-left corner (negative, or past the
+# window, to take in wallpaper), and scales it to the whole picture's height:
+# a close-up as tall as every other screenshot, only narrower. The framing itself is scripts/lib/frame-screenshot.swift,
 # compiled once under the gitignored build directory, and the wallpaper is
 # fetched from Apple once and cached beside it.
 

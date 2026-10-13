@@ -38,17 +38,18 @@
      screenshot in the release that changed it, and a screenshot redone later
      is taken from that release's own commit.
 
-     Every screenshot is taken on a Mac from the release's own build in
-     fixture mode, staged for the one feature it shows, and framed on macOS's
-     Golden Gate Sunset aerial by scripts/changelog-screenshot.sh, so every
-     release's pictures match. The changelog-screenshots skill
+     Every screenshot is taken on a Mac from the release's own build in fixture
+     mode, staged for the one feature it shows, and framed on macOS's Golden
+     Gate Sunset aerial by scripts/changelog-screenshot.sh, so every release's
+     pictures match. The changelog-screenshots skill
      (.agents/skills/changelog-screenshots) is the whole method. Each picture
-     is chosen on purpose: a section gets one only where it helps, no two
-     share a composition, and the layout (the sidebar folded or open, the side
-     panel closed, open, or full screen, a menu or card held open) is whatever
-     puts the feature in front, as the whole window at 1600 by 1000 points or,
-     with `--crop`, a close-up of one part of it. Every picture is signed in
-     as Dean Stratakos with his GitHub photo, shows no Update pill or other
+     is chosen on purpose: a section gets one only where it helps, no two share
+     a composition, and the layout (the sidebar folded or open, the side panel
+     closed, open, or full screen, a menu or card held open) is whatever puts
+     the feature in front, as the whole window at 1600 by 1000 points or, with
+     `--crop`, a close-up cut from that same framed picture, inside the app and
+     as tall as every other screenshot, only narrower. Every picture is signed
+     in as Dean Stratakos with his GitHub photo, shows no Update pill or other
      development chrome, and dates everything minutes or days before the
      capture, never the fixture's 1970 or an hours-long timer. Its data is
      synthetic: the acme organisation, its teal mark, and its repositories,
@@ -278,7 +279,7 @@ the open plan's repository, with a filter for each kind.
 [#2212](https://github.com/ReviewStage/luke/pull/2212),
 [#2399](https://github.com/ReviewStage/luke/pull/2399))
 
-![The ⌘K command palette searching "invite" across plans, coding agents, and files.](apps/web/public/changelog/0.12.0/a-command-palette.png)
+![The ⌘K command palette open over a plan, searching "invite" across plans, coding agents, and files.](apps/web/public/changelog/0.12.0/a-command-palette.png)
 
 ### Improvements
 

@@ -6,10 +6,12 @@
 // body opaque, its shadow fading to transparent around it. The window body is
 // found from the alpha channel, wallpaper is laid around it by MARGIN capture
 // pixels, and the whole is scaled to OUTPUT_WIDTH. Given a crop, in the
-// window's points from its top-left corner, only that part of the body is
-// framed: its corners rounded, a shadow drawn under it, and the wallpaper laid
-// around it at the capture's own resolution, so a close-up is as sharp as the
-// window it was cut from. The wallpaper is the first
+// window's points from its top-left corner (negative, or past the window, to
+// take in wallpaper), the same picture is cut to that part and scaled to the
+// height the whole one would have, so a close-up stands beside the full
+// windows at their height, narrower and nearer. It is composed at the
+// capture's own resolution, so a crop at least 800 points tall is never
+// enlarged past its pixels. The wallpaper is the first
 // frame of macOS's Golden Gate Sunset aerial (Marshall's Beach), read once from
 // Apple's servers and cached, since macOS keeps the aerial as a video, not a
 // still.
@@ -32,10 +34,6 @@ let MARGIN = 180
 let OUTPUT_WIDTH = 2400
 /// A pixel this opaque belongs to the window body rather than its shadow.
 let BODY_ALPHA: UInt8 = 250
-/// A crop's corner radius and shadow, in the window's points.
-let CROP_RADIUS: CGFloat = 12
-let CROP_SHADOW_BLUR: CGFloat = 40
-let CROP_SHADOW_DROP: CGFloat = 10
 /// The resolution macOS records for a point when it does not say, as on a Retina display.
 let DEFAULT_DPI: CGFloat = 144
 
@@ -172,13 +170,13 @@ func windowBody(_ image: CGImage) throws -> CGRect {
 }
 
 /// The window on the wallpaper: the wallpaper scaled to cover the canvas and centred, the window drawn shadow and all.
-func frame(capture: CGImage, wallpaper: CGImage) throws -> CGImage {
+func frame(capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT_WIDTH) throws -> CGImage {
     let body = try windowBody(capture)
     let canvasWidth = body.width + CGFloat(2 * MARGIN)
     let canvasHeight = body.height + CGFloat(2 * MARGIN)
-    let scale = CGFloat(OUTPUT_WIDTH) / canvasWidth
+    let scale = CGFloat(outputWidth) / canvasWidth
     let outputHeight = Int((canvasHeight * scale).rounded())
-    let context = try wallpaperCanvas(width: OUTPUT_WIDTH, height: outputHeight, wallpaper: wallpaper)
+    let context = try wallpaperCanvas(width: outputWidth, height: outputHeight, wallpaper: wallpaper)
 
     // Note that we place the capture from the top, because the body was measured top-down and Core Graphics draws bottom-up.
     let captureWidth = CGFloat(capture.width) * scale
@@ -194,37 +192,33 @@ func frame(capture: CGImage, wallpaper: CGImage) throws -> CGImage {
     return output
 }
 
-/// Part of the window on the wallpaper: the crop cut from the body, its corners rounded, over a soft shadow, at the capture's own resolution.
+/// Part of the framed picture: the window on the wallpaper composed at the capture's resolution, cut to the crop, and scaled to the whole picture's height.
 func frameCrop(capture: CGImage, crop: CGRect, scale: CGFloat, wallpaper: CGImage) throws -> CGImage {
     let body = try windowBody(capture)
+    let nativeWidth = Int(body.width) + 2 * MARGIN
+    let whole = try frame(capture: capture, wallpaper: wallpaper, width: nativeWidth)
+    let outputHeight = Int((CGFloat(whole.height) * CGFloat(OUTPUT_WIDTH) / CGFloat(nativeWidth)).rounded())
     let cut = CGRect(
-        x: body.minX + crop.minX * scale, y: body.minY + crop.minY * scale,
+        x: CGFloat(MARGIN) + crop.minX * scale, y: CGFloat(MARGIN) + crop.minY * scale,
         width: crop.width * scale, height: crop.height * scale
     ).integral
-    guard body.contains(cut), let piece = capture.cropping(to: cut) else {
-        throw FrameError(description: "the crop \(crop) falls outside the window's \(body.size) pixels")
+    let outputWidth = Int((cut.width * CGFloat(outputHeight) / cut.height).rounded())
+    guard CGRect(x: 0, y: 0, width: whole.width, height: whole.height).contains(cut),
+        let piece = whole.cropping(to: cut)
+    else {
+        throw FrameError(description: "the crop \(crop) reaches past the wallpaper around the window")
     }
-    let width = Int(cut.width) + 2 * MARGIN
-    let height = Int(cut.height) + 2 * MARGIN
-    let context = try wallpaperCanvas(width: width, height: height, wallpaper: wallpaper)
-    let place = CGRect(x: CGFloat(MARGIN), y: CGFloat(MARGIN), width: cut.width, height: cut.height)
-    let rounded = CGPath(
-        roundedRect: place, cornerWidth: CROP_RADIUS * scale, cornerHeight: CROP_RADIUS * scale, transform: nil)
-
-    // Note that we draw the shadow from a filled shape and the piece clipped above it, because a clipped draw casts no shadow.
-    context.saveGState()
-    context.setShadow(
-        offset: CGSize(width: 0, height: -CROP_SHADOW_DROP * scale), blur: CROP_SHADOW_BLUR * scale,
-        color: CGColor(gray: 0, alpha: 0.55))
-    context.addPath(rounded)
-    context.setFillColor(CGColor(gray: 0, alpha: 1))
-    context.fillPath()
-    context.restoreGState()
-    context.saveGState()
-    context.addPath(rounded)
-    context.clip()
-    context.draw(piece, in: place)
-    context.restoreGState()
+    guard outputWidth <= OUTPUT_WIDTH else {
+        throw FrameError(description: "the crop \(crop) is wider than a whole picture at its height; make it taller")
+    }
+    guard
+        let context = CGContext(
+            data: nil, width: outputWidth, height: outputHeight, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else { throw FrameError(description: "cannot make the output canvas") }
+    context.interpolationQuality = .high
+    context.draw(piece, in: CGRect(x: 0, y: 0, width: outputWidth, height: outputHeight))
     guard let output = context.makeImage() else { throw FrameError(description: "cannot finish the image") }
     return output
 }

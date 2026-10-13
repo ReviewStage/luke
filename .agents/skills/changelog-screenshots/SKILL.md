@@ -34,10 +34,12 @@ in front. Then look at the list as a set.
   folded or open, the side panel closed, wide, or full screen, a full-window
   view (Settings, version history), a menu, card, or palette held open.
 - Vary the framing: the whole window (1600 by 1000 points) where the layout is
-  the point, a `--crop` close-up where the feature is one part of it. The
-  changelog page draws every picture at its column's full width (about 640
-  CSS pixels), so keep a crop between about 0.8:1 and 2.5:1; a tall crop
-  takes over the page.
+  the point, a `--crop` close-up where the feature is one part of it. A
+  close-up is the framed picture zoomed in, never a cut-out: the feature stays
+  inside the app around it (the ⌘K palette over its dimmed plan, the sidebar
+  with the window's corner and wallpaper beyond), and it comes out exactly as
+  tall as a whole-window picture, only narrower. The changelog page shows
+  every picture at that one height.
 - The plan document is not wallpaper. Show it only where it is the subject;
   elsewhere open another plan, another tab, or fold it away.
 
@@ -125,13 +127,19 @@ Frame with the repository's own script, from the synced checkout:
 
 ```sh
 bash $S/scripts/changelog-screenshot.sh out/the-call-tab.png --from ~/luke-shots/<v>/call.png
-bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/luke-shots/<v>/skills.png --crop 80,650,746,345
+bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/luke-shots/<v>/skills.png --crop 30,230,860,830
 ```
 
 A crop is `x,y,width,height` in window points from the window's top-left
-corner (the capture is 2 pixels a point on a Retina display). Find the
-numbers from a preview of the raw capture: its body starts 112 by 76 pixels
-in, from the shadow.
+corner; go negative or past the window, up to 90 points, to take in
+wallpaper. It is cut from the framed picture and scaled to the whole
+picture's height (1591 pixels), so it can be no wider than about 1.5 times its
+height, and at under about 800 points tall it is enlarged past the capture's
+pixels: keep it above about 600 so text stays sharp. Find the numbers from a
+preview of the raw capture, which is 2 pixels a point on a Retina display, its
+window body starting 112 by 76 pixels in from the shadow. A close-up that
+shows empty space is a staging problem as often as a cropping one: 0.12.0's
+skill picker needed more transcript above it, not a tighter crop.
 
 Review every picture in the cloud before showing anyone: make small JPEG
 previews on the Mac (`sips -s format jpeg -Z 1500`), `tar` and `base64` them
