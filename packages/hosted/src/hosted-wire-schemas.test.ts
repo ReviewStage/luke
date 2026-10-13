@@ -263,9 +263,13 @@ const EFFECT_MODULE_SCHEMAS = {
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
   "workspace-wire": {
+    workspaceGithubSchema: workspaceWire.workspaceGithubSchema,
     workspaceSchema: workspaceWire.workspaceSchema,
-    availableWorkspaceSchema: workspaceWire.availableWorkspaceSchema,
     workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
+    workspaceAnswerSchema: workspaceWire.workspaceAnswerSchema,
+    workspaceCreateRequestSchema: workspaceWire.workspaceCreateRequestSchema,
+    workspaceGithubRequestSchema: workspaceWire.workspaceGithubRequestSchema,
+    workspaceGithubConnectAnswerSchema: workspaceWire.workspaceGithubConnectAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;
 
