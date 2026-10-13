@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
+import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { EXCESS_KEYS } from "@sidecar/wire";
@@ -32,7 +33,6 @@ import {
   savePlanText,
 } from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
-import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import {
   SCRIPTED_DELEGATE,

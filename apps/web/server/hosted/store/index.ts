@@ -66,7 +66,7 @@ export function hostedStore(): HostedStore {
   };
 }
 
-export { promptHashOf } from "./content-addressed.js";
+export { promptHashOf } from "@sidecar/database/models/content-addressed";
 export {
   listMessagesPast,
   listRecentMessages,

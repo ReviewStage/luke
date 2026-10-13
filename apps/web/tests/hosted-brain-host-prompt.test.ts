@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { Effect, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -21,7 +21,6 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, promptHashOf, storeWriter } from "../server/hosted/store";
-import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { noNetwork } from "./support/no-network";
