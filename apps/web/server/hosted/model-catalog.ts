@@ -430,13 +430,14 @@ export function validateModelChoice(
   });
 }
 
-/** The choice checked against the instance's catalog: accepted, refused, or the catalog unavailable. */
+/** The choice checked against the instance's catalog as the account is offered it (`offeredToAccount`): accepted, refused, or the catalog unavailable. */
 export function acceptedModelChoice(
   choice: ModelChoice,
+  ownKeyProviders: ReadonlySet<ModelProvider>,
 ): Effect.Effect<ModelChoice, ModelChoiceRefused | ModelCatalogUnavailable, ModelCatalog> {
   return Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
-    const offered = yield* catalog.read;
+    const offered = offeredToAccount(yield* catalog.read, ownKeyProviders);
     return yield* Effect.fromResult(validateModelChoice(offered, choice)).pipe(
       Effect.mapError((reason) => new ModelChoiceRefused({ reason })),
     );

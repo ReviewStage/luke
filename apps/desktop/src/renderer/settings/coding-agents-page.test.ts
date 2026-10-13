@@ -559,14 +559,30 @@ test("the model menu lists base models only, and the Fast switch under it stores
   );
 });
 
-test("where the service withholds a model's fast version for the account's own key, the Fast switch rests saying so", async () => {
+test("a key of the account's own saved on the page reads the models again, and the Fast switch rests saying the service withholds it for that key", async () => {
+  const page = await mount();
+  assert.equal(fastSwitch(page).disabled, false, "on Luke's key Opus offers Fast");
+
   // The service answers an account that runs Anthropic on its own key with no Anthropic fast version.
   catalog = MODELS.filter((model) => !model.id.endsWith("-fast")).map((model) =>
     model.id === "anthropic/claude-opus-5.5"
       ? { ...model, fastWithheld: FAST_WITHHELD.OWN_KEY }
       : model,
   );
-  const page = await mount();
+  const add = [...page.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) =>
+      each.textContent === "Add key" &&
+      each.closest(".menu-row")?.textContent?.includes("Anthropic"),
+  );
+  act(() => add?.click());
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    assert.fail("no Anthropic field");
+  field.value = "sk-ant-api03-synthetic-0000000000000000wxyz";
+  const form = field.closest("form") ?? assert.fail("no form around the field");
+  act(() => form.requestSubmit());
+  await settle();
+
   assert.equal(fastSwitch(page).disabled, true);
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
   assert.match(

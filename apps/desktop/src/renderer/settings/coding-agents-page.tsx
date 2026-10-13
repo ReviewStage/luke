@@ -280,7 +280,7 @@ function CodingAgentsSection({
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
 
-  // The page opening reads the default the service holds now, which a Start may just have written, and the models beside it.
+  // The page opening reads the default the service holds now, which a Start may just have written.
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
@@ -299,6 +299,17 @@ function CodingAgentsSection({
         if (live) setReadFailed(true);
       },
     );
+    return () => {
+      live = false;
+    };
+  }, [act, signedIn, attempt]);
+
+  const ownAnthropic = ownKeys.has(MODEL_PROVIDER.ANTHROPIC);
+  const ownOpenAi = ownKeys.has(MODEL_PROVIDER.OPENAI);
+  // The models are read as the page opens, and again as a key of the account's own is saved or removed, since the service withholds a fast version for one.
+  useEffect(() => {
+    if (!signedIn) return;
+    let live = true;
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
         if (!live) return;
@@ -312,7 +323,7 @@ function CodingAgentsSection({
     return () => {
       live = false;
     };
-  }, [act, signedIn, attempt]);
+  }, [act, signedIn, attempt, ownAnthropic, ownOpenAi]);
 
   const write = useCallback(
     (next: ModelChoice) => {

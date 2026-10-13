@@ -1,9 +1,8 @@
-import { listProviderKeyRows } from "@sidecar/database/models/provider-key-store";
-import type { ModelProvider } from "@sidecar/hosted/models-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
+import { ownKeyProviders } from "./hosted/coder-host/account-keys.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -61,11 +60,8 @@ const modelsEndpoint = /* @__PURE__ */ Effect.fn("web/modelsEndpoint")(function*
     ),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );
-  const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(account.value));
-  const ownKeyProviders: ReadonlySet<ModelProvider> = new Set(rows.map((row) => row.provider));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    models: offeredToAccount(models, ownKeyProviders),
-  });
+  const own = yield* hostedStoreOrUnavailable(ownKeyProviders(account.value));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { models: offeredToAccount(models, own) });
 });
 
 /** The group: the one models path, and the hosted vocabulary's own refusal for any other. */

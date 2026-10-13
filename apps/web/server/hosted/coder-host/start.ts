@@ -37,6 +37,7 @@ import {
   type ModelCatalog,
   type ModelChoiceRefused,
 } from "../model-catalog.js";
+import { ownKeyProviders } from "./account-keys.js";
 
 /**
  * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.
@@ -83,7 +84,9 @@ export type StartServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
 
 /**
  * The choice an agent runs on: the one named where one is, the account's
- * default otherwise, either checked against the catalog. A catalog that
+ * default otherwise, either checked against the catalog as the account is
+ * offered it, so a fast version its own key withholds is refused here
+ * rather than at the agent's first step. A catalog that
  * could not be read is an outage; a choice it refuses is its own refusal.
  */
 export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -98,7 +101,8 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     named ??
     (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent ??
     CODING_AGENT_DEFAULT_CHOICE;
-  return yield* acceptedModelChoice(choice).pipe(
+  const own = yield* hostedStoreOrUnavailable(ownKeyProviders(userId));
+  return yield* acceptedModelChoice(choice, own).pipe(
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
       Effect.logWarning(
         `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
