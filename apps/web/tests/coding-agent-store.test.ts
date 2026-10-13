@@ -293,6 +293,24 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     }),
   );
 
+  it.effect(
+    "a delete told which agents it stopped refuses while another stands, and takes the plan once each is named",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const stoppedAgent = started(yield* createCodingAgent(userId, start(planId)));
+        // Started while the delete was stopping the others, so the delete never stopped it.
+        const raced = started(yield* createCodingAgent(userId, start(planId)));
+
+        const refused = yield* Effect.flip(deletePlan(userId, planId, new Set([stoppedAgent.id])));
+
+        assert.equal(refused._tag, "PlanAgentUnstopped");
+        assert.equal(yield* agentRows(userId), 2);
+        assert.equal(yield* deletePlan(userId, planId, new Set([stoppedAgent.id, raced.id])), true);
+        assert.equal(yield* agentRows(userId), 0);
+      }),
+  );
+
   it.effect("an agent goes with its plan, and its conversation is stamped for the purge", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;

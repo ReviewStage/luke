@@ -49,6 +49,9 @@ export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.Sq
 /** The plan is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
 export class PlanArchived extends Data.TaggedError("PlanArchived") {}
 
+/** A coding agent stands on the plan that its delete was not told was stopped: one started while the delete stopped the others. */
+export class PlanAgentUnstopped extends Data.TaggedError("PlanAgentUnstopped") {}
+
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
   readonly label: string;
@@ -456,10 +459,10 @@ const removeEndedCalls = SqlSchema.void({
 /** The conversations of the plan's coding agents, read before the delete cascades the rows that name them. */
 const findAgentConversations = SqlSchema.findAll({
   Request: PlanKeySchema,
-  Result: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
   execute: ({ userId, planId }) =>
     db
-      .select({ conversationId: codingAgent.conversationId })
+      .select({ id: codingAgent.id, conversationId: codingAgent.conversationId })
       .from(codingAgent)
       .where(and(eq(codingAgent.planId, planId), eq(codingAgent.userId, userId))),
 });
@@ -658,12 +661,27 @@ export function updatePlan(
  * cleared; false where the account owned no such plan. The agents'
  * conversations are read before the delete, because the delete cascades
  * the agent rows that name them.
+ *
+ * A caller that stopped the plan's agents first names the ones it stopped,
+ * and the delete fails with `PlanAgentUnstopped` where any other stands. The
+ * plan's row is locked before the agents are read, so a Start racing the
+ * delete either landed its agent before the read, which then refuses, or
+ * waits on the lock and finds no plan to start on.
  */
-export function deletePlan(userId: string, planId: string): PlanStoreEffect<boolean> {
+export function deletePlan(
+  userId: string,
+  planId: string,
+  stoppedAgentIds?: ReadonlySet<string>,
+): Effect.Effect<boolean, PlanStoreFailure | PlanAgentUnstopped, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        const locked = yield* lockPlan({ userId, planId });
+        if (Option.isNone(locked)) return false;
         const agents = yield* findAgentConversations({ userId, planId });
+        if (stoppedAgentIds !== undefined && agents.some(({ id }) => !stoppedAgentIds.has(id))) {
+          return yield* new PlanAgentUnstopped();
+        }
         const removed = yield* removePlan({ userId, planId });
         if (Option.isNone(removed)) return false;
         yield* removeEndedCalls({ userId, planId });

@@ -1,19 +1,14 @@
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import {
   archiveCodingAgent,
-  awaitingLinesOf,
   type CodingAgent,
-  type CodingAgentLatestTurn,
-  latestTurnsOf,
   listCodingAgents,
-  RUNNING_TURN_STATUSES,
   readCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
 } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { readPlan } from "@sidecar/database/models/plan-store";
-import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
 import {
   type ConversationTarget,
   type StoreWriter,
@@ -26,7 +21,6 @@ import {
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
@@ -47,7 +41,7 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Cache, Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -64,13 +58,6 @@ import {
 } from "./core.js";
 import type { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import {
-  describeUnreachable,
-  EVE_CANCEL_OUTCOME,
-  EVE_MOUNT,
-  type EveSessions,
-  eveSessions,
-} from "./hosted/brain-host/eve-sessions.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,
@@ -78,8 +65,16 @@ import {
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
-import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
+import { codingAgentSummary } from "./hosted/coder-host/status.js";
 import { steerCodingAgent } from "./hosted/coder-host/steer.js";
+import {
+  type EveReach,
+  eveFor,
+  standingsOf,
+  stoppedForGood,
+  stoppedTurn,
+  summaryOf,
+} from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import {
   cursorOfWire,
@@ -242,12 +237,8 @@ const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 const MAXIMUM_MESSAGE_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
 
-export interface CodingAgentsAppSeams {
+export interface CodingAgentsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
-  /** The origin eve answers on; nothing where the deployment names none, which refuses every Start and Stop as unavailable. */
-  eveOrigin: () => string | undefined;
-  /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
-  eve?: (authorization: Redacted.Redacted) => EveSessions;
 }
 
 /** What the routes may require of the function that stands them. */
@@ -347,44 +338,6 @@ function transcriptResponse(
     ...(page.context === undefined ? undefined : { context: page.context }),
   });
 }
-
-/** eve as the developer reaches it, or unavailable where the deployment names no origin for eve. */
-const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  request: Request,
-): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
-  const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-  if (seams.eve !== undefined) return seams.eve(authorization);
-  const origin = seams.eveOrigin();
-  if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* eveSessions({ origin, caller: { authorization }, mount: EVE_MOUNT.CODER });
-});
-
-/** Where each of the account's conversations named stands now: its newest turn, and whether a line of the developer's awaits one. */
-const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  conversationIds: readonly string[],
-): Effect.fn.Return<
-  (conversationId: string) => AgentTurnStanding,
-  HostedRefusal,
-  SqlClient.SqlClient
-> {
-  const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, conversationIds));
-  const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOf(userId, conversationIds));
-  return (conversationId) => ({
-    turn: turns.get(conversationId),
-    lineAwaits: awaiting.has(conversationId),
-  });
-});
-
-/** The agent's summary with its status read now. */
-const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  agent: CodingAgent,
-): Effect.fn.Return<CodingAgentSummary, HostedRefusal, SqlClient.SqlClient> {
-  const standing = yield* standingsOf(userId, [agent.conversationId]);
-  return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
-});
 
 /** A choice the catalog refused is an invalid request, on the wire. */
 const choiceOrInvalid = <A, E, R>(
@@ -593,57 +546,6 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
   },
 );
 
-/** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */
-function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgentLatestTurn & {
-  readonly eveTurnId: string;
-} {
-  return (
-    turn !== undefined &&
-    RUNNING_TURN_STATUSES.has(turn.status) &&
-    turn.eveTurnId !== null &&
-    turn.cancelRequestedAt === null
-  );
-}
-
-/** eve's cancel of the agent's turn under way, then the row's stamp; nothing where no turn runs that a Stop has to stop. */
-const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-  request: Request,
-  userId: string,
-  agent: CodingAgent,
-  target: ConversationTarget,
-): Effect.fn.Return<void, HostedRefusal, AgentsServices> {
-  const turn = (yield* standingsOf(userId, [agent.conversationId]))(agent.conversationId).turn;
-  if (!stoppable(turn)) return;
-  const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) return;
-  // The cancel names the turn the row was written for, never the session's turn under way, so a
-  // turn that ended between the read above and eve's answer is answered `no_active_turn` and
-  // nothing newer is stopped in its place.
-  const eve = yield* eveFor(seams, request);
-  const cancelled = yield* eve
-    .cancel(sessionId, turn.eveTurnId)
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to stop a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          { outcome: EVE_CANCEL_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
-        ),
-      ),
-    );
-  if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  const at = yield* DateTime.nowAsDate;
-  const stamped = yield* hostedStoreOrUnavailable(
-    Effect.flatMap(writer, (write) => write.requestTurnCancel(target, { turnId: turn.id, at })),
-  );
-  if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-});
-
 /**
  * PATCH changes the agent for what follows, and answers it as it then
  * stands. A body naming a title renames it: the title written whole on the
@@ -665,7 +567,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent, target } = yield* ownedAgent(seams, request);
+  const { userId, agent } = yield* ownedAgent(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
   const rename = readEither(codingAgentRenameRequestSchema)(body);
   if (Result.isSuccess(rename)) {
@@ -683,13 +585,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const { archived } = archive.success;
     if (archived) {
       // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-      yield* stoppedTurn(seams, writer, request, userId, agent, target);
-      // A session still coming up, or a line awaiting the turn it opens, has no turn a Stop can
-      // name yet, so nothing is archived until there is one to stop or it has ended.
-      const { status } = yield* summaryOf(userId, agent);
-      if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
-        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-      }
+      yield* stoppedForGood(seams, writer, request, userId, agent);
     }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -719,8 +615,8 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent, target } = yield* ownedAgent(seams, request);
-  yield* stoppedTurn(seams, writer, request, userId, agent, target);
+  const { userId, agent } = yield* ownedAgent(seams, request);
+  yield* stoppedTurn(seams, writer, request, userId, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
