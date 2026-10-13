@@ -715,6 +715,13 @@
       "when": 1791893084244,
       "tag": "20261013120444_dead_tables_pending_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1791895002008,
+      "tag": "20261013123642_dead_tables_drop",
+      "breakpoints": true
     }
   ]
 }
