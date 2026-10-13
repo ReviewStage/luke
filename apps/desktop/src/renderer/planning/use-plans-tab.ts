@@ -94,6 +94,7 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
+import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
@@ -115,7 +116,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
-import { startedAgentCallIds, workerCallIds } from "./work-model";
+import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -235,10 +236,12 @@ export interface PlansControl {
    * is read before where an older one stands, and that read.
    */
   work: {
-    turns: PlanningView["work"];
+    /** The open plan's planning conversation as an agent's transcript is read; none before the first read lands. */
+    conversation: PlanningView["conversation"];
     callLive: boolean;
-    earlier: string | undefined;
     onLoadEarlier: () => Promise<void>;
+    /** Reads a planning worker's session past a cursor, as an agent's worker's tab reads its own, the plan standing in the agent's place. */
+    readWorker: TranscriptReader;
     /** The moment whose turn the tab is asked to bring into view, and the word that it has; what a version's Open asks. */
     reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
   };
@@ -414,10 +417,11 @@ function secondCallQuestion(planName: string): DialogQuestion {
 
 /** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
 function planHolds(
-  view: Pick<PlanningView, "board" | "shownCode" | "work">,
+  view: Pick<PlanningView, "board" | "shownCode" | "conversation">,
   transcript: TranscriptRegion,
 ): PlanHolds {
-  const { board, shownCode, work } = view;
+  const { board, shownCode, conversation } = view;
+  const work = conversation?.messages;
   return {
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
@@ -590,12 +594,18 @@ export function usePlansTab(input: {
     lukeEndedCall: voice.view.lukeEndedCall,
   });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
-  const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
+  const workers = useMemo(
+    () => workerCallIds(workRowsOf(viewed.conversation, false)),
+    [viewed.conversation],
+  );
   // An agent Luke started in the call is in the work before it is in the
   // list, so the list is read again as its start answers, and the tab
   // appears as it does after a Start; a start already in the work when the
   // plan opens is read with the plan.
-  const startedByLuke = useMemo(() => startedAgentCallIds(viewed.work), [viewed.work]);
+  const startedByLuke = useMemo(
+    () => startedAgentCallIds(viewed.conversation),
+    [viewed.conversation],
+  );
   const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
     planId: undefined,
     ids: new Set(),
@@ -1128,6 +1138,16 @@ export function usePlansTab(input: {
   // tab never closes, and a draft's lets its draft go, so neither is kept.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
+  // A planning worker's tab reads its session as an agent's worker's tab does, the plan standing in the agent's place.
+  const readWorker = useCallback<TranscriptReader>(
+    ({ agentId, after, callId }) =>
+      act(ACT_KIND.PLANNING_MESSAGES, {
+        planId: agentId,
+        after,
+        ...(callId === undefined ? undefined : { callId }),
+      }),
+    [act],
+  );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
       const at = openTabs.findIndex((each) => sameTab(each, tab));
@@ -1290,10 +1310,10 @@ export function usePlansTab(input: {
     },
     // A fixture's open plan is drawn mid-call, as its status and transcript are.
     work: {
-      turns: planning.work,
+      conversation: planning.conversation,
       callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
-      earlier: planning.workEarlier,
-      onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
+      onLoadEarlier: () => act(ACT_KIND.PLANNING_CONVERSATION_EARLIER),
+      readWorker,
       reveal:
         revealing?.kind === REVISION_SOURCE.WORK
           ? { at: revealing.at, onRevealed: revealed }
