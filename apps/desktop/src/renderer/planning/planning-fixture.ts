@@ -1,6 +1,13 @@
 import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+  ROLLOUT_ROLE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { type Plan, type PlanSummary, ROLLOUT_BASE, type Rollout } from "@sidecar/hosted/plan-wire";
 import {
   type CodeToken,
@@ -12,6 +19,7 @@ import {
   type PlanningView,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
+import { WORKER_REPORT_KIND } from "@sidecar/hosted/rollout-wire";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
@@ -23,6 +31,7 @@ import type { WireRecord, WireValue } from "@sidecar/wire";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { MAIN_TAB, type MainTab } from "./use-main-tabs";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -39,8 +48,10 @@ import {
  * the panel opens on Plans, and under the planning profile it also opens the
  * reference journey's plan from `docs/PLANNING.md`, a draft of the default
  * template partway through with Luke working on the call about it, which is
- * what the planning capture shows. Every name and repository here is
- * invented; nothing is read from an account.
+ * what the planning capture shows. Under the planning-stack profile the
+ * plan opens on its Stack tab over three staged builders, one per pull
+ * request of its rollout, and its keeper, since a fixture run reads no agent either. Every
+ * name and repository here is invented; nothing is read from an account.
  */
 
 /**
@@ -605,6 +616,80 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
 /** The open plan mid-call on its work, as the planning-work profile captures it. */
 const FIXTURE_OPEN_WORK: PlanningView = { ...FIXTURE_OPEN_PLAN, work: FIXTURE_WORK };
 
+/**
+ * The workers the planning-stack profile stages, one per pull request of
+ * the plan's rollout: the first finished with its pull request open and its
+ * checks running, the second still at work on the first's branch, and the
+ * third, on the first's too, waiting on the developer's answer to its
+ * question; and the rollout's keeper at work linking the first's pull
+ * request into a stack.
+ */
+const FIXTURE_STACK_AGENTS: readonly CodingAgentSummary[] = [
+  {
+    id: "7c1e3a5b-2d4f-4a6c-9e8b-0a1b2c3d4e00",
+    planId: FIXTURE_PLAN.id,
+    model: "anthropic/claude-sonnet-5.5",
+    effort: "medium",
+    title: "Stack keeper",
+    createdAt: Date.parse("2026-10-07T16:49:00Z"),
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: null,
+    role: ROLLOUT_ROLE.KEEPER,
+  },
+  {
+    id: "7c1e3a5b-2d4f-4a6c-9e8b-0a1b2c3d4e01",
+    planId: FIXTURE_PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Pending memberships",
+    createdAt: Date.parse("2026-10-07T16:50:00Z"),
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    position: 1,
+    role: ROLLOUT_ROLE.BUILDER,
+    published: {
+      number: 412,
+      title: "Pending memberships",
+      url: "https://github.com/acme/relay/pull/412",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PENDING,
+      additions: 64,
+      deletions: 3,
+      changedFiles: 4,
+    },
+  },
+  {
+    id: "7c1e3a5b-2d4f-4a6c-9e8b-0a1b2c3d4e02",
+    planId: FIXTURE_PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invite and accept",
+    createdAt: Date.parse("2026-10-07T17:05:00Z"),
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: null,
+    position: 2,
+    role: ROLLOUT_ROLE.BUILDER,
+  },
+  {
+    id: "7c1e3a5b-2d4f-4a6c-9e8b-0a1b2c3d4e03",
+    planId: FIXTURE_PLAN.id,
+    model: "openai/gpt-5.5",
+    effort: "medium",
+    title: "Invite screen",
+    createdAt: Date.parse("2026-10-07T17:06:00Z"),
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    position: 3,
+    role: ROLLOUT_ROLE.BUILDER,
+    lastReport: {
+      kind: WORKER_REPORT_KIND.QUESTION,
+      text: "Should the invite form take several emails at once, or one per invite?",
+      options: ["One per invite", "Several at once"],
+      at: Date.parse("2026-10-07T17:20:00Z"),
+    },
+  },
+];
+
 /** The side panels the fixture profiles open their plan with. */
 const FIXTURE_CODE_PANEL: SidePanelState = {
   open: true,
@@ -661,6 +746,7 @@ export function fixturePlanningView(run: {
   if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_OPEN_BOARD;
   if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_OPEN_PLAN;
   if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_OPEN_WORK;
+  if (run.profile === RUN_PROFILE.PLANNING_STACK) return FIXTURE_OPEN_PLAN;
   return FIXTURE_PLAN_LIST;
 }
 
@@ -682,4 +768,22 @@ export function fixtureSidePanel(run: {
   if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_CALL_PANEL;
   if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_CALL_PANEL;
   return FIXTURE_CLOSED_PANEL;
+}
+
+/** The tab the plan's column opens on under a fixture profile that asks for one: the Stack's under the planning-stack profile; nothing under any other, nor for a live run. */
+export function fixtureMainTab(run: {
+  readonly fixtureMode: boolean;
+  readonly profile: string;
+}): MainTab | undefined {
+  if (!run.fixtureMode || run.profile !== RUN_PROFILE.PLANNING_STACK) return undefined;
+  return MAIN_TAB.STACK;
+}
+
+/** The agents the plan's Stack tab draws on a fixture run: the staged workers under the planning-stack profile, and nothing under any other, nor for a live run, which draws the plan's own. */
+export function fixtureStackAgents(run: {
+  readonly fixtureMode: boolean;
+  readonly profile: string;
+}): readonly CodingAgentSummary[] | undefined {
+  if (!run.fixtureMode || run.profile !== RUN_PROFILE.PLANNING_STACK) return undefined;
+  return FIXTURE_STACK_AGENTS;
 }

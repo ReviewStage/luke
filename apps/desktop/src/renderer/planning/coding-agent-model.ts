@@ -688,12 +688,21 @@ export function effortLabel(effort: string): string {
   return EFFORT_LABEL.get(effort) ?? `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
 }
 
-/** The agents with one agent as the service just answered it, in its place. */
+/**
+ * The agents with one agent as the service just answered it, in its place.
+ * Note that what the agent published is kept from the list where the
+ * answer carries none, because only the plan's list carries it, so a rename
+ * or a change of model does not take a pull request off the Stack tab.
+ */
 export function withAgent(
   agents: readonly CodingAgentSummary[],
   answered: CodingAgentSummary,
 ): readonly CodingAgentSummary[] {
-  return agents.map((agent) => (agent.id === answered.id ? answered : agent));
+  return agents.map((agent) => {
+    if (agent.id !== answered.id) return agent;
+    if (answered.published !== undefined || agent.published === undefined) return answered;
+    return { ...answered, published: agent.published };
+  });
 }
 
 /** Where an agent stands as a page or an answer read it: its status, and when the run under way began where the service said. */

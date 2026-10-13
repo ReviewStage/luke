@@ -9,6 +9,7 @@ import {
   createCodingAgent,
   listCodingAgents,
   readCodingAgent,
+  recordCodingAgentPublished,
   recordCodingAgentReport,
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
@@ -26,6 +27,7 @@ import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -34,6 +36,7 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  PULL_REQUEST_STATE,
   ROLLOUT_ROLE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -81,8 +84,10 @@ import {
   userMetadataOf,
 } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { LINK_OUTCOME, linkInstallation } from "../server/hosted/github-installations";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -515,6 +520,48 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             [1, ROLLOUT_ROLE.BUILDER],
             [undefined, undefined],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "the list carries the pull request each agent last published as its row kept it, and an agent that published none carries none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const plain = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        const published = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        const pullRequest = {
+          number: 412,
+          title: "Pending memberships",
+          url: "https://github.com/reviewstage/luke/pull/412",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 40,
+          deletions: 2,
+          changedFiles: 3,
+        } as const;
+        yield* recordCodingAgentPublished(owner, published.agent.id, pullRequest);
+
+        const listed = yield* ask(request(PLAN_AGENTS, owner, { method: "GET", id: plan.id }));
+        assert.deepEqual(
+          new Map(
+            readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).agents.map(
+              (each) => [each.id, each.published],
+            ),
+          ),
+          new Map([
+            [plain.agent.id, undefined],
+            [published.agent.id, pullRequest],
+          ]),
         );
       }),
   );

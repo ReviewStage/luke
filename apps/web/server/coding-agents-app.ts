@@ -3,7 +3,7 @@ import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import {
   archiveCodingAgent,
   type CodingAgent,
-  listCodingAgents,
+  listPlanCodingAgentsPublished,
   readCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
@@ -440,13 +440,17 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   }
   const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const agents = yield* hostedStoreOrUnavailable(
-    listCodingAgents(userId, planId, { includeArchived: listsArchived(request) }),
+  const held = yield* hostedStoreOrUnavailable(
+    listPlanCodingAgentsPublished(userId, planId, { includeArchived: listsArchived(request) }),
   );
-  const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
+  const standing = yield* standingsOf(held.map(({ agent }) => agent.conversationId));
   const now = yield* Clock.currentTimeMillis;
+  // The list alone carries what each agent published, as its row last kept it, so it asks GitHub nothing.
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents.map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
+    agents: held.map(({ agent, published }) => {
+      const summary = codingAgentSummary(agent, standing(agent.conversationId), now);
+      return published === null ? summary : { ...summary, published };
+    }),
   });
 });
 

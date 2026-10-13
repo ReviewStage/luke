@@ -196,6 +196,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
     },
     agents: codingAgentsControl(),
+    stackAgents: undefined,
     history: versionHistoryControl(),
     onSelect: ignore,
     onShowAgent: ignore,

@@ -2730,6 +2730,10 @@ agent still without a turn row five minutes after its Start
 (`CODER.STARTING_GRACE`) reading as failed rather than starting forever,
 and an agent with a message of the developer's still awaiting its turn
 (`awaitingLinesOf`) reading as running whatever its newest turn says.
+The list alone also carries `published`, the pull request the agent's row
+last kept from any read of what it published (`coder-host/published.ts`),
+absent where none was read, so the plan's Stack tab draws every worker's
+pull request from one list read and asks GitHub nothing.
 `GET /api/agents/{id}/messages?after=<seq>:<revision>` answers the
 conversation's rows past the cursor as `UIMessage`s, the cursor to read on
 from, the agent's status as the page was read, and, where that status is
