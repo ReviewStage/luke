@@ -4,12 +4,18 @@ set -euo pipefail
 # Takes one CHANGELOG.md screenshot: a capture of Luke's window, framed on
 # macOS's Golden Gate Sunset aerial.
 #
-#   scripts/changelog-screenshot.sh <out.png> [--from <capture.png>]
+#   scripts/changelog-screenshot.sh <out.png> [--from <capture.png>] [--crop <x,y,width,height> [--zoom <factor>]]
 #
 # With no capture given it opens macOS's window capture, so click Luke's
 # window; the capture keeps the window's shadow, which the frame draws over the
 # wallpaper. `--from` frames a capture already taken the same way (⇧⌘4, then
-# Space, then the window). The framing itself is scripts/lib/frame-screenshot.swift,
+# Space, then the window). `--crop` cuts the framed picture to that part of
+# the window, in its points from the top-left corner (negative, or past the
+# window, to take in wallpaper), and scales it to the whole picture's height:
+# a close-up as tall as every other screenshot, only narrower. `--zoom` says
+# the capture was taken zoomed by that factor (the changelog-screenshots
+# skill's LUKE_SHOT_ZOOM), so the crop's points hold that many times the
+# pixels and a close-up stays sharp. The framing itself is scripts/lib/frame-screenshot.swift,
 # compiled once under the gitignored build directory, and the wallpaper is
 # fetched from Apple once and cached beside it.
 
@@ -21,12 +27,26 @@ sidecar_require_macos
 sidecar_require_command xcrun
 sidecar_require_command screencapture
 
-if [[ $# -ne 1 && ! ($# -eq 3 && $2 == --from) ]]; then
-    printf 'usage: %s <out.png> [--from <capture.png>]\n' "$0" >&2
+usage() {
+    printf 'usage: %s <out.png> [--from <capture.png>] [--crop <x,y,width,height> [--zoom <factor>]]\n' "$0" >&2
     exit 2
-fi
+}
+[[ $# -ge 1 ]] || usage
 output=$1
-capture=${3:-}
+shift
+capture=
+crop=
+zoom=
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --from) [[ $# -ge 2 ]] || usage; capture=$2; shift 2 ;;
+        --crop) [[ $# -ge 2 ]] || usage; crop=$2; shift 2 ;;
+        --zoom) [[ $# -ge 2 ]] || usage; zoom=$2; shift 2 ;;
+        *) usage ;;
+    esac
+done
+
+[[ -z $zoom || -n $crop ]] || usage
 
 work_root="$SIDECAR_BUILD_ROOT/changelog-screenshot"
 framer="$work_root/frame-screenshot"
@@ -48,5 +68,5 @@ if [[ -z $capture ]]; then
 fi
 
 mkdir -p "$(dirname -- "$output")"
-"$framer" "$capture" "$output" "$work_root/golden-gate-sunset.png"
+"$framer" "$capture" "$output" "$work_root/golden-gate-sunset.png" ${crop:+"$crop"} ${zoom:+"$zoom"}
 printf 'Framed screenshot: %s\n' "$output"
