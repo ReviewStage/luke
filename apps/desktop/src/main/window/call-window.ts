@@ -42,7 +42,8 @@ function readPlacement(file: string): CallWindowPoint | undefined {
 /**
  * The one floating window that draws the standing call while no Luke window
  * has the keyboard. It loads the same renderer bundle as the panels from a
- * document of its own (`call.html`, which may reach no host), under the same
+ * document of its own (`call.html`, which may reach LiveKit Cloud alone, where
+ * LiveAvatar's room for the avatar stands), under the same
  * hardening, and mounts the call card by the role main answers it. It is
  * transparent and frameless, so the card is the whole of what is seen; a non-activating
  * panel, so pressing a control leaves the developer's editor in front; and it

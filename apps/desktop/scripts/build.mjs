@@ -218,6 +218,21 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // The call window's view of the avatar, its own bundle so the bundle every
+  // window parses never carries LiveKit; the call window loads it the first
+  // time a call turns its video on (`src/renderer/avatar-room/contract.ts`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-room/index.ts")],
+    outfile: path.join(outputRoot, "renderer/avatar-room.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),

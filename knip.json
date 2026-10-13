@@ -32,6 +32,7 @@
         "src/renderer/plan-editor/index.ts",
         "src/renderer/session-recorder/index.ts",
         "src/renderer/call/call-video-tile.tsx",
+        "src/renderer/avatar-room/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],
