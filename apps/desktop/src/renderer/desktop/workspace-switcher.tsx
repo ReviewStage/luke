@@ -1,5 +1,7 @@
-import type { Workspace } from "@sidecar/hosted/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@sidecar/hosted/workspace-wire";
 import { CheckIcon, ChevronDownIcon, ExternalIcon, PlusIcon, UserIcon } from "@sidecar/panel";
+import { useState } from "react";
+import { GitHubMark } from "../account-marks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
   ActionMenu,
@@ -9,20 +11,22 @@ import {
   type MenuPlacement,
   useActionMenu,
 } from "./action-menu";
+import { NewWorkspaceDialog } from "./new-workspace-dialog";
 
 /**
  * workspace-switcher.tsx -- the head of the sidebar's plans: which of the account's workspaces they are, and the menu that lists another.
  *
- * A workspace is the account's personal plans, or the shared plans of a
- * GitHub App installation's team, and the sidebar lists one at a time. Its
- * head names the workspace listed, and a press drops the menu of every
- * workspace the account is a member of, the listed one checked; then a Join
- * for each installation's workspace the account reaches but is not in; then
- * Install Luke on GitHub…, which opens the App's installation page, and,
- * while a team's workspace is listed, Members…, which opens Settings on its
- * members. An account in its personal workspace alone, with nothing to
- * join, has nothing to switch between, so it draws no head at all and its
- * plans read as they always did; Settings still offers it the install.
+ * A workspace is the account's personal plans, or a team's shared plans,
+ * and the sidebar lists one at a time. Its head names the workspace listed,
+ * and a press drops the menu of every workspace the account is a member of,
+ * the listed one checked, then New workspace…, which asks a name and lists
+ * the workspace made. While a team's workspace is listed it adds Invite
+ * people…, which opens the service's invite page in the browser, Members…,
+ * which opens Settings on its members, and, for an owner or admin, the
+ * team's GitHub organization: Connect GitHub org… while none is connected,
+ * or its login, which opens Settings where it is disconnected. The head
+ * stands whenever an account is signed in, its personal workspace alone
+ * included, because its menu is where a workspace is made.
  */
 
 /** Where the menu hangs: under the head, its left edge on the head's, since the head spans the column. */
@@ -31,11 +35,22 @@ function dropUnder(button: HTMLElement): MenuPlacement {
   return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
 }
 
-/** The menu's items: every workspace, the listed one checked, the ones to join, then the install and the members. */
+/** Whether the account's role lets it connect or disconnect the workspace's GitHub organization. */
+function managesGitHub(workspace: Workspace): boolean {
+  return workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN;
+}
+
+/**
+ * The menu's items: every workspace, the listed one checked; New
+ * workspace…; then, for a team's workspace, Invite people…, Members…, and
+ * for an owner or admin its GitHub organization: Connect GitHub org… while
+ * none is connected, or the connected login, which opens Settings where it
+ * is disconnected.
+ */
 function workspaceMenuGroups(
   listed: Workspace,
   plans: PlansControl,
-  onOpenMembers: () => void,
+  presses: { onNew: () => void; onOpenSettings: () => void },
 ): MenuAction[][] {
   const choices = plans.workspaces.map(
     (workspace): MenuAction => ({
@@ -44,24 +59,31 @@ function workspaceMenuGroups(
       onSelect: () => plans.onChooseWorkspace(workspace.id),
     }),
   );
-  const joins = plans.available.map(
-    (available): MenuAction => ({
-      label: `Join ${available.name}`,
-      icon: <PlusIcon />,
-      onSelect: () => plans.onJoinWorkspace(available.installationId),
-    }),
-  );
-  const install: MenuAction = {
-    label: "Install Luke on GitHub…",
-    icon: <ExternalIcon />,
-    onSelect: plans.onInstallApp,
+  const create: MenuAction = {
+    label: "New workspace…",
+    icon: <PlusIcon />,
+    onSelect: presses.onNew,
   };
-  const members: MenuAction = { label: "Members…", icon: <UserIcon />, onSelect: onOpenMembers };
-  const manage = listed.personal ? [install] : [install, members];
-  return joins.length === 0 ? [choices, manage] : [choices, joins, manage];
+  if (listed.personal) return [choices, [create]];
+  const team: MenuAction[] = [
+    { label: "Invite people…", icon: <ExternalIcon />, onSelect: plans.onInviteToWorkspace },
+    { label: "Members…", icon: <UserIcon />, onSelect: presses.onOpenSettings },
+  ];
+  if (managesGitHub(listed)) {
+    team.push(
+      listed.github === null
+        ? { label: "Connect GitHub org…", icon: <GitHubMark />, onSelect: plans.onConnectGitHub }
+        : {
+            label: `GitHub: ${listed.github.login}`,
+            icon: <GitHubMark />,
+            onSelect: presses.onOpenSettings,
+          },
+    );
+  }
+  return [choices, [create], team];
 }
 
-/** The plans' head while the account is in two workspaces or more, or may join one; nothing otherwise. */
+/** The plans' head while an account is signed in and its workspaces are read. */
 export function WorkspaceSwitcher({
   plans,
   inSight,
@@ -70,13 +92,13 @@ export function WorkspaceSwitcher({
   plans: PlansControl;
   /** Whether the sidebar is in sight, so the menu closes with it folding away. */
   inSight: boolean;
-  /** Opens Settings, where the listed workspace's members stand. */
+  /** Opens Settings, where the listed workspace's members and GitHub organization stand. */
   onOpenMembers: () => void;
 }): React.JSX.Element | null {
+  const [naming, setNaming] = useState(false);
   const menu = useActionMenu(plans.shown && inSight);
   const listed = plans.workspace;
-  const switchable = plans.workspaces.length > 1 || plans.available.length > 0;
-  if (listed === undefined || !switchable) return null;
+  if (listed === undefined) return null;
   return (
     <div className="sidebar-workspace">
       <button
@@ -100,10 +122,16 @@ export function WorkspaceSwitcher({
         <ActionMenu
           label="Workspaces"
           menu={menu.drawn}
-          groups={workspaceMenuGroups(listed, plans, onOpenMembers)}
+          groups={workspaceMenuGroups(listed, plans, {
+            onNew: () => setNaming(true),
+            onOpenSettings: onOpenMembers,
+          })}
           onClose={menu.close}
         />
       )}
+      {naming ? (
+        <NewWorkspaceDialog onCreate={plans.onCreateWorkspace} onClose={() => setNaming(false)} />
+      ) : null}
     </div>
   );
 }

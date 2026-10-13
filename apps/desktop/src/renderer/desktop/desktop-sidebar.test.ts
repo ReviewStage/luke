@@ -2061,59 +2061,58 @@ const PERSONAL = {
   name: "Personal",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
-  active: true,
+  github: null,
 };
 const ACME = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  github: null,
 };
-const GLOBEX = { installationId: 4242, name: "globex" };
+const CONNECTED = { ...ACME, role: WORKSPACE_ROLE.ADMIN, github: { login: "acme", active: true } };
 
 function workspaceSwitcher(container: HTMLElement): HTMLButtonElement | null {
   return container.querySelector<HTMLButtonElement>(".sidebar-workspace-toggle");
 }
 
-test("the plans are headed by the workspace listed, whose menu lists every workspace checked where listed, a Join for each to join, the install, and the members of a team's", () => {
+test("the plans are headed by the workspace listed, whose menu lists every workspace, New workspace…, and a team's Invite, Members, and connected GitHub organization", () => {
   const pressed: string[] = [];
   const tabs: PanelTab[] = [];
   const container = mount(DEAN, {
     onTabChange: (tab) => tabs.push(tab),
     plans: {
       plans: [onRepository("Billing", "acme/ledger")],
-      workspaces: [PERSONAL, ACME],
-      available: [GLOBEX],
-      workspace: ACME,
+      workspaces: [PERSONAL, CONNECTED],
+      workspace: CONNECTED,
       onChooseWorkspace: (workspaceId) => pressed.push(`choose:${workspaceId}`),
-      onJoinWorkspace: (installationId) => pressed.push(`join:${installationId}`),
-      onInstallApp: () => pressed.push("install"),
+      onInviteToWorkspace: () => pressed.push("invite"),
     },
   });
   const switcher = workspaceSwitcher(container);
-  assert.ok(switcher, "two workspaces draw the switcher");
+  assert.ok(switcher, "the switcher heads the plans");
 
   act(() => switcher.click());
   const offered = menuItems().map((item) => [item.textContent, item.querySelector("svg") !== null]);
   choose("Personal");
   act(() => switcher.click());
-  choose("Join globex");
-  act(() => switcher.click());
-  choose("Install Luke on GitHub…");
+  choose("Invite people…");
   act(() => switcher.click());
   choose("Members…");
+  act(() => switcher.click());
+  choose("GitHub: acme");
 
   assert.equal(switcher.textContent, "acme");
   assert.deepEqual(offered, [
     ["Personal", false],
     ["acme", true],
-    ["Join globex", true],
-    ["Install Luke on GitHub…", true],
+    ["New workspace…", true],
+    ["Invite people…", true],
     ["Members…", true],
+    ["GitHub: acme", true],
   ]);
-  assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, `join:${GLOBEX.installationId}`, "install"]);
-  assert.deepEqual(tabs, [PANEL_TAB.SETTINGS]);
+  assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, "invite"]);
+  assert.deepEqual(tabs, [PANEL_TAB.SETTINGS, PANEL_TAB.SETTINGS]);
   assert.ok(
     switcher.compareDocumentPosition(header(container, "ledger")) &
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -2121,35 +2120,77 @@ test("the plans are headed by the workspace listed, whose menu lists every works
   );
 });
 
-test("the personal workspace listed offers no Members…, and one workspace with one to join still draws the switcher", () => {
-  const container = mount(DEAN, {
-    plans: { workspaces: [PERSONAL], available: [GLOBEX], workspace: PERSONAL },
+test("an admin of a team with no GitHub organization is offered Connect GitHub org…, and a member is offered none", () => {
+  let connects = 0;
+  const admin = mount(DEAN, {
+    plans: {
+      workspaces: [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.ADMIN }],
+      workspace: { ...ACME, role: WORKSPACE_ROLE.ADMIN },
+      onConnectGitHub: () => {
+        connects += 1;
+      },
+    },
   });
-  const switcher = workspaceSwitcher(container);
-  assert.ok(switcher, "a workspace to join draws the switcher");
+  const adminSwitcher = workspaceSwitcher(admin);
+  assert.ok(adminSwitcher);
+  act(() => adminSwitcher.click());
+  choose("Connect GitHub org…");
+  unmountAll();
+  const member = mount(DEAN, { plans: { workspaces: [PERSONAL, ACME], workspace: ACME } });
+  const memberSwitcher = workspaceSwitcher(member);
+  assert.ok(memberSwitcher);
+  act(() => memberSwitcher.click());
 
-  act(() => switcher.click());
-
+  assert.equal(connects, 1);
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Personal", "Join globex", "Install Luke on GitHub…"],
+    ["Personal", "acme", "New workspace…", "Invite people…", "Members…"],
   );
 });
 
-test("an account in its personal workspace alone with none to join, or signed out, draws no switcher", () => {
-  const alone = mount(DEAN, {
+test("New workspace… asks a name and creates it, and a refusal is said on the card with the name kept", async () => {
+  const asked: string[] = [];
+  let refusal: string | undefined = "Could not make that workspace on this system.";
+  const container = mount(DEAN, {
     plans: {
-      plans: [onRepository("Billing", "acme/ledger")],
       workspaces: [PERSONAL],
       workspace: PERSONAL,
+      onCreateWorkspace: (name) => {
+        asked.push(name);
+        return Promise.resolve(refusal);
+      },
     },
   });
+  const switcher = workspaceSwitcher(container);
+  assert.ok(switcher, "the personal workspace alone draws the switcher");
+  act(() => switcher.click());
+  const offered = menuItems().map((item) => item.textContent);
+  choose("New workspace…");
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
+    assert.fail("no name field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "  Platform  ");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => field.form?.requestSubmit());
+  const refused = document.querySelector('[role="dialog"] [role="alert"]')?.textContent;
+  refusal = undefined;
+  await act(async () => field.form?.requestSubmit());
+
+  assert.deepEqual(offered, ["Personal", "New workspace…"]);
+  assert.deepEqual(asked, ["Platform", "Platform"]);
+  assert.equal(refused, "Could not make that workspace on this system.");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "a workspace made closes the card");
+});
+
+test("a signed-out sidebar draws no switcher", () => {
   const signedOut = mount(
     { status: ACCOUNT_STATUS.SIGNED_OUT },
     { plans: { signedIn: false, workspaces: [PERSONAL, ACME], workspace: PERSONAL } },
   );
 
-  assert.equal(workspaceSwitcher(alone), null);
   assert.equal(workspaceSwitcher(signedOut), null);
 });
 
@@ -2162,7 +2203,7 @@ test("the workspace menu closes when the sidebar folds away", () => {
 
   restages.get(container)?.({ collapsed: true });
 
-  assert.equal(opened, 4);
+  assert.equal(opened, 5);
   assert.deepEqual(menuItems(), []);
 });
 

@@ -66,7 +66,6 @@ const OPEN: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.READY,
   workspaces: [],
-  available: [],
   activePlanId: PLAN.id,
   document: { status: PLANNING_READ.READY, plan: PLAN },
 };
@@ -1258,14 +1257,14 @@ const PERSONAL = {
   name: "Personal",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
-  active: true,
+  github: null,
 };
 const ACME = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  github: null,
 };
 
 /** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
@@ -1287,8 +1286,8 @@ const readWorkspaceNamed = Schema.decodeUnknownOption(
   Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
 );
 
-/** A join's payload, read back as the act's own schema admits it. */
-const readJoin = Schema.decodeUnknownOption(Schema.Struct({ installationId: Schema.Number }));
+/** A create's payload, read back as the act's own schema admits it. */
+const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
@@ -1394,54 +1393,6 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-const GLOBEX = { installationId: 4242, name: "globex" };
-const GLOBEX_JOINED = {
-  id: "workspace-globex",
-  name: "globex",
-  personal: false,
-  role: WORKSPACE_ROLE.MEMBER,
-  active: true,
-};
-
-test("joining an installation's workspace asks for it by the installation and lists it once main's view holds it", async () => {
-  const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
-    { [ACT_KIND.WORKSPACE_JOIN]: () => Promise.resolve(GLOBEX_JOINED) },
-  );
-
-  const offered = tab.control().available;
-  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
-  await settle();
-  tab.stand({
-    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, GLOBEX_JOINED], available: [] },
-  });
-
-  assert.deepEqual(offered, [GLOBEX]);
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_JOIN)
-      .map((asked) => Option.getOrUndefined(readJoin(asked.payload))?.installationId),
-    [GLOBEX.installationId],
-  );
-  assert.equal(tab.control().workspace?.id, GLOBEX_JOINED.id);
-});
-
-test("a join the service refuses says why in a toast and keeps the workspace listed", async () => {
-  const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
-    {
-      [ACT_KIND.WORKSPACE_JOIN]: () =>
-        Promise.reject(new Error("Could not join that workspace on this system.")),
-    },
-  );
-
-  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
-  await settle();
-
-  assert.equal(toast(), "Could not join that workspace on this system.");
-  assert.equal(tab.control().workspace?.id, PERSONAL.id);
-});
-
 test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
   const listed = {
     repositories: {
@@ -1468,58 +1419,79 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
   ]);
 });
 
-test("Install Luke on GitHub opens the installation page the repository read answers", async () => {
-  const installationUrl = "https://github.com/apps/luke/installations/new";
+const PLATFORM = {
+  id: "workspace-platform",
+  name: "Platform",
+  personal: false,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+
+test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
+  let refuse = false;
   const tab = mount(
     { shown: true, planning: TWO_WORKSPACES },
     {
-      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
-        Promise.resolve({ repositories: { installed: false, repositories: [], installationUrl } }),
+      [ACT_KIND.WORKSPACE_CREATE]: () =>
+        refuse
+          ? Promise.reject(new Error("Could not make that workspace on this system."))
+          : Promise.resolve(PLATFORM),
     },
   );
 
-  act(() => tab.control().onInstallApp());
+  const made = await tab.control().onCreateWorkspace("Platform");
   await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } });
+  refuse = true;
+  const refused = await tab.control().onCreateWorkspace("Platform");
 
-  assert.deepEqual(tab.told, [
-    ACT_KIND.PLANNING_REFRESH,
-    ACT_KIND.PLANNING_REPOSITORIES,
-    ACT_KIND.GITHUB_OPEN,
-  ]);
+  assert.equal(made, undefined);
+  assert.equal(refused, "Could not make that workspace on this system.");
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_CREATE)
+      .map((asked) => Option.getOrUndefined(readCreate(asked.payload))?.name),
+    ["Platform", "Platform"],
+  );
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
 });
 
-test("Install Luke on GitHub opens the page an earlier read answered when the read now fails, and says why where none ever did", async () => {
-  const installationUrl = "https://github.com/apps/luke/installations/new";
-  let reachable = true;
+test("Invite people and Connect GitHub org name the listed workspace, a refusal says why in a toast, and a fixture asks nothing", async () => {
   const tab = mount(
     { shown: true, planning: TWO_WORKSPACES },
     {
-      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
-        reachable
-          ? Promise.resolve({
-              repositories: { installed: true, repositories: [], installationUrl },
-            })
-          : Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
+      [ACT_KIND.WORKSPACE_INVITE]: () => Promise.resolve(undefined),
+      [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: () =>
+        Promise.reject(new Error("Could not connect GitHub to that workspace on this system.")),
     },
   );
-  const offline = mount(
-    { shown: true, planning: TWO_WORKSPACES },
-    {
-      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
-        Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
-    },
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().onInviteToWorkspace());
+  act(() => tab.control().onConnectGitHub());
+  await settle();
+  act(() => fixture.control().onInviteToWorkspace());
+  act(() => fixture.control().onConnectGitHub());
+
+  assert.deepEqual(
+    tab.payloads
+      .filter(
+        (asked) =>
+          asked.kind === ACT_KIND.WORKSPACE_INVITE ||
+          asked.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT,
+      )
+      .map((asked) => [
+        asked.kind,
+        Option.getOrUndefined(readWorkspaceNamed(asked.payload))?.workspaceId,
+      ]),
+    [
+      [ACT_KIND.WORKSPACE_INVITE, ACME.id],
+      [ACT_KIND.WORKSPACE_GITHUB_CONNECT, ACME.id],
+    ],
   );
-
-  await tab.control().repositories.read();
-  reachable = false;
-  act(() => tab.control().onInstallApp());
-  await settle();
-  act(() => offline.control().onInstallApp());
-  await settle();
-
-  assert.equal(tab.told.at(-1), ACT_KIND.GITHUB_OPEN);
-  assert.equal(offline.told.includes(ACT_KIND.GITHUB_OPEN), false);
-  assert.equal(toast(), "Luke could not reach GitHub to install the App. Try again.");
+  assert.equal(toast(), "Could not connect GitHub to that workspace on this system.");
+  assert.deepEqual(fixture.told, []);
 });
 
 test("a workspace left lists the personal one again", () => {
@@ -1537,7 +1509,6 @@ test("a fixture run lists its personal workspace's plans under the switcher, and
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
   const staged = fixture.control().listed.plans.map((plan) => plan.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));
-  act(() => fixture.control().onJoinWorkspace(4242));
 
   assert.deepEqual(staged, ["Teammate invitations", "Billing export"]);
   assert.deepEqual(
@@ -1545,8 +1516,6 @@ test("a fixture run lists its personal workspace's plans under the switcher, and
     ["Usage alerts"],
   );
   assert.equal(fixture.control().workspaces.length, 2);
-  assert.equal(fixture.control().available.length, 1);
-  assert.deepEqual(fixture.told, [], "a fixture's join asks nothing");
   assert.equal(window.localStorage.length, 0);
 });
 

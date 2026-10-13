@@ -25,8 +25,28 @@
               "member"
             ]
           },
-          "active": {
-            "type": "boolean"
+          "github": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "login": {
+                    "type": "string"
+                  },
+                  "active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "login",
+                  "active"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -34,34 +54,14 @@
           "name",
           "personal",
           "role",
-          "active"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "available": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "installationId": {
-            "type": "integer"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "installationId",
-          "name"
+          "github"
         ],
         "additionalProperties": false
       }
     }
   },
   "required": [
-    "workspaces",
-    "available"
+    "workspaces"
   ],
   "additionalProperties": false
 }
