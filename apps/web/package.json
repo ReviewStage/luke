@@ -18,6 +18,9 @@
     "test": "vitest run && pnpm test:agent",
     "test:agent": "pnpm --filter @luke/eve run test:agent && pnpm --filter @luke/coder run test:agent",
     "test:store": "tsx scripts/store-tests.ts",
+    "test:vitest:1": "vitest run --shard=1/3",
+    "test:vitest:2": "vitest run --shard=2/3",
+    "test:vitest:3": "vitest run --shard=3/3",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

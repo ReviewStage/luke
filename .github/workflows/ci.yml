@@ -16,8 +16,18 @@ concurrency:
 # `./scripts/verify.sh` at the developer's hand before a UI change is opened
 # and by the release workflow before anything ships. Every job below is
 # independent and runs at once, so a run takes as long as its longest job:
-# the tests, which are the bulk of `check.sh`, are sharded across runners
+# the tests, which are the bulk of `check.sh`, are spread across runners
 # rather than run behind the lint and typecheck.
+#
+# The TypeScript checks and the tests run through Turborepo (`turbo.json`),
+# which replays a task whose inputs it has already seen pass. Its cache is
+# `.turbo/cache`, kept between runs of one branch by actions/cache, so a
+# re-run or a push that leaves a workspace alone replays that workspace's
+# tasks; given the TURBO_TOKEN and TURBO_TEAM secrets it is also Vercel's
+# Remote Cache, shared with every machine that runs the checks. Without them
+# turbo says "Remote caching disabled" and the local cache does the work.
+# `scripts/turbo.mjs` hands the token to turbo on its command line, so no task
+# sees it in its environment and no cached log can carry it.
 jobs:
   portable:
     name: TypeScript checks
@@ -26,8 +36,22 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ github.job }}-${{ github.sha }}
+          restore-keys: turbo-${{ github.job }}-
       - run: ./scripts/check.sh --without test
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
+  # The four jobs keep the names the ruleset requires. apps/web's suite is
+  # more than half of all the tests, so it is cut into three vitest shards,
+  # one per job, and the fourth job runs every other workspace's tests, one
+  # workspace at a time (`scripts/check.mjs` says why). Every workspace with
+  # tests runs under one of these names or `scripts/repository-checks.sh`
+  # fails, so no test file can fall outside all four jobs.
   tests:
     name: Tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -35,11 +59,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - shard: 1
+            task: test:vitest:1
+          - shard: 2
+            task: test:vitest:2
+          - shard: 3
+            task: test:vitest:3
+          - shard: 4
+            task: test:vitest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      - run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ github.job }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: turbo-${{ github.job }}-${{ matrix.shard }}-
+      - run: node scripts/turbo.mjs run ${{ matrix.task }} --concurrency=1
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
   # The generated migrations meet a real Postgres here, the major production
   # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is

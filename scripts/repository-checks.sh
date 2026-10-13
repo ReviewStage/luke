@@ -339,14 +339,21 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# The root `vitest.config.ts` names every workspace whose tests run under
-# `pnpm test`. A workspace that gains a `vitest.config.ts` and is left off that
-# list has tests nothing runs, and CI stays green over them; one that loses its
-# config and stays on the list fails the run outright. Both are the same drift.
+# The root `vitest.config.ts` names every workspace with tests, which is what
+# `pnpm exec vitest run <path>` from the root reads, and each of those
+# workspaces runs its tests through turbo under a name in `lib/turbo.mjs`'s
+# TEST_TASKS, which is what the checks and CI ask turbo for. A workspace that
+# gains a `vitest.config.ts` and is left off the list, or whose tests are under
+# no such name, has tests nothing runs, and CI stays green over them; one that
+# loses its config and stays on the list fails the run outright. All three are
+# the same drift. A suite cut into shards must declare every shard, or the
+# files hashed to the missing one never run.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
   const root = process.argv[1];
+  const { TEST_TASKS } = await import(path.join(root, "scripts/lib/turbo.mjs"));
+  const [WHOLE, ...SHARDS] = TEST_TASKS;
   const configured = [];
   for await (const found of glob(["apps/*/vitest.config.ts", "packages/*/vitest.config.ts", "tools/*/vitest.config.ts"], { cwd: root })) {
     configured.push(path.dirname(found).split(path.sep).join("/"));
@@ -356,11 +363,20 @@ node --input-type=module -e '
   const listed = [...projects.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
   const missing = configured.filter((one) => !listed.includes(one)).sort();
   const stale = listed.filter((one) => !configured.includes(one)).sort();
-  if (missing.length > 0 || stale.length > 0) {
+  const untasked = [];
+  for (const one of configured.sort()) {
+    const scripts = JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).scripts ?? {};
+    const named = Object.keys(scripts).filter((script) => script.startsWith(WHOLE));
+    const whole = named.length === 1 && named[0] === WHOLE;
+    const sharded = named.length === SHARDS.length && SHARDS.every((shard) => named.includes(shard));
+    if (!whole && !sharded) untasked.push(one);
+  }
+  if (missing.length > 0 || stale.length > 0 || untasked.length > 0) {
     process.stderr.write(
-      `error: the root vitest.config.ts projects list and the workspaces holding a vitest.config.ts have drifted apart:\n${[
+      `error: the root vitest.config.ts projects list, the workspaces holding a vitest.config.ts, and their turbo test tasks have drifted apart:\n${[
         ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
         ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
+        ...untasked.map((one) => `  ${one} runs its tests under neither "${WHOLE}" alone nor all of ${SHARDS.map((shard) => `"${shard}"`).join(", ")}, so the checks and CI never run them`),
       ].join("\n")}\n`,
     );
     process.exit(1);
