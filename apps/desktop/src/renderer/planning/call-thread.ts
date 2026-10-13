@@ -18,6 +18,7 @@
  */
 
 import type { UIMessage } from "ai";
+import { Option, Schema } from "effect";
 import type { TranscriptCallRow } from "./transcript-model";
 
 /** What the thread is made of: a call with its lines and the work under them, a line, and a turn's work. */
@@ -56,12 +57,17 @@ export type ThreadSection<T> =
     }
   | ThreadWork<T>;
 
+/** What a line's metadata says of its rows, as the transcript's wire and the live call's report both write it. */
+const LineRowsSchema = Schema.Struct({ rowIds: Schema.Array(Schema.String) });
+
+const readLineRows = Schema.decodeUnknownOption(LineRowsSchema);
+
 /** The rows a line was written as, which a turn names its ask by; none for a line whose rows the record does not hold. */
 function lineRowIds(line: UIMessage): readonly string[] {
-  const metadata: unknown = line.metadata;
-  if (typeof metadata !== "object" || metadata === null || !("rowIds" in metadata)) return [];
-  const { rowIds } = metadata;
-  return Array.isArray(rowIds) ? rowIds.filter((rowId) => typeof rowId === "string") : [];
+  return Option.match(readLineRows(line.metadata), {
+    onNone: () => [],
+    onSome: (rows) => rows.rowIds,
+  });
 }
 
 /** The line each turn stands under, by the turn's key: the last line on screen it took as its ask. */
@@ -84,10 +90,12 @@ function anchorsOf<T>(
 }
 
 /** Where a turn no line asked for stands: the index of the last call that started before it, and whether it started after that call ended. */
-function slotOf<T>(
-  calls: readonly TranscriptCallRow[],
-  turn: CallTurn<T>,
-): { readonly call: number; readonly after: boolean } {
+interface Slot {
+  readonly call: number;
+  readonly after: boolean;
+}
+
+function slotOf<T>(calls: readonly TranscriptCallRow[], turn: CallTurn<T>): Slot {
   const call = calls.findLastIndex((each) => each.startedAt <= turn.startedAt);
   const endedAt = calls[call]?.record?.endedAt;
   const after = endedAt !== undefined && !calls[call]?.live && turn.startedAt > endedAt;
