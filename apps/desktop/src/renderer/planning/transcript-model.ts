@@ -183,7 +183,7 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
       id: line.rowId,
       role: line.speaker,
       parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.words }],
-      metadata: { rowId: line.rowId },
+      metadata: { rowIds: [line.rowId] },
     });
     return message === undefined ? [] : [message];
   });

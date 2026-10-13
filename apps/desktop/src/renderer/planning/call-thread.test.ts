@@ -11,13 +11,13 @@ const MINUTE = 60_000;
 const FIRST_CALL = 1_000 * MINUTE;
 const SECOND_CALL = 2_000 * MINUTE;
 
-/** A line said on a call, naming its row where the record holds one. */
-function line(id: string, role: TranscriptSpeaker, text: string, rowId?: string): UIMessage {
+/** A line said on a call, naming its rows where the record holds any. */
+function line(id: string, role: TranscriptSpeaker, text: string, ...rowIds: string[]): UIMessage {
   return {
     id,
     role,
     parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
-    ...(rowId === undefined ? undefined : { metadata: { rowId } }),
+    ...(rowIds.length === 0 ? undefined : { metadata: { rowIds } }),
   };
 }
 
@@ -146,6 +146,28 @@ test("a line heard on the call standing now names its row as a line on record do
     [
       "call-live",
       ["user: Check how removal works.", "work turn-removal (spoken)", "assistant: Checking."],
+    ],
+  ]);
+});
+
+test("a line read back as one though the call wrote it as two rows takes the work either row asked for", () => {
+  const thread = callThread(
+    [
+      call("call-1", FIRST_CALL, [
+        line("0", USER, "Check how removal works.", "row-check", "row-check-again"),
+        line("1", ASSISTANT, "It checks for an admin.", "row-admin"),
+      ]),
+    ],
+    [turn("turn-removal", FIRST_CALL + MINUTE, ["row-check-again"])],
+  );
+  assert.deepEqual(read(thread), [
+    [
+      "call-1",
+      [
+        "user: Check how removal works.",
+        "work turn-removal (spoken)",
+        "assistant: It checks for an admin.",
+      ],
     ],
   ]);
 });

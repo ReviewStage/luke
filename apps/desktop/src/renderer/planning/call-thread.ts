@@ -6,8 +6,8 @@
  * call, and the work Luke did for a line drawn right under it. The tie is
  * the record's own: a turn names the spoken lines it took as its ask by the
  * row id the voice's ledger minted for each (`asked`), and a line names its
- * row the same way (`lineRowId`), whether it was read back from the record
- * or heard on the call standing now. A turn whose ask spans several lines
+ * rows the same way (`lineRowIds`), whether it was read back from the
+ * record or heard on the call standing now. A turn whose ask spans several lines
  * stands under the last of them, since that is where the ask was complete.
  * A turn no line on screen asked for, one typed, one whose lines are not
  * read yet, or one whose lines are past what the transcript holds, stands
@@ -56,13 +56,12 @@ export type ThreadSection<T> =
     }
   | ThreadWork<T>;
 
-/** The row a line was written as, which a turn names its ask by; none for a line whose row the record does not hold. */
-function lineRowId(line: UIMessage): string | undefined {
+/** The rows a line was written as, which a turn names its ask by; none for a line whose rows the record does not hold. */
+function lineRowIds(line: UIMessage): readonly string[] {
   const metadata: unknown = line.metadata;
-  if (typeof metadata !== "object" || metadata === null || !("rowId" in metadata)) {
-    return undefined;
-  }
-  return typeof metadata.rowId === "string" ? metadata.rowId : undefined;
+  if (typeof metadata !== "object" || metadata === null || !("rowIds" in metadata)) return [];
+  const { rowIds } = metadata;
+  return Array.isArray(rowIds) ? rowIds.filter((rowId) => typeof rowId === "string") : [];
 }
 
 /** The line each turn stands under, by the turn's key: the last line on screen it took as its ask. */
@@ -72,9 +71,8 @@ function anchorsOf<T>(
 ): ReadonlyMap<string, UIMessage> {
   // Each line on screen by its row, with its place in the whole thread.
   const lineOfRow = new Map<string, { readonly line: UIMessage; readonly place: number }>();
-  for (const line of calls.flatMap((call) => call.messages)) {
-    const rowId = lineRowId(line);
-    if (rowId !== undefined) lineOfRow.set(rowId, { line, place: lineOfRow.size });
+  for (const [place, line] of calls.flatMap((call) => call.messages).entries()) {
+    for (const rowId of lineRowIds(line)) lineOfRow.set(rowId, { line, place });
   }
   const anchors = new Map<string, UIMessage>();
   for (const turn of turns) {
