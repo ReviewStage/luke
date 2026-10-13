@@ -21,6 +21,7 @@ import {
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
@@ -56,8 +57,9 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
-import type { GitHubApp } from "./github/github-app.js";
+import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
+import { pullRequestFiles } from "./github/pull-requests.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,
@@ -161,6 +163,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * branch and pull request its own transcript names, as GitHub holds them
  * now (`hosted/coder-host/published.ts`), kept per agent for a short while
  * so a tab asking beside every held page does not ask GitHub as often.
+ * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
+ * the pull request that answer names, read from GitHub afresh on each ask
+ * (`github/pull-requests.ts`), each with its patch, or none where the
+ * agent has opened none yet.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
@@ -185,6 +191,8 @@ const AGENTS_PATH = {
   STOP: "/api/agents/stop",
   /** GET reads what the agent published; the rewrite moves the path's agent id into the `id` query. */
   PULL_REQUEST: "/api/agents/pull-request",
+  /** GET reads the agent's changes, its pull request's files; the rewrite moves the path's agent id into the `id` query. */
+  CHANGES: "/api/agents/changes",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
   /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
@@ -620,24 +628,16 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
-/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
-const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
+/** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
+const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: PublishedCache,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* ownedAgent(seams, request);
+  userId: string,
+  agent: CodingAgent,
+): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
   // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
   const { status } = yield* summaryOf(userId, agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
-  const answer = yield* Cache.get(
-    published,
-    new PublishedKey({ userId, agentId: agent.id, ended }),
-  ).pipe(
+  return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
         // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
@@ -653,7 +653,49 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
       }
     }),
   );
+});
+
+/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
+const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  published: PublishedCache,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* ownedAgent(seams, request);
+  const answer = yield* keptPublished(published, userId, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
+/**
+ * GET reads the agent's changes: the files of the pull request its kept
+ * published answer names, read from GitHub afresh on the developer's own
+ * token, or none where it names no pull request yet.
+ */
+const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  published: PublishedCache,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* ownedAgent(seams, request);
+  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
+  const listed = yield* githubUserReadOrRefusal(
+    Effect.gen(function* () {
+      const token = yield* (yield* GitHubApp).userToken(userId);
+      return yield* pullRequestFiles(token, agent.repository, pullRequest);
+    }),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    pullRequest: { url: pullRequest.url, ...listed },
+  });
 });
 
 /** The inbox cursor the request reads past, or the start where it names none; refused where it names something else. */
@@ -823,7 +865,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrUndefined(answered);
 });
 
-/** The group: the nine paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the ten paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
@@ -845,6 +887,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.PULL_REQUEST,
           hostedRefusing(pullRequestEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.CHANGES,
+          hostedRefusing(changesEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,

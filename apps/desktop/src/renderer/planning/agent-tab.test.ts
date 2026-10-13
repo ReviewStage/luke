@@ -30,7 +30,7 @@ import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
-import { PublishedChip, PublishedRow } from "./agent-published";
+import { ChangesChip, PublishedChip, type PublishedDoors, PublishedRow } from "./agent-published";
 import { AgentGlyph, AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
@@ -1101,6 +1101,28 @@ test("a press of the chip opens the pull request on GitHub, or the branch compar
     "https://github.com/acme/relay/compare/luke/teammate-invitations?expand=1",
   ]);
   assert.equal(menuItems().length, 0, "a press drops no menu");
+});
+
+test("the Changes chip stands beside a pull request's chip and opens its changes; a branch alone, no answer yet, or no panel to open them in wears none", () => {
+  let asked = 0;
+  const doors = { ...SHUT, openChanges: () => (asked += 1) };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(ChangesChip, { published: PUBLISHED, doors })));
+  const chip = container.querySelector<HTMLButtonElement>('button[aria-label="Show changes"]');
+  assert.ok(chip);
+  act(() => chip.click());
+  assert.equal(asked, 1);
+
+  const drawn = (
+    published: CodingAgentPullRequestAnswer | undefined,
+    open: PublishedDoors = doors,
+  ) => renderToStaticMarkup(createElement(ChangesChip, { published, doors: open }));
+  assert.equal(drawn({ ...PUBLISHED, pullRequest: null }), "");
+  assert.equal(drawn(undefined), "");
+  assert.equal(drawn(PUBLISHED, SHUT), "");
 });
 
 test("a right-click on the chip offers copying the branch and its checkout command word for word, each with its toast, and no menu where there is no branch", () => {

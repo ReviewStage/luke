@@ -24,7 +24,7 @@ import { RetryButton } from "../retry-button";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
-import { PublishedChip, type PublishedDoors } from "./agent-published";
+import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { DictateButton, DictationStrip } from "./dictation-strip";
@@ -332,6 +332,7 @@ export function AgentComposer({
                   }}
                 />
                 <PublishedChip published={published} doors={doors} />
+                <ChangesChip published={published} doors={doors} />
               </PromptInputTools>
               <div className="agent-composer-actions">
                 {model === undefined ? null : (

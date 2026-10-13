@@ -152,6 +152,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
   },
+  [ACT_KIND.CODING_AGENTS_CHANGES]: {
+    kind: ACT_KIND.CODING_AGENTS_CHANGES,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
+  },
   [ACT_KIND.PROVIDER_KEYS_READ]: { kind: ACT_KIND.PROVIDER_KEYS_READ },
   [ACT_KIND.PROVIDER_KEYS_SAVE]: {
     kind: ACT_KIND.PROVIDER_KEYS_SAVE,

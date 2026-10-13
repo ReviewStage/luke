@@ -15,6 +15,7 @@ import {
 } from "@sidecar/gateway";
 import {
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -25,6 +26,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
+  codingAgentChangesAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -242,6 +244,8 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
+  CODING_AGENTS_CHANGES: "codingAgents.changes",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -748,6 +752,13 @@ export const ACT = {
       isReadable(codingAgentPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHANGES]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentChangesAnswerView>(
+      isReadable(codingAgentChangesAnswerViewSchema),
+    ),
+    refusal: "Could not read the agent's changes on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,

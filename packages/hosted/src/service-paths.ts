@@ -268,3 +268,8 @@ export function agentStopPath(agentId: string): string {
 export function agentPullRequestPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/pull-request`;
 }
+
+/** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
+export function agentChangesPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/changes`;
+}

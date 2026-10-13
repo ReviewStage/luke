@@ -659,6 +659,7 @@ export function AgentTab({
   control,
   shown,
   onOpenSubagent,
+  onOpenChanges,
   onHeld,
 }: {
   agent: CodingAgentSummary;
@@ -667,6 +668,8 @@ export function AgentTab({
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
+  /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
+  onOpenChanges?: (() => void) | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
@@ -722,7 +725,7 @@ export function AgentTab({
       composer={composer}
       model={model}
       published={published}
-      doors={{ openGitHub, copy: copyWithToast }}
+      doors={{ openGitHub, copy: copyWithToast, openChanges: onOpenChanges }}
       startedAt={shown ? agent.runStartedAt : undefined}
       delegationStarts={shown ? transcript.delegations : undefined}
       onStop={() => control.onStop(agent.id)}

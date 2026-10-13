@@ -3,6 +3,7 @@ import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
@@ -267,6 +268,14 @@ export const codingAgentPullRequestAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentPullRequestAnswerView = typeof codingAgentPullRequestAnswerViewSchema.Type;
+
+/** One agent's changes, as the window hears them: its pull request's files, why there are none yet, or why there is no answer. */
+export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
+  codingAgentChangesAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

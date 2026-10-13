@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
@@ -170,6 +171,8 @@ export interface CodingAgentsControl {
   readTranscript: TranscriptReader;
   /** One read of what an agent published, as its tab asks it. */
   readPullRequest: PullRequestReader;
+  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it. */
+  readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
@@ -615,6 +618,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),
+    [act],
+  );
+
   const readInbox = useCallback<InboxReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
@@ -675,6 +683,7 @@ export function useCodingAgents(input: {
     onTitle,
     readTranscript,
     readPullRequest,
+    readChanges,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     readInbox,

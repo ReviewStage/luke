@@ -577,7 +577,8 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * What an agent's or the draft's tab shows in the column: the agent's
  * transcript and composer, or the draft's composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
- * `onOpenDelegation`.
+ * `onOpenDelegation`, and its Changes chip its pull request's changes,
+ * through `onOpenChanges`.
  */
 export function MainTabContent({
   tab,
@@ -585,6 +586,7 @@ export function MainTabContent({
   shown,
   views,
   onOpenDelegation,
+  onOpenChanges,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -597,6 +599,8 @@ export function MainTabContent({
     task: string,
     status: CodingAgentStatus,
   ) => void;
+  /** Opens the agent's changes in the side panel, by the agent. */
+  onOpenChanges: (agentId: string) => void;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -619,6 +623,7 @@ export function MainTabContent({
       control={agents}
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+      onOpenChanges={() => onOpenChanges(agent.id)}
       onHeld={views.onAgentHeld}
     />
   );
