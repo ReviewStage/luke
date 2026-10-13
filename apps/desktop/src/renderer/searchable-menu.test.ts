@@ -725,12 +725,27 @@ test("a name or a detail cut short by the menu's width is marked to fade at its 
   assert.equal(fade.textOverflow, "clip", "a fade, not an ellipsis");
 });
 
-/** The row the focused field or list names to assistive technology, read by its words; none where it names nothing. */
+/**
+ * The row the focused field or list names to assistive technology, read by
+ * its words; none where it names nothing. A row the field names stands in a
+ * popup the field controls, and a row the list names stands in the list.
+ */
 function named(): string | undefined {
-  const id = document.activeElement?.getAttribute("aria-activedescendant");
-  if (id === null || id === undefined) return undefined;
+  const keys = document.activeElement;
+  const id = keys?.getAttribute("aria-activedescendant");
+  if (keys === null || keys === undefined || id === null || id === undefined) return undefined;
   const row = document.getElementById(id);
   assert.ok(row, "the id names an element in the document");
+  const holders =
+    keys.getAttribute("role") === "combobox"
+      ? (keys.getAttribute("aria-controls") ?? "")
+          .split(" ")
+          .map((held) => document.getElementById(held))
+      : [keys];
+  assert.ok(
+    holders.some((holder) => holder?.contains(row)),
+    "the named row stands in what the focused element controls or holds",
+  );
   return row.textContent ?? undefined;
 }
 

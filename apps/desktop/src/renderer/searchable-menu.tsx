@@ -199,6 +199,9 @@ function highlightOver(input: {
 /** The highlighted row of an open submenu, which a reader is told of before the pinned row it opened from. */
 const SUBMENU_HIGHLIGHT = '.plan-compose-submenu [aria-selected="true"]';
 
+/** The highlighted option of the list itself. */
+const OPTION_HIGHLIGHT = '[aria-selected="true"]';
+
 /** The one highlighted row of the list or the pinned rows under it. */
 const MENU_HIGHLIGHT = '.plan-compose-menu-list [aria-selected="true"], [data-highlighted="true"]';
 
@@ -305,6 +308,8 @@ export function SearchableMenu(props: {
     blocked: () => false,
   });
   const listId = useId();
+  const footId = useId();
+  const submenuId = useId();
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -318,11 +323,16 @@ export function SearchableMenu(props: {
 
   // Note that the field, or the list where there is none, names the
   // highlighted row after every render, because focus stays there and a
-  // reader would otherwise hear nothing as the arrows move.
+  // reader would otherwise hear nothing as the arrows move. The field may
+  // name a pinned or a submenu row, since it controls those too; the list
+  // names only its own options, which are all it holds.
   useLayoutEffect(() => {
     const keys = field.current ?? list.current;
     const row =
-      menu.current?.querySelector(SUBMENU_HIGHLIGHT) ?? menu.current?.querySelector(MENU_HIGHLIGHT);
+      field.current === null
+        ? list.current?.querySelector(OPTION_HIGHLIGHT)
+        : (menu.current?.querySelector(SUBMENU_HIGHLIGHT) ??
+          menu.current?.querySelector(MENU_HIGHLIGHT));
     if (row?.id) keys?.setAttribute("aria-activedescendant", row.id);
     else keys?.removeAttribute("aria-activedescendant");
   });
@@ -411,6 +421,15 @@ export function SearchableMenu(props: {
     setHighlight(stepped(at, matches.length + foot.length, event.key, blocked));
   };
 
+  // What the field controls, as the space-separated list of ids ARIA reads:
+  // the list, the pinned rows, and a submenu while one is open, so every row
+  // it may name stands in a popup it controls.
+  const footed = foot.length > 0 || props.footNote !== undefined;
+  const controlled = [
+    listId,
+    ...(footed ? [footId] : []),
+    ...(open === undefined ? [] : [submenuId]),
+  ];
   const root =
     props.className === undefined
       ? "plan-compose-menu searchable-menu"
@@ -434,7 +453,7 @@ export function SearchableMenu(props: {
             role="combobox"
             aria-label={props.placeholder}
             aria-expanded="true"
-            aria-controls={listId}
+            aria-controls={controlled.join(" ")}
             aria-autocomplete="list"
             autoComplete="off"
             spellCheck={false}
@@ -511,8 +530,8 @@ export function SearchableMenu(props: {
           <p className="plan-compose-menu-note">{props.noMatch}</p>
         ) : null}
       </div>
-      {foot.length > 0 || props.footNote !== undefined ? (
-        <div className="plan-compose-menu-foot">
+      {footed ? (
+        <div id={footId} className="plan-compose-menu-foot">
           {foot.map((row, index) => (
             <WithId key={row.id}>
               {(id) => {
@@ -573,6 +592,7 @@ export function SearchableMenu(props: {
                     {index === footAt && open !== undefined ? (
                       <div
                         ref={panel}
+                        id={submenuId}
                         className="plan-compose-submenu"
                         role="listbox"
                         aria-label={open.label}
