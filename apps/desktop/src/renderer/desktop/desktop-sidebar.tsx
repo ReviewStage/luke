@@ -188,6 +188,8 @@ function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): Pinned
 /**
  * The Pinned section's rows, each a plan's or a tab's. A tab's row is keyed
  * by when it was pinned, which no other pin shares, and a plan's by its id.
+ * A plan's row is one line, as a grouped row is: its repository is named on
+ * its hover card and its page, not beneath its name.
  */
 function PinnedRows({
   rows,
@@ -208,7 +210,7 @@ function PinnedRows({
             plan={plan}
             current={context.current(plan.id)}
             unread={context.unread(plan)}
-            repositoryShown
+            repositoryShown={false}
             now={context.now}
             onOpen={() => context.onOpen(plan.id)}
           />
@@ -631,8 +633,8 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  * waits on the developer, the Inbox heads the list, a row for each plan
  * with an inbox item open. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
- * while any are pinned, newest pinned first, a plan naming its repository
- * and a tab its plan, under a header that folds as a repository's does;
+ * while any are pinned, newest pinned first, a tab naming its plan,
+ * under a header that folds as a repository's does;
  * the rest are grouped
  * under their repositories' headers, the pinned repositories first, newest
  * pinned first, then the group updated most recently first;

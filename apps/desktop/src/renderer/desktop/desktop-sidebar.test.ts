@@ -1441,7 +1441,7 @@ function header(container: HTMLElement, name: string): HTMLElement {
   return found;
 }
 
-test("the plans stand under their repositories' headers, newest updated group first and No repository last, the pinned ones flat and naming theirs", () => {
+test("the plans stand under their repositories' headers, newest updated group first and No repository last, the pinned ones flat in one line", () => {
   window.localStorage.clear();
   const container = mount(DEAN, {
     plans: {
@@ -1460,7 +1460,8 @@ test("the plans stand under their repositories' headers, newest updated group fi
     ["No repository", ["Notes"]],
   ]);
   const pinned = container.querySelector("nav[aria-label='Pinned'] .sidebar-plan");
-  assert.equal(pinned?.querySelector(".sidebar-plan-repository")?.textContent, "acme/relay");
+  assert.equal(pinned?.textContent?.includes("Invites"), true);
+  assert.doesNotMatch(pinned?.textContent ?? "", /relay/u, "a pinned row names no repository");
   assert.equal(
     container.querySelector(".sidebar-repository .sidebar-plan-repository"),
     null,
@@ -1683,14 +1684,17 @@ test("a fixture run's sidebar wears none of the folds this Mac kept, and keeps n
 });
 
 test("a plan row naming its repository leads the name with its owner's picture, and a fixture run with the GitHub mark", () => {
-  const plans = { plans: [{ ...onRepository("Invites", "acme/relay"), pinnedAt: 9 }] };
+  const plans = { archived: [{ ...onRepository("Invites", "acme/relay"), archivedAt: 9 }] };
   const live = mount(DEAN, { plans });
   const staged = mount(DEAN, {
     plans: { ...plans, repositories: { ...plansControl().repositories, pictures: false } },
   });
+  for (const container of [live, staged]) {
+    act(() => container.querySelector<HTMLButtonElement>(".sidebar-archived-row")?.click());
+  }
 
   const named = (container: HTMLElement) =>
-    container.querySelector("nav[aria-label='Pinned'] .sidebar-plan-repository");
+    container.querySelector(".sidebar-archived .sidebar-plan-repository");
   assert.equal(named(live)?.textContent, "acme/relay");
   assert.equal(
     named(live)?.querySelector("img")?.getAttribute("src"),

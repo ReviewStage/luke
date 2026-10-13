@@ -327,7 +327,7 @@ export function SidebarPlan({
   current: boolean;
   /** Whether the plan was saved since the developer last looked at it on this Mac. */
   unread: boolean;
-  /** Whether the row names its repository beneath its name: a row under its repository's header leaves it to the header. */
+  /** Whether the row names its repository beneath its name, as an archived row does: a grouped or pinned row leaves it to its hover card. */
   repositoryShown: boolean;
   /** The time the row's last update is counted back from. */
   now: number;
