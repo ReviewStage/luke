@@ -452,12 +452,10 @@ function saidToolView(
   };
 }
 
-/** A repository command's answer as the planning model's tool journals it: the command's own output, or why it ran nothing. */
+/** A repository command's answer as the planning model's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
 function repositoryOutput(output: WireValue): ToolBlock {
   const reason = stringAt(output, "reason");
-  if (stringAt(output, "status") === "not-run" && reason !== undefined) {
-    return textBlock(`Not run: ${reason}`);
-  }
+  if (stringAt(output, "status") === "not-run" && reason !== undefined) return textBlock(reason);
   return commandOutput(output);
 }
 
@@ -534,7 +532,7 @@ function planningToolView(
     case EVE_TOOL.TASK_WAIT:
       return namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined);
     case EVE_TOOL.TASK_CANCEL:
-      return namedCall(CALL_KIND.WORKER_CANCEL, input, output, undefined);
+      return namedCall(CALL_KIND.WORKER_CANCEL, input, output, "taskId");
     default:
       return undefined;
   }

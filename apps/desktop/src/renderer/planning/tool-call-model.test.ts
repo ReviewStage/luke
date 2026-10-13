@@ -376,11 +376,12 @@ test("the planning model's own calls draw from their parts as a coding agent's d
   const refused = toolCallView({
     tool: "run_in_repository",
     input: { command: "ls" },
-    output: { status: "not-run", reason: "The plan names no repository." },
+    output: { status: "not-run", reason: "Not run: the plan names no repository." },
   });
+  // The service's reason already says it was not run, so its words stand as they are.
   assert.deepEqual(refused.output, {
     kind: TOOL_BLOCK.TEXT,
-    text: "Not run: The plan names no repository.",
+    text: "Not run: the plan names no repository.",
   });
 
   const shown = toolCallView({
@@ -399,4 +400,10 @@ test("the planning model's own calls draw from their parts as a coding agent's d
   assert.deepEqual([looked.kind, looked.output], [CALL_KIND.LOOK_AT_BOARD, undefined]);
   const waited = toolCallView({ tool: "task_wait", input: {}, output: "1 task settled." });
   assert.equal(waited.kind, CALL_KIND.WORKER_WAIT);
+  const stopped = toolCallView({
+    tool: "task_cancel",
+    input: { taskId: "delegate-7k2m9q" },
+    output: "Stopped delegate-7k2m9q.",
+  });
+  assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
 });
