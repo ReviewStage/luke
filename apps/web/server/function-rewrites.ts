@@ -63,6 +63,12 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/plans/([^/]+)/revisions/([^/]+)", route: "plans/revision", query: "id=$1&seq=$2" },
   { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1" },
+  {
+    src: "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
+    route: "plans/page",
+    query: "id=$1&page=$2&version=$3",
+  },
+  { src: "/api/plans/([^/]+)/pages", route: "plans/pages", query: "id=$1" },
   { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1" },
   {
     src: "/api/account/plan-template/revisions/([^/]+)/restore",

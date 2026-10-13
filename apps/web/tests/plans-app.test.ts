@@ -7,6 +7,7 @@ import {
   createCodingAgent,
   recordCodingAgentPublished,
 } from "@sidecar/database/models/coding-agent-store";
+import { writePage } from "@sidecar/database/models/plan-pages";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { purgeDeletedPlanCalls } from "@sidecar/database/models/soft-delete";
@@ -29,6 +30,7 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { planPagesAnswerSchema, planPageVersionAnswerSchema } from "@sidecar/hosted/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
@@ -114,6 +116,7 @@ const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
 const EDIT = "/api/plans/edit";
+const PAGE = "/api/plans/page";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -2411,6 +2414,82 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(yield* ask(request(REVISION, owner, { id: planId })), invalid);
         assert.deepEqual(
           yield* ask(request(RESTORE, owner, { id: planId, query: { seq: "1" } })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's pages as a desktop reads them, once the platform lands each read: the list, and one version's HTML inside JSON",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const first = Option.getOrThrow(
+          yield* writePage(owner, planId, { title: "Invite funnel", html: "<p>v1</p>" }),
+        );
+        const second = Option.getOrThrow(
+          yield* writePage(owner, planId, { pageId: first.id, title: "Funnel", html: "<p>v2</p>" }),
+        );
+
+        assert.deepEqual(
+          readAnswer(
+            planPagesAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(`/api/plans/${planId}/pages`, owner), "plans/pages"),
+          ),
+          { pages: [second] },
+        );
+        assert.deepEqual(
+          readAnswer(
+            planPageVersionAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(
+              request(`/api/plans/${planId}/pages/${first.id}/versions/1`, owner),
+              "plans/page",
+            ),
+          ),
+          { page: { ...first, html: "<p>v1</p>" } },
+        );
+      }),
+  );
+
+  it.effect(
+    "another account reads no page of the plan, and a version that names none answers as none or is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const page = Option.getOrThrow(
+          yield* writePage(owner, planId, { title: "Invite funnel", html: "<p>v1</p>" }),
+        );
+        const version = (asker: string, pageId: string, number: string, method?: string) =>
+          ask(
+            request(PAGE, asker, {
+              id: planId,
+              query: { page: pageId, version: number },
+              ...(method === undefined ? undefined : { method }),
+            }),
+          );
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(yield* ask(request(`/api/plans/${planId}/pages`, other), "plans/pages"), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { pages: [] },
+        });
+        assert.deepEqual(yield* version(other, page.id, "1"), notFound);
+        assert.deepEqual(yield* version(owner, page.id, "2"), notFound);
+        assert.deepEqual(yield* version(owner, "not-a-page", "1"), notFound);
+        assert.deepEqual(
+          yield* version(owner, page.id, "0"),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* version(owner, page.id, "1", "POST"),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),

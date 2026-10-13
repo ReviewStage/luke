@@ -1,5 +1,6 @@
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
 import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
+import { listPages, readPageVersion } from "@sidecar/database/models/plan-pages";
 import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
 import {
   createPlan,
@@ -12,6 +13,7 @@ import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import { pageVersionNumberSchema } from "@sidecar/hosted/page-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_BOUNDS,
@@ -110,7 +112,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's, answered with the
- * plan (`@sidecar/database/models/plan-revisions`).
+ * plan (`@sidecar/database/models/plan-revisions`). `/api/plans/{id}/pages`
+ * is the pages agents wrote for the plan, each by its newest version, and
+ * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
+ * answered inside JSON so no page is ever a document of this origin
+ * (`@sidecar/database/models/plan-pages`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -151,6 +157,10 @@ const PLANS_PATH = {
   RESTORE: "/api/plans/restore",
   /** POST saves the developer's edit of the document; the rewrite moves the path's id into the `id` query. */
   EDIT: "/api/plans/edit",
+  /** GET lists the plan's pages; the rewrite moves the path's id into the `id` query. */
+  PAGES: "/api/plans/pages",
+  /** GET reads one version of one page; the rewrite moves the path's ids and number into the `id`, `page`, and `version` queries. */
+  PAGE: "/api/plans/page",
 } as const;
 
 const HTTP_METHOD = {
@@ -168,6 +178,12 @@ const BEFORE_TURN_QUERY = "before";
 
 /** The query naming one revision of the plan by its number. */
 const REVISION_SEQ_QUERY = "seq";
+
+/** The queries naming one version of one page: the page's id, and the version's number. */
+const PAGE_QUERY = {
+  PAGE: "page",
+  VERSION: "version",
+} as const;
 
 /** The queries naming a window of a file: its path, and its first and last line. */
 const FILE_QUERY = {
@@ -705,6 +721,51 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
   }
 });
 
+/** GET lists the plan's pages, the most recently written first; a plan id the account does not own answers none, as the history does. */
+const pagesEndpoint = /* @__PURE__ */ Effect.fn("web/planPagesEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const pages = yield* hostedStoreOrUnavailable(listPages(userId, planId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pages });
+});
+
+/** The version number the path names, once; one that is not a whole number from one is refused as a request that does not read. */
+const pageVersionOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<number, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(PAGE_QUERY.VERSION);
+  const read = readEither(pageVersionNumberSchema)(unparsedWire(Number(named[0])));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** GET reads one version of one page with its HTML, inside JSON. */
+const pageEndpoint = /* @__PURE__ */ Effect.fn("web/planPageEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const pageId = yield* idOf(request, PAGE_QUERY.PAGE);
+  const version = yield* pageVersionOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const page = yield* hostedStoreOrUnavailable(readPageVersion(userId, planId, pageId, version));
+  if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { page: page.value });
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -721,6 +782,8 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.EDIT, hostedRefusing(editEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.PAGES, hostedRefusing(pagesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.PAGE, hostedRefusing(pageEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }
