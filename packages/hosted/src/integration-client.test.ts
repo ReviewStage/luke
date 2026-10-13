@@ -22,12 +22,20 @@ it.effect("reads where every provider stands under the account's bearer", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({
       "GET /api/account/integrations": {
-        answer: () => ({ integrations: { linear: INTEGRATION_STATUS.CONNECTED } }),
+        answer: () => ({
+          integrations: {
+            linear: INTEGRATION_STATUS.CONNECTED,
+            notion: INTEGRATION_STATUS.UNAVAILABLE,
+          },
+        }),
       },
     });
 
     assert.deepEqual(yield* Effect.provide(client().statuses(), api.layer), {
-      integrations: { linear: INTEGRATION_STATUS.CONNECTED },
+      integrations: {
+        linear: INTEGRATION_STATUS.CONNECTED,
+        notion: INTEGRATION_STATUS.UNAVAILABLE,
+      },
     });
     assert.deepEqual(api.credentials(), ["token-1"]);
   }),
@@ -38,7 +46,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const missing = fakeCloudApi({
-        "GET /api/account/integrations": { answer: () => ({ integrations: {} }) },
+        "GET /api/account/integrations": {
+          answer: () => ({ integrations: { linear: INTEGRATION_STATUS.CONNECTED } }),
+        },
       });
       assert.deepEqual(yield* Effect.provide(client().statuses(), missing.layer), {
         failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
@@ -46,7 +56,9 @@ it.effect(
 
       const unknown = fakeCloudApi({
         "GET /api/account/integrations": {
-          answer: () => ({ integrations: { linear: "half-connected" } }),
+          answer: () => ({
+            integrations: { linear: "half-connected", notion: INTEGRATION_STATUS.UNAVAILABLE },
+          }),
         },
       });
       assert.deepEqual(yield* Effect.provide(client().statuses(), unknown.layer), {

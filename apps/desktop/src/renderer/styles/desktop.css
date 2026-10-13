@@ -1907,6 +1907,23 @@ body,
   flex: 0 0 auto;
 }
 
+/* An integration whose brand publishes its one-colour mark in named inks
+   wears them by the ground: Notion's pure white on dark and pure black on
+   light (`integration-marks.tsx`). */
+:root {
+  --integration-ink-notion: #fff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --integration-ink-notion: #000;
+  }
+}
+
+.integration-mark-notion {
+  color: var(--integration-ink-notion);
+}
+
 /* The searchable menu, in the shape of a command menu: the search as the
    first row, flush and edge to edge over a hairline; under it the list,
    its rows inset by the list's own padding so a highlight never meets the

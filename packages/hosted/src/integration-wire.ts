@@ -24,6 +24,7 @@ import { Schema as EffectSchema } from "effect";
  */
 export const INTEGRATION_PROVIDER = {
   LINEAR: "linear",
+  NOTION: "notion",
 } as const;
 
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDER)[keyof typeof INTEGRATION_PROVIDER];
@@ -35,6 +36,7 @@ export const INTEGRATION_PROVIDER_LIST: readonly IntegrationProvider[] =
 /** What each provider is called wherever Luke names it, to the developer and to a model alike. */
 export const INTEGRATION_NAME = {
   [INTEGRATION_PROVIDER.LINEAR]: "Linear",
+  [INTEGRATION_PROVIDER.NOTION]: "Notion",
 } as const satisfies Record<IntegrationProvider, string>;
 
 const PROVIDERS: ReadonlySet<string> = new Set(INTEGRATION_PROVIDER_LIST);

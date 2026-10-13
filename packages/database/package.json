@@ -44,7 +44,6 @@
     "./schemas/inbox": "./src/schemas/inbox.js",
     "./schemas/inbox-attachment": "./src/schemas/inbox-attachment.js",
     "./schemas/integration": "./src/schemas/integration.js",
-    "./schemas/linear": "./src/schemas/linear.js",
     "./schemas/plan": "./src/schemas/plan.js",
     "./schemas/plan-revision": "./src/schemas/plan-revision.js",
     "./schemas/plan-template-revision": "./src/schemas/plan-template-revision.js",

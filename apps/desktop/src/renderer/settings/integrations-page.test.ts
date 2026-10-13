@@ -53,7 +53,10 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.INTEGRATIONS_STATUS:
       if (readFails) return Promise.resolve(done({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED }));
-      return Promise.resolve(done({ integrations: { linear: standing } }));
+      // Notion has no connector on this deployment, so only Linear offers anything.
+      return Promise.resolve(
+        done({ integrations: { linear: standing, notion: INTEGRATION_STATUS.UNAVAILABLE } }),
+      );
     case ACT_KIND.INTEGRATIONS_CONNECT:
       assert.deepEqual(request.payload, LINEAR);
       if (!opens) return Promise.resolve(done({ failure: INTEGRATION_CALL_FAILURE.NOT_OPENED }));
@@ -221,6 +224,9 @@ test("an expired sign-in and a service with no Linear each say so, and only the 
 
   standing = INTEGRATION_STATUS.UNAVAILABLE;
   const unavailable = await mount();
-  assert.match(unavailable.textContent ?? "", /Not available/);
+  assert.match(
+    unavailable.querySelector('[data-search-anchor="linear"]')?.textContent ?? "",
+    /Not available/,
+  );
   assert.equal(unavailable.querySelectorAll("button").length, 0);
 });

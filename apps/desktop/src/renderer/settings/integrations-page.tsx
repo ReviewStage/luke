@@ -40,6 +40,7 @@ import { ConfirmSwap } from "./confirm-swap";
 /** What connecting each provider lets the agents do, in one line. */
 const INTEGRATION_OFFER = {
   [INTEGRATION_PROVIDER.LINEAR]: "Read and update issues, projects, and documents.",
+  [INTEGRATION_PROVIDER.NOTION]: "Search, read, and update pages and databases.",
 } as const satisfies Record<IntegrationProvider, string>;
 
 const PAGE_LINE = {

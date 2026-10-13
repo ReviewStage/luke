@@ -687,6 +687,13 @@
       "when": 1791867433330,
       "tag": "20261013045713_integration_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1791867599361,
+      "tag": "20261013045959_linear_connection_drop",
+      "breakpoints": true
     }
   ]
 }

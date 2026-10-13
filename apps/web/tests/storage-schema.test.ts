@@ -79,7 +79,6 @@ const DECLARED_TABLES = [
   "integration_connection",
   "introduction_usage",
   "jwks",
-  "linear_connection",
   "messages",
   "oauth_access_token",
   "oauth_client",

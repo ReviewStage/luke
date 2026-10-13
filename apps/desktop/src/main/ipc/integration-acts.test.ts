@@ -24,7 +24,12 @@ function fixture() {
       integrationsStatus: () =>
         Effect.sync(() => {
           asked.push("status");
-          return { integrations: { linear: INTEGRATION_STATUS.CONNECTED } };
+          return {
+            integrations: {
+              linear: INTEGRATION_STATUS.CONNECTED,
+              notion: INTEGRATION_STATUS.DISCONNECTED,
+            },
+          };
         }),
       integrationsConnect: ({ provider }) =>
         Effect.sync(() => {
@@ -49,7 +54,12 @@ it.effect("the panel's integration acts carry the host's answers to it, whole", 
 
     assert.deepEqual(yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_STATUS }, PANEL), {
       status: ACT_OUTCOME_STATUS.DONE,
-      value: { integrations: { linear: INTEGRATION_STATUS.CONNECTED } },
+      value: {
+        integrations: {
+          linear: INTEGRATION_STATUS.CONNECTED,
+          notion: INTEGRATION_STATUS.DISCONNECTED,
+        },
+      },
     });
     assert.deepEqual(
       yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: LINEAR }, PANEL),

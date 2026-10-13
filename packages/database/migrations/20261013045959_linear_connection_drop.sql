@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS "linear_connection" CASCADE;

@@ -13,10 +13,21 @@
             "disconnected",
             "unavailable"
           ]
+        },
+        "notion": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
         }
       },
       "required": [
-        "linear"
+        "linear",
+        "notion"
       ],
       "additionalProperties": false
     }

@@ -102,6 +102,7 @@ const INTEGRATION_WORDS = "connect disconnect integration mcp";
 /** What each integration is for, in the words someone looking for it would type. */
 const INTEGRATION_KEYWORDS = {
   [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
+  [INTEGRATION_PROVIDER.NOTION]: "pages docs wiki databases notes",
 } as const satisfies Record<IntegrationProvider, string>;
 
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */

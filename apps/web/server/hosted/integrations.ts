@@ -11,7 +11,12 @@
  * its row, and its landing page are the same for every provider.
  */
 
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
 
 export interface IntegrationDefinition {
   /** The variable the connector's UID is read from, as `vercel connect create` printed it. */
@@ -32,4 +37,16 @@ export const INTEGRATION = {
       "Linear, the developer's issue tracker, as their own account sees it: find, read, create, and update issues, projects, cycles, documents, and comments.",
     REMOTE_TOOL: "linear_remote",
   },
+  [INTEGRATION_PROVIDER.NOTION]: {
+    CONNECTOR_VARIABLE: "NOTION_CONNECTOR_UID",
+    MCP_URL: "https://mcp.notion.com/mcp",
+    DESCRIPTION:
+      "Notion, the developer's workspace of pages and databases, as their own account sees it: search, read, create, and update pages, databases, and comments.",
+    REMOTE_TOOL: "notion_remote",
+  },
 } as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
+
+/** Every integration's name as one phrase an instruction can say: "Linear or Notion". */
+export const INTEGRATION_NAMES_SAID = new Intl.ListFormat("en", { type: "disjunction" }).format(
+  INTEGRATION_PROVIDER_LIST.map((provider) => INTEGRATION_NAME[provider]),
+);

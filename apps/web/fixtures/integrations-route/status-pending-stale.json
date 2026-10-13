@@ -7,5 +7,5 @@
       "application/json"
     ]
   ],
-  "body": "{\"integrations\":{\"linear\":\"disconnected\"}}"
+  "body": "{\"integrations\":{\"linear\":\"disconnected\",\"notion\":\"disconnected\"}}"
 }
