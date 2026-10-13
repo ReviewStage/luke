@@ -6,6 +6,7 @@ import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { finishAll, installAnimations, MOTION, motion, running } from "#testing/animations";
 import { captionStripProps } from "#testing/captions";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl, usedPlan } from "#testing/plans-control";
@@ -44,66 +45,7 @@ const CODE: readonly PlanCodeShowing[] = [
   },
 ];
 
-/** The motion tokens as base.css leaves them, which jsdom does not load: as shipped, and under reduced motion. */
-const MOTION = {
-  ON: "240ms",
-  REDUCED: "1ms",
-} as const;
-
 const ignore = () => undefined;
-
-/** One animation the stand-in engine is running, and the element it runs on. */
-interface Running {
-  element: Element;
-  animation: Animation;
-  keyframes: Keyframe[];
-}
-
-/** What the stand-in engine hands back for an animation. */
-interface FakeAnimation {
-  onfinish: (() => void) | null;
-  cancel: () => void;
-  finish: () => void;
-}
-
-/** What the stand-in engine is running; jsdom has no Web Animations of its own. */
-const running: Running[] = [];
-
-/** Puts the Web Animations API in jsdom's place: each animation runs until the test finishes it. */
-function installAnimations(): void {
-  Element.prototype.animate = function (this: Element, keyframes: Keyframe[]) {
-    const stop = () => {
-      if (running.includes(entry)) running.splice(running.indexOf(entry), 1);
-    };
-    const fake: FakeAnimation = {
-      onfinish: null,
-      cancel: stop,
-      finish: () => {
-        stop();
-        fake.onfinish?.();
-      },
-    };
-    // SAFETY: the panes set `onfinish` and call `cancel` and nothing else of an
-    // animation, which the stand-in has; a test calls `finish`.
-    const entry: Running = { element: this, animation: fake as unknown as Animation, keyframes };
-    running.push(entry);
-    return entry.animation;
-  };
-  Element.prototype.getAnimations = function (this: Element) {
-    return running.filter((each) => each.element === this).map((each) => each.animation);
-  };
-}
-
-function finishAll(): void {
-  act(() => {
-    for (const each of [...running]) each.animation.finish();
-  });
-}
-
-function motion(duration: string): void {
-  document.documentElement.style.setProperty("--duration-pane", duration);
-  document.documentElement.style.setProperty("--motion-pane", "ease-out");
-}
 
 /**
  * Lays the plan's title out where the shell would: clear of the traffic
