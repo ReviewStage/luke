@@ -597,11 +597,11 @@ button.code-card-path:hover {
   display: flex;
   max-height: calc(100vh - 16px);
   flex-direction: column;
-  padding: var(--space-4);
+  padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   -webkit-app-region: no-drag;
 }
 
@@ -1786,10 +1786,10 @@ button.attached-file-face:hover img {
   flex-direction: column;
   gap: var(--space-12);
   padding: var(--space-12) var(--space-16) var(--space-16);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 40px var(--shadow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
   color: var(--text-primary);
   font-size: 12.5px;
   animation: menu-enter var(--duration-quick) var(--motion-exit) both;

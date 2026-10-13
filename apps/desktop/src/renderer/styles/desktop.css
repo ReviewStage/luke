@@ -52,8 +52,17 @@
   /* A page's content from its column's edges: the document, the call bar
      under it, the new-plan page, and a Settings page. */
   --page-inset: var(--space-40);
-  /* A menu's edge to its items, whose own row inset then places their glyphs. */
+  /* Every menu and popover draws from one set: the --surface-popover ground
+     inside a --hairline-strong edge, this corner and shadow, and its items
+     this inset from its edge, each row this tall and its glyph this big. The
+     corner is a row's own and the inset together, so a highlighted row
+     follows the menu's curve wherever it meets it. */
   --menu-inset: var(--space-4);
+  --menu-row-height: 32px;
+  --menu-row-radius: 6px;
+  --menu-glyph: 16px;
+  --menu-radius: calc(var(--menu-row-radius) + var(--menu-inset));
+  --menu-shadow: 0 12px 32px var(--shadow);
   /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
      drawn, which the app stage carries once the developer has dragged it. */
   --sidebar-width-default: 264px;
@@ -1286,9 +1295,9 @@ body,
   flex-direction: column;
   padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   /* A long menu, as a folder's entries may be, scrolls within the window. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
@@ -1303,9 +1312,9 @@ body,
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 28px;
+  height: var(--menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: 6px;
+  border-radius: var(--menu-row-radius);
   background: none;
   color: var(--text-primary);
   font-size: 13px;
@@ -1337,15 +1346,15 @@ body,
    one line down the menu. Muted beside its label, and red with it on Delete. */
 .plan-menu-icon {
   display: flex;
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
   color: var(--text-secondary);
 }
 
 .plan-menu-icon svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
 }
 
 .plan-menu-item[data-danger="true"] .plan-menu-icon {
@@ -1370,8 +1379,8 @@ body,
 
 /* A setting's check at its end while it is on. */
 .plan-menu-check {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
   margin-left: var(--space-24);
   color: var(--text-secondary);
@@ -1919,8 +1928,8 @@ body,
 /* The glyph is sized here, as every glyph is by what it sits in: an SVG
    with no size of its own fills the row it is in. */
 .plan-compose-menu-search svg {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -1945,7 +1954,7 @@ body,
 .plan-compose-menu-list {
   display: block;
   max-height: 288px;
-  padding: var(--space-6);
+  padding: var(--menu-inset);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1958,7 +1967,7 @@ body,
 .plan-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
-  padding: var(--space-6);
+  padding: var(--menu-inset);
   border-top: 1px solid var(--hairline);
 }
 
@@ -2035,11 +2044,11 @@ body,
   top: 0;
   left: calc(100% + 9px);
   width: 200px;
-  padding: var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 40px var(--shadow);
+  padding: var(--menu-inset);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
   animation: menu-enter var(--duration-quick) var(--motion-exit) both;
 }
 
@@ -2091,8 +2100,8 @@ body,
 }
 
 .plan-compose-menu-row :is(svg, .repository-picture) {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2103,15 +2112,15 @@ body,
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   margin-left: auto;
   color: var(--text-tertiary);
 }
 
 .plan-compose-menu-end .credential-check {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   color: var(--text-primary);
 }
 
@@ -2136,10 +2145,10 @@ body,
   width: 340px;
   flex-direction: column;
   padding: var(--menu-inset);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 40px var(--shadow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
   animation: menu-enter var(--duration-quick) var(--motion-exit) both;
 }
 
@@ -2179,9 +2188,9 @@ body,
   width: 100%;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 32px;
+  height: var(--menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: 6px;
+  border-radius: var(--menu-row-radius);
   background: none;
   color: var(--text-primary);
   font-size: 13px;
@@ -2375,9 +2384,9 @@ body,
   gap: var(--space-2);
   padding: var(--space-4);
   border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   animation: menu-enter var(--duration-quick) var(--motion-exit) both;
   -webkit-app-region: no-drag;
 }
@@ -2938,7 +2947,7 @@ body,
   overflow-y: auto;
   border: var(--card-edge) solid var(--hairline);
   border-radius: 12px;
-  background: var(--surface-overlay);
+  background: var(--surface-popover);
   box-shadow: 0 16px 40px var(--shadow);
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
@@ -3662,9 +3671,9 @@ body,
   gap: var(--space-4);
   padding: var(--space-6) var(--row-inset);
   border-color: var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   color: var(--text-primary);
   font-weight: 400;
   white-space: normal;
@@ -4012,8 +4021,8 @@ body,
 }
 
 .command-palette-search svg {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -4098,9 +4107,9 @@ body,
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 32px;
+  height: var(--menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: 6px;
+  border-radius: var(--menu-row-radius);
   color: var(--text-primary);
   font-size: 13px;
   cursor: default;
@@ -4113,8 +4122,8 @@ body,
 /* A row's glyph: a plan's, an agent's mark, a setting's gear. */
 .command-palette-icon {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -4122,8 +4131,8 @@ body,
 }
 
 .command-palette-icon svg {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
 }
 
 .command-palette-name {
