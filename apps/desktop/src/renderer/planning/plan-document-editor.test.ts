@@ -419,6 +419,21 @@ test("a rename refused, which puts the plan's old name back, puts the title's wo
   assert.equal(text.textContent, DOCUMENT_NAME);
 });
 
+test("words typed into the title as another plan opens are saved to the plan they were typed for, and the other's title is its own name", () => {
+  const { container, renamed, render } = mount();
+  const text = title(container);
+  act(() => {
+    text.focus();
+    text.textContent = "Teammate invites";
+    text.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  });
+
+  render({ ...DOCUMENT_PLAN, id: "0c4f9e2b-8a71-4d36-b5e0-7f13a92c6d58", name: "Billing export" });
+
+  assert.deepEqual(renamed, ["Teammate invites"]);
+  assert.equal(title(container).textContent, "Billing export");
+});
+
 test("↑ on the text's first line saves it and goes into the title", async () => {
   const { container, sent } = mount();
   act(() => block(container, "Context").click());

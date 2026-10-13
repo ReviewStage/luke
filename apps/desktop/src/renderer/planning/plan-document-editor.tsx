@@ -31,9 +31,11 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * the caret at its end; and Esc in the editor saves and selects the section
  * the caret stood in. The title is edited where it stands (Return or ↓ goes
  * into the text, ↑ on the text's first line comes back to it, Esc saves and
- * selects it) and saved by renaming the plan, so the name never enters the
- * text. The words save as the developer pauses (`use-plan-editing.ts`), and
- * the service merges them with what Luke writes.
+ * selects it) and saved by renaming the plan as the typing pauses and as it
+ * is left, so the name never enters the text; meanwhile its words are drawn
+ * as the plan's name wherever the window names it. The words save as the
+ * developer pauses (`use-plan-editing.ts`), and the service merges them with
+ * what Luke writes.
  * A save's merged answer is taken into the open editor block by block, and
  * the notetaker's drafts never redraw it. The editor stands under
  * `ph-no-capture`, and its words are document text, which the recording masks.
@@ -50,6 +52,11 @@ const DRAFT_PAUSE = Duration.millis(150);
 
 /** The pause before the text is handed over, as an atom whose work is the wait; setting it again starts the wait over. */
 const draftPauseAtom = rendererRuntime.fn((stamp: number) =>
+  Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
+);
+
+/** The pause before the title's words are saved, the text's own pause apart, so neither's wait starts the other's over. */
+const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
 );
 
@@ -165,48 +172,95 @@ function caretAtEnd(element: HTMLElement): void {
   window.getSelection()?.addRange(range);
 }
 
+/** The title's words as a name: trimmed, and cut to the bound as the name field's own `maxLength` cuts a paste. */
+function typedName(element: HTMLElement): string {
+  return (element.textContent ?? "").trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
+}
+
 /**
  * The title over the text, edited where it stands. A click puts the caret
  * in it; Return or ↓ saves it and goes into the text at its start; Esc saves
- * it and selects it as a block, from which Return comes back into it. It is
- * saved by renaming the plan, and a title left empty or unchanged renames
- * nothing, as a rename anywhere else does. Its words are the name's own but
- * while it is typed in, so a refused rename that puts the old name back puts
- * it back here too; a name past the bound is cut to it, as the name field's
- * own `maxLength` cuts a paste.
+ * it and selects it as a block, from which Return comes back into it. Its
+ * words are drawn as the plan's name everywhere at every keystroke, through
+ * `onDraft`, and saved by renaming the plan at each pause in the typing and
+ * as it is left. A title left empty or unchanged renames nothing, as a
+ * rename anywhere else does, and one left empty is drawn as the saved name
+ * again. Its words are the name's own but while they are typed, so a
+ * refused rename that puts the old name back puts it back here too, unless
+ * the typing has moved on past the name refused.
  */
 export function EditableTitle({
   name,
   entry,
   editing,
   onRename,
+  onDraft,
 }: {
   name: string;
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: PlanEditing;
   onRename: (name: string) => void;
+  onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
   const text = useRef<HTMLDivElement>(null);
+  const [pause, restartPause] = useAtom(titlePauseAtom);
+  const stamp = useRef(0);
   // ↑ on the text's first line comes back into the title, its caret at the end.
   useSelectedOnClose(editing, EDITOR_PLACE.TITLE, () => {
     if (text.current !== null) caretAtEnd(text.current);
   });
-  // Whether the words as they stand were saved by a key, so the blur that follows renames nothing again.
-  const saved = useRef(false);
+  // Whether the words as they stand were saved as the title was left, so a blur that follows renames nothing again.
+  const saved = useRef(true);
+  // Whether words were typed since the last pause saved them.
+  const typed = useRef(false);
+  // The name last saved or asked for, which words typed back to rename nothing.
+  const base = useRef(name);
+  // The draft this title last drew, which comes back to it as `name` and is not drawn over its own words.
+  const echo = useRef<string | undefined>(undefined);
+  const doors = useRef({ onRename, onDraft });
+  doors.current = { onRename, onDraft };
   useLayoutEffect(() => {
     const element = text.current;
-    if (element !== null && element !== document.activeElement) element.textContent = name;
+    if (element === null || name === echo.current) return;
+    base.current = name;
+    const typing = element === document.activeElement;
+    if (typing && echo.current === undefined) return;
+    echo.current = undefined;
+    element.textContent = name;
+    if (typing) caretAtEnd(element);
   }, [name]);
-  const save = () => {
-    const element = text.current;
-    if (element === null || saved.current) return;
-    saved.current = true;
-    const typed = (element.textContent ?? "").trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
-    element.textContent = typed === "" ? name : typed;
-    if (typed !== "" && typed !== name) onRename(typed);
+  const rename = (element: HTMLElement) => {
+    typed.current = false;
+    const next = typedName(element);
+    if (next === "" || next === base.current) return;
+    base.current = next;
+    doors.current.onRename(next);
   };
+  const save = (element: HTMLElement) => {
+    if (saved.current) return;
+    saved.current = true;
+    rename(element);
+    const next = typedName(element);
+    element.textContent = next === "" ? base.current : next;
+    echo.current = undefined;
+    doors.current.onDraft(undefined);
+  };
+  // A pause that ran out on the newest words saves them.
+  useEffect(() => {
+    const element = text.current;
+    if (element === null || !typed.current || !AsyncResult.isSuccess(pause)) return;
+    if (!pause.waiting && pause.value === stamp.current) rename(element);
+  });
+  // Note that a title going while typed in saves its words to the plan it
+  // was drawn for, because no blur reaches an element taken out of the page.
+  useLayoutEffect(() => {
+    const element = text.current;
+    return () => {
+      if (element !== null) save(element);
+    };
+  }, []);
   return (
     // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
     // biome-ignore lint/a11y/noNoninteractiveTabindex: the title is a block the keyboard selects, as the sections are.
@@ -245,20 +299,26 @@ export function EditableTitle({
           onFocus={() => {
             saved.current = false;
           }}
-          onInput={() => {
+          onInput={(event) => {
             saved.current = false;
+            typed.current = true;
+            const next = typedName(event.currentTarget);
+            echo.current = next === "" ? undefined : next;
+            onDraft(echo.current);
+            stamp.current += 1;
+            restartPause(stamp.current);
           }}
-          onBlur={save}
+          onBlur={(event) => save(event.currentTarget)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
-              save();
+              save(event.currentTarget);
               block.current?.focus();
               return;
             }
             if (event.key !== "Enter" && event.key !== "ArrowDown") return;
             event.preventDefault();
-            save();
+            save(event.currentTarget);
             editing.open();
           }}
         />
