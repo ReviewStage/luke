@@ -1,6 +1,6 @@
 import { EXCESS_KEYS, HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -17,11 +17,13 @@ import {
   type IntegrationStatusView,
 } from "./integration-view.js";
 import {
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
   type IntegrationConnectAnswer,
   type IntegrationProvider,
+  type IntegrationStatus,
   integrationConnectAnswerSchema,
   integrationStatusAnswerSchema,
-  integrationStatusesAnswerSchema,
 } from "./integration-wire.js";
 import {
   HOSTED_SERVICE_PATH,
@@ -48,6 +50,39 @@ export interface HostedIntegrationsClientOptions extends AccountToken {
 type Failed = { readonly failure: IntegrationCallFailure };
 
 const UNANSWERED: Failed = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
+
+/**
+ * Where every provider's connection stands, as a desktop reads the answer:
+ * every status kept in words, because a service older than the desktop names
+ * fewer providers and a newer one may name a status this build does not know.
+ */
+const integrationStatusesReadSchema = Schema.Struct({
+  integrations: Schema.Record(Schema.String, Schema.String),
+});
+
+const STATUSES: ReadonlySet<string> = new Set(Object.values(INTEGRATION_STATUS));
+
+/**
+ * Every provider's status from an answer read leniently: a provider the
+ * service left out, or named in a status this build does not know, stands
+ * unavailable, which is what a service that offers no such connection means.
+ * One provider's absence never hides the others.
+ */
+function integrationStatusesFromRead(
+  read: typeof integrationStatusesReadSchema.Type,
+): Record<IntegrationProvider, IntegrationStatus> {
+  const statusOf = (provider: IntegrationProvider): IntegrationStatus => {
+    const word = read.integrations[provider];
+    // SAFETY: membership in the set built from INTEGRATION_STATUS's values is what the union names.
+    return word !== undefined && STATUSES.has(word)
+      ? (word as IntegrationStatus)
+      : INTEGRATION_STATUS.UNAVAILABLE;
+  };
+  // SAFETY: the entries are one per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
+  return Object.fromEntries(
+    INTEGRATION_PROVIDER_LIST.map((provider) => [provider, statusOf(provider)]),
+  ) as Record<IntegrationProvider, IntegrationStatus>;
+}
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
 function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
@@ -89,7 +124,10 @@ export class HostedIntegrationsClient {
   statuses(): Effect.Effect<IntegrationStatusesView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS }),
-      (answer) => readAnswer(answer, integrationStatusesAnswerSchema),
+      (answer) =>
+        Effect.map(readAnswer(answer, integrationStatusesReadSchema), (read) =>
+          "failure" in read ? read : { integrations: integrationStatusesFromRead(read) },
+        ),
     );
   }
 
