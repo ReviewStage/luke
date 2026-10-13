@@ -177,13 +177,14 @@ function IntegrationRow({
 }
 
 /**
- * Every provider's row, drawn whether or not where they stand has been read,
- * so a search result always has its row to land on: a row offers its action
- * once its status is known, and a read that failed says so above the rows,
- * with the way to read again.
+ * Every provider's row, once where they stand has been read, so each row is
+ * drawn whole at once; a read that failed draws them all, offering nothing,
+ * and says so above them, with the way to read again.
  */
 function IntegrationRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
+  const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
+  if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
   return (
     <>
       {statuses.readFailed ? (

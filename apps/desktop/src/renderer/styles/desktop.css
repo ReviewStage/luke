@@ -2717,13 +2717,46 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
 }
 
-/* The plan template drawn as a plan, scrolling under the note pinned over
-   it: its words dissolve into the page at the scroller's top edge, through
-   the shared top fade, once the page has left its top. */
+/* The plan template laid out as every Settings page is (`PlanBody`'s
+   `page`): at their measure, its name at a page title's place and size, the
+   Edited line and the note under it. Its words dissolve at the scroller's
+   top edge, through the shared top fade, once the page has left its top. */
 .template-document .plan-document-scroll {
+  padding-top: 0;
   animation: scroll-top-fade linear both;
   animation-timeline: scroll(self block);
   animation-range: 0 var(--scroll-fade);
+}
+
+.template-document :is(.plan-body, .plan-edit-note) {
+  max-width: var(--settings-width);
+}
+
+.plan-page-head {
+  padding-top: var(--space-32);
+}
+
+.plan-page-head .plan-title-line {
+  align-items: center;
+}
+
+.template-document .plan-page-head .markdown-heading[data-level="1"] {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: var(--control-height);
+}
+
+.plan-page-head .plan-edit-note {
+  margin: var(--space-4) 0 0;
+}
+
+/* A search landing on the note keeps the name over it in view. */
+.plan-page-head .template-note {
+  width: auto;
+  margin: var(--space-16) 0 0;
+  line-height: normal;
+  scroll-margin-top: calc(var(--space-32) + 3 * var(--control-height));
 }
 
 /* The measure a Settings page's head and rows read at, and a row's height. */
@@ -2746,6 +2779,14 @@ body:has(.app-stage[data-capture="true"])
      column's own top margin above it. */
   scroll-padding-top: var(--page-inset);
   mask-image: linear-gradient(to bottom, transparent, #000 var(--scroll-fade));
+  /* A bar that takes room takes it on every page, so the column never slides. */
+  scrollbar-gutter: stable;
+}
+
+/* A page whose reads are out draws nothing under its name until every one
+   has answered, then the whole page at once, so nothing grows into place. */
+.settings-page-scroll:has(.settings-reading) .settings {
+  visibility: hidden;
 }
 
 /* The page's name and what acts on the whole page, its reset, on one line. */

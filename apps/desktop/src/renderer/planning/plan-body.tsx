@@ -313,8 +313,9 @@ function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }):
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the plan's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only; `titleEnd` stands at the end of a title that is not
- * edited. `looks` are the sections changed since the developer last
+ * drawn read-only. With `page` the document is drawn as a Settings page,
+ * as the plan template is: the page's actions end the title's line, and the
+ * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
  * none are.
  */
@@ -326,7 +327,7 @@ export function PlanBody({
   onRename,
   onDraftName = NO_DRAFT,
   looks = NO_LOOKS,
-  titleEnd,
+  page,
 }: {
   plan: Plan;
   live: boolean;
@@ -337,8 +338,8 @@ export function PlanBody({
   /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: PlanLooks;
-  /** What stands at the right end of a title that is not edited, as a page's actions stand at the end of its title line. */
-  titleEnd?: React.ReactNode;
+  /** The Settings page the document is drawn as: its actions and its note. */
+  page?: { actions: React.ReactNode; note: React.ReactNode };
 }): React.JSX.Element {
   const { views, behind, jumps } = usePlanChase(plan, live);
   const editable = onEdit !== undefined;
@@ -439,9 +440,11 @@ export function PlanBody({
       <DocumentUnit key={view.id} view={view} marks={marks} />
     ),
   );
+  const editedNote =
+    edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />;
   return (
     <div ref={scroller} className="plan-document-scroll">
-      {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
+      {page === undefined ? editedNote : null}
       <ChangedLine looks={looks} />
       <div className="plan-body">
         {editable && onRename !== undefined ? (
@@ -454,13 +457,17 @@ export function PlanBody({
             onRename={onRename}
             onDraft={onDraftName}
           />
-        ) : titleEnd === undefined ? (
+        ) : page === undefined ? (
           <PlanTitle name={plan.name} />
         ) : (
-          <div className="plan-title-line">
-            <PlanTitle name={plan.name} />
-            {titleEnd}
-          </div>
+          <header className="plan-page-head">
+            <div className="plan-title-line">
+              <PlanTitle name={plan.name} />
+              {page.actions}
+            </div>
+            {editedNote}
+            {page.note}
+          </header>
         )}
         {editing.editor === undefined ? (
           sections

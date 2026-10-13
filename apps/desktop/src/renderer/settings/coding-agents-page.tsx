@@ -33,7 +33,7 @@ import {
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
-import { Spinner, SpinnerRegion } from "../spinner";
+import { SpinnerRegion } from "../spinner";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { SettingsGroup } from "./settings-group";
@@ -101,14 +101,13 @@ function modelRowNote(
 function DefaultRows({
   choice,
   models,
-  modelsFailed,
   ownKeys,
   busy,
   onChange,
 }: {
   choice: ModelChoice;
+  /** The catalog, or nothing where it could not be read. */
   models: readonly CatalogModel[] | undefined;
-  modelsFailed: boolean;
   /** How each provider the account holds a key of its own for last answered it. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
   busy: boolean;
@@ -165,15 +164,7 @@ function DefaultRows({
         placeholder="Search models"
         noMatch={PAGE_LINE.MODELS_NONE_MATCH}
         note={
-          models === undefined ? (
-            modelsFailed ? (
-              <span role="alert">{PAGE_LINE.MODELS_FAILED}</span>
-            ) : (
-              <div className="plan-compose-menu-note">
-                <Spinner label="Loading models" />
-              </div>
-            )
-          ) : undefined
+          models === undefined ? <span role="alert">{PAGE_LINE.MODELS_FAILED}</span> : undefined
         }
         anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
         disabled={busy}
@@ -268,8 +259,8 @@ function CodingAgentsSection({
   ownKeys,
 }: {
   signedIn: boolean;
-  /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them. */
-  ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
+  /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them; nothing until they are read. */
+  ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus> | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
@@ -304,11 +295,12 @@ function CodingAgentsSection({
     };
   }, [act, signedIn, attempt]);
 
-  const ownAnthropic = ownKeys.has(MODEL_PROVIDER.ANTHROPIC);
-  const ownOpenAi = ownKeys.has(MODEL_PROVIDER.OPENAI);
-  // The models are read as the page opens, and again as a key of the account's own is saved or removed, since the service withholds a fast version for one.
+  const ownAnthropic = ownKeys?.has(MODEL_PROVIDER.ANTHROPIC);
+  const ownOpenAi = ownKeys?.has(MODEL_PROVIDER.OPENAI);
+  const keysRead = ownKeys !== undefined;
+  // The models are read once the keys are, and again as a key of the account's own is saved or removed, since the service withholds a fast version for one.
   useEffect(() => {
-    if (!signedIn) return;
+    if (!signedIn || !keysRead) return;
     let live = true;
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
@@ -323,7 +315,7 @@ function CodingAgentsSection({
     return () => {
       live = false;
     };
-  }, [act, signedIn, attempt, ownAnthropic, ownOpenAi]);
+  }, [act, signedIn, attempt, keysRead, ownAnthropic, ownOpenAi]);
 
   const write = useCallback(
     (next: ModelChoice) => {
@@ -347,13 +339,12 @@ function CodingAgentsSection({
     <SettingsGroup title="Default model">
       {!signedIn ? (
         <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
-      ) : choice !== undefined ? (
+      ) : choice !== undefined && (models !== undefined || modelsFailed) ? (
         <>
           <DefaultRows
             choice={choice}
             models={models}
-            modelsFailed={modelsFailed}
-            ownKeys={ownKeys}
+            ownKeys={ownKeys ?? new Map()}
             busy={busy}
             onChange={write}
           />
@@ -371,7 +362,7 @@ function CodingAgentsSection({
           <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
         </div>
       ) : (
-        <div className="settings-card-line">
+        <div className="settings-card-line settings-reading">
           <SpinnerRegion label="Loading your default" />
         </div>
       )}
@@ -386,7 +377,7 @@ function CodingAgentsSection({
  * read of its own that a save below would leave behind.
  */
 export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
-  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
+  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
     setOwnKeys(new Map(keys.map((key) => [key.provider, key.status])));
   }, []);

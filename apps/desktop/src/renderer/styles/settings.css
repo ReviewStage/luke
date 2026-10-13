@@ -34,13 +34,15 @@
 }
 
 /* A page's own name, at the head of its column: the page list says where
-   Settings is, and this says which page the column holds. */
+   Settings is, and this says which page the column holds. Its line is a
+   control tall, so a head with Reset is no taller than one without. */
 .settings-page-title {
   margin: 0;
   color: var(--text-primary);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.015em;
+  line-height: var(--control-height);
 }
 
 /* A group of a page (`settings-group.tsx`): its name above the card, small
