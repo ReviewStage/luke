@@ -27,7 +27,6 @@ import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
 import { dictationKeywords } from "./dictation-keywords";
-import { type InboxReadsControl, useInboxReads } from "./inbox-reads";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
 import {
   FIXTURE_PLANNING_CALL,
@@ -144,12 +143,12 @@ export interface InboxViewControl {
   readonly open: boolean;
   /** The plan chosen in it, none until one is, where the list's first stands in. */
   readonly planId: string | undefined;
-  /** Whether it lists only the plans with an item the developer has not seen. */
-  readonly unreadOnly: boolean;
+  /** Whether it lists only the plans with an item waiting on the developer. */
+  readonly waitingOnly: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (planId: string) => void;
-  readonly onUnreadOnly: (unreadOnly: boolean) => void;
+  readonly onWaitingOnly: (waitingOnly: boolean) => void;
 }
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -240,8 +239,6 @@ export interface PlansControl {
   inboxShown: string | null;
   /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
   inboxPlans: readonly AppInboxPlanHolding[];
-  /** Which waiting items each plan has shown on this Mac: the Inbox's unread dots and counts, and the press that marks them read. */
-  inboxReads: InboxReadsControl;
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
@@ -452,7 +449,7 @@ export function usePlansTab(input: {
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** The window's Inbox while it stands: the plan chosen in it, and whether it lists only the unread. */
   const [inboxView, setInboxView] = useState<
-    { readonly planId: string | undefined; readonly unreadOnly: boolean } | undefined
+    { readonly planId: string | undefined; readonly waitingOnly: boolean } | undefined
   >(undefined);
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
@@ -1087,7 +1084,6 @@ export function usePlansTab(input: {
     setFileFor(undefined);
     onOpenFile(fileFor.ref, fileFor.commit);
   }, [fileFor, planning.activePlanId, onOpenFile]);
-  const inboxReads = useInboxReads(input.inboxWaiting, input.inboxPlans, fixture !== undefined);
 
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
@@ -1181,19 +1177,18 @@ export function usePlansTab(input: {
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     inboxPlans: input.inboxPlans,
-    inboxReads,
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,
       planId: inboxView?.planId,
-      unreadOnly: inboxView?.unreadOnly ?? false,
+      waitingOnly: inboxView?.waitingOnly ?? false,
       onOpen: () => {
         setHistoryFor(undefined);
-        setInboxView((held) => held ?? { planId: undefined, unreadOnly: false });
+        setInboxView((held) => held ?? { planId: undefined, waitingOnly: false });
       },
       onClose: () => setInboxView(undefined),
       onChoose: (planId) => setInboxView((held) => held && { ...held, planId }),
-      onUnreadOnly: (unreadOnly) => setInboxView((held) => held && { ...held, unreadOnly }),
+      onWaitingOnly: (waitingOnly) => setInboxView((held) => held && { ...held, waitingOnly }),
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a

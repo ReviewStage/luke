@@ -322,8 +322,8 @@ const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
 /** Pinned holds tabs as well as plans, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 
-/** The Inbox row counts what the developer has not seen, so its count is read as unread items. */
-const UNREAD_NOUN: CountNoun = { one: "unread item", many: "unread items" };
+/** The Inbox row counts the items waiting on the developer, as the Inbox's rows do. */
+const WAITING_NOUN: CountNoun = { one: "item waiting", many: "items waiting" };
 
 /**
  * A folded group's count of what it holds, shown after its name while the
@@ -523,22 +523,27 @@ function ListSkeleton(): React.JSX.Element {
   );
 }
 
+/** How many items wait on the developer across every plan: the sum of the Inbox's row counts. */
+function waitingItems(plans: PlansControl): number {
+  return plans.inbox.reduce((sum, plan) => sum + plan.items.length, 0);
+}
+
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many waiting items the developer has not
- * seen at its end, muted in even figures as a group's count is, and nothing
- * at none. Its chord takes the count's place while the row is hovered or
+ * the tray, its name, and how many items wait on the developer across every
+ * plan at its end, the sum of the counts the Inbox's rows show, muted in
+ * even figures as a group's count is, and nothing at none. Its chord takes the count's place while the row is hovered or
  * reached from the keyboard, as New plan's and Search's show theirs. A press
  * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
  * shown while it stands.
  */
 function SidebarInboxRow({
-  unread,
+  waiting,
   current,
   disabled,
   onOpen,
 }: {
-  unread: number;
+  waiting: number;
   current: boolean;
   disabled: boolean;
   onOpen: () => void;
@@ -554,12 +559,12 @@ function SidebarInboxRow({
     >
       <InboxIcon />
       Inbox
-      {unread === 0 ? null : (
-        <span className="sidebar-inbox-unread">
-          {unread}
+      {waiting === 0 ? null : (
+        <span className="sidebar-inbox-waiting">
+          {waiting}
           <span className="visually-hidden">
             {" "}
-            {unread === 1 ? UNREAD_NOUN.one : UNREAD_NOUN.many}
+            {waiting === 1 ? WAITING_NOUN.one : WAITING_NOUN.many}
           </span>
         </span>
       )}
@@ -572,7 +577,7 @@ function SidebarInboxRow({
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan the account owns, and the account's
  * row, whose menu and gear lead to Settings and the rest. The Inbox's row
- * follows Search above the rule, counting what waits unseen, and opens the
+ * follows Search above the rule, counting what waits on the developer, and opens the
  * window's Inbox. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
@@ -751,7 +756,7 @@ export function DesktopSidebar({
         />
       </button>
       <SidebarInboxRow
-        unread={plans.signedIn ? plans.inboxReads.total : 0}
+        waiting={plans.signedIn ? waitingItems(plans) : 0}
         current={inInbox}
         disabled={!plans.signedIn}
         onOpen={openInbox}

@@ -2142,9 +2142,9 @@ test("the window's Inbox stands over the open plan without opening another, tell
   act(() => tab.control().inboxView.onOpen());
   assert.equal(tab.control().inboxView.open, true);
   act(() => tab.control().inboxView.onChoose(other));
-  act(() => tab.control().inboxView.onUnreadOnly(true));
+  act(() => tab.control().inboxView.onWaitingOnly(true));
   assert.equal(tab.control().inboxView.planId, other);
-  assert.equal(tab.control().inboxView.unreadOnly, true);
+  assert.equal(tab.control().inboxView.waitingOnly, true);
   assert.equal(tab.told.includes(ACT_KIND.PLANNING_SELECT), false, "the open plan stands");
   assert.deepEqual(tab.shownInboxes, [null, other]);
 
@@ -2155,7 +2155,7 @@ test("the window's Inbox stands over the open plan without opening another, tell
   // Opened again, it starts on the list's first plan and lists every plan.
   act(() => tab.control().inboxView.onOpen());
   assert.equal(tab.control().inboxView.planId, undefined);
-  assert.equal(tab.control().inboxView.unreadOnly, false);
+  assert.equal(tab.control().inboxView.waitingOnly, false);
   act(() => tab.control().onNewPlan());
   assert.equal(tab.control().inboxView.open, false);
 });

@@ -387,28 +387,28 @@ body,
 }
 
 /* The Inbox row is the place shown while the window's Inbox stands, filled as
-   the new-plan page's row is. Its count of what waits unseen stands at its end
+   the new-plan page's row is. Its count of what waits on the developer stands at its end
    in a group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-inbox[aria-current="page"] {
   background: var(--raised-strong);
 }
 
-.sidebar-inbox-unread {
+.sidebar-inbox-waiting {
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
 
-.sidebar-inbox-unread ~ .row-shortcut,
-.sidebar-inbox:hover > .sidebar-inbox-unread,
-:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-unread {
+.sidebar-inbox-waiting ~ .row-shortcut,
+.sidebar-inbox:hover > .sidebar-inbox-waiting,
+:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting {
   display: none;
 }
 
-.sidebar-inbox:hover > .sidebar-inbox-unread ~ .row-shortcut,
-:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-unread ~ .row-shortcut {
+.sidebar-inbox:hover > .sidebar-inbox-waiting ~ .row-shortcut,
+:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting ~ .row-shortcut {
   display: inline-flex;
 }
 
@@ -565,11 +565,7 @@ body,
   flex: 1;
 }
 
-/* A plan's count of what waits, in the Inbox's column, stands in the time's
-   place, drawn as the time is, and, with no Pin or Archive to make room for,
-   stays put under the pointer. */
-.sidebar-plan-time,
-.sidebar-inbox-count {
+.sidebar-plan-time {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--space-2));
   color: var(--text-tertiary);
@@ -2461,21 +2457,6 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: var(--space-8) var(--column-inset) var(--column-inset);
-}
-
-/* A plan with an item the developer has not seen leads with the accent's dot,
-   and its name takes an unread plan's weight; the dot's room stands empty on
-   the rest, so the names line up. */
-.inbox-unread-dot {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  align-self: center;
-  border-radius: 50%;
-}
-
-.inbox-plan[data-unread="true"] .inbox-unread-dot {
-  background: var(--message-sent);
 }
 
 .inbox-view-items {
