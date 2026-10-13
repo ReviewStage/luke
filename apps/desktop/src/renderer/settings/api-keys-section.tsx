@@ -277,7 +277,7 @@ export function ApiKeysSection({
   onKeys,
 }: {
   signedIn: boolean;
-  /** The keys as last read or changed, none while they are being read or could not be. */
+  /** The keys as last read or changed, none where they could not be read; not called while the read is out. */
   onKeys: (keys: readonly ProviderKeySummary[]) => void;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -309,7 +309,9 @@ export function ApiKeysSection({
   }, [act, signedIn, attempt]);
 
   // The page beside the group hears every answer, so nothing there says what a key used to be.
-  useEffect(() => onKeys(keys ?? []), [keys, onKeys]);
+  useEffect(() => {
+    if (keys !== undefined || readFailed) onKeys(keys ?? []);
+  }, [keys, readFailed, onKeys]);
 
   const save = useCallback(
     (provider: ProviderKeyProvider, key: string): Promise<string | undefined> => {
@@ -369,7 +371,7 @@ export function ApiKeysSection({
             <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
           </div>
         ) : (
-          <div className="settings-card-line">
+          <div className="settings-card-line settings-reading">
             <SpinnerRegion label="Loading your keys" />
           </div>
         )}

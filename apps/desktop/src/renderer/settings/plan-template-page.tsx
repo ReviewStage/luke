@@ -16,7 +16,6 @@ import { PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
 import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
@@ -26,19 +25,19 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  *
  * The template is a plan's text before it is a plan, so the page is a plan's
  * page beside Settings' page list, with no top bar: the document is the
- * plan's own (`../planning/plan-body.tsx`), at the plan's width and in its
- * type, read as sections until a click or Return opens the same editor on
- * the same words with the same keyboard, and its words dissolve as they
- * scroll up under the note over them. Its title is the page's name, which is
+ * plan's own (`../planning/plan-body.tsx`), at the Settings pages' width and
+ * in a plan's type, read as sections until a click or Return opens the same
+ * editor on the same words with the same keyboard. Its title is the page's
+ * name, at a page title's place and size, which is
  * no name of the account's to change, so it is drawn and never edited, and
  * the page's actions stand at the end of its line: the version history
- * (`plan-template-history.tsx`), which the "Edited by" line over the
- * document opens too, and Reset to default while the account holds a
+ * (`plan-template-history.tsx`), which the "Edited by" line under the
+ * title opens too, and Reset to default while the account holds a
  * template of its own. The reset asks first, since it replaces every word of
  * the account's, kept since only in the template's history, and waits for a
- * save already out so the default lands last. A quiet note over the
- * document, placed as an archived plan's banner is, says what the template
- * is for.
+ * save already out so the default lands last. A quiet note under the
+ * title, drawn as an archived plan's banner is, says what the template is
+ * for.
  *
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
@@ -179,13 +178,16 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     held.current.kept = answer.template;
     setText(answer.template);
     setCustom(answer.custom);
-    setLastEdit(edited);
+    // Note that a read names no edit, because the history read beside it may already have named one.
+    if (edited !== undefined) setLastEdit(edited);
   }, []);
 
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
+    // Each read names the newest edit afresh: the page is not drawn while it is out, and an earlier attempt's may be stale.
     setRead(TEMPLATE_READ.READING);
+    setLastEdit(undefined);
     act(ACT_KIND.PLAN_TEMPLATE_READ)
       .catch((): PlanTemplateAnswerView | undefined => undefined)
       .then((answer) => {
@@ -276,9 +278,9 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
 }
 
 /**
- * The note over the template, placed as an archived plan's banner is: what
- * the template is for. It is what a settings search for the template lands
- * on.
+ * The note under the template's title, drawn as an archived plan's banner
+ * is: what the template is for. It is what a settings search for the
+ * template lands on.
  */
 function TemplateNote(): React.JSX.Element {
   return (
@@ -345,20 +347,22 @@ function TemplateDocument({
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <>
-      <TemplateNote />
       <div className="desktop-document template-document ph-no-capture">
         <PlanBody
           plan={templateDocument(template.text, template.lastEdit)}
           live={false}
           onEdit={template.edit}
           onShowHistory={onShowHistory}
-          titleEnd={
-            <TitleActions
-              custom={template.custom}
-              onShowHistory={onShowHistory}
-              onReset={reset.ask}
-            />
-          }
+          page={{
+            actions: (
+              <TitleActions
+                custom={template.custom}
+                onShowHistory={onShowHistory}
+                onReset={reset.ask}
+              />
+            ),
+            note: <TemplateNote />,
+          }}
         />
       </div>
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
@@ -389,9 +393,12 @@ function TemplateState({
       </div>
     );
   }
+  // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
   return (
-    <div className="desktop-empty">
-      <Spinner label="Loading your template" size={SPINNER_SIZE.REGION} />
+    <div className="settings-page-scroll" aria-busy="true">
+      <header className="settings-page-head">
+        <h1 className="settings-page-title">{TEMPLATE_TITLE}</h1>
+      </header>
     </div>
   );
 }

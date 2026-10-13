@@ -244,7 +244,7 @@
 }
 
 /* The same fade at a scroll container's top edge, where something stands
-   pinned over it, as the plan template's banner does: content scrolled up
+   pinned over it, as the drag strip over the plan template does: content scrolled up
    past the edge dissolves into the surface over `--scroll-fade` rather than
    being sliced against the banner. A container runs it on its own scroll
    timeline over its first `--scroll-fade` of scrolling, so a page at rest at
