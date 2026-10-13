@@ -57,6 +57,14 @@ test("a server that refused the sign-in says so", () => {
   assert.equal(row.problem, "Slack refused the sign-in.");
 });
 
+test("a server that could not be reached keeps its switch and says so, since reconnecting would not mend it", () => {
+  const row = slackRow({ problem: { reason: INTEGRATION_TOOLS_PROBLEM.UNREACHABLE } });
+
+  assert.equal(row.kind, SERVER_ROW.SWITCH);
+  assert.equal(row.problem, "Can't reach Slack.");
+  assert.equal(row.tools, undefined);
+});
+
 test("a working server keeps its switch and the tools it listed", () => {
   const tools = [
     { name: "slack_search_public", description: "Search public channels" },

@@ -35,8 +35,9 @@ import { SettingsGroup } from "./settings-group";
  * stands once that needs saying — connected with the count of its server's
  * tools, a sign-in under way, or one expired. A connection is said to be
  * connected only once its server answered with its tools; one whose server
- * answered why it would not says why instead and offers Reconnect
- * (`integration-health.ts`). A Connect sends the browser to sign in with the provider; a
+ * answered why it would not says why instead, and offers Reconnect where
+ * that mends it (`integration-health.ts`). A Connect sends the browser to
+ * sign in with the provider; a
  * connected row's ⋯ (or a right-click on it) offers Disconnect, which asks
  * first in the confirm dialog. The window never sees a sign-in address; the
  * host opens it. Where every
@@ -172,7 +173,7 @@ function IntegrationRow({
   );
 
   const line = rowLine(provider, status, health);
-  const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN;
+  const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect;
   const actions = connected
     ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
     : [];

@@ -15,7 +15,10 @@ import {
  * stands. So a surface says a provider is connected only once its server
  * answered with its tools, and draws its count; one whose server answered
  * why it would not is a problem, said in a line of its own with the
- * server's message where it sent one, and mended by reconnecting. A read
+ * server's message where it sent one. A refusal, or the server's own error,
+ * is mended by reconnecting (a token issued before a provider-side setting
+ * changed keeps failing); a server that never answered is an outage a
+ * reconnect would not mend, so it keeps its switch and offers nothing. A read
  * not answered yet is still being checked; one Luke's own service could not
  * answer says nothing of the server, so the connection stands as the
  * service says.
@@ -31,7 +34,7 @@ export interface IntegrationTool {
 export const CONNECTION_HEALTH = {
   /** Its server answered with its tools. */
   WORKING: "working",
-  /** Its server answered why it listed none: reconnect. */
+  /** Its server answered no tools: why, and whether reconnecting mends it. */
   BROKEN: "broken",
   /** Its tools have not been read yet. */
   CHECKING: "checking",
@@ -41,7 +44,12 @@ export const CONNECTION_HEALTH = {
 
 export type ConnectionHealth =
   | { readonly kind: typeof CONNECTION_HEALTH.WORKING; readonly tools: readonly IntegrationTool[] }
-  | { readonly kind: typeof CONNECTION_HEALTH.BROKEN; readonly problem: string }
+  | {
+      readonly kind: typeof CONNECTION_HEALTH.BROKEN;
+      readonly problem: string;
+      /** Whether reconnecting mends it: a refusal or the server's own error, never an outage. */
+      readonly reconnect: boolean;
+    }
   | { readonly kind: typeof CONNECTION_HEALTH.CHECKING | typeof CONNECTION_HEALTH.UNKNOWN };
 
 /** How a connected server's count of tools reads. */
@@ -69,7 +77,14 @@ export function connectionHealth(
   if (read === undefined) return { kind: CONNECTION_HEALTH.CHECKING };
   if ("failure" in read) return { kind: CONNECTION_HEALTH.UNKNOWN };
   if ("problem" in read) {
-    return { kind: CONNECTION_HEALTH.BROKEN, problem: problemLine(provider, read.problem) };
+    const reason = read.problem.reason;
+    return {
+      kind: CONNECTION_HEALTH.BROKEN,
+      problem: problemLine(provider, read.problem),
+      reconnect:
+        reason === INTEGRATION_TOOLS_PROBLEM.REFUSED ||
+        reason === INTEGRATION_TOOLS_PROBLEM.REJECTED,
+    };
   }
   return { kind: CONNECTION_HEALTH.WORKING, tools: read.tools };
 }

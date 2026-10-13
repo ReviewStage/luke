@@ -294,9 +294,10 @@ function toolsProblem(failure: McpToolsFailure) {
 /**
  * GET: the tools one provider's server offers the account's agents. A
  * provider with no connector here, one the account has not connected, and a
- * token Connect will not give are the one unavailable refusal. A server that
- * listed none is an answer rather than a refusal: why, which the desktop
- * draws in place of the connection's "Connected", and never held.
+ * Connect that could not be asked are the one unavailable refusal. A grant
+ * Connect no longer holds, and a server that listed none, are an answer
+ * rather than a refusal: why, which the desktop draws in place of the
+ * connection's "Connected", and never held.
  */
 const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(function* (
   seams: IntegrationsAppSeams,
@@ -329,15 +330,23 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools: held.tools });
   }
   const name = INTEGRATION_NAME[provider];
-  const issued = yield* connector.token(userId, { fresh: false }).pipe(
-    Effect.tapError((failure) =>
-      Effect.logWarning(`Vercel Connect gave no ${name} token for its tools`, failure.message),
-    ),
-    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-  );
+  const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
+  if (Result.isFailure(issued)) {
+    // A grant Connect no longer holds is a refusal the developer mends by reconnecting, not an outage.
+    if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+        problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED },
+      });
+    }
+    yield* Effect.logWarning(
+      `Vercel Connect gave no ${name} token for its tools`,
+      issued.failure.message,
+    );
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
   const definition: IntegrationDefinition = INTEGRATION[provider];
   const listed = yield* Effect.result(
-    listMcpTools(definition.MCP_URL, Redacted.value(issued.token)),
+    listMcpTools(definition.MCP_URL, Redacted.value(issued.success.token)),
   );
   if (Result.isFailure(listed)) {
     const failure = listed.failure;

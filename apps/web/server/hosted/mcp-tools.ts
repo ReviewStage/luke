@@ -62,6 +62,9 @@ const MESSAGE_MAX_CHARS = 200;
  */
 const CREDENTIAL_SHAPE = /bearer\s|xox[a-z]-|[A-Za-z0-9_+=-]{32,}/i;
 
+/** The shortest run of the bearer whose echo in a server's message drops it, so a truncated token is caught too. */
+const TOKEN_ECHO_CHARS = 12;
+
 /** Why no list could be read. */
 export const MCP_TOOLS_FAILURE = {
   /** The server never answered, or answered an error status with no message. */
@@ -148,10 +151,24 @@ const unreachable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREACHABLE 
 const refused = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.REFUSED });
 const unreadable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREADABLE });
 
-/** A server's error message as a failure may keep it: its first line, or nothing where that could carry a credential. */
+/** Whether `line` repeats any run of the bearer long enough to be part of it rather than chance. */
+function echoesToken(line: string, token: string): boolean {
+  if (token.length <= TOKEN_ECHO_CHARS) return line.includes(token);
+  for (let start = 0; start + TOKEN_ECHO_CHARS <= token.length; start += 1) {
+    if (line.includes(token.slice(start, start + TOKEN_ECHO_CHARS))) return true;
+  }
+  return false;
+}
+
+/**
+ * A server's error message as a failure may keep it: its first line, or
+ * nothing where that could carry a credential, which is any run of the
+ * bearer the server was sent, the only account secret it holds of ours,
+ * or anything shaped like one.
+ */
 function keptMessage(message: string | undefined, token: string): string | undefined {
   const line = (message ?? "").trim().split(/\r?\n/)[0] ?? "";
-  if (line === "" || line.includes(token) || CREDENTIAL_SHAPE.test(line)) return undefined;
+  if (line === "" || echoesToken(line, token) || CREDENTIAL_SHAPE.test(line)) return undefined;
   return firstLine(line, MESSAGE_MAX_CHARS);
 }
 

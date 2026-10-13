@@ -16,7 +16,9 @@ import { useAct } from "./act";
  * service holds a list it read for a few minutes, so a read again costs a
  * working server nothing, and holds no refusal, so a mended one reads as
  * mended. Each read stands until the next one answers, so a surface does
- * not blink back to checking. What a read means for the row is
+ * not blink back to checking, and an answer to an older ask never lands over
+ * a newer one; a provider that stops standing connected forgets its read.
+ * What a read means for the row is
  * `integration-health.ts`'s to say.
  */
 
@@ -34,6 +36,9 @@ export function useIntegrationTools(
   const [focus, setFocus] = useState(0);
   // The focus each provider was last asked under, so each is asked once per focus.
   const asked = useRef(new Map<IntegrationProvider, number>());
+  // Each provider's newest ask, so an answer to an older one never lands over it.
+  const newest = useRef(new Map<IntegrationProvider, number>());
+  const asks = useRef(0);
 
   useEffect(() => {
     const focused = () => setFocus((count) => count + 1);
@@ -42,13 +47,28 @@ export function useIntegrationTools(
   }, []);
 
   useEffect(() => {
+    // A provider no longer connected forgets its read, so a grant made later is never drawn with the old one's answer.
+    for (const provider of asked.current.keys()) {
+      if (connected.includes(provider)) continue;
+      asked.current.delete(provider);
+      newest.current.delete(provider);
+      setReads((read) => {
+        const kept = { ...read };
+        delete kept[provider];
+        return kept;
+      });
+    }
     for (const provider of connected) {
       if (asked.current.get(provider) === focus) continue;
       asked.current.set(provider, focus);
-      act(ACT_KIND.INTEGRATIONS_TOOLS, { provider }).then(
-        (answer: IntegrationToolsView) => setReads((read) => ({ ...read, [provider]: answer })),
-        () => setReads((read) => ({ ...read, [provider]: UNANSWERED })),
-      );
+      asks.current += 1;
+      const ask = asks.current;
+      newest.current.set(provider, ask);
+      const land = (answer: IntegrationToolsView) => {
+        if (newest.current.get(provider) !== ask) return;
+        setReads((read) => ({ ...read, [provider]: answer }));
+      };
+      act(ACT_KIND.INTEGRATIONS_TOOLS, { provider }).then(land, () => land(UNANSWERED));
     }
   });
 

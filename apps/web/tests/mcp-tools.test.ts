@@ -49,6 +49,17 @@ it.effect("a server message that carries the bearer is dropped whole", () =>
   }),
 );
 
+it.effect("a server message that echoes part of the bearer is dropped whole", () =>
+  Effect.gen(function* () {
+    const failure = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(refusingServer(400, -32600, `token ${TOKEN.slice(0, 14)}… is not allowed`)),
+      Effect.flip,
+    );
+
+    assert.equal(failure.serverMessage, undefined);
+  }),
+);
+
 it.effect("an error status with no JSON-RPC error is unreachable", () =>
   Effect.gen(function* () {
     const failure = yield* listMcpTools(URL, TOKEN).pipe(

@@ -21,10 +21,11 @@ import {
  * for every agent. Its row names how many tools the server offers once they
  * have been read, and that count opens the list of them. A server not
  * connected offers to connect it, there and then; one whose sign-in expired,
- * or connected but whose server answered why it lists no tools
+ * or connected but whose server refused it or answered an error of its own
  * (`../integration-health.ts`), offers to reconnect, the latter with the
- * server's reason beside its name; one this deployment does not offer is a
- * dimmed row with nothing to press. No other row says where it stands in
+ * server's reason beside its name; one whose server could not be reached
+ * keeps its switch, with that said beside its name; one this deployment
+ * does not offer is a dimmed row with nothing to press. No other row says where it stands in
  * words: the switch, the count, and the button are what say it. A read of
  * the connections that failed is the one error, offered as a way to read
  * again.
@@ -78,7 +79,9 @@ function kindOf(
   if (status === undefined) return readFailed ? SERVER_ROW.RETRY : SERVER_ROW.QUIET;
   switch (status) {
     case INTEGRATION_STATUS.CONNECTED:
-      return health.kind === CONNECTION_HEALTH.BROKEN ? SERVER_ROW.RECONNECT : SERVER_ROW.SWITCH;
+      return health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect
+        ? SERVER_ROW.RECONNECT
+        : SERVER_ROW.SWITCH;
     case INTEGRATION_STATUS.PENDING:
     case INTEGRATION_STATUS.DISCONNECTED:
       return SERVER_ROW.CONNECT;
