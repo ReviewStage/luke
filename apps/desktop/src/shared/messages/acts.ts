@@ -237,9 +237,10 @@ export const ACT_KIND = {
    * The account's workspaces, asked of the service: the workspace of a
    * GitHub App installation it reaches joined, answered as joined; one
    * workspace's members read; one member removed, answered with the members
-   * who remain; and one workspace left. Each reads the planning view again,
-   * so the workspaces arrive on the document; one the account's role does
-   * not allow is refused in words that say so.
+   * who remain; and one workspace left. A join, a removal, and a leave read
+   * the workspaces again, so they arrive on the document. A join GitHub no
+   * longer shows the account, and a write its role does not allow, are each
+   * refused in words that say so.
    */
   WORKSPACE_JOIN: "workspace.join",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
@@ -422,12 +423,6 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 }
 
 /**
- * Whether a value reads under a schema at all, for a result the payload's own
- * row only checks admits. Every schema read here is a Gateway answer, so a key
- * a newer host added is dropped rather than refused: which keys a read tolerates
- * is the read's to say now that a declaration carries no parse options of its own.
- */
-/**
  * What a workspace act whose role does not allow it is refused with, in place
  * of its kind's own sentence: a member removing someone, an owner removed or
  * leaving, or a personal workspace, which is managed and left by nobody.
@@ -435,8 +430,22 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
 
+/**
+ * What a join is refused with where the service does not show the account
+ * the installation, or refuses it the workspace: GitHub no longer shows it
+ * that installation, so there is nothing of its to join.
+ */
+export const WORKSPACE_JOIN_NOT_FOUND_REFUSAL =
+  "GitHub doesn't show you that installation." as const;
+
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 
+/**
+ * Whether a value reads under a schema at all, for a result the payload's own
+ * row only checks admits. Every schema read here is a Gateway answer, so a key
+ * a newer host added is dropped rather than refused: which keys a read tolerates
+ * is the read's to say now that a declaration carries no parse options of its own.
+ */
 const isReadable =
   <Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>) =>
   (value: UnparsedWireValue): boolean =>

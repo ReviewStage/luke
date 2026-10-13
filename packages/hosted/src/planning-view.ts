@@ -693,6 +693,8 @@ export const WORKSPACE_CALL_FAILURE = {
   UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
   /** The account's role does not allow it, or the workspace is a personal one: a member removing someone, an owner removed or leaving. */
   NOT_PERMITTED: "not-permitted",
+  /** The workspace or the member is not one the service shows the account: for a join, an installation GitHub no longer shows it. */
+  NOT_FOUND: PLAN_CALL_FAILURE.NOT_FOUND,
 } as const;
 
 export type WorkspaceCallFailure =

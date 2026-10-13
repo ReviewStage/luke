@@ -217,6 +217,8 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
+  /** The account's workspaces read again, where the host's last read is a minute old. */
+  workspacesRefresh(): Effect.Effect<void>;
   /** The Work tab scrolled back: the host reads the open plan's page of work before the oldest turn it holds, and the view takes it. */
   planningWorkEarlier(): Effect.Effect<void>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
@@ -566,6 +568,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
       ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     planningWorkEarlier: () => fire(client.call(GATEWAY_METHOD.PLANNING_WORK_EARLIER)),
     planningOpen: (planId) =>
       Effect.map(

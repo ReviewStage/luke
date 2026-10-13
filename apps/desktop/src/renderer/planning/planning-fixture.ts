@@ -151,7 +151,13 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   ],
   listStatus: PLANNING_READ.READY,
   workspaces: [
-    { id: "workspace-personal", name: "Personal", personal: true, role: WORKSPACE_ROLE.OWNER },
+    {
+      id: "workspace-personal",
+      name: "Personal",
+      personal: true,
+      role: WORKSPACE_ROLE.OWNER,
+      active: true,
+    },
   ],
   available: [],
   document: { status: PLANNING_READ.IDLE },

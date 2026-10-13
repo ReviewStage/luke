@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
+import { type FakeCloudRoute, fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { WORKSPACE_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
@@ -119,26 +119,6 @@ it.effect(
     }),
 );
 
-it.effect("answers nothing where the service refused", () =>
-  Effect.gen(function* () {
-    const refusal = {
-      answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
-      status: HTTP_STATUS.FORBIDDEN,
-    };
-    const api = fakeCloudApi({
-      "POST /api/workspaces/join": refusal,
-      "GET /api/workspaces/members": refusal,
-    });
-    const workspaces = client();
-
-    assert.equal(
-      yield* Effect.provide(workspaces.join(JOINABLE.installationId), api.layer),
-      undefined,
-    );
-    assert.equal(yield* Effect.provide(workspaces.members(SHARED.id), api.layer), undefined);
-  }),
-);
-
 it.effect(
   "removes a member and leaves a workspace, answered with those who remain and the workspace left",
   () =>
@@ -174,30 +154,36 @@ it.effect(
 );
 
 it.effect(
-  "tells a removal or a leave the account's role refused apart from one that is no answer at all",
+  "tells a refusal the account's role earned, and one of a thing not shown it, apart from no answer at all",
   () =>
     Effect.gen(function* () {
       const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
-      const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
-      const notPermitted = fakeCloudApi({
-        "POST /api/workspaces/members/remove": forbidden,
-        "POST /api/workspaces/leave": forbidden,
-      });
-      const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
-      const notFound = fakeCloudApi({
-        "POST /api/workspaces/members/remove": missing,
-        "POST /api/workspaces/leave": missing,
-      });
+      const every = (answer: FakeCloudRoute) =>
+        fakeCloudApi({
+          "POST /api/workspaces/join": answer,
+          "GET /api/workspaces/members": answer,
+          "POST /api/workspaces/members/remove": answer,
+          "POST /api/workspaces/leave": answer,
+        });
+      const notPermitted = every(refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN));
+      const notFound = every(refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND));
+      const serverError = every({ answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR });
       const elsewhere = fakeCloudApi({
+        "POST /api/workspaces/join": {
+          answer: () => ({ workspace: { ...SHARED, role: "guest" } }),
+        },
+        "GET /api/workspaces/members": { answer: () => ({ members: [{ ...ADA, role: "guest" }] }) },
         "POST /api/workspaces/members/remove": {
           answer: () => ({ members: [{ ...ADA, role: "guest" }] }),
         },
         "POST /api/workspaces/leave": { answer: () => ({ workspaceId: PERSONAL.id }) },
       });
       const workspaces = client();
-      const both = (layer: typeof notPermitted.layer) =>
+      const all = (layer: typeof notPermitted.layer) =>
         Effect.provide(
           Effect.all([
+            workspaces.join(JOINABLE.installationId),
+            workspaces.members(SHARED.id),
             workspaces.removeMember(SHARED.id, GRACE.userId),
             workspaces.leave(SHARED.id),
           ]),
@@ -205,51 +191,21 @@ it.effect(
         );
 
       const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const missed = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
       const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
-      assert.deepEqual(yield* both(notPermitted.layer), [refused, refused]);
-      assert.deepEqual(yield* both(notFound.layer), [unanswered, unanswered]);
-      assert.deepEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
+      assert.deepEqual(yield* all(notPermitted.layer), [refused, refused, refused, refused]);
+      assert.deepEqual(yield* all(notFound.layer), [missed, missed, missed, missed]);
+      assert.deepEqual(yield* all(serverError.layer), [
+        unanswered,
+        unanswered,
+        unanswered,
+        unanswered,
+      ]);
+      assert.deepEqual(yield* all(elsewhere.layer), [
+        unanswered,
+        unanswered,
+        unanswered,
+        unanswered,
+      ]);
     }),
-
-);
-
-it.effect("tells a refusal the account's role earned apart from one that is no answer at all", () =>
-  Effect.gen(function* () {
-    const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
-    const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
-    const notPermitted = fakeCloudApi({
-      "POST /api/workspaces/join": forbidden,
-      "GET /api/workspaces/members": forbidden,
-      "POST /api/workspaces/members/remove": forbidden,
-      "POST /api/workspaces/leave": forbidden,
-    });
-    const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
-    const notFound = fakeCloudApi({
-      "POST /api/workspaces/join": missing,
-      "GET /api/workspaces/members": missing,
-      "POST /api/workspaces/members/remove": missing,
-      "POST /api/workspaces/leave": missing,
-    });
-    const workspaces = client();
-    const every = (layer: typeof notPermitted.layer) =>
-      Effect.provide(
-        Effect.all([
-          workspaces.join(JOINABLE.installationId),
-          workspaces.members(SHARED.id),
-          workspaces.removeMember(SHARED.id, GRACE.userId),
-          workspaces.leave(SHARED.id),
-        ]),
-        layer,
-      );
-
-    const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
-    const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
-    assert.deepEqual(yield* every(notPermitted.layer), [refused, refused, refused, refused]);
-    assert.deepEqual(yield* every(notFound.layer), [
-      unanswered,
-      unanswered,
-      unanswered,
-      unanswered,
-    ]);
-  }),
 );

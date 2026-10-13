@@ -6,6 +6,7 @@ import {
   type CodeLines,
   PLAN_CALL_FAILURE,
   type PlanningStartAnswer,
+  type PlanningWorkspaceJoinAnswer,
   WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
@@ -16,6 +17,7 @@ import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   COLOURED_CODE_MAX_CHARS,
+  WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
@@ -29,7 +31,13 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const RELAY = { installationId: 4_200_017, name: "relay-labs" };
-const ACME = { id: "workspace-acme", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+const ACME = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: true,
+};
 const GRACE = {
   userId: "user-grace",
   name: "Grace Hopper",
@@ -56,7 +64,7 @@ function fixture() {
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
-  /** Whether the host answers a workspace call as the account's role not allowing it. */
+  /** Whether the host refuses a workspace call: a write as the account's role not allowing it, a join as not found. */
   const host = { notPermitted: false };
   const refusal = () =>
     host.notPermitted
@@ -156,9 +164,13 @@ function fixture() {
           return true;
         }),
       workspaceJoin: (params) =>
-        Effect.sync(() => {
+        Effect.sync((): PlanningWorkspaceJoinAnswer => {
           asked.push(`join:${params.installationId}`);
-          return params.installationId === RELAY.installationId ? { workspace: ACME } : refusal();
+          if (params.installationId === RELAY.installationId) return { workspace: ACME };
+          // The service answers a join it would not grant as not found.
+          return host.notPermitted
+            ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
+            : refusal();
         }),
       workspaceMembers: (params) =>
         Effect.sync(() => {
@@ -301,7 +313,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace act the account's role does not allow is refused in words that say so, and one unanswered in its kind's own",
+  "a workspace act the account's role does not allow, and a join GitHub does not show, are each refused in words that say so, and one unanswered in its kind's own",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -318,6 +330,10 @@ it.effect(
         { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
         PANEL,
       );
+      const notShown = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
+        PANEL,
+      );
       f.host.notPermitted = false;
       const unjoined = yield* f.router.performAct(
         { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
@@ -330,6 +346,10 @@ it.effect(
       };
       assert.deepEqual(removed, notPermitted);
       assert.deepEqual(left, notPermitted);
+      assert.deepEqual(notShown, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
+      });
       assert.deepEqual(unjoined, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.WORKSPACE_JOIN].refusal,
