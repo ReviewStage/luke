@@ -110,7 +110,7 @@ const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
  * is one short line; Luke still talking `PLAYBACK_MS` after the word is Luke
  * carrying on, so the call stays up rather than cutting him off.
  */
-export const LUKE_ENDING_BOUNDS = {
+const LUKE_ENDING_BOUNDS = {
   START_MS: 1_500,
   PLAYBACK_MS: 15_000,
 } as const;

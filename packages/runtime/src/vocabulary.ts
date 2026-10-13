@@ -8,5 +8,5 @@
 
 export type { ModelUsage, ReasoningSummary, ToolInvocation } from "./execution.js";
 export { type AgentId, DEFAULT_AGENT_ID, type SessionKey, sessionKey } from "./identifiers.js";
-export { COMPACTION_SOURCE, type CompactionSource } from "./storage.js";
+export type { CompactionSource } from "./storage.js";
 export { DAY_MS } from "./timers.js";

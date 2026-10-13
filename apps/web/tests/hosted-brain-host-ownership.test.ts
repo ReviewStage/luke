@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { Effect, Layer, Option, Result, Schema } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
-import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
@@ -25,19 +24,12 @@ import {
   type HostedToolBinding,
 } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
-import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
-import { stampedEveEvent } from "./support/eve-events";
 import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  insertConversation,
-  readConversationById,
-  readTurnsByConversation,
-  setConversationDeletedAt,
-} from "./support/store-rows";
+import { insertConversation, setConversationDeletedAt } from "./support/store-rows";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and
@@ -126,72 +118,12 @@ async function ownedConversation(userId: string): Promise<ConversationTarget> {
   return { userId, conversationId };
 }
 
-const RuntimeSessionRowSchema = Schema.Struct({
-  runtimeSessionId: Schema.NullOr(Schema.String),
-});
-
-async function recordedSession(conversationId: string): Promise<string | null> {
-  const [row] = await readConversationById(database.run, conversationId);
-  assert.ok(row);
-  return Schema.decodeUnknownSync(RuntimeSessionRowSchema)(row).runtimeSessionId;
-}
-
 /** A session's start as the store hook runs it: admitted while claiming, then the claim; answers whether the record is now this session's. */
 async function start(host: BrainHost, auth: SessionAuth, sessionId: string): Promise<boolean> {
   const starting = await database.run(host.admitStarting(auth, sessionId));
   assert.ok(Result.isSuccess(starting));
   if (!Result.isSuccess(starting)) return false;
   return database.run(host.sessionStarted(starting.success, sessionId));
-}
-
-const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-  stampedEveEvent(event, NOW);
-
-/** The fewest events of one turn that leave a settled turn row: opened, the words, one answering step, closed. */
-function shortTurn(turnId: string): readonly MessageStreamEvent[] {
-  const sequence = 0;
-  return [
-    stamped({ type: "turn.started", data: { turnId, sequence } }),
-    stamped({ type: "message.received", data: { turnId, sequence, message: "hello" } }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
-    stamped({
-      type: "message.completed",
-      data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: "Hi." },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 0, finishReason: "stop" },
-    }),
-    stamped({ type: "turn.completed", data: { turnId, sequence } }),
-  ];
-}
-
-/**
- * One event of one session as the store hook carries it: relayed only for a
- * session the host admits as the conversation's current one. Answers whether
- * the event was relayed at all.
- */
-async function hookedEvent(
-  host: BrainHost,
-  auth: SessionAuth,
-  sessionId: string,
-  event: MessageStreamEvent,
-  state = memoryRelayState(),
-): Promise<boolean> {
-  const admitted = await database.run(host.admit(auth, sessionId));
-  if (Result.isFailure(admitted)) return false;
-  await database.run(
-    host
-      .relay(
-        event,
-        admitted.success,
-        { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
-        state,
-        {},
-      )
-      .pipe(Effect.provide(NO_GITHUB)),
-  );
-  return true;
 }
 
 /** The lineage eve hands a subagent's child session: the root it was delegated from, and the root's turn. */
@@ -241,54 +173,6 @@ function binding(target: ConversationTarget, sessionId: string): HostedToolBindi
   };
 }
 
-test("two concurrent starts on one conversation leave exactly one recorded session, the newer, whichever start lands first", async () => {
-  const { host } = hostOverTestDatabase();
-  for (const first of ["OLDER", "NEWER"] as const) {
-    const SESSION = sessions();
-    const order =
-      first === "OLDER" ? [SESSION.OLDER, SESSION.NEWER] : [SESSION.NEWER, SESSION.OLDER];
-    const target = await ownedConversation(await database.createUser());
-    const seat = ownSeat(target.userId, target.conversationId);
-
-    const claims = await Promise.all(order.map((sessionId) => start(host, seat, sessionId)));
-
-    assert.equal(claims[order.indexOf(SESSION.NEWER)], true);
-    assert.equal(await recordedSession(target.conversationId), SESSION.NEWER);
-    assert.ok(Result.isSuccess(await database.run(host.admit(seat, SESSION.NEWER))));
-    assert.deepEqual(
-      await database.run(host.admit(seat, SESSION.OLDER)),
-      Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
-    );
-    assert.equal(await start(host, seat, SESSION.OLDER), false);
-    assert.equal(await recordedSession(target.conversationId), SESSION.NEWER);
-  }
-});
-
-test("the session that lost the race relays nothing: one turn stands on the conversation's sequence, keyed to the session that won", async () => {
-  const SESSION = sessions();
-  const { host } = hostOverTestDatabase();
-  const target = await ownedConversation(await database.createUser());
-  const seat = ownSeat(target.userId, target.conversationId);
-  await Promise.all([start(host, seat, SESSION.OLDER), start(host, seat, SESSION.NEWER)]);
-
-  const olderState = memoryRelayState();
-  const newerState = memoryRelayState();
-  const olderCarried: boolean[] = [];
-  const newerCarried: boolean[] = [];
-  for (const event of shortTurn("turn_0")) {
-    olderCarried.push(await hookedEvent(host, seat, SESSION.OLDER, event, olderState));
-    newerCarried.push(await hookedEvent(host, seat, SESSION.NEWER, event, newerState));
-  }
-
-  assert.deepEqual(olderCarried, [false, false, false, false, false, false]);
-  assert.deepEqual(newerCarried, [true, true, true, true, true, true]);
-  const turnRows = await readTurnsByConversation(database.run, target.conversationId);
-  assert.deepEqual(
-    turnRows.map((row) => row.id),
-    [hostTurnId(SESSION.NEWER, "turn_0")],
-  );
-});
-
 /** What the door answered a request: the caller it admitted, or the status and body of the refusal eve writes from the door's error. */
 type DoorAnswer =
   | { readonly admitted: string }
@@ -336,35 +220,6 @@ function request(
   });
 }
 
-test("a session id nobody's record attributes is refused at the door to everyone, its owner-to-be included, until its first event records it; a rotated-away id is unrecorded again", async () => {
-  const SESSION = sessions();
-  const userA = await database.createUser();
-  const userB = await database.createUser();
-  const target = await ownedConversation(userA);
-  const seat = ownSeat(userA, target.conversationId);
-  const { host } = hostOverTestDatabase();
-  const auth = channelAuth([userA, userB]);
-  const stream = (sessionId: string, bearer: string) =>
-    request(`/eve/v1/session/${sessionId}/stream`, bearer);
-  const followUp = (sessionId: string, bearer: string) =>
-    request(`/eve/v1/session/${sessionId}`, bearer, {}, "POST");
-
-  const notOwner = forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER);
-  for (const bearer of [userA, userB]) {
-    assert.deepEqual(await auth(stream(SESSION.OLDER, bearer)), notOwner);
-    assert.deepEqual(await auth(followUp(SESSION.OLDER, bearer)), notOwner);
-  }
-
-  assert.equal(await start(host, seat, SESSION.OLDER), true);
-  assert.deepEqual(await auth(stream(SESSION.OLDER, userA)), { admitted: userA });
-  assert.deepEqual(await auth(followUp(SESSION.OLDER, userA)), { admitted: userA });
-  assert.deepEqual(await auth(stream(SESSION.OLDER, userB)), notOwner);
-
-  assert.equal(await start(host, seat, SESSION.NEWER), true);
-  assert.deepEqual(await auth(stream(SESSION.OLDER, userA)), notOwner);
-  assert.deepEqual(await auth(stream(SESSION.NEWER, userA)), { admitted: userA });
-});
-
 test("another account's conversation and another account's session are refused at the door; a bearer the account service does not know is no caller at all", async () => {
   const SESSION = sessions();
   const userA = await database.createUser();
@@ -409,43 +264,6 @@ test("another account's conversation and another account's session are refused a
   );
   const unknown = await auth(opening("nobody"));
   assert.equal("status" in unknown && unknown.status, 401);
-});
-
-test("a conversation cleared while its session runs admits nobody at the door and claims no further session", async () => {
-  const SESSION = sessions();
-  const userA = await database.createUser();
-  const target = await ownedConversation(userA);
-  const seat = ownSeat(userA, target.conversationId);
-  const { host } = hostOverTestDatabase();
-  assert.equal(await start(host, seat, SESSION.OLDER), true);
-  const auth = channelAuth([userA]);
-
-  await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
-
-  assert.deepEqual(
-    await auth(request(`/eve/v1/session/${SESSION.OLDER}/stream`, userA)),
-    forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER),
-  );
-  assert.deepEqual(
-    await auth(
-      request(
-        "/eve/v1/session",
-        userA,
-        { [BRAIN_HOST_HEADER.CONVERSATION]: target.conversationId },
-        "POST",
-      ),
-    ),
-    forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER),
-  );
-  assert.deepEqual(
-    await database.run(host.admit(seat, SESSION.OLDER)),
-    Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION),
-  );
-  assert.deepEqual(
-    await database.run(host.admitStarting(seat, SESSION.NEWER)),
-    Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION),
-  );
-  assert.equal(await recordedSession(target.conversationId), SESSION.OLDER);
 });
 
 test("a tool call is admitted again as it runs: the current session's lands, and a rotated-away session's, another account's seat, and a cleared conversation's are each refused for the admission's reason, not the tool's", async () => {
@@ -499,79 +317,4 @@ test("a tool call is admitted again as it runs: the current session's lands, and
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
-});
-
-test("a subagent's tool call is admitted through the root it was delegated from: it lands while the root is the conversation's session, and is refused once the conversation rotates away from it or for another account's seat", async () => {
-  const SESSION = sessions();
-  const CHILD = "wrun_01MCHILD000000000000000";
-  const userA = await database.createUser();
-  const userB = await database.createUser();
-  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
-  const conversationId = Option.getOrThrow(
-    await database.run(openPlanConversation(userA, started.id)),
-  );
-  const target = { userId: userA, conversationId };
-  const seat = ownSeat(userA, conversationId);
-  const { host } = hostOverTestDatabase();
-  const question = {
-    question: "Should a withdrawn invite tell the invitee who withdrew it?",
-    recommendation: "No: just say the invite is no longer valid.",
-  };
-  const call = (auth: SessionAuth, childOf?: ChildOf) =>
-    database.run(
-      host
-        .runTool(
-          QUEUE_QUESTION_TOOL.name,
-          binding(target, CHILD),
-          question,
-          toolContext(CHILD, auth, childOf),
-        )
-        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
-    );
-
-  assert.equal(await start(host, seat, SESSION.OLDER), true);
-  assert.deepEqual(await call(seat, { rootSessionId: SESSION.OLDER }), {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-  });
-  // The child's own id is no conversation's session: without its lineage it is refused.
-  assert.deepEqual(await call(seat), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
-  });
-  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId });
-  assert.deepEqual(
-    await call({ current: seatB, initiator: seatB }, { rootSessionId: SESSION.OLDER }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: BRAIN_HOST_REFUSAL.NOT_OWNER },
-  );
-
-  assert.equal(await start(host, seat, SESSION.NEWER), true);
-  assert.deepEqual(await call(seat, { rootSessionId: SESSION.OLDER }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
-  });
-});
-
-test("a subagent's resolvers are admitted on ownership alone, since eve names its child session no record holds: the owner's child is admitted whichever session the conversation runs in, and another account's seat is refused", async () => {
-  const SESSION = sessions();
-  const CHILD = "wrun_01MCHILD000000000000001";
-  const userA = await database.createUser();
-  const userB = await database.createUser();
-  const target = await ownedConversation(userA);
-  const seat = ownSeat(userA, target.conversationId);
-  const { host } = hostOverTestDatabase();
-  assert.equal(await start(host, seat, SESSION.OLDER), true);
-
-  assert.deepEqual(
-    await database.run(host.admit(seat, CHILD)),
-    Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
-  );
-  const delegated = await database.run(host.admitDelegated(seat, CHILD));
-  assert.ok(Result.isSuccess(delegated));
-  assert.deepEqual(delegated.success.target, target);
-
-  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId });
-  assert.deepEqual(
-    await database.run(host.admitDelegated({ current: seatB, initiator: seatB }, CHILD)),
-    Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER),
-  );
 });

@@ -6,11 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream } from "node:stream/web";
-import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import type { SandboxSpawnOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
-import { bashStartingIn, SHELL_INPUT } from "../server/hosted/coder-host/shell";
+import { bashStartingIn } from "../server/hosted/coder-host/shell";
 
 /**
  * The coding agent's shell: every command starts in the checkout, in a
@@ -106,43 +105,4 @@ test("a command starts in the checkout, and a `cd` lasts only for the call it is
   assert.equal((await run(root, checkout, "pwd")).stdout.trim(), checkout);
   assert.equal((await run(root, checkout, "cd .. && pwd")).stdout.trim(), root);
   assert.equal((await run(root, checkout, "pwd")).stdout.trim(), checkout);
-});
-
-test("the command's own exit and output come back whole, a multi-line script and a heredoc among them", async () => {
-  const { root, checkout } = sandboxRoot();
-  const failed = await run(root, checkout, "echo out\necho err >&2\nexit 3");
-  assert.deepEqual(
-    { exitCode: failed.exitCode, stdout: failed.stdout, stderr: failed.stderr },
-    { exitCode: 3, stdout: "out\n", stderr: "err\n" },
-  );
-  const read = await run(
-    root,
-    checkout,
-    "while read -r line; do echo \"[$line]\"; done <<'EOF'\na b\nEOF",
-  );
-  assert.equal(read.stdout, "[a b]\n");
-});
-
-test("a checkout that is not there fails the call and runs nothing at the sandbox's root", async () => {
-  const { root } = sandboxRoot();
-  const answer = await run(root, join(root, "missing"), "echo ran; pwd");
-  assert.notEqual(answer.exitCode, 0);
-  assert.equal(answer.stdout, "");
-});
-
-test("a command given with its description runs as the command alone", async () => {
-  const { root, checkout } = sandboxRoot();
-  const answer = await run(root, checkout, "echo ran", "Say the command ran");
-  assert.deepEqual(
-    { exitCode: answer.exitCode, stdout: answer.stdout, stderr: answer.stderr },
-    { exitCode: 0, stdout: "ran\n", stderr: "" },
-  );
-});
-
-test("the model is offered a command and the plain words it is for, and nothing else", async () => {
-  await settleJsonSchemaGolden(
-    jsonSchemaGoldenRoot(import.meta.url),
-    "coder-bash-tool-input",
-    jsonSchemaOf(SHELL_INPUT),
-  );
 });

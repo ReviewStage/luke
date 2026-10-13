@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
-import { DOCUMENT_TEXT } from "#testing/document-plan";
+import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";
 import {
   authorName,
@@ -23,6 +23,7 @@ import {
 const HOUR = 3_600_000;
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const NOW = Date.UTC(2026, 9, 11, 18, 0);
+const DOCUMENT_TEXT = DOCUMENT_PLAN.document.body.trimEnd();
 
 function line(overrides: Partial<PlanRevisionLine> = {}): PlanRevisionLine {
   return {
@@ -253,6 +254,7 @@ test("a revision is compared by section, its assumptions among them, and a headi
   assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), [" or by link"]);
   assert.ok(diff.changed);
 });
+
 test("a revision's changed sections are the units its diff marks, in reading order, and the plan's first revision wrote every one", () => {
   const before = {
     body: "## Goal\n\nOnly admins.\n\n## Risks\n\nSpam.\n\n## Notes\n\nNone.",

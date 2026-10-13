@@ -61,7 +61,7 @@ import {
 const BEARER_CHALLENGE = [{ scheme: "Bearer" }] as const;
 
 /** The two request headers as attributes, each only when it is well formed; a malformed one names nothing. */
-export function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
+function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
   const attributes: Record<string, string> = {};
   const conversation = headers.get(BRAIN_HOST_HEADER.CONVERSATION)?.trim();
   if (conversation && CONVERSATION_ID_PATTERN.test(conversation)) {

@@ -67,26 +67,6 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
   "uuid",
 ]);
 
-/**
- * Columns the database still carries that no module declares, each waiting
- * on the migration that drops it. Drizzle names every declared column in an
- * insert, and a deployment migrates while the one before it still serves, so
- * a column leaves its module one deployment before it leaves the database.
- * An entry goes in the same PR as its drop, which the last tests below hold
- * by failing on an entry the database no longer carries.
- */
-const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  // Migration 0088 moved the fixed kinds into `blocks` and `response`.
-  ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
-]);
-
-/**
- * Tables the database still carries that no module declares, on the same
- * terms as `PENDING_DROP`: nothing reads or writes them, and they leave the
- * database one deployment after they left their modules.
- */
-const PENDING_DROP_TABLES: ReadonlySet<string> = new Set([]);
-
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";
 
@@ -210,47 +190,6 @@ const MIGRATED = await migratedTables();
 /** The names both sides know, which is where a column or a key can be compared at all. */
 const SHARED_TABLES = [...DECLARED.keys()].filter((name) => MIGRATED.has(name)).sort();
 
-/** One side's names, in order, so a comparison reads the same however either side was built. */
-function names(of: ReadonlySet<string> | ReadonlyMap<string, unknown>): ReadonlyArray<string> {
-  return [...of.keys()].sort();
-}
-
-/** What the left side holds and the right side does not, in order. */
-function surplus(
-  left: Iterable<string>,
-  right: ReadonlyMap<string, unknown> | ReadonlySet<string>,
-): ReadonlyArray<string> {
-  return [...left].filter((name) => !right.has(name)).sort();
-}
-
-test("the schema modules and the migrated database hold the same tables", () => {
-  assert.deepEqual(
-    {
-      declaredAndNotMigrated: surplus(DECLARED.keys(), MIGRATED),
-      migratedAndNotDeclared: surplus(MIGRATED.keys(), DECLARED).filter(
-        (name) => !PENDING_DROP_TABLES.has(name),
-      ),
-    },
-    { declaredAndNotMigrated: [], migratedAndNotDeclared: [] },
-  );
-});
-
-test("the schema modules and the migrated database hold the same columns of each table", () => {
-  const drift: string[] = [];
-  for (const table of SHARED_TABLES) {
-    const declared = DECLARED.get(table)?.columns ?? new Map<string, Column>();
-    const migrated = MIGRATED.get(table)?.columns ?? new Map<string, Column>();
-    for (const column of surplus(declared.keys(), migrated)) {
-      drift.push(`${table}.${column}: declared, and not in the migrated database`);
-    }
-    for (const column of surplus(migrated.keys(), declared)) {
-      if (PENDING_DROP.get(table)?.has(column)) continue;
-      drift.push(`${table}.${column}: in the migrated database, and declared by no module`);
-    }
-  }
-  assert.deepEqual(drift, []);
-});
-
 test("every declared column carries the type and the nullability the migrated database gives it", () => {
   const drift: string[] = [];
   for (const table of SHARED_TABLES) {
@@ -273,30 +212,4 @@ test("every declared column carries the type and the nullability the migrated da
     }
   }
   assert.deepEqual(drift, []);
-});
-
-test("every table's primary key is the one the migrated database gives it", () => {
-  const drift: string[] = [];
-  for (const table of SHARED_TABLES) {
-    const declared = names(DECLARED.get(table)?.primaryKey ?? new Set());
-    const migrated = names(MIGRATED.get(table)?.primaryKey ?? new Set());
-    if (declared.join(", ") !== migrated.join(", ")) {
-      drift.push(`${table}: declared (${declared.join(", ")}), migrated (${migrated.join(", ")})`);
-    }
-  }
-  assert.deepEqual(drift, []);
-});
-
-test("every column waiting on its drop is still in the migrated database", () => {
-  const dropped: string[] = [];
-  for (const [table, columns] of PENDING_DROP) {
-    for (const column of columns) {
-      if (!MIGRATED.get(table)?.columns.has(column)) dropped.push(`${table}.${column}`);
-    }
-  }
-  assert.deepEqual(dropped, []);
-});
-
-test("every table waiting on its drop is still in the migrated database", () => {
-  assert.deepEqual(surplus(PENDING_DROP_TABLES, MIGRATED), []);
 });

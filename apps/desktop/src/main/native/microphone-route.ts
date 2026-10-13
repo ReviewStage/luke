@@ -9,7 +9,7 @@ import { lineWatcher } from "./line-watcher";
 import type { NativeHelperProcess } from "./native-helper";
 
 /** The one word the helper takes; its one line is read by the parser below. */
-export const MICROPHONE_ROUTE_PROBE = "probe";
+const MICROPHONE_ROUTE_PROBE = "probe";
 
 interface MicrophoneRouteEdges {
   /** The route as read, on start, on every input change, and per probe. */
@@ -84,7 +84,7 @@ const LID_WORDS: readonly LidState[] = Object.values(LID_STATE);
  * than guessed at: the cost of missing one is the browser's default device,
  * which is exactly what no helper at all would mean.
  */
-export function parseMicrophoneRouteLine(line: string): MicrophoneRoute | undefined {
+function parseMicrophoneRouteLine(line: string): MicrophoneRoute | undefined {
   const match = /^input transport=(\S+) lid=(\S+)(?: builtin=(.+))?$/.exec(line);
   if (!match?.[1] || !match[2]) return undefined;
   const transport = TRANSPORT_WORDS.find((word) => word === match[1]);

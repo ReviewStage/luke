@@ -37,7 +37,7 @@ export const SOCKET_CLOSE_CODE = {
 } as const;
 
 /** The reason a socket is closed with when the peer has sent more than its budget of bytes. */
-export const BUDGET_SPENT_REASON = "frame-budget-spent";
+const BUDGET_SPENT_REASON = "frame-budget-spent";
 
 export type VoiceFrame = { readonly text: string } | { readonly bytes: Uint8Array };
 

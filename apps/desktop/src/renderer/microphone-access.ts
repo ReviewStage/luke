@@ -10,7 +10,7 @@ import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio
  */
 export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
 
-export const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
+const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
 
 /** A neutral customer-facing answer when the hosted emergency brake refuses a session. */
 export function hostedVoiceUnavailableNote(

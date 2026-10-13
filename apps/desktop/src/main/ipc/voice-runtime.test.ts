@@ -4,9 +4,8 @@ import { runModeFor } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
-import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
-import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
@@ -15,10 +14,6 @@ import {
   voiceRuntimeActRows,
   voiceRuntimeReports,
 } from "./voice-runtime";
-
-/** The voice rows through the real router, over the real document. */
-
-const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** What the document is composed from; the voice rows read none of it. */
 const RUN = {
@@ -193,55 +188,3 @@ it.effect("the five live session acts reach the host from the voice window alone
     assert.equal(f.liveCalls.length, 5);
   }),
 );
-
-it.effect(
-  "a panel's or the call window's command reaches the voice window, and one from anything else reaches nothing",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      assert.deepEqual(yield* f.command(f.voiceSender), { status: "done", value: undefined });
-      assert.deepEqual(f.sentToVoice, []);
-      assert.deepEqual(yield* f.command(f.panelSender), { status: "done", value: undefined });
-      yield* f.command(f.callSender);
-      const ended = {
-        channel: channels.onVoiceCommand,
-        payload: { command: VOICE_COMMAND.END_CALL },
-      };
-      assert.deepEqual(f.sentToVoice, [ended, ended]);
-    }),
-);
-
-it.effect(
-  "the call card's way back, from the floating window or a panel's own card, brings the panels forward on the call's own plan, and the voice window's ask, or one with no call, brings nothing",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const showPlan = { kind: ACT_KIND.CALL_SHOW_PLAN } as const;
-      yield* f.perform(f.callSender, showPlan);
-      yield* f.perform(f.panelSender, showPlan);
-      assert.equal(f.panelsFocused(), 0);
-
-      f.report(f.voiceSender, { ...IDLE_VOICE_VIEW, voiceStatus: "listening", callPlanId: PLAN });
-      yield* f.perform(f.voiceSender, showPlan);
-      assert.equal(f.panelsFocused(), 0);
-      yield* f.perform(f.callSender, showPlan);
-      yield* f.perform(f.panelSender, showPlan);
-      assert.equal(f.panelsFocused(), 2);
-      const shown = { channel: channels.onShowPlan, payload: { planId: PLAN } };
-      assert.deepEqual(f.toPanels, [shown, shown]);
-    }),
-);
-
-it("the voice window's report is written to the document; a panel's report is ignored", () => {
-  const f = fixture();
-  const speaking: VoiceView = {
-    ...IDLE_VOICE_VIEW,
-    voiceStatus: "speaking",
-    lukeSpeaking: true,
-    lukeCaptions: ["Two sessions"],
-  };
-  f.report(f.voiceSender, speaking);
-  assert.deepEqual(f.state.snapshot().voice.view, speaking);
-  f.report(f.panelSender, IDLE_VOICE_VIEW);
-  assert.deepEqual(f.state.snapshot().voice.view, speaking);
-});

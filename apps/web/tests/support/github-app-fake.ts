@@ -119,7 +119,7 @@ export function fakeGitHub(
 }
 
 /** One repository as a test names it; GitHub's record is built from it. */
-export interface RepositoryFixture {
+interface RepositoryFixture {
   readonly owner: string;
   readonly name: string;
   /** When GitHub last saw it change, ISO; a fixed instant when unsaid. */

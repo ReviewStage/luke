@@ -59,18 +59,13 @@ export function workingTime(elapsedMs: number): string {
 }
 
 /** What a finished turn's last line says: how long it worked, and the day and time it ended in the developer's own locale and zone, the day as a call's header says it from `now`. */
-export function workedForText(
-  startedAt: number,
-  endedAt: number,
-  now: number,
-  locale?: string,
-): string {
+function workedForText(startedAt: number, endedAt: number, now: number, locale?: string): string {
   const ended = callHeading(endedAt, now, locale);
   return `${WORKED_WORDS}${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
 }
 
 /** The time now, and again each second: what a count is read against. */
-export const workingClock: Stream.Stream<number> = Stream.fromEffectSchedule(
+const workingClock: Stream.Stream<number> = Stream.fromEffectSchedule(
   Clock.currentTimeMillis,
   Schedule.spaced(WORKING_TICK),
 );

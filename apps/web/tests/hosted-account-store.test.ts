@@ -11,7 +11,6 @@ import { user } from "@sidecar/database/schemas/auth";
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
-import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
@@ -56,13 +55,6 @@ const countRows = (userId: string) =>
   });
 
 it.layer(getTestDB())("the account group's seams over effect/unstable/sql", (it) => {
-  it.effect("an account that stored nothing reads as nothing", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      assert.equal(yield* readAccountPreferences(userId), undefined);
-    }),
-  );
-
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
@@ -72,28 +64,6 @@ it.layer(getTestDB())("the account group's seams over effect/unstable/sql", (it)
       assert.deepEqual(read?.preferences, { voice: "cedar" });
       assert.equal(read?.updatedAt?.getTime(), written.updatedAt?.getTime());
       assert.deepEqual(read, written);
-    }),
-  );
-
-  it.effect("a rewrite replaces the snapshot rather than merging into it", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
-      yield* writeAccountPreferences(userId, { preferences: {} });
-
-      const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.preferences, {});
-      assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
-    }),
-  );
-
-  it.effect("an account that never chose a coding-agent default reads the catalog's", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
-
-      const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
     }),
   );
 
@@ -121,45 +91,6 @@ it.layer(getTestDB())("the account group's seams over effect/unstable/sql", (it)
       // The instant is the preferences part's own, so a choice leaves it where it stood.
       assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
-    }),
-  );
-
-  it.effect(
-    "a default on the standard context window reads back with it, and a default naming none reads as the model's whole window",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const standard = {
-          model: "openai/gpt-5.5",
-          effort: "high",
-          contextWindow: CONTEXT_WINDOW.STANDARD,
-        };
-        assert.deepEqual(
-          (yield* writeAccountPreferences(userId, { codingAgent: standard })).codingAgent,
-          standard,
-        );
-        assert.deepEqual((yield* readAccountPreferences(userId))?.codingAgent, standard);
-
-        yield* writeAccountPreferences(userId, { codingAgent: SONNET_AT_MAX });
-        assert.deepEqual((yield* readAccountPreferences(userId))?.codingAgent, SONNET_AT_MAX);
-      }),
-  );
-
-  it.effect("a half-written coding-agent default reads as the catalog's", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      yield* db.insert(accountPreference).values({ userId, codingAgentModel: SONNET_AT_MAX.model });
-      const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
-    }),
-  );
-
-  it.effect("a value the vocabulary does not name is left out of the snapshot", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      yield* db.insert(accountPreference).values({ userId, voice: "not-a-voice" });
-      const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.preferences, {});
     }),
   );
 

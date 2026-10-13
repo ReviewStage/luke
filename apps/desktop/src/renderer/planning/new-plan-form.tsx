@@ -79,7 +79,6 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
 
   // Note that we focus on arrival as well as on each press of New plan,
   // because the page is the window's home and typing the name is its one job.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each new request is what asks for focus.
   useEffect(() => {
     nameField.current?.focus();
   }, [focusRequest]);

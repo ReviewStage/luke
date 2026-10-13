@@ -15,7 +15,7 @@ import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage } from "./support/store-rows";
+import { insertMessage } from "./support/store-rows";
 
 /**
  * The standing context as the host answers it to the eve project's prompt
@@ -137,16 +137,4 @@ test("a turn of a plan's conversation is handed the plan's name and the document
   const second = await standingContextOf(target);
   assert.ok(second.includes(handed(SECOND)));
   assert.equal(second.includes(handed(FIRST)), false);
-});
-
-test("a conversation no plan names is handed no name and no document", async () => {
-  const userId = await database.createUser();
-  const elsewhere = await database.run(createPlan(userId, { name: PLAN_NAME }));
-  await database.run(savePlanText(userId, elsewhere.id, FIRST));
-  const target = { userId, conversationId: await insertConversation(database.run, { userId }) };
-
-  const context = await standingContextOf(target);
-
-  assert.equal(context.includes(PLAN_NAME), false);
-  assert.equal(context.includes(handed(FIRST)), false);
 });

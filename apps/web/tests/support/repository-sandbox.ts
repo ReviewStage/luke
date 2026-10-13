@@ -63,7 +63,7 @@ const PROBE_BOUNDS = { MAX_FILE_BYTES: 1024 * 1024, TEXT_PROBE_BYTES: 8192 } as 
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
 
 /** The commit a checkout stands at unless a test says otherwise: synthetic, whole, as git names one. */
-export const CHECKOUT_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const CHECKOUT_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 /**
  * The file probe's answer, the facts the script prints on one line: whether

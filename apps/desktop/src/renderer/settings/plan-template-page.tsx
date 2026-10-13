@@ -234,7 +234,6 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
   };
 
   // The page going sends words whose save failed a turn later, once the document's own leaving has sent anything newer.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the page going is what sends them, through the door it held.
   useEffect(() => {
     const writes = held.current;
     writes.standing = true;

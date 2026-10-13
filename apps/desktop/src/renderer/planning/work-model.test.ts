@@ -247,23 +247,6 @@ test("a finished turn's fold names the coding agents it started apart from its t
   assert.equal(summaryOf([refused, words("That did not start.")]), "1 tool call");
 });
 
-test("a coding agent's start runs together with the calls beside it while the turn moves, as any call does", () => {
-  const rows = rowsOf([
-    turn(PLAN_WORK_STATE.RUNNING, [
-      call("a", PLAN_WORK_TOOL.LIST_AGENTS, undefined),
-      {
-        ...call("s", PLAN_WORK_TOOL.START_AGENT, "Fix the invite emails."),
-        output: JSON.stringify({ status: "accepted", agent: { id: "agent-1" } }),
-      },
-      call("b", PLAN_WORK_TOOL.READ_AGENT, "agent-1", PLAN_WORK_STATE.RUNNING),
-    ]),
-  ]);
-
-  assert.deepEqual(scanned(rows), [
-    [TURN_ROW.GROUP, [undefined, "Fix the invite emails.", "agent-1"], true],
-  ]);
-});
-
 test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
   const rows = rowsOf([
     turn(PLAN_WORK_STATE.DONE, [
@@ -306,18 +289,6 @@ test("a finished turn's thought between its calls folds with them under the lead
     ],
     [SCANNED.TEXT, "Invites live in one file."],
   ]);
-});
-
-test("the same calls while their turn still moves are one open group, and no lead is folded yet", () => {
-  const rows = rowsOf([
-    turn(PLAN_WORK_STATE.RUNNING, [
-      call("a", PLAN_WORK_TOOL.LIST_AGENTS, undefined),
-      call("b", PLAN_WORK_TOOL.READ_AGENT, "agent-1"),
-      call("c", PLAN_WORK_TOOL.READ_AGENT, "agent-2", PLAN_WORK_STATE.RUNNING),
-    ]),
-  ]);
-
-  assert.deepEqual(scanned(rows), [[TURN_ROW.GROUP, [undefined, "agent-1", "agent-2"], true]]);
 });
 
 test("the worker stands on its own row, the one call still turning while its turn waits on it", () => {

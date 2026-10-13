@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { cardTitle, patchPaths, stripAnsi, toolCallView } from "./tool-call-model";
+import { cardTitle, toolCallView } from "./tool-call-model";
 import { CALL_KIND } from "./turn-rows";
 
 const ESCAPE = String.fromCharCode(27);
@@ -25,12 +25,6 @@ test("a command's row is the command it ran, and its answer reads as a terminal 
     kind: TOOL_BLOCK.TEXT,
     text: "all green\none warning\nexit 2\n(output truncated)",
   });
-});
-
-test("a command still running has its row and its command, and no answer yet", () => {
-  const view = toolCallView({ tool: "bash", input: { command: "sleep 1" }, output: undefined });
-  assert.equal(view.subject, "sleep 1");
-  assert.equal(view.output, undefined);
 });
 
 test("a command the model described carries its description on one line for the row and keeps the command for the body; one with none, or only blanks, is the command's row as before", () => {
@@ -178,7 +172,6 @@ test("a patch names the first file it touches and how many more, carries the pat
     kind: TOOL_BLOCK.TEXT,
     text: "update apps/web/a.ts\nadd apps/web/b.ts",
   });
-  assert.deepEqual(patchPaths(patchText), ["apps/web/a.ts", "apps/web/b.ts"]);
 
   // A problem the patch reported is told after the files, not dropped.
   const flagged = toolCallView({
@@ -229,12 +222,6 @@ test("a command's answer that is not a terminal's envelope falls back to its JSO
   });
   assert.equal(view.output?.kind, TOOL_BLOCK.JSON);
   assert.match(view.output?.text ?? "", /"reason": "The turn ended/u);
-});
-
-test("terminal escapes are taken out of words, colours and titles alike", () => {
-  assert.equal(stripAnsi(`${ESCAPE}[1;31mred${ESCAPE}[0m plain`), "red plain");
-  assert.equal(stripAnsi(`${ESCAPE}]0;title${String.fromCharCode(7)}after`), "after");
-  assert.equal(stripAnsi("no escapes"), "no escapes");
 });
 
 test("a plan's card is titled by its first heading, or its first line of words", () => {

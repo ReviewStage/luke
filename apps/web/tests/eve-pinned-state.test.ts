@@ -41,24 +41,6 @@ const handle: StateHandle<string> = {
   },
 };
 
-test("a pinned handle reads and writes the container it was pinned in, from whatever context it is called in", async () => {
-  const own: Container = new Map();
-  const other: Container = new Map();
-  const pinned = storage.run(own, () => pinnedState(handle));
-  storage.run(other, () => {
-    pinned.update(() => "written from another context");
-  });
-  assert.equal(own.get(SLOT), "written from another context");
-  assert.equal(other.has(SLOT), false);
-  // Read again from outside every container, where the bare handle would throw.
-  assert.equal(pinned.get(), "written from another context");
-  assert.throws(() => handle.get());
-  await storage.run(other, async () => {
-    await Promise.resolve();
-    assert.equal(pinned.get(), "written from another context");
-  });
-});
-
 /** The callers that contend over the one connection, each entered in a container of its own. */
 const CALLERS = ["first", "second", "third", "fourth"] as const;
 

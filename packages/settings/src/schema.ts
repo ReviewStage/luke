@@ -13,7 +13,6 @@ import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
-  SETTING_ROWS,
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
   SETTINGS_PAGE,

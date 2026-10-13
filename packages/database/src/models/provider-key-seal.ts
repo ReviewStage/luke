@@ -50,7 +50,7 @@ const SEAL_PURPOSE = {
 const KEY_ENTRY = /^(\d{1,6}):([A-Za-z0-9+/]{43}=)$/u;
 
 /** Why the environment's list is no list; it names the shape that is wrong and never a value. */
-export const KEY_RING_FAULT = {
+const KEY_RING_FAULT = {
   EMPTY: "it names no key",
   MALFORMED: "an entry is not <version>:<base64 of 32 bytes>",
   DUPLICATE: "a version is named twice",

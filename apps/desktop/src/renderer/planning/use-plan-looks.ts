@@ -40,7 +40,7 @@ import { rendererRuntime } from "../renderer-runtime";
  */
 
 /** How long the plan is open before the developer has looked at it. */
-export const PLAN_LOOK = Duration.seconds(3);
+const PLAN_LOOK = Duration.seconds(3);
 
 /** Where the plans' marks are kept in the renderer's storage. */
 const STORAGE_KEY = "luke.planLooks";

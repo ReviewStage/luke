@@ -34,7 +34,7 @@ const { PLANNER, PLANNER_WORKER, CODER, CODER_WORKER } = AGENT_ROLE;
  * coding agent's worker only the reads of the checkout and the web, so
  * workers run in parallel without colliding and the agent alone edits.
  */
-export const TOOL_ROLES = {
+const TOOL_ROLES = {
   [AGENT_TOOL.QUEUE_QUESTION]: [PLANNER],
   [AGENT_TOOL.WITHDRAW_QUESTION]: [PLANNER],
   [AGENT_TOOL.SHOW_CODE]: [PLANNER],

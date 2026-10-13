@@ -127,7 +127,7 @@ export function callInProgress(view: Pick<VoiceView, "voiceStatus" | "callPlanId
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
 
-export function isLiveStatus(value: UnparsedWireValue): value is LiveStatus {
+function isLiveStatus(value: UnparsedWireValue): value is LiveStatus {
   return isWireString(value) && LIVE_STATUSES.has(value);
 }
 

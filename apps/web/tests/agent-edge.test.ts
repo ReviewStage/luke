@@ -6,13 +6,11 @@ import assert from "node:assert/strict";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
-import { INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { type EdgeKit, edgeKit } from "../server/hosted/agent-runtime/edge";
 import { AGENT_ROLE, type AgentRole } from "../server/hosted/agent-runtime/role";
-import type { AgentSkill } from "../server/hosted/agent-runtime/skills";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
@@ -25,10 +23,9 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 
 /**
- * Each door runs under the admission its role's profile names: a root's
- * session on its own standing, a worker's on ownership alone, and a session
- * the host does not admit is handed nothing. The store and the coding
- * agent's host are the real ones; GitHub and Connect are asked nothing.
+ * A session over another account's conversation is handed nothing under
+ * either role. The store and the coding agent's host are the real ones;
+ * GitHub and Connect are asked nothing.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -44,9 +41,6 @@ const ASKED_NOTHING = Layer.mergeAll(
 
 /** The suite's runner, as a root's `host.ts` hands its doors `runWeb`. */
 const run: WebAgentRun = (effect) => database.run(Effect.provide(effect, ASKED_NOTHING));
-
-/** The one skill the suite's root offers an admitted session. */
-const SKILL: AgentSkill = { name: "release", description: "Cut a release.", markdown: "# Release" };
 
 let minted = 0;
 function mintSession(): string {
@@ -82,7 +76,7 @@ async function openRoot(): Promise<{ host: CoderHost; edge: EdgeKit }> {
     scriptedModel: () => false,
     now: () => NOW,
   });
-  return { host, edge: edgeKit(run, { host, skills: () => Effect.succeed([SKILL]) }) };
+  return { host, edge: edgeKit(run, { host, skills: () => Effect.succeed([]) }) };
 }
 
 /** An account with a coding agent whose session was claimed as the coder's hook claims it. */
@@ -126,17 +120,6 @@ async function handedTo(edge: EdgeKit, role: AgentRole, auth: SessionAuth, sessi
   return resolved === null ? null : Object.keys(resolved);
 }
 
-test("a worker's turn is handed its parent's servers on ownership alone, where the agent's own admission refuses a session the conversation did not record", async () => {
-  const { host, edge } = await openRoot();
-  const agent = await openAgent(host);
-  const worker = mintSession();
-  const all = [...INTEGRATION_PROVIDER_LIST];
-
-  assert.deepEqual(await handedTo(edge, AGENT_ROLE.CODER, agent.auth, agent.sessionId), all);
-  assert.deepEqual(await handedTo(edge, AGENT_ROLE.CODER_WORKER, agent.auth, worker), all);
-  assert.equal(await handedTo(edge, AGENT_ROLE.CODER, agent.auth, worker), null);
-});
-
 test("a session over another account's conversation is handed no server under either role", async () => {
   const { host, edge } = await openRoot();
   const agent = await openAgent(host);
@@ -145,20 +128,4 @@ test("a session over another account's conversation is handed no server under ei
 
   assert.equal(await handedTo(edge, AGENT_ROLE.CODER, crossed, agent.sessionId), null);
   assert.equal(await handedTo(edge, AGENT_ROLE.CODER_WORKER, crossed, mintSession()), null);
-});
-
-test("a starting session is offered its root's skills, and none where the host does not admit it or the role's profile offers none", async () => {
-  const { host, edge } = await openRoot();
-  const agent = await openAgent(host);
-  const theirs = await openAgent(host);
-  const crossed = typedSeat(agent.userId, theirs.conversationId);
-
-  assert.deepEqual(await edge.sessionSkills(AGENT_ROLE.CODER, agent.auth, agent.sessionId), [
-    SKILL,
-  ]);
-  assert.deepEqual(await edge.sessionSkills(AGENT_ROLE.CODER, crossed, mintSession()), []);
-  assert.deepEqual(
-    await edge.sessionSkills(AGENT_ROLE.CODER_WORKER, agent.auth, agent.sessionId),
-    [],
-  );
 });

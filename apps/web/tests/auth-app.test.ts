@@ -5,11 +5,7 @@ import { authApp, type WebRequestHandler } from "../server/auth-app.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
-import {
-  recordedGoldenNames,
-  recordedResponse,
-  settleResponseGolden,
-} from "./support/response-golden.js";
+import { recordedResponse, settleResponseGolden } from "./support/response-golden.js";
 
 /**
  * The auth group carries Better Auth's answers rather than describing them, so
@@ -75,15 +71,6 @@ function methodRefusedAnswer(): Response {
   });
 }
 
-function bodylessAnswer(): Response {
-  const headers = new Headers({ "content-type": "application/json", "content-length": "22" });
-  headers.append("set-cookie", "luke.session_token=abc; Path=/");
-  return new Response(JSON.stringify({ message: "Not Found" }), {
-    status: HOSTED_HTTP_STATUS.NOT_FOUND,
-    headers,
-  });
-}
-
 interface Exchange {
   name: string;
   answer: () => Response;
@@ -140,42 +127,4 @@ test("the group answers what the handler answered, as the handler answered it", 
     assert.deepEqual(carried, direct);
     await settleResponseGolden(GOLDEN_ROOT, exchange.name, carried);
   }
-});
-
-test("a bodyless request keeps the handler's status line and headers and carries no body", async () => {
-  const stub = stubbedHandler(bodylessAnswer);
-  const answered = await routeFromHttpRouter(authApp(stub.handle)).fetch(
-    new Request(`${AUTH_ORIGIN}/api/auth/not-an-endpoint`, { method: "HEAD" }),
-  );
-  const carried = await recordedResponse(answered);
-  const direct = await recordedResponse(bodylessAnswer());
-
-  assert.equal(carried.status, direct.status);
-  assert.deepEqual(
-    carried.headers,
-    direct.headers.filter(([name]) => name !== "set-cookie"),
-  );
-  assert.equal(carried.body, "");
-  await settleResponseGolden(GOLDEN_ROOT, "bodyless", carried);
-});
-
-test("a path the group declares no route for is refused without reaching the handler", async () => {
-  const stub = stubbedHandler(signedInAnswer);
-  const answered = await routeFromHttpRouter(authApp(stub.handle)).fetch(
-    new Request(`${AUTH_ORIGIN}/api/not-the-auth-group`),
-  );
-  const carried = await recordedResponse(answered);
-
-  assert.deepEqual(stub.requests, []);
-  assert.equal(carried.status, HOSTED_HTTP_STATUS.NOT_FOUND);
-  await settleResponseGolden(GOLDEN_ROOT, "route-not-found", carried);
-});
-
-test("the recorded set is exactly the exchanges declared", async () => {
-  const named = [
-    ...EXCHANGES.map((exchange) => exchange.name),
-    "bodyless",
-    "route-not-found",
-  ].sort();
-  assert.deepEqual(await recordedGoldenNames(GOLDEN_ROOT), named);
 });

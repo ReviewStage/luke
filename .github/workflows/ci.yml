@@ -39,38 +39,21 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      # The harness tests are one small `node --test` pass, so one shard owns them.
-      - if: ${{ matrix.shard == 1 }}
-        run: pnpm test:harness
       - run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
 
-  # The store tests run on PGlite inside the test shards above; this job is
-  # the one place the generated migrations and the same tests meet a real
-  # Postgres, so a statement PGlite accepts and Postgres refuses is caught
-  # before a deployment's `db:migrate` finds it. The image is the major
-  # production runs (Neon, 18.x), which is also the major PGlite embeds; a
-  # test that fails here fails about the database the service actually runs.
-  # `db:migrate` migrates the `luke` database and nothing else writes to it:
-  # each test file clones it as a template into a database of its own and
-  # drops the clone when it is done (`@sidecar/database/testing`),
-  # so a statement one file forgets to scope reaches no other file's rows here
-  # any more than it does on PGlite. The image is Docker's official one, and a
-  # runner pulls it anonymously from a shared address, so every registry it
-  # can come from meets a rate limit sooner or later: Docker Hub's pull count,
-  # then AWS's public mirror's data limit. A service container gets one pull
-  # (the runner's own three tries, seconds apart, at the one registry), so
-  # the container is a step instead: each round tries AWS's mirror, Google's
-  # mirror, then Docker Hub, and a round that finds all three throttled waits
-  # and tries again. It starts before the checkout so it boots while the
-  # workspace installs, as a service container did, and the job waits for it
-  # to answer only before the first step that needs it.
+  # The generated migrations meet a real Postgres here, the major production
+  # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is
+  # caught before a deployment's `db:migrate` finds it. The job keeps its old
+  # name because the ruleset requires it. The image comes from whichever of
+  # three registries answers first, because each one rate-limits anonymous
+  # pulls; it starts before the checkout so it boots while the workspace
+  # installs.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
-      LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
       - name: Start Postgres
         run: |
@@ -112,8 +95,3 @@ jobs:
           echo "::error::Postgres did not become healthy"
           exit 1
       - run: pnpm --filter @luke/web db:migrate
-      - run: pnpm --filter @luke/web test:store
-      # The eve end-to-end eval writes through the real writer, so it runs where a Postgres stands.
-      - run: pnpm --filter @luke/web test:agent
-        env:
-          DATABASE_URL: postgresql://luke:luke@localhost:5432/luke

@@ -173,7 +173,7 @@ export interface AskSeams {
  * caller that went meanwhile (a voice socket detaching) holds its function
  * open no longer than this, far inside the voice function's 800-second cap.
  */
-export const ASK_DISPATCH_DEADLINE = Duration.seconds(30);
+const ASK_DISPATCH_DEADLINE = Duration.seconds(30);
 
 /**
  * The dispatch run to its end whoever stops waiting for it, up to the

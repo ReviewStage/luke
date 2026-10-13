@@ -21,7 +21,7 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/unstable/process"
  * kept. A command that could not be started answers why on its stderr.
  */
 
-export const MAC_COMMAND_RUN = {
+const MAC_COMMAND_RUN = {
   /** How long the group has to end after SIGTERM before it is sent SIGKILL. */
   KILL_GRACE: Duration.seconds(3),
   /** How long the streams are read once the command exited or timed out, for what it wrote just before. */

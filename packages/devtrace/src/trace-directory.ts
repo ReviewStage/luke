@@ -1,7 +1,7 @@
 import { Config, type Option } from "effect";
 
 /** The variable a live, unpackaged run's own shell sets to be traced at all. */
-export const AGENT_TRACE_DIRECTORY_VARIABLE = "LUKE_TRACE_DIR";
+const AGENT_TRACE_DIRECTORY_VARIABLE = "LUKE_TRACE_DIR";
 
 /**
  * Where a trace is written, read by the variable's own name out of whatever

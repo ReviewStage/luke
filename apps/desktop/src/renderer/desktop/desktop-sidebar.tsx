@@ -87,7 +87,6 @@ export function useSidebarEdge(
  * back to the default width.
  */
 export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
-  // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
   return <div className="sidebar-resize" {...edge} />;
 }
 

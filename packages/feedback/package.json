@@ -8,14 +8,11 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "dependencies": {
     "@sidecar/wire": "workspace:*",

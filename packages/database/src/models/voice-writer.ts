@@ -104,7 +104,7 @@ interface SpokenUtteranceSpan {
 }
 
 /** One speaker's row as the service's ledger holds it now: the id it minted for the row, and the span the words are read over. */
-export interface SpokenRowWrite extends SpokenUtteranceSpan {
+interface SpokenRowWrite extends SpokenUtteranceSpan {
   readonly rowId: string;
   readonly speaker: TranscriptSpeaker;
 }

@@ -29,10 +29,10 @@ import { diffHunks, type Hunk } from "./plan-diff";
  */
 
 /** The pace words are typed at: a model streaming its answer, about 50 tokens a second. */
-export const CHASE_CHARS_PER_SECOND = 200;
+const CHASE_CHARS_PER_SECOND = 200;
 
 /** The rest of the hand's pace: how fast it selects and backspaces, and where it stops to think. */
-export const CHASE_PACE = {
+const CHASE_PACE = {
   SELECT_CHARS_PER_SECOND: 600,
   BACKSPACE_CHARS_PER_SECOND: 60,
   /** The longest erase made letter by letter; anything longer is selected and erased at once. */

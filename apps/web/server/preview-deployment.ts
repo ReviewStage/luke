@@ -36,7 +36,7 @@ const DEPLOYMENT_PAGE = "10";
 /** Vercel's own words on the status it writes for a build its `ignoreCommand` skipped, compared whole. */
 const VERCEL_SKIPPED_DESCRIPTION = "Skipped - Not affected";
 
-export const DEPLOYMENT_STATE = {
+const DEPLOYMENT_STATE = {
   ERROR: "error",
   FAILURE: "failure",
   INACTIVE: "inactive",
@@ -47,23 +47,23 @@ export const DEPLOYMENT_STATE = {
 } as const;
 type DeploymentState = (typeof DEPLOYMENT_STATE)[keyof typeof DEPLOYMENT_STATE];
 
-export const DeploymentRecord = Schema.Struct({
+const DeploymentRecord = Schema.Struct({
   id: Schema.Number,
   sha: Schema.String,
   environment: Schema.String,
   created_at: Schema.String,
 });
-export type DeploymentRecord = typeof DeploymentRecord.Type;
+type DeploymentRecord = typeof DeploymentRecord.Type;
 const DeploymentRecords = Schema.Array(DeploymentRecord);
 
-export const DeploymentStatus = Schema.Struct({
+const DeploymentStatus = Schema.Struct({
   state: Schema.Literals(Object.values(DEPLOYMENT_STATE)),
   description: Schema.optional(Schema.NullOr(Schema.String)),
   environment_url: Schema.optional(Schema.NullOr(Schema.String)),
   target_url: Schema.optional(Schema.NullOr(Schema.String)),
   created_at: Schema.String,
 });
-export type DeploymentStatus = typeof DeploymentStatus.Type;
+type DeploymentStatus = typeof DeploymentStatus.Type;
 const DeploymentStatuses = Schema.Array(DeploymentStatus);
 
 export const PREVIEW_STATE = {
@@ -93,7 +93,7 @@ function newestFirst<T extends { readonly created_at: string }>(items: readonly 
 }
 
 /** The newest preview record for the head and its newest status, read as one of the four states. */
-export function decidePreview(
+function decidePreview(
   records: readonly DeploymentRecord[],
   statusesOf: (record: DeploymentRecord) => readonly DeploymentStatus[],
 ): PreviewReading {

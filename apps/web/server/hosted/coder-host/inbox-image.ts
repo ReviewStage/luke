@@ -28,7 +28,7 @@ type InboxSandbox = Pick<SandboxSession, "readFile">;
 export type InboxSandboxDoor = () => Promise<InboxSandbox>;
 
 /** Why a picture was not read, in the words the model reads; each is followed by the path. */
-export const INBOX_IMAGE_REFUSAL = {
+const INBOX_IMAGE_REFUSAL = {
   NO_FILE: "Not posted: an image block names no file in your sandbox:",
   NOT_IMAGE: "Not posted: an image block names a file that is not a PNG, JPEG, or WebP image:",
   TOO_LARGE: `Not posted: an image block names a file larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or at one screen scale:`,

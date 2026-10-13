@@ -25,7 +25,7 @@ import { sinceText } from "./plan-time";
  */
 
 /** How the ring reads: room to spare, near eve's compaction, or at or past it. */
-export const CONTEXT_LEVEL = {
+const CONTEXT_LEVEL = {
   ROOM: "room",
   NEAR: "near",
   OVER: "over",

@@ -18,14 +18,14 @@
  * name, and an ad-hoc package answers to the test name.
  */
 
-export const RELEASE_APP_NAME = "Luke";
+const RELEASE_APP_NAME = "Luke";
 
 /**
  * Derived from the release name rather than freestanding, because
  * `scripts/lib/workspace.sh` derives it the same way to find a development
  * instance's single-instance lock; the app-identity test holds them together.
  */
-export const DEVELOPMENT_APP_NAME = `${RELEASE_APP_NAME} Dev`;
+const DEVELOPMENT_APP_NAME = `${RELEASE_APP_NAME} Dev`;
 export const AD_HOC_APP_NAME = `${RELEASE_APP_NAME} Test`;
 
 export interface AppIdentityContext {

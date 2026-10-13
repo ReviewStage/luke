@@ -56,7 +56,7 @@ import { frameText, type VoiceSocket } from "./socket.js";
  * behind a request says who is asking, not how much of a prompt this
  * service will pay OpenAI to read.
  */
-export const SESSIONS_INPUT_BOUNDS = {
+const SESSIONS_INPUT_BOUNDS = {
   MESSAGES: LIVE_INPUT_BOUNDS.MESSAGES,
   CHARS: 4_096,
 } as const;

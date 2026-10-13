@@ -36,7 +36,7 @@ const SIGNED_QUERY_PARAMS = ["sig", "exp", "ba_iat", "ba_param", "ba_pl", "promp
  * absolute URL on the base host would carry a sign-in begun on the other
  * host to a page where it is a stranger.
  */
-export function resumeAuthorizeURL(basePath: string, oauthQuery: string): string {
+function resumeAuthorizeURL(basePath: string, oauthQuery: string): string {
   const params = new URLSearchParams(oauthQuery);
   for (const name of SIGNED_QUERY_PARAMS) params.delete(name);
   return `${basePath.replace(/\/$/, "")}${AUTHORIZE_PATH}?${params.toString()}`;

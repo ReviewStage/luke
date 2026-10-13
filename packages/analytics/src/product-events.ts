@@ -112,8 +112,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   MESSAGE_KIND: "message_kind",
 } as const;
 
-export type ProductEventProperty =
-  (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
+type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
 
 /** Which source opened a live voice session — Luke's hosted voice service on the account, or the introduction's accountless endpoint — never a credential or a session id. */
 export const PRODUCT_VOICE_SESSION_SOURCE = {
@@ -310,7 +309,7 @@ export const ProductRatedMessageKindSchema = Schema.Literals(
  * one question the event asks — how quickly Luke proved his loop to a new
  * account. Each rung is the widest window the elapsed time still fits.
  */
-export const PRODUCT_SIGN_IN_AGE = {
+const PRODUCT_SIGN_IN_AGE = {
   WITHIN_TEN_MINUTES: "within_ten_minutes",
   WITHIN_HOUR: "within_hour",
   WITHIN_DAY: "within_day",
@@ -344,7 +343,7 @@ export function productSignInAge(elapsedMs: number): ProductSignInAge {
  * shared rather than per-property: a second ladder would be a second thing to
  * keep honest, and the question every count answers here is the same one.
  */
-export const PRODUCT_SESSION_COUNT_BUCKET = {
+const PRODUCT_SESSION_COUNT_BUCKET = {
   NONE: 0,
   ONE: 1,
   FEW: 2,
@@ -442,7 +441,7 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
  * vocabulary is a deliberate edit to this table rather than a call site that
  * quietly started sending more.
  */
-export const PRODUCT_EVENT_PROPERTIES = {
+const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.APP_LAUNCH]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.APP_DAY_ACTIVE]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.ACCOUNT_SIGN_IN]: [],

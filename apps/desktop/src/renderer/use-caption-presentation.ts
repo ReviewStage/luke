@@ -31,10 +31,10 @@ export type CaptionTone = (typeof CAPTION_TONE)[keyof typeof CAPTION_TONE];
  * finish reading the line the voice ended on, short enough that the strip
  * is gone before the next thing is said.
  */
-export const CAPTION_LINGER_MS = 3_000;
+const CAPTION_LINGER_MS = 3_000;
 
 /** The strip's words and whose they are. */
-export interface CaptionContent {
+interface CaptionContent {
   tone: CaptionTone;
   words: string;
 }

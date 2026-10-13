@@ -95,7 +95,7 @@ import type { LiveRecord } from "./live-record.js";
 const EXCHANGE_FINALIZE_MS = 250;
 
 /** What is said aloud of a run that ended without a reply, fixed by the build and never composed with the ask. */
-export const RUN_END_NOTE = {
+const RUN_END_NOTE = {
   [LIVE_BRAIN_RUN_END.CANCELLED]: "That ask was stopped before I finished it.",
   [LIVE_BRAIN_RUN_END.FAILED]: "I couldn't finish that ask.",
 } as const satisfies Record<Exclude<LiveBrainRunEnd, typeof LIVE_BRAIN_RUN_END.COMPLETED>, string>;
@@ -106,8 +106,7 @@ export const RUN_END_NOTE = {
  * confirmed before it is told, and the stop instruction has the voice wait
  * for the developer, so this is context for its next reply and never speech.
  */
-export const STOPPED_RUN_NOTE =
-  "The developer stopped this ask, and Luke's work on it was cancelled.";
+const STOPPED_RUN_NOTE = "The developer stopped this ask, and Luke's work on it was cancelled.";
 
 /** The one progress update a slow step earns, worded by the build; an unknown step gets the general line. */
 const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
@@ -132,7 +131,7 @@ const SETTLED_STEP_GENERAL_NOTE = "Luke finished a step";
  * minutes leaves the voice a handful of facts rather than one per command.
  * A step settled inside the gap is counted in the next note the run earns.
  */
-export const PROGRESS_NOTE_BOUNDS = {
+const PROGRESS_NOTE_BOUNDS = {
   GAP_MS: 15_000,
   PER_EXCHANGE: 6,
 } as const;
@@ -176,7 +175,7 @@ function codeOnScreenNote(ref: CodeRef): string {
  * answers a goodbye the developer has had time to talk past, and the call
  * stays up rather than hanging up on whatever came since.
  */
-export const END_CALL_BOUNDS = {
+const END_CALL_BOUNDS = {
   WITHIN_MS: 30_000,
 } as const;
 
@@ -188,7 +187,7 @@ export const END_CALL_BOUNDS = {
  * which hand-off happened and nothing of what was said; a call that stays up
  * then reads as no delegation, a refused one, or a refused end.
  */
-export const LIVE_SESSION_TRACE = {
+const LIVE_SESSION_TRACE = {
   DELEGATION_ASKED: "delegation-asked",
   DELEGATION_SENT: "delegation-sent",
   DELEGATION_REFUSED: "delegation-refused",
@@ -196,7 +195,7 @@ export const LIVE_SESSION_TRACE = {
 } as const;
 
 /** Why a run's end of the call was not passed on; see `#endCall`. */
-export const END_CALL_REFUSAL = {
+const END_CALL_REFUSAL = {
   /** The run answers no delegation: the brain opened it of its own. */
   UNASKED: "unasked",
   /** A later delegation or the stop key silenced the run. */
@@ -239,7 +238,7 @@ export const ROW_WRITE_DEBOUNCE_MS = 300;
  * carries none of it, because under hold-to-talk the talk key's release
  * mutes while Luke is routinely still answering.
  */
-export const STOP_SPEAKING_INSTRUCTION = "Stop speaking now, then wait for the developer.";
+const STOP_SPEAKING_INSTRUCTION = "Stop speaking now, then wait for the developer.";
 
 /**
  * A session that stands somewhere, offered for this service to attach to and

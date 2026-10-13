@@ -32,8 +32,7 @@ export const INTEGRATION_ROW_STATUS = {
   EXPIRED: "expired",
 } as const;
 
-export type IntegrationRowStatus =
-  (typeof INTEGRATION_ROW_STATUS)[keyof typeof INTEGRATION_ROW_STATUS];
+type IntegrationRowStatus = (typeof INTEGRATION_ROW_STATUS)[keyof typeof INTEGRATION_ROW_STATUS];
 
 export type IntegrationStoreEffect<A> = Effect.Effect<
   A,

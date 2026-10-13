@@ -20,7 +20,7 @@
  */
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
-export const FIND_HIGHLIGHT = {
+const FIND_HIGHLIGHT = {
   MATCH: "find-match",
   CURRENT: "find-current",
 } as const;

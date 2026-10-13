@@ -308,7 +308,7 @@ const FailureDetailWordsSchema = Schema.Struct({
 const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSchema);
 
 /** How much of eve's failure message the row keeps, and how much of its details' key list, inside the writer's own 500. */
-export const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
+const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
 
 /**
  * Anything shaped like a credential, each replaced whole: an `sk-` key, a

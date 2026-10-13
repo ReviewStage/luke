@@ -7,7 +7,7 @@ import {
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
-import { CALL_CARD_UNNAMED, callBarPlanId, callCard, callCardShown } from "./call-card-model";
+import { callBarPlanId, callCard, callCardShown } from "./call-card-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -88,7 +88,7 @@ test("a call's plan the list does not hold is named from the open document, or p
   );
   assert.equal(
     callCard({ view: LISTENING, planning: IDLE_PLANNING_VIEW }).planName,
-    CALL_CARD_UNNAMED,
+    "Planning call",
   );
 });
 

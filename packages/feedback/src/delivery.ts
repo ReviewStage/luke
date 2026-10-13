@@ -49,7 +49,7 @@ function answeredOk(status: number): boolean {
   return status >= OK_STATUS.FIRST && status < OK_STATUS.PAST;
 }
 
-export interface FeedbackDeliveryOptions {
+interface FeedbackDeliveryOptions {
   url?: string;
   requestTimeoutMs?: number;
 }
@@ -79,7 +79,7 @@ function report(message: string): void {
  * about the submission is ever logged — a message to the founders is the
  * user's words, and status codes alone diagnose the path.
  */
-export interface FeedbackDeliveryEffects {
+interface FeedbackDeliveryEffects {
   readonly url: string;
   readonly requestTimeoutMs: number;
   deliver(
@@ -88,7 +88,7 @@ export interface FeedbackDeliveryEffects {
 }
 
 /** The delivery as effects over `effect/unstable/http`'s `HttpClient` tag. */
-export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
+function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
   const url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
   const requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
   const deadline = Duration.millis(requestTimeoutMs);

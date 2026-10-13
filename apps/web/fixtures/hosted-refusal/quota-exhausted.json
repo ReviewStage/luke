@@ -1,5 +1,0 @@
-{
-  "status": 429,
-  "contentType": "application/json",
-  "body": "{\"error\":\"quota-exhausted\"}"
-}

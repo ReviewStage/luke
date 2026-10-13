@@ -54,7 +54,7 @@ interface HostedStoreTestDatabase {
 }
 
 /** What every test user is called; the column is not null and no test reads it. */
-export const TEST_USER_NAME = "Test User";
+const TEST_USER_NAME = "Test User";
 
 interface HostedStoreTestDatabaseOptions {
   /** The instant `run` pins the clock to, for a test that asserts what the writers stamp; unpinned, the real clock. */

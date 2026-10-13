@@ -31,7 +31,7 @@ import {
  * rest in its message, so a model that writes at every step cannot rewrite
  * the plan under the developer.
  */
-export const PLAN_EDIT = {
+const PLAN_EDIT = {
   /** The most notes one turn may take on the plan, across its calls. */
   MAX_NOTES_PER_TURN: 40,
 } as const;

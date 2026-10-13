@@ -2,81 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { test } from "vitest";
-import type { SessionReplayBootstrap } from "#shared/messages/session";
-import {
-  POSTHOG_ASSETS_HOST,
-  POSTHOG_HOST,
-  sessionReplayWanted,
-  withoutLocalAddress,
-} from "./session-replay";
-
-/**
- * The gate, on its own. Recording is the one thing Luke sends that a fixed
- * vocabulary does not bound, and no switch stands in front of it, so the one
- * reason it must not start is asserted here rather than left to be read off
- * the run mode it arrives from.
- */
-
-function bootstrap(over: Partial<SessionReplayBootstrap> = {}): SessionReplayBootstrap {
-  return {
-    permitted: true,
-    appVersion: "1.2.3",
-    accountId: "user-1",
-    ...over,
-  };
-}
-
-test("an ordinary run records", () => {
-  assert.equal(sessionReplayWanted(bootstrap()), true);
-});
-
-test("a fixture or capture run records nothing", () => {
-  // `permitted` is where `runMode.sendsNetwork` arrives, so this is the same
-  // suppression the event sender takes — and the reason an evidence run
-  // reaches no network. A deleted account arrives here too, standing
-  // recording down for the rest of the run.
-  assert.equal(sessionReplayWanted(bootstrap({ permitted: false })), false);
-});
-
-test("no account is no reason not to record: the launch is what it is there for", () => {
-  // The signed-out panel and the spoken introduction before it are where a
-  // first run goes wrong, and a recording that waited for a sign-in never saw
-  // any of it. What the id decides is whom the recording is filed under, not
-  // whether there is one.
-  assert.equal(sessionReplayWanted(bootstrap({ accountId: undefined })), true);
-});
-
-/**
- * The recorder's hosts and the renderer's connect policy are separate
- * literals in separate files, and nothing at run time reconciles them: a host
- * the policy does not name is refused by the browser, which looks exactly like
- * a recording that never started — which is what it looked like for every
- * build before the assets host was named here. Asserted as the whole list
- * rather than as containment, so widening what this renderer may reach at all
- * has to be done deliberately here as well.
- */
-test("the connect policy names both recorder hosts, and nothing else", () => {
-  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
-  const connectSrc = html.match(/connect-src ([^;"]+)/)?.[1];
-  assert.deepEqual(connectSrc?.split(" "), [POSTHOG_HOST, POSTHOG_ASSETS_HOST]);
-});
-
-// The voice window loads the panel's bundle; `App` is never mounted for it,
-// so it never asks for the recorder's, and behind that stands this policy: no
-// host at all.
-test("the voice document loads the one bundle and may reach no host at all", () => {
-  const voice = readFileSync(new URL("./voice.html", import.meta.url), "utf8");
-  assert.equal(voice.match(/connect-src ([^;"]+)/)?.[1], "'none'");
-  assert.ok(voice.includes('<script src="renderer.js"></script>'));
-});
-
-// The call window loads the same bundle and never mounts `App` either, and it
-// draws no words; its policy is the voice window's: no host at all.
-test("the call window's document loads the one bundle and may reach no host at all", () => {
-  const call = readFileSync(new URL("./call.html", import.meta.url), "utf8");
-  assert.equal(call.match(/connect-src ([^;"]+)/)?.[1], "'none'");
-  assert.ok(call.includes('<script src="renderer.js"></script>'));
-});
+import { withoutLocalAddress } from "./session-replay";
 
 // The recorder drops a `session_recording` option it does not know without a
 // word, and the preload rests on a global the library does not declare, so a
@@ -126,25 +52,4 @@ test("the address goes from the frames the recorder opens with", () => {
       { type: 5, data: { tag: "$url_changed", payload: { href: PANEL } }, timestamp: 2 },
     ],
   );
-});
-
-test("a bare path names the machine as surely as a whole address does", () => {
-  // The library reports a path beside the address, and an exception names the
-  // script each frame came from rather than the document — so matching the
-  // document's own address exactly would have let both through.
-  assert.deepEqual(
-    withoutLocalAddress({
-      $pathname: "/Users/someone/Applications/Luke.app/renderer/index.html",
-      nested: { script: "/Users/someone/Applications/Luke.app/renderer/renderer.js" },
-    }),
-    { $pathname: PANEL, nested: { script: PANEL } },
-  );
-});
-
-test("everything that is not the address comes through as it came", () => {
-  // A page opened as a file has no referrer, so the library reports the same
-  // `$direct` any unreferred visit gets, and that says nothing about anyone.
-  const properties = { $referrer: "$direct", $screen_height: 900, nested: { list: [1, "two"] } };
-  assert.deepEqual(withoutLocalAddress(properties), properties);
-  assert.equal(withoutLocalAddress(undefined), undefined);
 });

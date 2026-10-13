@@ -78,7 +78,7 @@ export const REPOSITORY_SHELL_STATUS = {
   NOT_RUN: "not-run",
 } as const;
 
-export const REPOSITORY_SHELL_BOUNDS = {
+const REPOSITORY_SHELL_BOUNDS = {
   /** The most characters of stdout or stderr one command's result carries. */
   OUTPUT_MAX_CHARS: 20_000,
   /** How long one command may run before it is killed, in seconds, so a command that never ends does not hold the turn. */

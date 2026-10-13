@@ -41,7 +41,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * and `POST`, its result (`../mac-commands-app.ts`).
  */
 
-export const MAC_COMMAND_SERVICE = {
+const MAC_COMMAND_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
   /** How often a held read, and a call waiting on its result, looks again. */
@@ -64,7 +64,7 @@ export const MAC_COMMAND_STATUS = {
 } as const;
 
 /** Why a call ran nothing, or never heard back, in words the model can act on. */
-export const MAC_COMMAND_REFUSAL = {
+const MAC_COMMAND_REFUSAL = {
   NO_MAC:
     "Not run: Luke is not running on the developer's Mac, or they switched off " +
     "Settings › Let agents run commands on this Mac.",
@@ -83,7 +83,7 @@ export type MacCommandAnswer =
   | { readonly status: typeof MAC_COMMAND_STATUS.NOT_RUN; readonly reason: string };
 
 /** What a call asks: the shell text, and how long it may run, the default where unsaid. */
-export interface MacCommandAsk {
+interface MacCommandAsk {
   readonly command: string;
   readonly timeoutSeconds?: number;
 }
@@ -168,7 +168,7 @@ function awaitedResult(
  * at once where no Mac listens, and the row withdrawn however the wait
  * ends, an interrupted call's included.
  */
-export function runOnMac(
+function runOnMac(
   userId: string,
   ask: MacCommandAsk,
 ): Effect.Effect<MacCommandAnswer, never, SqlClient.SqlClient> {

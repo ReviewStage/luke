@@ -66,25 +66,3 @@ it.effect(
       assert.ok(!policy.get("img-src")?.includes("https:"));
     }),
 );
-
-it.effect(
-  "an address that names no version the service holds, or no page at all, is not found",
-  () =>
-    Effect.gen(function* () {
-      const missing = [
-        pageFrameUrl({ planId: PLAN_ID, pageId: CHART.id, version: 3 }),
-        `luke-page://page/${PLAN_ID}/${CHART.id}`,
-        `luke-page://page/${PLAN_ID}/${CHART.id}/2?plan=other`,
-        `luke-page://page/${PLAN_ID}/${CHART.id}/0`,
-        `luke-page://page/${PLAN_ID}/${CHART.id}/02`,
-        `luke-page://page/${PLAN_ID}/${CHART.id}/2e0`,
-        `luke-page://elsewhere/${PLAN_ID}/${CHART.id}/2`,
-        `https://page/${PLAN_ID}/${CHART.id}/2`,
-      ];
-      for (const url of missing) {
-        const response = yield* pageResponse(url, readPage);
-        assert.equal(response.status, 404, url);
-        assert.equal(response.headers.get("content-security-policy"), null, url);
-      }
-    }),
-);

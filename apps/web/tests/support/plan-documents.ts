@@ -1,7 +1,5 @@
 import { db } from "@sidecar/database/core/query";
 import { plan } from "@sidecar/database/schemas/plan";
-import { planRevision } from "@sidecar/database/schemas/plan-revision";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { eq, sql } from "drizzle-orm";
 
 /**
@@ -43,20 +41,4 @@ export function makeSavedDocumentPlan(planId: string, text: string) {
     .update(plan)
     .set({ document: text, updatedAt: sql`${plan.createdAt} + interval '1 minute'` })
     .where(eq(plan.id, planId));
-}
-
-/** Records a revision of a document plan: its text after the revision, written by the developer at `at`. */
-export function recordDocumentRevision(planId: string, seq: number, text: string, at: Date) {
-  return db.insert(planRevision).values({
-    planId,
-    seq,
-    actor: PLAN_ACTOR.DEVELOPER,
-    agentId: null,
-    liveSessionId: null,
-    document: text,
-    changes: 1,
-    startedAt: at,
-    at,
-    restoredFrom: null,
-  });
 }

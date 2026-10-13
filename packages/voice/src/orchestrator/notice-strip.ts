@@ -6,7 +6,7 @@
  */
 import { Duration, Effect, type Fiber } from "effect";
 
-export const VOICE_ERROR_NOTICE_MS = 12_000;
+const VOICE_ERROR_NOTICE_MS = 12_000;
 
 interface NoticeStripOptions {
   onChanged(): void;

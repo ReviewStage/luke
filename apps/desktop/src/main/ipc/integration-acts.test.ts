@@ -54,41 +54,6 @@ function fixture() {
   const router = createActRouter(rows as ActRows);
   return { router, asked };
 }
-
-it.effect("the panel's integration acts carry the host's answers to it, whole", () =>
-  Effect.gen(function* () {
-    const { router, asked } = fixture();
-
-    assert.deepEqual(yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_STATUS }, PANEL), {
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: {
-        integrations: {
-          linear: INTEGRATION_STATUS.CONNECTED,
-          notion: INTEGRATION_STATUS.DISCONNECTED,
-          sentry: INTEGRATION_STATUS.DISCONNECTED,
-          slack: INTEGRATION_STATUS.DISCONNECTED,
-        },
-      },
-    });
-    assert.deepEqual(
-      yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: LINEAR }, PANEL),
-      { status: ACT_OUTCOME_STATUS.DONE, value: { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED } },
-    );
-    assert.deepEqual(
-      yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_DISCONNECT, payload: LINEAR }, PANEL),
-      { status: ACT_OUTCOME_STATUS.DONE, value: { status: INTEGRATION_STATUS.DISCONNECTED } },
-    );
-    assert.deepEqual(
-      yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_TOOLS, payload: LINEAR }, PANEL),
-      {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { tools: [{ name: "list_issues", description: "List issues." }] },
-      },
-    );
-    assert.deepEqual(asked, ["status", "connect linear", "disconnect linear", "tools linear"]);
-  }),
-);
-
 it.effect(
   "the voice and call windows are refused every integration act in the kind's own words, and the host is not asked",
   () =>

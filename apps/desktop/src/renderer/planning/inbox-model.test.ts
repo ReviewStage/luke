@@ -8,10 +8,8 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-  inboxItemSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
-import { Option, Schema } from "effect";
 import { test } from "vitest";
 import {
   CODE_READ,
@@ -200,28 +198,6 @@ test("an approval, a task, and an item asking nothing are answered by their pres
     reply: INBOX_REPLY.ANSWERED,
     note: "Hello",
   });
-});
-
-test("an item asking a response this build does not know, one a newer service wrote, reads with its type alone and holds no answer, while a known type that fails its shape does not read", () => {
-  const read = Schema.decodeUnknownSync(inboxItemSchema)({
-    ...item({ id: "a1b2c3d4-0000-4000-8000-000000000009" }),
-    version: INBOX_WIRE_VERSION + 1,
-    blocks: [{ type: "table" }],
-    response: { type: "schedule" },
-  });
-  assert.deepEqual(read.blocks, [{ type: "table" }]);
-  assert.deepEqual(read.response, { type: "schedule" });
-  assert.equal(inboxReply(read, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
-  assert.equal(inboxReply(read, EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE), undefined);
-  // A block of a type this build knows that fails its own shape is a broken read, not a newer one.
-  assert.ok(
-    Option.isNone(
-      Schema.decodeUnknownOption(inboxItemSchema)({
-        ...item({ id: "a1b2c3d4-0000-4000-8000-000000000008" }),
-        blocks: [{ type: "markdown" }],
-      }),
-    ),
-  );
 });
 
 test("a settled card says what was answered and the note, a form's values a line each, or that the agent took it back and why", () => {

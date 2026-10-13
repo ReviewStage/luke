@@ -1,5 +1,0 @@
-{
-  "status": 401,
-  "contentType": "application/json",
-  "body": "{\"error\":\"invalid-token\"}"
-}

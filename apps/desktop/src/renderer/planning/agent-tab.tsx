@@ -671,7 +671,7 @@ export function AgentTranscriptView({
  * the plan is archived, the note that offers Unarchive in its place, with
  * the Stop of a turn still running.
  */
-export function AgentTabView({
+function AgentTabView({
   agent,
   models,
   readModels,

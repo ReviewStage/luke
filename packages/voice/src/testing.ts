@@ -1,15 +1,8 @@
 import assert from "node:assert/strict";
-import type { LiveServerEvent } from "@sidecar/live";
 import type { WireRecord } from "@sidecar/wire";
-import { Duration, Effect, Schedule, type Scope, Stream } from "effect";
+import { Duration, Effect, Schedule, type Stream } from "effect";
 import { type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";
-import type {
-  LiveSideband,
-  OpenSocket,
-  SocketArrival,
-  SocketClose,
-  SocketOpening,
-} from "./live-socket.js";
+import type { OpenSocket, SocketArrival, SocketClose, SocketOpening } from "./live-socket.js";
 
 /** How long a wait on an announced arrival stands before it fails, on the clock the test keeps. */
 const ARRIVAL_BOUND = Duration.seconds(2);
@@ -18,25 +11,6 @@ const POLL = {
   SPACING: Duration.millis(5),
   ATTEMPTS: 400,
 } as const;
-
-const changeListeners = new Set<() => void>();
-
-/** Tells every waiter that a fake moved: a socket sent or was closed, a seam opened one, a reading heard one. */
-function announceChange(): void {
-  for (const listener of [...changeListeners]) listener();
-}
-
-/**
- * Hears every change of every fake in this module, so a wait on a condition
- * over them (`arrival(onFakeChange, ...)`) is woken by the change itself and
- * polls nothing.
- */
-export function onFakeChange(listener: () => void): () => void {
-  changeListeners.add(listener);
-  return () => {
-    changeListeners.delete(listener);
-  };
-}
 
 /**
  * Polls `ready` on a `Schedule` until it answers true, or fails naming what
@@ -114,15 +88,12 @@ export class FakeLiveSocket implements HeldSocket {
     send: (data) => {
       this.sent.push(data);
       for (const listener of [...this.#sentListeners]) listener(data);
-      announceChange();
     },
     ping: () => {
       this.pings += 1;
-      announceChange();
     },
     close: () => {
       this.closedByClient = true;
-      announceChange();
     },
   });
 
@@ -175,7 +146,6 @@ export class FakeLiveSocket implements HeldSocket {
   #hear(heard: SocketArrival): void {
     this.received.push(heard);
     this.#hold.hear(heard);
-    announceChange();
   }
 }
 
@@ -207,35 +177,7 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
       call += 1;
       if (!answer) throw new Error("no scripted opening");
       const opening = answer(socket) ?? { socket };
-      announceChange();
       return opening;
     });
   return { openSocket, opens, sockets };
 }
-
-/** What one reader of a sideband heard, in arrival order: the events it read, then the close that ended them. */
-interface SidebandReading {
-  readonly events: LiveServerEvent[];
-  readonly closes: SocketClose[];
-}
-
-/**
- * Reads a sideband the way the session's own reader does — one consumer, on a
- * fiber of the scope this is yielded in — and answers what it has heard so
- * far, which a test reads after giving that fiber its turns.
- */
-export const readSideband = /* @__PURE__ */ Effect.fnUntraced(function* (
-  sideband: LiveSideband,
-): Effect.fn.Return<SidebandReading, never, Scope.Scope> {
-  const reading: SidebandReading = { events: [], closes: [] };
-  yield* Effect.forkScoped(
-    Stream.runForEach(sideband.arrivals, (heard) =>
-      Effect.sync(() => {
-        if ("close" in heard) reading.closes.push(heard.close);
-        else reading.events.push(heard.event);
-        announceChange();
-      }),
-    ),
-  );
-  return reading;
-});

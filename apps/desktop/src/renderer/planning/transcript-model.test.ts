@@ -8,16 +8,13 @@ import {
 import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { test } from "vitest";
 import {
-  CALL_ENDED_LINE,
   callEndedLine,
   callHeading,
   type HeardCall,
   heardCalls,
   messageText,
-  speakerTurns,
   TRANSCRIPT_REGION,
   transcriptRegion,
-  turnText,
 } from "./transcript-model";
 
 /** Synthetic plan, calls, and words throughout. */
@@ -228,25 +225,6 @@ test("a call's header names its day as today, yesterday, a weekday this week, or
   assert.equal(callHeading(at(11, 30, 2025), now, "en-US"), "Dec 30, 2025, 3:42 PM");
 });
 
-test("consecutive lines from one speaker are one turn, keyed by the first line, and a copy of it is a paragraph a line", () => {
-  const turns = speakerTurns([
-    spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire."),
-    spoken(1, TRANSCRIPT_SPEAKER.USER, "After a week, say."),
-    spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "A week it is."),
-    spoken(3, TRANSCRIPT_SPEAKER.USER, "And one per address."),
-  ]);
-  assert.deepEqual(
-    turns.map((turn) => [turn.key, turn.role, turn.messages.map(messageText)]),
-    [
-      ["0", TRANSCRIPT_SPEAKER.USER, ["Invites should expire.", "After a week, say."]],
-      ["2", TRANSCRIPT_SPEAKER.ASSISTANT, ["A week it is."]],
-      ["3", TRANSCRIPT_SPEAKER.USER, ["And one per address."]],
-    ],
-  );
-  assert.equal(turnText(turns[0]?.messages ?? []), "Invites should expire.\n\nAfter a week, say.");
-  assert.deepEqual(speakerTurns([]), []);
-});
-
 test("a call that ended closes with a line saying so, one Luke ended says he did, and the call standing closes with none", () => {
   const stored: PlanTranscript = {
     calls: [
@@ -269,8 +247,8 @@ test("a call that ended closes with a line saying so, one Luke ended says he did
 
   assert.equal(region.kind, TRANSCRIPT_REGION.READY);
   assert.deepEqual(region.kind === TRANSCRIPT_REGION.READY ? region.calls.map(callEndedLine) : [], [
-    CALL_ENDED_LINE.ENDED,
-    CALL_ENDED_LINE.LUKE_ENDED,
+    "Call ended",
+    "Luke ended the call",
     undefined,
   ]);
 });

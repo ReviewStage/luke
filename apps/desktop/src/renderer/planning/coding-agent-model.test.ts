@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
-  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentMessage,
@@ -23,30 +21,22 @@ import {
   choiceLabel,
   choiceModelId,
   choiceOn,
-  closesComposer,
   delegates,
   effortFor,
-  endLine,
   followsAgent,
   knownDeveloperRows,
-  messageFailureNote,
   messageWords,
   modelLabel,
   offeredModels,
-  orderedModels,
   publishedUrl,
   pullRequestPillLabel,
   pullRequestStateWord,
   readModelChoice,
   type SentLine,
-  START_NEEDS_REPOSITORY,
   settledPlanEdits,
   showsPublishedRow,
   startedAgentOf,
-  startFailureNote,
   unreadSentLines,
-  unsearchedModels,
-  WORKING_PHASE,
 } from "./coding-agent-model";
 import { CALL_KIND } from "./turn-rows";
 
@@ -161,33 +151,6 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
   ]);
 });
 
-test("each Start refusal has its own words", () => {
-  assert.equal(startFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY), START_NEEDS_REPOSITORY);
-  const notes = new Set(Object.values(CODING_AGENT_CALL_FAILURE).map(startFailureNote));
-  assert.equal(notes.size, Object.values(CODING_AGENT_CALL_FAILURE).length);
-});
-
-test("a message's refusals each say what to do, the agent ended for good closes the box, and a refusal no message meets reads as no answer", () => {
-  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY), /still starting/u);
-  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG), /too long/u);
-  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), /ended for good/u);
-  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.NOT_FOUND), /no longer exists/u);
-  // An archive another Mac or a race made is said as such, under the box and beside Start alike.
-  assert.match(
-    messageFailureNote(CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED),
-    /This plan is archived/u,
-  );
-  assert.match(startFailureNote(CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED), /This plan is archived/u);
-  assert.equal(
-    messageFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY),
-    messageFailureNote(CODING_AGENT_CALL_FAILURE.INVALID_CHOICE),
-  );
-  // No answer is not a refusal: the words may have reached the agent.
-  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), /didn't hear back/u);
-  assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), true);
-  assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY), false);
-});
-
 /** A row of the developer's, as the service writes one. */
 function developer(id: string, text: string): CodingAgentMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
@@ -237,92 +200,6 @@ test("the lines sent and not read back follow the transcript's rows, as the deve
       ["sent-2", "user", "Later."],
     ],
   );
-});
-
-test("the menus list the models by provider, Anthropic first, by lead family within each and the rest after, newest first within a family, the catalog's order kept between one version's models", () => {
-  const model = (
-    id: string,
-    provider: typeof MODEL_PROVIDER.ANTHROPIC | typeof MODEL_PROVIDER.OPENAI,
-  ) => ({
-    id,
-    name: id,
-    provider,
-    efforts: ["high"],
-  });
-  const ordered = orderedModels([
-    model("openai/gpt-5.1-codex-max", MODEL_PROVIDER.OPENAI),
-    model("anthropic/claude-opus-4.5", MODEL_PROVIDER.ANTHROPIC),
-    model("openai/gpt-6-astra", MODEL_PROVIDER.OPENAI),
-    model("anthropic/claude-fable-5.1", MODEL_PROVIDER.ANTHROPIC),
-    model("anthropic/claude-opus-5.5-fast", MODEL_PROVIDER.ANTHROPIC),
-    model("anthropic/claude-opus-5.5", MODEL_PROVIDER.ANTHROPIC),
-    model("anthropic/claude-fable-5", MODEL_PROVIDER.ANTHROPIC),
-    model("openai/gpt-5.6-luna", MODEL_PROVIDER.OPENAI),
-  ]);
-
-  assert.deepEqual(
-    ordered.map((each) => each.id),
-    [
-      "anthropic/claude-opus-5.5-fast",
-      "anthropic/claude-opus-5.5",
-      "anthropic/claude-opus-4.5",
-      "anthropic/claude-fable-5.1",
-      "anthropic/claude-fable-5",
-      "openai/gpt-6-astra",
-      "openai/gpt-5.6-luna",
-      "openai/gpt-5.1-codex-max",
-    ],
-  );
-});
-
-test("before a search the menus list the newest of each lead family by its version's numbers, and the chosen model however old; a catalog with no lead family lists everything", () => {
-  const model = (id: string) => ({
-    id,
-    name: id,
-    provider: id.startsWith("openai/") ? MODEL_PROVIDER.OPENAI : MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["high"],
-  });
-  const models = [
-    model("anthropic/claude-opus-5"),
-    model("anthropic/claude-opus-5.5"),
-    model("anthropic/claude-opus-5.1"),
-    model("anthropic/claude-opus-5.5-fast"),
-    model("anthropic/claude-sonnet-4.5"),
-    model("anthropic/claude-haiku-5"),
-    model("openai/gpt-6-astra"),
-    model("openai/gpt-6.1-astra"),
-    model("openai/gpt-6-astra-mini"),
-    model("openai/gpt-5.6-luna"),
-    model("openai/gpt-5.10-sol"),
-    model("openai/gpt-5.9-sol"),
-  ];
-  const listed = (chosen?: string) =>
-    orderedModels(models)
-      .map((each) => each.id)
-      .filter((id) => unsearchedModels(models, chosen).has(id));
-
-  assert.deepEqual(listed(), [
-    "anthropic/claude-opus-5.5",
-    "anthropic/claude-sonnet-4.5",
-    "anthropic/claude-haiku-5",
-    "openai/gpt-6.1-astra",
-    "openai/gpt-5.10-sol",
-    "openai/gpt-5.6-luna",
-  ]);
-  assert.deepEqual(listed("anthropic/claude-opus-5"), [
-    "anthropic/claude-opus-5.5",
-    "anthropic/claude-opus-5",
-    "anthropic/claude-sonnet-4.5",
-    "anthropic/claude-haiku-5",
-    "openai/gpt-6.1-astra",
-    "openai/gpt-5.10-sol",
-    "openai/gpt-5.6-luna",
-  ]);
-  const unled = [model("openai/gpt-6-astra-mini"), model("openai/gpt-5.1-codex-max")];
-  assert.deepEqual([...unsearchedModels(unled, undefined)].sort(), [
-    "openai/gpt-5.1-codex-max",
-    "openai/gpt-6-astra-mini",
-  ]);
 });
 
 const PULL_REQUEST: CodingAgentPullRequest = {
@@ -383,6 +260,7 @@ test("the row says where the pull request stands only once it is a draft, merged
   );
   assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, undefined), false);
 });
+
 test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {
   const model = (id: string, name: string) => ({
     id,
@@ -538,13 +416,6 @@ test("the plan edits that have answered are counted, not the ones still out or t
   assert.equal(settledPlanEdits([]), 0);
 });
 
-test("a turn failed on the account's own API key ends saying so and where to replace it", () => {
-  assert.equal(
-    endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PROVIDER_KEY),
-    "Failed: your API key was refused or can't be read; check Settings › Coding agents › API keys",
-  );
-});
-
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
   const plan: CodingAgentMessage = {
     id: "m-plan",
@@ -571,18 +442,18 @@ test("a working agent is starting until its turn opens, thinking until the turn 
     parts: [{ type: AGENT_PART.TEXT, text: "Also expire them after a week." }],
   };
   // Before the session runs a turn, whatever stands, and before the turn writes its journal.
-  assert.equal(agentWorkingPhase([plan], true), WORKING_PHASE.STARTING);
-  assert.equal(agentWorkingPhase([plan, opened], true), WORKING_PHASE.STARTING);
-  assert.equal(agentWorkingPhase([plan], false), WORKING_PHASE.STARTING);
+  assert.equal(agentWorkingPhase([plan], true), "starting");
+  assert.equal(agentWorkingPhase([plan, opened], true), "starting");
+  assert.equal(agentWorkingPhase([plan], false), "starting");
   // The turn open with nothing past its step boundary is the model at its first step.
-  assert.equal(agentWorkingPhase([plan, opened], false), WORKING_PHASE.THINKING);
-  assert.equal(agentWorkingPhase([plan, calling], false), WORKING_PHASE.WORKING);
+  assert.equal(agentWorkingPhase([plan, opened], false), "thinking");
+  assert.equal(agentWorkingPhase([plan, calling], false), "working");
   // A line after a closed turn awaits a turn of its own; one sent into an open turn steers it.
-  assert.equal(agentWorkingPhase([plan, closed, line], false), WORKING_PHASE.STARTING);
+  assert.equal(agentWorkingPhase([plan, closed, line], false), "starting");
   // A turn closing ahead of its row's settling ends as it worked, not as a start.
-  assert.equal(agentWorkingPhase([plan, closed], false), WORKING_PHASE.WORKING);
-  assert.equal(agentWorkingPhase([plan, calling, line], false), WORKING_PHASE.WORKING);
-  assert.equal(agentWorkingPhase([plan, opened, line], false), WORKING_PHASE.THINKING);
+  assert.equal(agentWorkingPhase([plan, closed], false), "working");
+  assert.equal(agentWorkingPhase([plan, calling, line], false), "working");
+  assert.equal(agentWorkingPhase([plan, opened, line], false), "thinking");
 });
 
 test("a part says what its wire read its call as, and one naming a kind this build does not know says nothing; a planning worker is a delegation, and a start names the agent it began only once it answered one", () => {

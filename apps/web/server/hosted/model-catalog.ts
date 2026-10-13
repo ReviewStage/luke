@@ -38,10 +38,10 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
  * caller.
  */
 
-export const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
+const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
 
 /** How long one instance keeps a read catalog before asking again. */
-export const MODEL_CATALOG_TTL = Duration.hours(1);
+const MODEL_CATALOG_TTL = Duration.hours(1);
 
 /** Every tag a model must carry to be offered. */
 const REQUIRED_TAGS: readonly string[] = ["tool-use", "reasoning"];

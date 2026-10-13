@@ -12,7 +12,7 @@ import { Config, Effect, Option } from "effect";
 import { Environment } from "./seams.js";
 
 /** Every variable the settings store's own overrides are read from, by name. */
-export const SETTINGS_OVERRIDE_VARIABLE = {
+const SETTINGS_OVERRIDE_VARIABLE = {
   LIVE_VOICE: LIVE_ENVIRONMENT.VOICE,
 } as const;
 

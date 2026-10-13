@@ -53,7 +53,7 @@ export const ProbeDoorSchema = Schema.Literals([
   PROBE_DOOR.OPTIONS_ALLOWLIST,
 ]);
 
-export const PROBE_METHOD = {
+const PROBE_METHOD = {
   GET: "GET",
   OPTIONS: "OPTIONS",
 } as const;
@@ -64,15 +64,15 @@ const METHOD_BY_DOOR = {
   [PROBE_DOOR.OPTIONS_ALLOWLIST]: PROBE_METHOD.OPTIONS,
 } as const satisfies Readonly<Record<ProbeDoor, ProbeMethod>>;
 
-export const SITE_ROOT_PATH = "/";
+const SITE_ROOT_PATH = "/";
 /**
  * eve's own `EVE_HEALTH_ROUTE_PATH`, which the package keeps off its public
  * exports; `vercel.json`'s `/eve/v1/(.*)` rewrite is what lands it on the
  * eve service, so its answer is the eve service being served.
  */
-export const EVE_HEALTH_PATH = "/eve/v1/health";
+const EVE_HEALTH_PATH = "/eve/v1/health";
 
-export const PROBE_STATUS = {
+const PROBE_STATUS = {
   OK: 200,
   UNAUTHORIZED: 401,
   METHOD_NOT_ALLOWED: 405,
@@ -90,7 +90,7 @@ const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]
  * unprotect every OPTIONS on the deployment, and eve's health answers OPTIONS
  * with its own 404, which the discriminator below already reads as eve.
  */
-export const EXPECTED_STATUS = {
+const EXPECTED_STATUS = {
   [PROBE_DOOR.BYPASS_SECRET]: new Map([
     [SITE_ROOT_PATH, PROBE_STATUS.OK],
     ["/api/plans", PROBE_STATUS.UNAUTHORIZED],
@@ -206,7 +206,7 @@ function redirectsToVercelSso(answer: ProbeAnswer): boolean {
   return target.host === VERCEL_SSO.host && target.pathname === VERCEL_SSO.pathname;
 }
 
-export function judge(request: PlannedRequest, answer: ProbeAnswer): Verdict {
+function judge(request: PlannedRequest, answer: ProbeAnswer): Verdict {
   if (redirectsToVercelSso(answer)) return VERDICT.PROTECTED;
   if (Option.isSome(answer.vercelError)) return VERDICT.PLATFORM_ERROR;
   if (answer.status >= SERVER_ERROR_FLOOR) return VERDICT.SERVER_ERROR;

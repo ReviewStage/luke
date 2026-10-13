@@ -1,23 +1,18 @@
 import type { PlanArchived } from "@sidecar/database/models/plan-store";
-import { Effect, type Layer, type Option, Schema, Stream } from "effect";
+import { Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
- * The hosted response vocabulary as the schemas an `HttpApi` group declares
- * its answers from, answering the same statuses and the same bytes
- * `server/hosted/http.ts` answers with today. The two stand side by side
- * while the routes convert one group at a time, and the goldens in
- * `fixtures/hosted-refusal/` are what hold them to the same bytes.
+ * The hosted response vocabulary as an `HttpRouter` answers it, with the same
+ * statuses and the same bytes `server/hosted/http.ts` answers with.
  *
- * A refusal is declared as the body itself rather than as a
- * `Schema.TaggedError`: `error` is already the discriminant the desktop's
- * hosted clients read, and the `_tag` a tagged error encodes beside it would
- * be a byte those clients never asked for.
+ * A refusal is the body itself rather than a `Schema.TaggedError`: `error` is
+ * already the discriminant the desktop's hosted clients read, and the `_tag` a
+ * tagged error encodes beside it would be a byte those clients never asked for.
  */
 
 /** The status each refusal is answered with, which is a function of the refusal alone. */
@@ -41,31 +36,6 @@ const HOSTED_REFUSAL_STATUS = {
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
-
-function refusalSchema<Slug extends HostedRefusalSlug>(slug: Slug) {
-  return Schema.Struct({ error: Schema.Literal(slug) }).pipe(
-    HttpApiSchema.status(HOSTED_REFUSAL_STATUS[slug]),
-  );
-}
-
-export const InvalidTokenRefusal = refusalSchema(HOSTED_API_ERROR.INVALID_TOKEN);
-export const InvalidRequestRefusal = refusalSchema(HOSTED_API_ERROR.INVALID_REQUEST);
-export const MethodNotAllowedRefusal = refusalSchema(HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
-export const NotFoundRefusal = refusalSchema(HOSTED_API_ERROR.NOT_FOUND);
-export const PromptTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.PROMPT_TOO_LARGE);
-export const QuotaExhaustedRefusal = refusalSchema(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-export const UnknownToolRefusal = refusalSchema(HOSTED_API_ERROR.UNKNOWN_TOOL);
-export const RequestTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.REQUEST_TOO_LARGE);
-export const UnavailableRefusal = refusalSchema(HOSTED_API_ERROR.UNAVAILABLE);
-export const GitHubSignInRequiredRefusal = refusalSchema(HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED);
-export const RepositoryNotReachableRefusal = refusalSchema(
-  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-);
-export const NoRepositoryRefusal = refusalSchema(HOSTED_API_ERROR.NO_REPOSITORY);
-export const MessageTooLongRefusal = refusalSchema(HOSTED_API_ERROR.MESSAGE_TOO_LONG);
-export const AgentNotReadyRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_NOT_READY);
-export const AgentRetiredRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_RETIRED);
-export const PlanArchivedRefusal = refusalSchema(HOSTED_API_ERROR.PLAN_ARCHIVED);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
