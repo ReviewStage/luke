@@ -7,8 +7,8 @@
  * where nothing beside it is left to say so, a coding agent's turn that
  * ended while the developer was looking elsewhere in the window, or an
  * inbox item an agent posted while they were. Each is a
- * card of its words, an optional second line under them, and at most one
- * action, such as Undo, at its end. Up to three stand at once, newest at the
+ * card of its words, an optional second line under them, each cut at two
+ * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the
  * bottom; a fourth pushes the oldest out, unless it waits, as news that
  * arrives in runs does, for one of the three to leave. A toast saying what
  * one standing already says takes that one's place rather than stacking a

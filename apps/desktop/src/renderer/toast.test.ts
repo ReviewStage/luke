@@ -10,7 +10,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { builtStylesheet, cssRules } from "#testing/css-rules";
+import { builtStylesheet, type CssRule, cssRules } from "#testing/css-rules";
 import {
   TOAST_HOLD,
   TOAST_TONE,
@@ -94,6 +94,55 @@ function toastEvent(type: "pointerover" | "pointerout" | "focusin" | "focusout",
         : new PointerEvent(type, { bubbles: true }),
     );
   });
+}
+
+/** Every declaration the rules make for exactly `selector`, a later one over an earlier. */
+function declared(rules: readonly CssRule[], selector: string): ReadonlyMap<string, string> {
+  return new Map(
+    rules
+      .filter((rule) => rule.selectors.includes(selector))
+      .flatMap((rule) => [...rule.declarations]),
+  );
+}
+
+/** A length in pixels, its `var()`s read from `tokens` and its `calc()` worked out. */
+function pixels(value: string, tokens: ReadonlyMap<string, string>): number {
+  let spelled = value;
+  while (spelled.includes("var(")) {
+    spelled = spelled.replace(/var\((--[\w-]+)\)/u, (_, name: string) => {
+      const token = tokens.get(name);
+      assert.ok(token !== undefined, `no ${name}`);
+      return `(${token})`;
+    });
+  }
+  const terms =
+    spelled
+      .replaceAll("calc", "")
+      .replaceAll("px", "")
+      .match(/\d+(?:\.\d+)?|\S/gu) ?? [];
+  let at = 0;
+  const sum = (): number => {
+    let total = product();
+    while (terms[at] === "+" || terms[at] === "-")
+      total += terms[at++] === "+" ? product() : -product();
+    return total;
+  };
+  const product = (): number => {
+    let total = factor();
+    while (terms[at] === "*" || terms[at] === "/")
+      total = terms[at++] === "*" ? total * factor() : total / factor();
+    return total;
+  };
+  const factor = (): number => {
+    const term = terms[at++];
+    if (term !== "(") return Number(term);
+    const inner = sum();
+    at += 1;
+    return inner;
+  };
+  const total = sum();
+  assert.ok(at === terms.length && Number.isFinite(total), `not a length: ${value}`);
+  return total;
 }
 
 /** What the polite region and the alert say aloud. */
@@ -393,4 +442,31 @@ test("the toasts stand in the window's very corner, and nothing at its foot, a c
       ["bottom", "transform", "translate", "inset"].some((name) => rule.declarations.has(name)),
   );
   assert.deepEqual(moves, []);
+});
+
+test("a toast's glyph, its words' first line, and its action share one middle, its words wrap at the card's line, and its words and detail stop at two lines each", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const card = declared(rules, ".toast");
+  const tokens = new Map([...declared(rules, ":root"), ...card]);
+  const words = declared(rules, ".toast-words");
+  const detail = declared(rules, ".toast-detail");
+  const text = declared(rules, ".toast-text");
+  const glyph = declared(rules, ".toast > svg");
+  const action = declared(rules, ".toast-action");
+  const line = pixels(card.get("line-height") ?? "", tokens);
+  const middle = {
+    glyph:
+      pixels(glyph.get("margin-top") ?? "", tokens) + pixels(glyph.get("height") ?? "", tokens) / 2,
+    words: pixels(text.get("padding-top") ?? text.get("padding-block") ?? "0px", tokens) + line / 2,
+    action: pixels(action.get("height") ?? "", tokens) / 2,
+  };
+
+  assert.equal(pixels(words.get("line-height") ?? card.get("line-height") ?? "", tokens), line);
+  assert.deepEqual(middle, { glyph: middle.words, words: middle.words, action: middle.words });
+  for (const clamped of [words, detail]) {
+    assert.deepEqual(
+      { clamp: clamped.get("-webkit-line-clamp"), overflow: clamped.get("overflow") },
+      { clamp: "2", overflow: "hidden" },
+    );
+  }
 });
