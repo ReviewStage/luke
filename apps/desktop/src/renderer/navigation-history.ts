@@ -32,7 +32,7 @@ import type { SettingsView } from "./settings-views";
 const HISTORY_LIMIT = 50;
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
-const MOUSE_BUTTON = {
+export const MOUSE_BUTTON = {
   BACK: 3,
   FORWARD: 4,
 } as const;

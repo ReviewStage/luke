@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
@@ -15,11 +16,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { useAppKeymap } from "../app-commands";
+import { runAppCommand, useAppKeymap } from "../app-commands";
+import type { CallCardInput } from "../call/call-card";
 import { MICROPHONE_UNGRANTED_NOTE } from "../microphone-access";
 import type { MicrophoneControl } from "../settings/controls";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
@@ -141,6 +144,11 @@ function results(container: ParentNode): readonly { page: string; rows: readonly
 
 function shownPage(container: ParentNode): string {
   return container.querySelector(".desktop-toolbar-title")?.textContent ?? "";
+}
+
+/** The plan template's page, by the name it is labelled with, which draws its title in its document rather than its toolbar. */
+function templatePage(container: ParentNode): Element | null {
+  return container.querySelector('.settings-page[aria-label="Plan template"]');
 }
 
 /** The toolbar's button with these words, if it draws one. */
@@ -508,10 +516,149 @@ test("the plan template stands as a plan's page beside the list, under its own t
   const container = mount();
   act(() => turnPage(SETTINGS_VIEW.PLAN_TEMPLATE));
 
-  assert.equal(shownPage(container), "Plan template");
+  assert.ok(templatePage(container));
+  assert.equal(shownPage(container), "", "the toolbar carries no title, the document does");
   assert.equal(container.querySelector(".settings-page-scroll"), null);
   assert.match(
     container.querySelector(".settings-page")?.textContent ?? "",
     /Sign in to edit the template/u,
   );
+});
+
+/** Answers the template page's reads: the account's own template, and no revisions. */
+function answerTemplateReads(request: Act) {
+  return Promise.resolve(
+    request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+      ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "## Why\n", custom: true } }
+      : request.kind === ACT_KIND.PLAN_TEMPLATE_REVISIONS
+        ? { status: ACT_OUTCOME_STATUS.DONE, value: { revisions: [] } }
+        : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+  );
+}
+
+/** A call standing while Settings is open. */
+const CALL: CallCardInput = {
+  card: {
+    planName: "Parser cache migration",
+    status: { voiceWord: "Listening", backend: { planner: undefined, notes: false } },
+    microphoneMuted: false,
+  },
+  speakerMuted: false,
+  controls: {
+    onReturn: ignore,
+    onToggleMicrophone: ignore,
+    onToggleSpeaker: ignore,
+    onEnd: ignore,
+  },
+};
+
+/**
+ * Settings, signed in, on the page `view` names, its reads answered with the
+ * account's own template; `draw` draws it again on another page or with a
+ * call, and `exits` counts how often Settings was left.
+ */
+async function mountSignedIn(view: SettingsView = SETTINGS_VIEW.PLAN_TEMPLATE) {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: { recordSurfaceEvent: ignore, act: answerTemplateReads },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted.push(root);
+  const left = { exits: 0 };
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+    });
+  const draw = async (page: SettingsView, call: CallCardInput | undefined = undefined) => {
+    act(() =>
+      root.render(
+        createElement(DesktopSettings, {
+          sidebar: {
+            collapsed: false,
+            width: SIDEBAR_WIDTH.DEFAULT,
+            onToggle: ignore,
+            onResize: ignore,
+            staged: false,
+          },
+          history: navigationHistory(),
+          call,
+          settings: settingsPanelProps({
+            view: page,
+            onViewChange: ignore,
+            account: {
+              status: ACCOUNT_STATUS.SIGNED_IN,
+              email: "dean@luke.test",
+              name: "Dean",
+              provider: ACCOUNT_PROVIDER.GITHUB,
+            },
+          }),
+          onExit: () => {
+            left.exits += 1;
+          },
+        }),
+      ),
+    );
+    await settle();
+  };
+  await draw(view);
+  const openHistory = async () => {
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('.plan-title-actions [aria-label="Version history"]')
+        ?.click(),
+    );
+    await settle();
+  };
+  return { container, left, draw, settle, openHistory };
+}
+
+test("the template's version history takes the whole window from the page's title line, and Escape and Back leave it for the template rather than leaving Settings", async () => {
+  const { container, left, settle, openHistory } = await mountSignedIn();
+  assert.ok(
+    container.querySelector('.plan-title-actions [aria-label="Version history"]'),
+    "the template's title line offers its version history",
+  );
+
+  await openHistory();
+  assert.equal(container.querySelector(".settings-pages"), null, "the page list gives way");
+  assert.ok(container.querySelector(".desktop-version-history"));
+  assert.equal(runAppCommand(APP_COMMAND.EXIT_SETTINGS), false);
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY);
+  });
+  await settle();
+  assert.ok(container.querySelector(".settings-pages"), "Escape leaves for the template");
+  assert.ok(templatePage(container));
+
+  await openHistory();
+  act(() => container.querySelector<HTMLButtonElement>(".version-log-back")?.click());
+  await settle();
+  assert.ok(templatePage(container), "Back leaves for the template too");
+  assert.equal(left.exits, 0, "Settings was never left");
+});
+
+test("a page turned while the template's history stands leaves it, so coming back finds the template", async () => {
+  const { container, draw, openHistory } = await mountSignedIn();
+  await openHistory();
+
+  await draw(SETTINGS_VIEW.SHORTCUTS);
+  await draw(SETTINGS_VIEW.PLAN_TEMPLATE);
+
+  assert.equal(container.querySelector(".desktop-version-history"), null);
+  assert.ok(templatePage(container));
+});
+
+test("a call's card rides the page list, and floats over the template's history, which has none", async () => {
+  const { draw, openHistory } = await mountSignedIn();
+  await draw(SETTINGS_VIEW.PLAN_TEMPLATE, CALL);
+  const cards = () =>
+    [...document.body.querySelectorAll<HTMLElement>('.call-card[data-leaving="false"]')].map(
+      (card) => card.dataset.surface ?? "",
+    );
+  assert.deepEqual(cards(), ["sidebar"]);
+
+  await openHistory();
+  assert.deepEqual(cards(), ["floating"]);
 });

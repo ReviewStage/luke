@@ -93,6 +93,7 @@ import {
   type SidePanelControl,
   useSidePanel,
 } from "./use-side-panel";
+import { sayRestored } from "./version-view";
 import { startedAgentCallIds, workerCallIds } from "./work-model";
 
 /**
@@ -336,10 +337,6 @@ const PLAN_DELETED_NOTE = "Plan deleted";
 
 /** Why a delete the service did not carry was refused. */
 const DELETE_REFUSED_NOTE = "The plan could not be deleted. Try again.";
-
-/** What the toast says once a version is restored, and why its Undo did nothing. */
-const VERSION_RESTORED_NOTE = "Version restored";
-const RESTORE_UNDO_REFUSED_NOTE = "The restore could not be undone. Try again.";
 
 /** What a delete the service did not carry answers, so the plan stays and says why. */
 const DELETE_REFUSED: ActionResult = {
@@ -949,28 +946,7 @@ export function usePlansTab(input: {
     seek: historyFor?.save,
     returnTo: historyFor?.spot,
     // The Undo puts back the version that stood before the restore, itself a restore.
-    onRestored: (undo) =>
-      toast(
-        undo === undefined
-          ? { words: VERSION_RESTORED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE }
-          : {
-              words: VERSION_RESTORED_NOTE,
-              tone: TOAST_TONE.DONE,
-              action: {
-                label: UNDO_LABEL,
-                onPress: () => {
-                  undo().then((undone) => {
-                    if (undone) return;
-                    toast({
-                      words: RESTORE_UNDO_REFUSED_NOTE,
-                      tone: TOAST_TONE.FAILED,
-                      hold: TOAST_HOLD.FAILED,
-                    });
-                  });
-                },
-              },
-            },
-      ),
+    onRestored: (undo) => sayRestored(toast, undo),
   });
 
   // A started plan becomes the host's open one, which turns the page to it.

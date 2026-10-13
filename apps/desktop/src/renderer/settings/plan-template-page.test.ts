@@ -6,7 +6,9 @@ import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
+  type PlanTemplateRevisionLine,
 } from "@sidecar/hosted/plan-document-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -22,6 +24,7 @@ import {
   type ActResultFor,
 } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { builtStylesheet, cssRules } from "#testing/css-rules";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
@@ -42,6 +45,12 @@ let refuseWrites = false;
 let holdWrites = false;
 /** The held writes' answers, each landing when called. */
 let heldWrites: (() => void)[] = [];
+/** How many times the page asked for the template's version history. */
+let historyAsked = 0;
+/** The template's newest revision as the service lists it; none for a template never edited. */
+let newest: PlanTemplateRevisionLine | undefined;
+/** Whether the history's read never answers, as a stalled service's would not. */
+let stallRevisions = false;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -59,6 +68,9 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.PLAN_TEMPLATE_READ:
       return Promise.resolve(done(refuseRead ? failed : answered()));
+    case ACT_KIND.PLAN_TEMPLATE_REVISIONS:
+      if (stallRevisions) return new Promise(() => undefined);
+      return Promise.resolve(done({ revisions: newest === undefined ? [] : [newest] }));
     case ACT_KIND.PLAN_TEMPLATE_WRITE: {
       if (refuseWrites) return Promise.resolve(done(failed));
       const { template } = request.payload;
@@ -117,6 +129,9 @@ beforeEach(() => {
   refuseWrites = false;
   holdWrites = false;
   heldWrites = [];
+  historyAsked = 0;
+  newest = undefined;
+  stallRevisions = false;
   built.length = 0;
   installScrollIntoView();
   // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
@@ -150,7 +165,12 @@ async function mount(signedIn = true, registry?: AtomRegistry) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page = createElement(PlanTemplatePage, { signedIn });
+  const page = createElement(PlanTemplatePage, {
+    signedIn,
+    onShowHistory: () => {
+      historyAsked += 1;
+    },
+  });
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return { container, root };
@@ -234,6 +254,15 @@ function confirmReset(page: ParentNode): void {
   act(() => [...dialog.querySelectorAll("button")].at(-1)?.click());
 }
 
+/** Whether a selector reaches the element; a selector jsdom cannot parse, as a keyframe's step, reaches nothing. */
+function safeMatch(element: Element, selector: string): boolean {
+  try {
+    return element.matches(selector);
+  } catch {
+    return false;
+  }
+}
+
 const DEFAULT_HEADINGS = [
   "Context",
   "Goal",
@@ -252,8 +281,8 @@ test("the page draws the template as a plan's document under the page's own titl
   const { container } = await mount();
 
   assert.deepEqual(
-    sent.map((request) => request.kind),
-    [ACT_KIND.PLAN_TEMPLATE_READ],
+    sent.map((request) => request.kind).sort(),
+    [ACT_KIND.PLAN_TEMPLATE_READ, ACT_KIND.PLAN_TEMPLATE_REVISIONS].sort(),
   );
   assert.deepEqual(sections(container), DEFAULT_HEADINGS);
   const title = container.querySelector<HTMLElement>(".plan-body .plan-title");
@@ -486,4 +515,78 @@ test("words queued behind a save as the reset is asked never land after it", asy
   assert.deepEqual(writes(), [`${CUSTOM}\n## Risks\n`, null]);
   assert.equal(stored, null);
   assert.deepEqual(sections(container), DEFAULT_HEADINGS);
+});
+
+test("the page has no top bar: its actions, Version history and Reset to default, stand at the end of the title line, and it and the line naming the newest revision each open the template's version history", async () => {
+  stored = CUSTOM;
+  newest = {
+    seq: 3,
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 0, duringCall: false },
+    startedAt: 0,
+    changes: 2,
+  };
+  const { container } = await mount();
+
+  assert.equal(container.querySelector(".desktop-toolbar"), null);
+  const line = container.querySelector<HTMLElement>(".plan-body .plan-title-line");
+  assert.equal(line?.querySelector(".plan-title")?.textContent, "Plan template");
+  const actions = [...(line?.querySelectorAll("button") ?? [])];
+  assert.deepEqual(
+    actions.map((each) => each.getAttribute("aria-label") ?? each.textContent),
+    ["Version history", "Reset to default"],
+  );
+  assert.ok(actions[1]?.classList.contains("bordered-button"), "a page action is bordered");
+  act(() => actions[0]?.click());
+  const edited = container.querySelector<HTMLButtonElement>(".plan-edit-link");
+  assert.match(edited?.textContent ?? "", /^Edited by you · \d+d ago$/u);
+  act(() => edited?.click());
+
+  assert.equal(historyAsked, 2);
+});
+
+test("a template never edited has no line over it, and while it is read, no history to open", async () => {
+  refuseRead = true;
+  const failedRead = await mount();
+  assert.equal(failedRead.container.querySelector('[aria-label="Version history"]'), null);
+
+  refuseRead = false;
+  const { container } = await mount();
+  assert.equal(container.querySelector(".plan-edit-note"), null);
+  assert.ok(container.querySelector('[aria-label="Version history"]'));
+});
+
+test("the template's words dissolve at the scroller's top edge as they pass under the note, through the shared top fade, once the page has left its top", async () => {
+  const sheet = await builtStylesheet();
+  const rules = cssRules(sheet);
+  const { container } = await mount();
+  const scroller = container.querySelector(".plan-document-scroll");
+  assert.ok(scroller);
+  // The sheet's rules whose selector reaches the scroller, in the order the sheet gives them.
+  const own = (property: string) =>
+    rules
+      .filter((rule) => rule.selectors.some((selector) => safeMatch(scroller, selector)))
+      .flatMap((rule) => {
+        const value = rule.declarations.get(property);
+        return value === undefined ? [] : [value];
+      });
+
+  assert.deepEqual(own("animation"), ["scroll-top-fade linear both"]);
+  assert.deepEqual(own("animation-timeline"), ["scroll(self block)"]);
+  assert.deepEqual(own("animation-range"), ["0 var(--scroll-fade)"]);
+  const fade = /@keyframes scroll-top-fade\s*\{(?<frames>[^@]*?\}\s*)\}/u.exec(sheet)?.groups
+    ?.frames;
+  assert.match(
+    fade ?? "",
+    /to\s*\{\s*mask-image:\s*linear-gradient\(to bottom, transparent 0, #000 var\(--scroll-fade\)\)/u,
+  );
+});
+
+test("a history read that never answers holds nothing back: the template is drawn and edited without its line", async () => {
+  stallRevisions = true;
+  const { container } = await mount();
+
+  assert.deepEqual(sections(container), DEFAULT_HEADINGS);
+  assert.equal(container.querySelector(".plan-edit-note"), null);
+  await edit(container, CUSTOM);
+  assert.deepEqual(writes(), [CUSTOM]);
 });

@@ -313,7 +313,8 @@ function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }):
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the plan's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only. `looks` are the sections changed since the developer last
+ * drawn read-only; `titleEnd` stands at the end of a title that is not
+ * edited. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
  * none are.
  */
@@ -325,6 +326,7 @@ export function PlanBody({
   onRename,
   onDraftName = NO_DRAFT,
   looks = NO_LOOKS,
+  titleEnd,
 }: {
   plan: Plan;
   live: boolean;
@@ -335,6 +337,8 @@ export function PlanBody({
   /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: PlanLooks;
+  /** What stands at the right end of a title that is not edited, as a page's actions stand at the end of its title line. */
+  titleEnd?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = usePlanChase(plan, live);
   const editable = onEdit !== undefined;
@@ -450,8 +454,13 @@ export function PlanBody({
             onRename={onRename}
             onDraft={onDraftName}
           />
-        ) : (
+        ) : titleEnd === undefined ? (
           <PlanTitle name={plan.name} />
+        ) : (
+          <div className="plan-title-line">
+            <PlanTitle name={plan.name} />
+            {titleEnd}
+          </div>
         )}
         {editing.editor === undefined ? (
           sections

@@ -28,7 +28,7 @@ import { runAppCommand } from "../app-commands";
 import { REVISION_SOURCE, type RevisionSource } from "../planning/plan-history-model";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { type PlanHistorySource, usePlanHistory } from "../planning/use-plan-history";
-import { DesktopVersionHistory } from "./desktop-version-history";
+import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
 import { useSidebarCollapse } from "./sidebar-collapse";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -239,7 +239,7 @@ function mount(
     return createElement(DesktopVersionHistory, {
       sidebar,
       history: navigationHistory(),
-      plans,
+      subject: planVersionSubject(plans),
       account: READER,
       onExit: () => setOpen(false),
       onRestored: () => setOpen(false),

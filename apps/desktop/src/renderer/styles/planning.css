@@ -263,6 +263,26 @@ button.plan-unit-byline:focus-visible {
   pointer-events: none;
 }
 
+/* A title that is not edited, with what stands at its right end on its line,
+   as a page's actions stand at the end of its title. */
+.plan-title-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.plan-title-line > .plan-title {
+  min-width: 0;
+}
+
+.plan-title-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .plan-title-text {
   caret-color: var(--accent);
