@@ -206,15 +206,21 @@ export function callThread<T>(
     });
   const sections: ThreadSection<T>[] = between(-1, false).map(work);
   for (const [index, call] of calls.entries()) {
-    const inside = between(index, false);
     // A turn no line asked for stands by time among the lines: after the last that began before it, at the top where none had.
-    const following = (line: UIMessage | undefined) =>
-      inside.filter((turn) => lineBefore(call, turn) === line).map(work);
-    const entries: CallEntry<T>[] = following(undefined);
+    const after = new Map<UIMessage | undefined, CallTurn<T>[]>();
+    for (const turn of between(index, false)) {
+      const line = lineBefore(call, turn);
+      after.set(line, [...(after.get(line) ?? []), turn]);
+    }
+    const entries: CallEntry<T>[] = (after.get(undefined) ?? []).map(work);
     for (const line of call.messages) {
       entries.push({ kind: THREAD_ITEM.LINE, line });
-      const under = byStart.filter((turn) => anchors.get(turn.key) === line);
-      entries.push(...under.map(work), ...following(line));
+      // Under one line stand the turns it asked for and those that fall after it by time, in the order they started.
+      const under = [
+        ...byStart.filter((turn) => anchors.get(turn.key) === line),
+        ...(after.get(line) ?? []),
+      ].toSorted((left, right) => left.startedAt - right.startedAt);
+      entries.push(...under.map(work));
     }
     sections.push({ kind: THREAD_ITEM.CALL, call, entries });
     sections.push(...between(index, true).map(work));

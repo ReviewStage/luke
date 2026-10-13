@@ -44,7 +44,7 @@ function scanned(sections: readonly ThreadSection<string>[]): unknown[] {
   );
 }
 
-test("on the call standing, a turn no line asked for stands by time among the lines: the look around the call opened with at its top, a later one after the last line that began before it, and a turn a line asked for under that line, whichever the voice asked for folded as spoken", () => {
+test("on the call standing, a turn no line asked for stands by time among the lines: the look around the call opened with at its top, a later one after the last line that began before it, and a turn a line asked for under that line, the turns under one line in the order they started, whichever the voice asked for folded as spoken", () => {
   const live: TranscriptCallRow = {
     key: LIVE_CALL,
     startedAt: 100_000,
@@ -64,10 +64,19 @@ test("on the call standing, a turn no line asked for stands by time among the li
       turn("asked", 121_000, { askedAt: [{ voiceSessionId: LIVE_CALL, fromMs: 20_500 }] }),
       turn("woken", 110_000),
       turn("explore", 95_000, { spoken: true }),
+      turn("woken-later", 120_500),
     ],
   );
   assert.deepEqual(scanned(sections), [
-    [["explore", true], "Hello.", "Hi.", ["woken", false], "Look into invites.", ["asked", true]],
+    [
+      ["explore", true],
+      "Hello.",
+      "Hi.",
+      ["woken", false],
+      "Look into invites.",
+      ["woken-later", false],
+      ["asked", true],
+    ],
   ]);
 });
 
