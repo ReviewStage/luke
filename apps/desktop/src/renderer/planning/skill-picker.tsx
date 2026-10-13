@@ -250,10 +250,13 @@ export function useSkillPicker({
   draft,
   setDraft,
   source,
+  maxLength,
 }: {
   field: RefObject<HTMLTextAreaElement | null>;
   draft: string;
   setDraft: (text: string) => void;
+  /** The longest message the box takes, which a chosen skill's name may not carry it past. */
+  maxLength: number;
   /** Where the skills are read from; nothing where the box offers none. */
   source: SkillSource | undefined;
 }): SkillPicker {
@@ -297,10 +300,12 @@ export function useSkillPicker({
   // The skills are read the first time a `/` word is typed and kept; a read
   // that failed is asked again as the next `/` word opens the list.
   const start = open ? mention.start : undefined;
+  // Note that a failed read waits for a `/` word other than the one it was
+  // read for to open the list, never for the list to close or the caret to move.
   const settled =
-    read?.source === source &&
     read !== undefined &&
-    ("skills" in read.read || read.start === start);
+    read.source === source &&
+    ("skills" in read.read || start === undefined || read.start === start);
   useEffect(() => {
     if (source === undefined || (!open && !wantsSkills) || settled) return;
     let live = true;
@@ -319,11 +324,13 @@ export function useSkillPicker({
     pendingCaret.current = undefined;
   }, [draft, field]);
 
-  // The list is measured to its word's slash as the word opens it.
-  useLayoutEffect(() => {
-    if (start === undefined || field.current === null) return;
-    setPoint(caretPoint(field.current, start));
-  }, [start, field]);
+  // The list is measured to its word's slash as the word opens it, and again
+  // as the box scrolls or its words rewrap under it.
+  const measure = () => {
+    if (start !== undefined && field.current !== null) setPoint(caretPoint(field.current, start));
+  };
+  // Note that the words are a dependency, because an edit before the slash rewraps the line it stands on.
+  useLayoutEffect(measure, [start, draft, field]);
 
   const edit = (text: string, nextCaret: number) => {
     pendingCaret.current = nextCaret;
@@ -332,6 +339,8 @@ export function useSkillPicker({
   const choose = (skill: SkillOption) => {
     if (mention === undefined) return;
     const written = chooseSkill(draft, mention, skill.name);
+    // A name the message has no room left for is not written, as a key typed past the bound is not.
+    if (written.text.length > maxLength) return;
     edit(written.text, written.caret);
   };
   const onCaret = () => {
@@ -411,6 +420,9 @@ export function useSkillPicker({
     onKeyDown,
     onCaret,
     onBlur: () => setCaret(undefined),
-    onScroll: () => setScroll(field.current?.scrollTop ?? 0),
+    onScroll: () => {
+      setScroll(field.current?.scrollTop ?? 0);
+      measure();
+    },
   };
 }

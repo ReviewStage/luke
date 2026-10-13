@@ -197,6 +197,7 @@ export function AgentComposer({
     draft: composer.draft,
     setDraft: (next) => latest.current.setDraft(next),
     source: skills,
+    maxLength: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   });
 
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.

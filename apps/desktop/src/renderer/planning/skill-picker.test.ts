@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  type CodingAgentAttachment,
+} from "@sidecar/hosted/coding-agent-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -283,6 +287,17 @@ test("skills that could not be read are asked for again as the next `/` word ope
   const box = mount({ unread: "GitHub could not be read just now." }, SKILLS);
   await box.type("/");
   assert.equal(box.note(), "GitHub could not be read just now.");
+  // Closing the list over the word already read for asks nothing again.
+  await box.key({ key: "Escape" });
+  assert.equal(box.reads(), 1);
   await box.type("/ then /");
   assert.equal(box.rows()?.length, 3);
+});
+
+test("a skill whose name the message has no room left for is not written, as a key typed past the bound is not", async () => {
+  const box = mount();
+  const full = `${"x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - 2)} /`;
+  await box.type(full);
+  await box.key({ key: "Enter" });
+  assert.equal(box.field().value, full);
 });

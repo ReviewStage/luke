@@ -255,10 +255,16 @@ test("the session is told when to delegate, how to choose a worker's model, and 
   }
 });
 
-test("the session is told a `/name` in the developer's words names a skill to load before anything else", () => {
+test("the session is told a `/name` in the developer's words names a skill to load before anything else, and where to read one added since it began", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const instructions = coderInstructions("Acme/Relay", brief, false);
-    for (const kept of ["`/name`", `\`${CODER_TOOL.LOAD_SKILL}\``, "before anything else"]) {
+    for (const kept of [
+      "`/name`",
+      `\`${CODER_TOOL.LOAD_SKILL}\``,
+      "before anything else",
+      "`.agents/skills/<name>/`",
+      "`.claude/skills/<name>/`",
+    ]) {
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }
   }
