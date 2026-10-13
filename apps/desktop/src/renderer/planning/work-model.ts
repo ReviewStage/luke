@@ -15,7 +15,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { cardTitle } from "./tool-call-model";
+import { AGENT_TOOL, cardTitle } from "./tool-call-model";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -219,13 +219,15 @@ type WorkToolPart = Extract<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>;
 
 /** A call's kind and subject, its stop naming the subagent it stopped and a page by its name. */
 function callRowOf(part: WorkToolPart, moving: boolean, jobs: JobsByTask): WorkCallRow {
-  const kind = CALL_KIND_OF_TOOL[part.tool];
+  // A skill load travels as `other`, which every desktop reads, named by the tool it ran.
+  const loaded = part.tool === PLAN_WORK_TOOL.OTHER && part.name === AGENT_TOOL.LOAD_SKILL;
+  const kind = loaded ? CALL_KIND.LOAD_SKILL : CALL_KIND_OF_TOOL[part.tool];
   const stopped =
     part.tool === PLAN_WORK_TOOL.WORKER_CANCEL && part.task !== undefined
       ? jobs.get(part.task)
       : undefined;
   const subject =
-    part.tool === PLAN_WORK_TOOL.OTHER
+    part.tool === PLAN_WORK_TOOL.OTHER && !loaded
       ? part.name
       : kind === CALL_KIND.WEB_PAGE && part.subject !== undefined
         ? pageName(part.subject)

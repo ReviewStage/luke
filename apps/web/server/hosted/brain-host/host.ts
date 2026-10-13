@@ -24,11 +24,13 @@ import {
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { type ModelCatalog, providerModelOf } from "../model-catalog.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
+import type { RepositorySkill } from "../repository-skills.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
@@ -198,6 +200,19 @@ export interface BrainHost {
    * title model, and a failed call each write nothing.
    */
   titleChild(session: SessionContext["session"]): HostEffect<void>;
+  /**
+   * The skills the plan's repository keeps, offered to the session as it
+   * starts (`../agent-runtime/skills.ts`), each body saying where it stands
+   * in the repository `run_in_repository` reads; none for a plan with no
+   * repository, one the App does not reach, or a read that failed.
+   */
+  skills(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<
+    readonly AgentSkill[],
+    SqlError | Schema.SchemaError,
+    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+  >;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -210,6 +225,11 @@ export interface BrainHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+}
+
+/** The body a planning skill loads as: where it stands in the plan's repository, which \`run_in_repository\` reads, and then its own words. */
+function planningSkillMarkdown(skill: RepositorySkill): string {
+  return `This skill is \`${skill.folder}/SKILL.md\` in the plan's repository; read the files it names with \`run_in_repository\`, relative to \`${skill.folder}/\`.\n\n${skill.markdown}`;
 }
 
 /** Where a child's first task is read from: before every row of its conversation. */
@@ -474,6 +494,14 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           turn: RELAY_TURN.CHILD,
           state,
         });
+      }),
+
+    skills: (admitted) =>
+      Effect.gen(function* () {
+        const plan = yield* planOf(admitted.target);
+        const repository = plan?.plan.repository ?? null;
+        if (repository === null) return [];
+        return yield* repositorySkills(admitted.target, repository, planningSkillMarkdown);
       }),
 
     titleChild: (session) =>

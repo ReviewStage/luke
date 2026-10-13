@@ -1099,3 +1099,49 @@ test("a worker sent more work in a later turn reads the session of the call that
     text: "Only the second one batches.",
   });
 });
+
+test("a skill the planning model loads is written and reaches the Work tab as a call every desktop reads, named load_skill with the skill as its subject", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const turnId = FIRST_EVE_TURN;
+  const data = { turnId, sequence: SEQUENCE, stepIndex: 0 };
+  await play(
+    [
+      ...opening(turnId),
+      stamped({ type: "step.started", data: { ...data, modelId: "m" } }),
+      stamped({
+        type: "actions.requested",
+        data: {
+          ...data,
+          actions: [
+            { kind: "load-skill", callId: "call-skill", input: { skill: "release-notes" } },
+          ],
+        },
+      }),
+      stamped({
+        type: "action.result",
+        data: {
+          ...data,
+          status: "completed",
+          result: {
+            kind: "load-skill-result",
+            callId: "call-skill",
+            output: "One line per change.",
+          },
+        },
+      }),
+      stamped({ type: "step.completed", data: { ...data, finishReason: "tool-calls" } }),
+      ...answeringStep(turnId, 1, "Loaded the release notes skill."),
+    ],
+    standing,
+  );
+
+  const turn = await worked(target, standing);
+  const loads = turn.parts.filter((part) => part.type === PLAN_WORK_PART.TOOL);
+  assert.deepEqual(
+    loads.map((part) =>
+      part.type === PLAN_WORK_PART.TOOL ? [part.tool, part.name, part.subject, part.state] : [],
+    ),
+    [[PLAN_WORK_TOOL.OTHER, "load_skill", "release-notes", PLAN_WORK_STATE.DONE]],
+  );
+});

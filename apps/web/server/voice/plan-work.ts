@@ -21,7 +21,11 @@ import {
   TURN_STATUS,
   UI_PART_TYPE,
 } from "../core.js";
-import { EVE_DELEGATION_INPUT, EVE_DELEGATION_TOOL } from "../hosted/brain-host/planning.js";
+import {
+  EVE_DELEGATION_INPUT,
+  EVE_DELEGATION_TOOL,
+  EVE_SKILL_TOOL,
+} from "../hosted/brain-host/planning.js";
 import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
@@ -85,6 +89,7 @@ const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
 const isText = Schema.is(Schema.String);
+const isSkillInput = Schema.is(EVE_SKILL_TOOL.INPUT);
 
 /** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
@@ -129,9 +134,15 @@ function inputOf(tool: PlanWorkTool, part: StoredToolPart): string {
   return cut(JSON.stringify({ ...input, message: cut(message, room) }, null, 2), max);
 }
 
-/** The one input of a call a reader looks for first, or nothing for a tool whose input has none. */
+/**
+ * The one input of a call a reader looks for first, or nothing for a tool
+ * whose input has none. Note that a skill load is said as `other`, a kind
+ * every desktop reads, with the skill as its subject: the desktop names the
+ * call by the tool it ran.
+ */
 function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined {
   const { input } = part;
+  if (storedToolName(part) === EVE_SKILL_TOOL.NAME && isSkillInput(input)) return input.skill;
   if (tool === PLAN_WORK_TOOL.REPOSITORY && isRepositoryInput(input)) return input.command;
   if (tool === PLAN_WORK_TOOL.SEARCH_WEB && isSearchInput(input)) return input.query;
   if (tool === PLAN_WORK_TOOL.READ_WEB_PAGE && isPageInput(input)) return input.url;

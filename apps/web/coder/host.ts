@@ -5,6 +5,7 @@ import type { UnparsedWireValue } from "../server/core.js";
 import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
 import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
 import { turnServers } from "../server/hosted/agent-runtime/servers.js";
+import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
@@ -14,7 +15,6 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
-import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import { integrationAccessToken } from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
@@ -133,7 +133,7 @@ export function runInboxTool(
 export function sessionSkills(
   auth: SessionAuth,
   sessionId: string,
-): Promise<readonly CoderSkill[]> {
+): Promise<readonly AgentSkill[]> {
   return runWeb(
     Effect.gen(function* () {
       const admitted = yield* host.admitStarting(auth, sessionId);

@@ -1097,6 +1097,17 @@ calls are written and read back under the same list it was offered.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 
+The planning session is offered the skills the plan's repository keeps
+(`eve/skills/repository.ts`, `server/hosted/agent-runtime/skills.ts`), read
+from GitHub on a read token for that repository as the session starts, which
+is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
+says where the skill stands in the repository, so its files are read with
+`run_in_repository`. A plan with no repository, one the App does not reach,
+or a read that fails offers none, and a coding agent's are read the same way
+from its own repository, led by where they stand in its checkout. A skill
+load reaches the Work tab as `other` named `load_skill`, a kind every desktop
+reads, with the skill as its subject.
+
 The research reads (`server/hosted/public-research.ts`) are `search_web`,
 one query sent to OpenAI's Responses API with its own `web_search` tool on
 Luke's key and the brain's model at low reasoning effort and low search

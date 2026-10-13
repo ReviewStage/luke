@@ -220,6 +220,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window. Code is on screen only from a call in this turn, so when the developer asks to see code again or says they cannot see it, call show_code again rather than saying it is up.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
+- load_skill loads one of the plan's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
 - worker does a job in the background, as above.
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
@@ -525,6 +526,16 @@ export const EVE_DELEGATION_INPUT = {
 } as const;
 
 /**
+ * eve's own `load_skill`, which loads one of the skills the plan's
+ * repository keeps (`../agent-runtime/skills.ts`), and what its call
+ * carries, as eve declares it: the skill's name.
+ */
+export const EVE_SKILL_TOOL = {
+  NAME: "load_skill",
+  INPUT: Schema.Struct({ skill: Schema.String }),
+} as const;
+
+/**
  * The planning tools the `worker` subagent is offered: every read a
  * background session can carry. Note that it is offered nothing that speaks
  * or shows, because a question queued or code shown reaches the developer only
@@ -562,7 +573,7 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   }));
 }
 
-/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation and every integration's calls beside them (`../connection-tools.ts`). */
+/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation, its skill load, and every integration's calls beside them (`../connection-tools.ts`). */
 export function planningToolSet(): ToolSet {
   return Object.fromEntries([
     ...PLANNING_TOOLS.map((tool) => [
@@ -573,6 +584,10 @@ export function planningToolSet(): ToolSet {
       name,
       wireValidatedTool(`eve's own ${name} tool`, inputSchema),
     ]),
+    [
+      EVE_SKILL_TOOL.NAME,
+      wireValidatedTool(`eve's own ${EVE_SKILL_TOOL.NAME} tool`, EVE_SKILL_TOOL.INPUT),
+    ],
     ...connectionToolEntries(),
   ]);
 }

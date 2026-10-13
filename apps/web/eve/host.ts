@@ -1,7 +1,9 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
+import type { SessionAuth } from "eve/context";
 import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
-import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
+import { AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
 import { turnServers } from "../server/hosted/agent-runtime/servers.js";
+import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
 import {
   type BrainHostSeams,
@@ -48,6 +50,26 @@ export function relayChildEvent(
       if (event.type === "message.received") {
         yield* Effect.forkDetach(host.titleChild(session));
       }
+    }),
+  );
+}
+
+/**
+ * The skills the planning session is offered as it starts, for the
+ * project's own \`skills/repository.ts\`: the ones the plan's repository
+ * keeps, or none for a session the host does not admit or a role whose
+ * profile offers none.
+ */
+export function sessionSkills(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<readonly AgentSkill[]> {
+  if (!ROLE_PROFILE[AGENT_ROLE.PLANNER].skills) return Promise.resolve([]);
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admitStarting(auth, sessionId);
+      if (Result.isFailure(admitted)) return [];
+      return yield* host.skills(admitted.success);
     }),
   );
 }

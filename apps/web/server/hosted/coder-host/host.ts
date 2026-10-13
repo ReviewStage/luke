@@ -18,6 +18,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue } from "../../core.js";
+import type { AgentSkill } from "../agent-runtime/skills.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import { RELAY_TURN } from "../brain-host/bounds.js";
 import {
@@ -62,7 +63,7 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
-import { agentSkills, type CoderSkill } from "./skills.js";
+import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -176,7 +177,7 @@ export interface CoderHost {
   skills(
     admitted: AdmittedConversation,
     agent: CodingAgent,
-  ): Effect.Effect<readonly CoderSkill[], never, CheckoutServices>;
+  ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
   /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
   checkOut(
     admitted: AdmittedConversation,
