@@ -1,0 +1,508 @@
+import assert from "node:assert/strict";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
+  type CodingAgentMessage,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { MESSAGE_ROLE } from "@sidecar/wire";
+import { test } from "vitest";
+import { TOOL_STATE } from "../ai-elements/tool";
+import {
+  AGENT_PART,
+  agentLines,
+  agentParts,
+  agentWorkingPhase,
+  applyMessagesPage,
+  checkoutCommand,
+  choiceLabel,
+  choiceModelId,
+  choiceOn,
+  delegates,
+  effortFor,
+  followsAgent,
+  knownDeveloperRows,
+  messageWords,
+  modelLabel,
+  offeredModels,
+  publishedUrl,
+  pullRequestPillLabel,
+  pullRequestStateWord,
+  readModelChoice,
+  type SentLine,
+  settledPlanEdits,
+  showsPublishedRow,
+  startedAgentOf,
+  unreadSentLines,
+} from "./coding-agent-model";
+import { CALL_KIND } from "./turn-rows";
+
+function message(id: string, text: string): CodingAgentMessage {
+  return { id, role: "assistant", parts: [{ type: "text", text }] };
+}
+
+test("a page joins the messages held: one heard again is replaced in place, a new one joins at the end", () => {
+  const held = [message("a", "first"), message("b", "second")];
+
+  const joined = applyMessagesPage(held, [message("a", "first, amended"), message("c", "third")]);
+
+  assert.deepEqual(
+    joined.map((each) => [each.id, each.parts]),
+    [
+      ["a", [{ type: "text", text: "first, amended" }]],
+      ["b", [{ type: "text", text: "second" }]],
+      ["c", [{ type: "text", text: "third" }]],
+    ],
+  );
+  assert.equal(applyMessagesPage(held, []), held);
+});
+
+test("the transcript is followed only while the tab shows and the agent may still write", () => {
+  assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.RUNNING }), true);
+  assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.STARTING }), true);
+  assert.equal(followsAgent({ shown: false, status: CODING_AGENT_STATUS.RUNNING }), false);
+  for (const ended of [
+    CODING_AGENT_STATUS.COMPLETED,
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_STATUS.CANCELLED,
+  ]) {
+    assert.equal(followsAgent({ shown: true, status: ended }), false, ended);
+  }
+});
+
+test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
+  const models = [
+    {
+      id: "anthropic/claude-opus-5.5",
+      name: "Claude Opus 5.5",
+      provider: MODEL_PROVIDER.ANTHROPIC,
+      efforts: ["high"],
+    },
+    {
+      id: "openai/gpt-5.6-terra",
+      name: "GPT-5.6 Terra",
+      provider: MODEL_PROVIDER.OPENAI,
+      efforts: ["high"],
+    },
+  ];
+  assert.equal(modelLabel("anthropic/claude-opus-5.5", models), "Opus 5.5");
+  assert.equal(modelLabel("openai/gpt-5.6-terra", models), "GPT-5.6 Terra");
+  assert.equal(modelLabel("anthropic/claude-opus-5.5"), "Opus 5.5");
+  assert.equal(modelLabel("openai/gpt-6.1-sol"), "GPT 6.1 Sol");
+  assert.equal(modelLabel("openai/gpt-6.1-sol", models), "GPT 6.1 Sol");
+});
+
+test("a stored message's parts are read for drawing: text, reasoning, a tool call with its state, and anything else skipped", () => {
+  const parts = agentParts({
+    id: "m",
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      { type: "reasoning", text: "Read the guide first." },
+      {
+        type: "tool-bash",
+        toolCallId: "call_1",
+        state: "output-error",
+        input: { command: "pnpm check" },
+        errorText: "exit 1",
+      },
+      {
+        type: "tool-read_file",
+        toolCallId: "call_2",
+        state: "output-available",
+        input: {},
+        output: "ok",
+      },
+      { type: "text", text: "Done." },
+      { type: "data-weather", data: {} },
+      { type: "text" },
+    ],
+  });
+
+  assert.deepEqual(parts, [
+    { kind: AGENT_PART.STEP_START },
+    { kind: AGENT_PART.REASONING, text: "Read the guide first." },
+    {
+      kind: AGENT_PART.TOOL,
+      tool: "bash",
+      callId: "call_1",
+      state: TOOL_STATE.OUTPUT_ERROR,
+      input: { command: "pnpm check" },
+      output: undefined,
+      errorText: "exit 1",
+      said: undefined,
+    },
+    {
+      kind: AGENT_PART.TOOL,
+      tool: "read_file",
+      callId: "call_2",
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      input: {},
+      output: "ok",
+      errorText: undefined,
+      said: undefined,
+    },
+    { kind: AGENT_PART.TEXT, text: "Done." },
+    { kind: AGENT_PART.OTHER },
+    { kind: AGENT_PART.OTHER },
+  ]);
+});
+
+/** A row of the developer's, as the service writes one. */
+function developer(id: string, text: string): CodingAgentMessage {
+  return { id, role: "user", parts: [{ type: "text", text }] };
+}
+
+test("a sent line is read back by a developer's row it did not know holding its words, one row answering one line in order", () => {
+  const plan = developer("m-plan", "Go on.");
+  const sent = (id: string, text: string, known: readonly CodingAgentMessage[]): SentLine => ({
+    id,
+    text,
+    attachments: [],
+    known: knownDeveloperRows(known),
+  });
+  // The plan already says the same words: the line is not read back by it.
+  const first = sent("sent-1", "Go on.", [plan]);
+  assert.deepEqual(unreadSentLines([first], [plan]).lines, [first]);
+  // Two lines of the same words are read back one row at a time, in order.
+  const second = sent("sent-2", "Go on.", [plan]);
+  const one = [plan, developer("m-1", "Go on.")];
+  const read = unreadSentLines([first, second], one);
+  assert.deepEqual(read.lines, [second]);
+  assert.deepEqual([...read.taken], ["m-1"]);
+  // Read again with the first line let go, the row it took stays taken: the second line waits for its own.
+  assert.deepEqual(unreadSentLines(read.lines, one, read.taken).lines, [second]);
+  const two = [...one, developer("m-2", "Go on.")];
+  assert.deepEqual(unreadSentLines(read.lines, two, read.taken).lines, []);
+  assert.deepEqual(unreadSentLines([first, second], two).lines, []);
+  // Other words are nobody's.
+  assert.deepEqual(unreadSentLines([first], [plan, developer("m-3", "Stop.")]).lines, [first]);
+  assert.equal(messageWords(two[2] ?? plan), "Go on.");
+});
+
+test("the lines sent and not read back follow the transcript's rows, as the developer's own, in the order they went", () => {
+  const plan = developer("m-plan", "Go on.");
+  const taken = developer("m-1", "Taken.");
+  const lines: SentLine[] = [
+    { id: "sent-1", text: "Soon.", attachments: [], known: new Set() },
+    { id: "sent-2", text: "Later.", attachments: [], known: new Set() },
+  ];
+  const drawn = agentLines([plan, taken], lines);
+  assert.deepEqual(
+    drawn.map((each) => [each.id, each.role, messageWords(each)]),
+    [
+      ["m-plan", "user", "Go on."],
+      ["m-1", "user", "Taken."],
+      ["sent-1", "user", "Soon."],
+      ["sent-2", "user", "Later."],
+    ],
+  );
+});
+
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 123,
+  title: "Teammate invitations",
+  url: "https://github.com/acme/relay/pull/123",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 210,
+  deletions: 14,
+  changedFiles: 6,
+};
+
+test("the checkout command fetches and switches to the branch, and the chip opens the pull request, else the branch compared, else nowhere", () => {
+  assert.equal(
+    checkoutCommand("luke/teammate-invitations"),
+    "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
+  );
+  const repository = "acme/relay";
+  assert.equal(
+    publishedUrl({ repository, branch: "luke/x", pullRequest: PULL_REQUEST }),
+    "https://github.com/acme/relay/pull/123",
+  );
+  assert.equal(
+    publishedUrl({ repository, branch: "luke/x", pullRequest: null }),
+    "https://github.com/acme/relay/compare/luke/x?expand=1",
+  );
+  assert.equal(publishedUrl({ repository, branch: null, pullRequest: null }), undefined);
+  // A branch a shell or an address would read into is quoted or encoded, never read.
+  assert.equal(
+    checkoutCommand("luke/$(touch pwned)'x"),
+    "git fetch origin 'luke/$(touch pwned)'\\''x' && git switch 'luke/$(touch pwned)'\\''x'",
+  );
+  assert.equal(
+    publishedUrl({ repository, branch: "luke/issue#12 fix", pullRequest: null }),
+    "https://github.com/acme/relay/compare/luke/issue%2312%20fix?expand=1",
+  );
+});
+
+test("the row says where the pull request stands only once it is a draft, merged, or closed, the chip says it to a reader without its colour, and the row is drawn only once the agent has ended with one", () => {
+  assert.deepEqual(Object.values(PULL_REQUEST_STATE).map(pullRequestStateWord), [
+    undefined,
+    "Draft",
+    "Merged",
+    "Closed",
+  ]);
+  assert.equal(
+    pullRequestPillLabel({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
+    "Pull request #123, merged",
+  );
+  const published = { repository: "acme/relay", branch: "luke/x", pullRequest: PULL_REQUEST };
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, published), true);
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.CANCELLED, published), true);
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.RUNNING, published), false);
+  assert.equal(
+    showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, { ...published, pullRequest: null }),
+    false,
+  );
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, undefined), false);
+});
+
+test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {
+  const model = (id: string, name: string) => ({
+    id,
+    name,
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  });
+  const models = [
+    model("anthropic/claude-opus-5.5-fast", "Claude Opus 5.5 (Fast)"),
+    model("anthropic/claude-opus-5.5", "Claude Opus 5.5"),
+    model("anthropic/claude-fable-5", "Claude Fable 5"),
+    // A suffixed id with no base beside it is a model of its own.
+    model("anthropic/claude-haiku-4-fast", "Claude Haiku 4 (Fast)"),
+  ];
+  const offered = offeredModels(models);
+  assert.deepEqual(
+    offered.map((each) => [each.model.id, each.fast?.id]),
+    [
+      ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast"],
+      ["anthropic/claude-fable-5", undefined],
+      ["anthropic/claude-haiku-4-fast", undefined],
+    ],
+  );
+  assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5-fast"), {
+    base: "anthropic/claude-opus-5.5",
+    fast: true,
+  });
+  assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5"), {
+    base: "anthropic/claude-opus-5.5",
+    fast: false,
+  });
+  assert.deepEqual(readModelChoice(models, "anthropic/claude-haiku-4-fast"), {
+    base: "anthropic/claude-haiku-4-fast",
+    fast: false,
+  });
+  const [opus, fable] = offered;
+  assert.ok(opus && fable);
+  assert.equal(choiceModelId(opus, true), "anthropic/claude-opus-5.5-fast");
+  assert.equal(choiceModelId(opus, false), "anthropic/claude-opus-5.5");
+  assert.equal(choiceModelId(fable, true), "anthropic/claude-fable-5", "no fast version to name");
+  assert.equal(
+    choiceLabel({ model: "anthropic/claude-opus-5.5-fast", effort: "high" }, models),
+    "Opus 5.5 High Fast",
+  );
+  assert.equal(
+    choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),
+    "Fable 5 Extra high",
+  );
+});
+
+test("a choice names its window after the effort only where it runs on the standard one and the model offers two, and a change of model keeps the standard window only where the next model offers two too", () => {
+  const models = [
+    {
+      id: "openai/gpt-5.5",
+      name: "GPT-5.5",
+      provider: MODEL_PROVIDER.OPENAI,
+      efforts: ["low", "high"],
+      contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
+    },
+    {
+      id: "anthropic/claude-opus-5.5",
+      name: "Claude Opus 5.5",
+      provider: MODEL_PROVIDER.ANTHROPIC,
+      efforts: ["low", "high"],
+    },
+  ];
+  const standard = {
+    model: "openai/gpt-5.5",
+    effort: "high",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  };
+  assert.equal(choiceLabel(standard, models), "GPT-5.5 High 272K");
+  assert.equal(choiceLabel({ model: "openai/gpt-5.5", effort: "high" }, models), "GPT-5.5 High");
+  assert.equal(
+    choiceLabel({ ...standard, contextWindow: CONTEXT_WINDOW.LONG }, models),
+    "GPT-5.5 High",
+  );
+  assert.equal(
+    choiceLabel({ ...standard, model: "anthropic/claude-opus-5.5" }, models),
+    "Opus 5.5 High",
+  );
+
+  assert.deepEqual(
+    choiceOn(models, { model: "openai/gpt-5.5", effort: "low" }, CONTEXT_WINDOW.STANDARD),
+    { model: "openai/gpt-5.5", effort: "low", contextWindow: CONTEXT_WINDOW.STANDARD },
+  );
+  assert.deepEqual(
+    choiceOn(
+      models,
+      { model: "anthropic/claude-opus-5.5", effort: "low" },
+      CONTEXT_WINDOW.STANDARD,
+    ),
+    { model: "anthropic/claude-opus-5.5", effort: "low" },
+  );
+  assert.deepEqual(
+    choiceOn(models, { model: "openai/gpt-5.5", effort: "low" }, CONTEXT_WINDOW.LONG),
+    { model: "openai/gpt-5.5", effort: "low" },
+  );
+});
+
+test("an effort carried to a model that lacks it falls to the nearest the model lists at or below it on the scale, else the lowest above, else the model's first", () => {
+  assert.equal(effortFor(["low", "medium", "high"], "high"), "high", "listed, kept");
+  assert.equal(effortFor(["low", "medium", "high"], "xhigh"), "high", "Extra high lands on High");
+  assert.equal(effortFor(["low", "high", "max"], "medium"), "low");
+  assert.equal(effortFor(["minimal", "low"], "max"), "low");
+  assert.equal(effortFor(["high", "max"], "low"), "high", "nothing below, so the lowest above");
+  assert.equal(effortFor(["low", "high"], undefined), "low", "nothing chosen yet");
+  assert.equal(
+    effortFor(["turbo", "high"], "ludicrous"),
+    "turbo",
+    "a name off the scale takes the first",
+  );
+  assert.equal(
+    effortFor(["turbo", "medium"], "high"),
+    "medium",
+    "names off the scale are passed over",
+  );
+  assert.equal(effortFor([], "high"), undefined);
+});
+
+test("the plan edits that have answered are counted, not the ones still out or the other calls", () => {
+  const messages: CodingAgentMessage[] = [
+    {
+      id: "m1",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "tool-edit_plan",
+          toolCallId: "c1",
+          state: "output-available",
+          input: {},
+          output: {},
+        },
+        { type: "tool-edit_plan", toolCallId: "c2", state: "input-available", input: {} },
+        { type: "tool-bash", toolCallId: "c3", state: "output-available", input: {}, output: {} },
+      ],
+    },
+    {
+      id: "m2",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "tool-edit_plan",
+          toolCallId: "c4",
+          state: "output-available",
+          input: {},
+          output: {},
+        },
+      ],
+    },
+  ];
+  assert.equal(settledPlanEdits(messages), 2);
+  assert.equal(settledPlanEdits([]), 0);
+});
+
+test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
+  const plan: CodingAgentMessage = {
+    id: "m-plan",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: AGENT_PART.TEXT, text: "# Invitations" }],
+  };
+  const opened: CodingAgentMessage = {
+    id: "m-turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: AGENT_PART.STEP_START }],
+    startedAt: 1_000,
+  };
+  const calling: CodingAgentMessage = {
+    ...opened,
+    parts: [
+      { type: AGENT_PART.STEP_START },
+      { type: "tool-bash", toolCallId: "call_1", state: TOOL_STATE.INPUT_AVAILABLE },
+    ],
+  };
+  const closed: CodingAgentMessage = { ...calling, finishedAt: 9_000 };
+  const line: CodingAgentMessage = {
+    id: "m-line",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: AGENT_PART.TEXT, text: "Also expire them after a week." }],
+  };
+  // Before the session runs a turn, whatever stands, and before the turn writes its journal.
+  assert.equal(agentWorkingPhase([plan], true), "starting");
+  assert.equal(agentWorkingPhase([plan, opened], true), "starting");
+  assert.equal(agentWorkingPhase([plan], false), "starting");
+  // The turn open with nothing past its step boundary is the model at its first step.
+  assert.equal(agentWorkingPhase([plan, opened], false), "thinking");
+  assert.equal(agentWorkingPhase([plan, calling], false), "working");
+  // A line after a closed turn awaits a turn of its own; one sent into an open turn steers it.
+  assert.equal(agentWorkingPhase([plan, closed, line], false), "starting");
+  // A turn closing ahead of its row's settling ends as it worked, not as a start.
+  assert.equal(agentWorkingPhase([plan, closed], false), "working");
+  assert.equal(agentWorkingPhase([plan, calling, line], false), "working");
+  assert.equal(agentWorkingPhase([plan, opened, line], false), "thinking");
+});
+
+test("a part says what its wire read its call as, and one naming a kind this build does not know says nothing; a planning worker is a delegation, and a start names the agent it began only once it answered one", () => {
+  const [worker, started, refused, unknown, coding] = agentParts({
+    id: "turn-1",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      {
+        type: "tool-worker",
+        toolCallId: "w",
+        state: TOOL_STATE.INPUT_AVAILABLE,
+        input: { message: "Compare the queues." },
+        said: { kind: CALL_KIND.WORKER, subject: "Compare the queues." },
+      },
+      {
+        type: "tool-start_coding_agent",
+        toolCallId: "s",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: { task: "Fix the invite emails." },
+        output: { status: "accepted", agent: { id: "agent-1" } },
+        said: { kind: CALL_KIND.START_AGENT, subject: "Fix the invite emails." },
+      },
+      {
+        type: "tool-start_coding_agent",
+        toolCallId: "r",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: {},
+        output: { status: "rejected", reason: "The plan has no repository." },
+        said: { kind: CALL_KIND.START_AGENT },
+      },
+      {
+        type: "tool-summon",
+        toolCallId: "u",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: {},
+        said: { kind: "summon", subject: "a reviewer" },
+      },
+      { type: "tool-bash", toolCallId: "b", state: TOOL_STATE.OUTPUT_AVAILABLE, input: {} },
+    ],
+  });
+  assert.ok(worker?.kind === AGENT_PART.TOOL && started?.kind === AGENT_PART.TOOL);
+  assert.ok(refused?.kind === AGENT_PART.TOOL && unknown?.kind === AGENT_PART.TOOL);
+  assert.ok(coding?.kind === AGENT_PART.TOOL);
+  assert.deepEqual(worker.said, { kind: CALL_KIND.WORKER, subject: "Compare the queues." });
+  assert.equal(delegates(worker), true);
+  assert.equal(delegates(coding), false);
+  assert.equal(startedAgentOf(started), "agent-1");
+  assert.equal(startedAgentOf(refused), undefined);
+  assert.equal(startedAgentOf(worker), undefined);
+  assert.equal(unknown.said, undefined);
+  assert.equal(coding.said, undefined);
+});
