@@ -1,9 +1,7 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import { SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import type { WorkspaceSeams } from "./workspace-seams.js";
@@ -21,7 +19,7 @@ import type { WorkspaceSeams } from "./workspace-seams.js";
  * Auth writes over its own pool, outside the fiber's `SqlClient`, so two Macs
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
- * Every function is an effect over the ambient `SqlClient`.
+ * Every function is an effect over the ambient `Database`.
  */
 
 /** The slug every personal workspace is made under, one per account, which is what makes the plugin refuse a second. */
@@ -37,11 +35,11 @@ export interface Workspace {
   readonly personal: boolean;
 }
 
-/** What a workspace read answers: an effect over the ambient client. */
+/** What a workspace read answers: an effect over the ambient database. */
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
   A,
-  SqlError | Schema.SchemaError | E,
-  SqlClient.SqlClient
+  QueryError | Schema.SchemaError | E,
+  DatabaseServices
 >;
 
 const OrganizationIdSchema = Schema.Struct({ organizationId: Schema.String });
@@ -57,27 +55,32 @@ const findPersonalWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationIdSchema,
   execute: (userId) =>
-    db
-      .select({ organizationId: personalWorkspace.organizationId })
-      .from(personalWorkspace)
-      .where(eq(personalWorkspace.userId, userId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ organizationId: personalWorkspace.organizationId })
+        .from(personalWorkspace)
+        .where(eq(personalWorkspace.userId, userId))
+        .limit(1),
+    ),
 });
 
 const findAccountName = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ name: Schema.String }),
-  execute: (userId) => db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
+  execute: (userId) =>
+    Database.use((db) => db.select({ name: user.name }).from(user).where(eq(user.id, userId))),
 });
 
 const findOrganizationBySlug = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationIdSchema,
   execute: (slug) =>
-    db
-      .select({ organizationId: organization.id })
-      .from(organization)
-      .where(eq(organization.slug, slug)),
+    Database.use((db) =>
+      db
+        .select({ organizationId: organization.id })
+        .from(organization)
+        .where(eq(organization.slug, slug)),
+    ),
 });
 
 const insertPersonalWorkspace = SqlSchema.void({
@@ -87,34 +90,70 @@ const insertPersonalWorkspace = SqlSchema.void({
     now: Schema.Date,
   }),
   execute: (row) =>
-    db
-      .insert(personalWorkspace)
-      .values({ userId: row.userId, organizationId: row.organizationId, createdAt: row.now })
-      .onConflictDoNothing(),
+    Database.use((db) =>
+      db
+        .insert(personalWorkspace)
+        .values({ userId: row.userId, organizationId: row.organizationId, createdAt: row.now })
+        .onConflictDoNothing(),
+    ),
 });
 
 const findWorkspaces = SqlSchema.findAll({
   Request: Schema.String,
   Result: WorkspaceRowSchema,
   execute: (userId) =>
-    db
-      .select({
-        id: organization.id,
-        name: organization.name,
-        personalOf: personalWorkspace.userId,
-      })
-      .from(member)
-      .innerJoin(organization, eq(organization.id, member.organizationId))
-      .leftJoin(
-        personalWorkspace,
-        and(
-          eq(personalWorkspace.organizationId, organization.id),
-          eq(personalWorkspace.userId, userId),
-        ),
-      )
-      .where(eq(member.userId, userId))
-      .orderBy(asc(organization.name), asc(organization.id)),
+    Database.use((db) =>
+      db
+        .select({
+          id: organization.id,
+          name: organization.name,
+          personalOf: personalWorkspace.userId,
+        })
+        .from(member)
+        .innerJoin(organization, eq(organization.id, member.organizationId))
+        .leftJoin(
+          personalWorkspace,
+          and(
+            eq(personalWorkspace.organizationId, organization.id),
+            eq(personalWorkspace.userId, userId),
+          ),
+        )
+        .where(eq(member.userId, userId))
+        .orderBy(asc(organization.name), asc(organization.id)),
+    ),
 });
+
+/**
+ * The account's personal workspace: the one its row names, and whatever
+ * stands under its personal slug, in case an ensure made the organization
+ * and never wrote the row. Its member rows and the account's row go with
+ * it through their own cascades.
+ */
+const deletePersonalOrganization = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) =>
+    Database.use((db) =>
+      db
+        .delete(organization)
+        .where(
+          or(
+            inArray(
+              organization.id,
+              queryBuilder
+                .select({ id: personalWorkspace.organizationId })
+                .from(personalWorkspace)
+                .where(eq(personalWorkspace.userId, userId)),
+            ),
+            eq(organization.slug, personalSlugOf(userId)),
+          ),
+        ),
+    ),
+});
+
+/** The slug an account's personal workspace is made under. */
+function personalSlugOf(userId: string): string {
+  return `${PERSONAL_SLUG_PREFIX}${userId}`;
+}
 
 /**
  * The workspace the plugin holds under the account's personal slug: the one
@@ -127,7 +166,7 @@ function createPersonalOrganization(
   name: string,
   seams: WorkspaceSeams,
 ): WorkspaceStoreEffect<string, Cause.UnknownError> {
-  const slug = `${PERSONAL_SLUG_PREFIX}${userId}`;
+  const slug = personalSlugOf(userId);
   return seams
     .createOrganization({ name, slug, userId, metadata: PERSONAL_WORKSPACE_METADATA })
     .pipe(
@@ -188,4 +227,15 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
       ...workspaces.filter((workspace) => !workspace.personal),
     ];
   });
+}
+
+/**
+ * Deletes the account's personal workspace, which carries its name and its
+ * id in the slug. The account's own row would take only the row naming the
+ * workspace with it, leaving the organization standing, so an account's
+ * erasure deletes it first (`account-store.ts`). A shared workspace the
+ * account was a member of stands; only its member row goes, with the account.
+ */
+export function deletePersonalWorkspace(userId: string): WorkspaceStoreEffect<void> {
+  return deletePersonalOrganization(userId);
 }

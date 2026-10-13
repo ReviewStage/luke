@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { type WorkspaceSeams, workspaceSeams } from "@sidecar/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
   listWorkspaces,
   personalWorkspaceOf,
 } from "@sidecar/database/models/workspace-store";
-import * as authSchema from "@sidecar/database/schemas/auth";
 import { member, organization, user } from "@sidecar/database/schemas/auth";
 import { getTestDB, openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
 import { betterAuth } from "better-auth";
@@ -16,7 +15,6 @@ import { organization as organizationPlugin } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { Cause, DateTime, Effect, Option } from "effect";
-import { SqlClient } from "effect/unstable/sql";
 import { authDatabaseAdapter } from "../server/auth-database";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "../server/auth-policy";
 
@@ -38,7 +36,7 @@ const MEMBER_ROLE = {
 
 /** The plugin's server-only create, over the test's own database: the organization, then its owner. */
 const fakeSeams = Effect.gen(function* () {
-  const client = yield* SqlClient.SqlClient;
+  const db = yield* Database;
   const seams: WorkspaceSeams = {
     createOrganization: (creation) =>
       Effect.gen(function* () {
@@ -63,10 +61,10 @@ const fakeSeams = Effect.gen(function* () {
         yield* joinWorkspace(id, creation.userId, MEMBER_ROLE.OWNER);
         return { id };
       }).pipe(
-        Effect.catchTag("SqlError", (failure) =>
+        Effect.catchTag("EffectDrizzleQueryError", (failure) =>
           Effect.fail(new Cause.UnknownError(failure, "Failed to create organization")),
         ),
-        Effect.provideService(SqlClient.SqlClient, client),
+        Effect.provideService(Database, db),
       ),
   };
   return seams;
@@ -74,6 +72,7 @@ const fakeSeams = Effect.gen(function* () {
 
 const openUser = (name: string) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name, email: `${userId}@luke.test` });
     return userId;
@@ -81,6 +80,7 @@ const openUser = (name: string) =>
 
 const joinWorkspace = (organizationId: string, userId: string, role: string) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const now = yield* DateTime.nowAsDate;
     yield* db
       .insert(member)
@@ -105,7 +105,7 @@ const openSharedWorkspace = (
     return id;
   });
 
-it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("an account's workspaces over the test database", (it) => {
   it.effect(
     "an account's first ensure makes its personal workspace and the second makes none",
     () =>
@@ -189,7 +189,7 @@ const openPluginDatabase = Effect.gen(function* () {
     Effect.promise(() => opened.close()),
   );
   const plugin = betterAuth({
-    database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
+    database: authDatabaseAdapter(drizzle({ client })),
     baseURL: "http://127.0.0.1",
     secret: "workspace-store-test-secret-with-enough-length",
     disabledPaths: [...DISABLED_AUTH_PATHS],
@@ -206,6 +206,7 @@ it.effect(
     Effect.gen(function* () {
       const { seams, database } = yield* openPluginDatabase;
       yield* Effect.gen(function* () {
+        const db = yield* Database;
         const ada = yield* openUser("Ada Lovelace");
         const grace = yield* openUser("Grace Hopper");
         const raced = yield* seams.createOrganization({
