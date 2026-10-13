@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { PageLine, PageVersion } from "@sidecar/hosted/page-wire";
+import {
+  type PageLine,
+  type PageVersion,
+  type PageWrite,
+  pageWriteSchema,
+} from "@sidecar/hosted/page-wire";
 import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -16,15 +21,11 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * two writes of one page never take one number and a plan deleted meanwhile
  * reads as gone rather than written back into being. Every statement names
  * the account beside the plan, so a plan another account owns reads and
- * writes as no plan, exactly as in `plan-store.ts`.
+ * writes as no plan, exactly as in `plan-store.ts`. A write is read against
+ * the wire's own bounds before it touches a row, so nothing is stored that
+ * the desktop could not read back. Pages written in the same millisecond
+ * list in no particular order between them.
  */
-
-/** What an agent writes: a page's title and HTML, as the next version of the page it names, or as a new page where it names none. */
-export interface PageWrite {
-  readonly pageId?: string;
-  readonly title: string;
-  readonly html: string;
-}
 
 const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
 
@@ -129,7 +130,8 @@ function lineOf(row: typeof PageLineRowSchema.Type): PageLine {
 /**
  * Writes the page's next version, or a new page's first where the write
  * names none; the page as it now stands. Nothing where the account owns no
- * such plan, or the plan no such page.
+ * such plan, or the plan no such page, and a schema failure, with nothing
+ * written, for a write past the wire's bounds.
  */
 export function writePage(
   userId: string,
@@ -139,21 +141,22 @@ export function writePage(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        const admitted = yield* Schema.decodeUnknownEffect(pageWriteSchema)(write);
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return Option.none<PageLine>();
         const newest =
-          write.pageId === undefined
+          admitted.pageId === undefined
             ? Option.some({ version: 0 })
-            : yield* findNewestVersion({ planId, pageId: write.pageId });
+            : yield* findNewestVersion({ planId, pageId: admitted.pageId });
         if (Option.isNone(newest)) return Option.none<PageLine>();
         const at = yield* DateTime.nowAsDate;
         // An insert that returned no row is the database breaking its own contract, not an outcome.
         const row = yield* insertVersion({
           planId,
-          pageId: write.pageId ?? randomUUID(),
+          pageId: admitted.pageId ?? randomUUID(),
           version: newest.value.version + 1,
-          title: write.title,
-          html: write.html,
+          title: admitted.title,
+          html: admitted.html,
           at,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
         return Option.some(lineOf(row));

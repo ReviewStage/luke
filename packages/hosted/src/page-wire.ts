@@ -14,7 +14,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * draws it in a sandboxed frame of its own scheme.
  */
 
-const PAGE_BOUNDS = {
+export const PAGE_BOUNDS = {
   /** The most characters a page's title may spell. */
   MAX_TITLE_CHARS: 80,
   /** The most characters one version's HTML may spell: a document with its scripts and styles inline. */
@@ -35,6 +35,18 @@ const pageHtmlSchema = EffectSchema.String.check(
 export const pageVersionNumberSchema = EffectSchema.Int.check(
   EffectSchema.isGreaterThanOrEqualTo(1),
 );
+
+/**
+ * What an agent writes of a page: its title and whole HTML, as the next
+ * version of the page it names, or as a new page's first where it names none.
+ */
+export const pageWriteSchema = EffectSchema.Struct({
+  pageId: EffectSchema.optionalKey(wireUuidSchema),
+  title: pageTitleSchema,
+  html: pageHtmlSchema,
+});
+
+export type PageWrite = typeof pageWriteSchema.Type;
 
 /**
  * One page as its plan lists it: its newest version's number and title, and

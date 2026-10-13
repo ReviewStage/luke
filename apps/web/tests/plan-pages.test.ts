@@ -7,8 +7,9 @@ import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { planPageVersion } from "@sidecar/database/schemas/plan-page";
 import { getTestDB } from "@sidecar/database/testing";
+import { PAGE_BOUNDS } from "@sidecar/hosted/page-wire";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, Exit, Option } from "effect";
 import { TestClock } from "effect/testing";
 
 /**
@@ -106,6 +107,25 @@ it.layer(getTestDB())("a plan's pages", (it) => {
           Option.isNone(yield* writePage(userId, planId, { pageId: randomUUID(), ...MOCKUP })),
         );
         assert.ok(Option.isNone(yield* readPageVersion(userId, planId, theirs.id, 1)));
+        assert.deepEqual(yield* listPages(userId, planId), []);
+      }),
+  );
+
+  it.effect(
+    "a write past the bounds the desktop reads pages by is refused, and nothing is stored",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const refused = [
+          { title: "", html: CHART.html },
+          { title: "x".repeat(PAGE_BOUNDS.MAX_TITLE_CHARS + 1), html: CHART.html },
+          { title: CHART.title, html: "" },
+          { title: CHART.title, html: "x".repeat(PAGE_BOUNDS.MAX_HTML_CHARS + 1) },
+        ];
+        for (const write of refused) {
+          assert.ok(Exit.isFailure(yield* Effect.exit(writePage(userId, planId, write))));
+        }
+
         assert.deepEqual(yield* listPages(userId, planId), []);
       }),
   );
