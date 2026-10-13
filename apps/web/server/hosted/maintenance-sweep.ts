@@ -11,20 +11,24 @@ import {
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
- * will. A plan deleted thirty days ago has its conversation purged, a turn
- * whose end eve never told the relay is settled as abandoned, and a voice
- * session whose device detached and never came back is ended on Luke's key,
- * as a connection would have ended it. None of the three reads a word of any
- * account; each is bounded on its own, and the sweep runs them in turn.
+ * will. A plan deleted thirty days ago has its conversation purged, a
+ * deleted plan's call that was still open when the plan went is removed
+ * once it has ended, a turn whose end eve never told the relay is settled as
+ * abandoned, and a voice session whose device detached and never came back
+ * is ended on Luke's key, as a connection would have ended it. None of the
+ * four reads a word of any account; each is bounded on its own, and the
+ * sweep runs them in turn.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, SqlClient.SqlClient>;
 
-/** The three sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The four sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
+  /** Removes the ended calls of plans deleted since, a sweep's worth, answering how many went. */
+  purgeDeletedPlanCalls: (now: number) => SweepRead<number>;
   /** Settles every turn still running past its kind's bound, an hour for a planning turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Ends every voice session whose device socket went without a hang-up longer ago than the grace. */
@@ -40,6 +44,8 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
   purged: number;
+  /** Ended calls of deleted plans removed. */
+  purgedCalls: number;
   /** Turns still running past their kind's bound, settled as failed for abandonment. */
   abandoned: number;
   /** What the sweep over the detached voice sessions did. */
@@ -68,6 +74,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
     const now = yield* Clock.currentTimeMillis;
     const answer: MaintenanceSweepAnswer = {
       purged: yield* options.purgeCleared(now),
+      purgedCalls: yield* options.purgeDeletedPlanCalls(now),
       abandoned: yield* options.sweepAbandonedTurns(now),
       voice: yield* options.sweepVoice(now),
     };

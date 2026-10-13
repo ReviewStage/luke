@@ -9,6 +9,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
 import { createPlan } from "@sidecar/database/models/plan-store";
+import { purgeDeletedPlanCalls } from "@sidecar/database/models/soft-delete";
 import { user } from "@sidecar/database/schemas/auth";
 import { planBoard } from "@sidecar/database/schemas/plan";
 import { turns } from "@sidecar/database/schemas/storage";
@@ -55,7 +56,7 @@ import {
 import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
@@ -1343,6 +1344,88 @@ it.layer(getTestDB())("the plan routes", (it) => {
         HOSTED_HTTP_STATUS.NOT_FOUND,
       );
     }),
+  );
+
+  it.effect(
+    "a deleted plan takes its ended calls and their words with it, and the sweep each call left open once it ends",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const keptId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const othersId = startedId(
+          yield* ask(request(PLANS, other, { method: "POST", body: RELAY })),
+        );
+        const hour = Duration.toMillis(Duration.hours(1));
+        const ended = (at: number): Recorded => ({
+          closedAt: new Date(at),
+          closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
+          usage: { seconds: 60, confirmed: false },
+          model: LIVE_DEFAULTS.MODEL,
+        });
+        const said: readonly Said[] = [[VOICE_SEGMENT_ROLE.USER, "Ship the invite flow.", 0]];
+        yield* callAbout(
+          { userId: owner, planId, startedAt: 10 * hour, recorded: ended(10 * hour + 60_000) },
+          said,
+        );
+        const openCall = yield* callAbout({ userId: owner, planId, startedAt: 12 * hour }, said);
+        const staleCall = yield* callAbout({ userId: owner, planId, startedAt: 9 * hour }, said);
+        const keptCall = yield* callAbout(
+          { userId: owner, planId: keptId, startedAt: 10 * hour, recorded: ended(11 * hour) },
+          said,
+        );
+        const othersCall = yield* callAbout(
+          { userId: other, planId: othersId, startedAt: 10 * hour, recorded: ended(11 * hour) },
+          said,
+        );
+        const standing = () =>
+          Effect.map(
+            db
+              .select({ id: voiceSessions.id })
+              .from(voiceSessions)
+              .where(inArray(voiceSessions.userId, [owner, other]))
+              .orderBy(voiceSessions.id),
+            (rows) => rows.map(({ id }) => id),
+          );
+        const spokenOn = () =>
+          Effect.map(
+            db
+              .selectDistinct({ id: voiceTranscriptSegments.voiceSessionId })
+              .from(voiceTranscriptSegments)
+              .innerJoin(
+                voiceSessions,
+                eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId),
+              )
+              .where(inArray(voiceSessions.userId, [owner, other]))
+              .orderBy(voiceTranscriptSegments.voiceSessionId),
+            (rows) => rows.map(({ id }) => id),
+          );
+        const ids = (...each: string[]) => [...each].sort();
+
+        yield* ask(request(ONE_PLAN, owner, { id: planId, method: "DELETE" }));
+
+        const afterDelete = ids(openCall, staleCall, keptCall, othersCall);
+        assert.deepEqual(yield* standing(), afterDelete);
+        assert.deepEqual(yield* spokenOn(), afterDelete);
+
+        // An hour past the open call's start no Live session of the stale call can still run.
+        const liveEdge = new Date(12 * hour - hour);
+        yield* purgeDeletedPlanCalls(liveEdge);
+        assert.deepEqual(yield* standing(), ids(openCall, keptCall, othersCall));
+
+        yield* db
+          .update(voiceSessions)
+          .set({ closedAt: new Date(12 * hour + 60_000) })
+          .where(eq(voiceSessions.id, openCall));
+        yield* purgeDeletedPlanCalls(liveEdge);
+        const afterSweep = ids(keptCall, othersCall);
+        assert.deepEqual(yield* standing(), afterSweep);
+        assert.deepEqual(yield* spokenOn(), afterSweep);
+      }),
   );
 
   it.effect(

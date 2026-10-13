@@ -8,7 +8,7 @@ import {
   type StoredTurnRecord,
   turnsNamed,
 } from "./message-reads.js";
-import { purgeClearedConversations } from "./soft-delete.js";
+import { purgeClearedConversations, purgeDeletedPlanCalls } from "./soft-delete.js";
 
 /** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
 type HostedStoreFailure = SqlError | Schema.SchemaError;
@@ -48,6 +48,8 @@ export interface HostedStore {
   retention: {
     /** The cron's purge of every conversation, of any account, stamped past the retention window. */
     purgeCleared(now: Date): HostedStoreEffect<number>;
+    /** The cron's purge of the ended calls of every deleted plan, a sweep's worth: ended means closed, or started before `liveEdge`. */
+    purgeDeletedPlanCalls(liveEdge: Date): HostedStoreEffect<number>;
   };
 }
 
@@ -62,6 +64,7 @@ export function hostedStore(): HostedStore {
     },
     retention: {
       purgeCleared: (now) => purgeClearedConversations(now),
+      purgeDeletedPlanCalls: (liveEdge) => purgeDeletedPlanCalls(liveEdge),
     },
   };
 }

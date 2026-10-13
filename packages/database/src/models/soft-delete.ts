@@ -1,9 +1,11 @@
-import { lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, notExists, or } from "drizzle-orm";
 import { Duration, Effect, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
+import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
+import { voiceSessions } from "../schemas/voice.js";
 
 /**
  * The purge that follows a soft delete. Nothing is erased at the stamp: a
@@ -14,12 +16,19 @@ import { conversations } from "../schemas/storage.js";
  * purge removes the stamped conversations thirty days on, their messages,
  * turns, and events going with them by the schema's own cascade. Deleting
  * the account cascades everything at once, stamped or not.
+ *
+ * A deleted plan's calls are not stamped: the delete removes the ones that
+ * had ended (`plan-store.ts`), and the cron removes each one left once it
+ * has ended too, the words said on it going with it by the cascade.
  */
 
 /** How long a cleared conversation's rows stand before the purge takes them. */
 export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(30));
 
 type ClearFailure = SqlError | Schema.SchemaError;
+
+/** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
+const DELETED_PLAN_CALLS_PER_SWEEP = 200;
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
@@ -44,4 +53,47 @@ export function purgeClearedConversations(
 ): Effect.Effect<number, ClearFailure, SqlClient.SqlClient> {
   const edge = new Date(now.getTime() - CLEARED_CONVERSATION_RETENTION_MS);
   return Effect.map(purgeRows(edge), (rows) => rows.length);
+}
+
+/**
+ * A call whose plan is gone, once it has ended: recorded closed, or started
+ * before `liveEdge`, past which no Live session still runs whatever its row
+ * says. A call no plan was ever named for is not one of a deleted plan.
+ */
+const purgeCallRows = SqlSchema.findAll({
+  Request: Schema.Date,
+  Result: IdRowSchema,
+  execute: (liveEdge) =>
+    db
+      .delete(voiceSessions)
+      .where(
+        inArray(
+          voiceSessions.id,
+          db
+            .select({ id: voiceSessions.id })
+            .from(voiceSessions)
+            .where(
+              and(
+                isNotNull(voiceSessions.planId),
+                notExists(
+                  db.select({ id: plan.id }).from(plan).where(eq(plan.id, voiceSessions.planId)),
+                ),
+                or(isNotNull(voiceSessions.closedAt), lte(voiceSessions.startedAt, liveEdge)),
+              ),
+            )
+            .limit(DELETED_PLAN_CALLS_PER_SWEEP),
+        ),
+      )
+      .returning({ id: voiceSessions.id }),
+});
+
+/**
+ * Removes the ended calls of plans deleted since, across every account, at
+ * most a sweep's worth; each call's segments cascade with it. Answers how
+ * many calls went.
+ */
+export function purgeDeletedPlanCalls(
+  liveEdge: Date,
+): Effect.Effect<number, ClearFailure, SqlClient.SqlClient> {
+  return Effect.map(purgeCallRows(liveEdge), (rows) => rows.length);
 }

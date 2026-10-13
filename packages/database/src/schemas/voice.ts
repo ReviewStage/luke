@@ -65,7 +65,8 @@ export const voiceSessions = pgTable(
      * earlier build opened with none, which a re-attach refuses. A plain
      * column rather than a reference: a session is bound to its plan for its
      * whole life, so a re-attach after the plan was deleted must still read
-     * the binding and find no plan to land in.
+     * the binding and find no plan to land in. The session goes once it has
+     * ended: with the plan's delete, or the sweep after it (`soft-delete.ts`).
      */
     planId: uuid("plan_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
