@@ -115,4 +115,6 @@ export const EFFECT_MIGRATION_FOLDERS = {
   "20261013145235_plan_page_version": "20261013145235_plan_page_version",
   "20261013151624_plan_section_writers_undeclare": "20261013151624_plan_section_writers_undeclare",
   "20261013153724_plan_section_writers_drop": "20261013153724_plan_section_writers_drop",
+  "20261013203349_voice_avatar_sessions": "20261013203349_voice_avatar_sessions",
+  "20261013210942_voice_avatar_sessions_drop": "20261013210943_voice_avatar_sessions_drop",
 } as const satisfies Readonly<Record<string, string>>;
