@@ -1,3 +1,4 @@
+import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import { childConversationId } from "@sidecar/database/models/ids";
 import {
   listJournals,
@@ -25,7 +26,6 @@ import {
 import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { subagentRecordsByCall } from "./child-models.js";
-import { childTitlesByCall } from "./child-titles.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 
 /**

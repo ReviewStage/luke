@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
+import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { listJournals, listJournalsCalling } from "@sidecar/database/models/message-reads";
@@ -49,7 +50,6 @@ import {
 import { EVE_DELEGATION_TOOL, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { subagentRecordsByCall } from "../hosted/child-models.js";
-import { childTitlesByCall } from "../hosted/child-titles.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { logStoreFailure } from "../hosted/store-failure.js";

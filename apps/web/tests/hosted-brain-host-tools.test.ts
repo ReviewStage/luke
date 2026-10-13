@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { listJournals, sentLineStands } from "@sidecar/database/models/message-reads";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
@@ -41,7 +42,6 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { childTitlesOf } from "../server/hosted/child-titles";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { MessageListRead } from "@sidecar/database/models/message-reads";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
@@ -45,7 +46,6 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { fillChildTitle } from "../server/hosted/child-titles";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import {
   SEARCH_WEB_REFUSAL,
