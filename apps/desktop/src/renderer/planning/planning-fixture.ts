@@ -443,6 +443,9 @@ function fixtureCommand(id: string, command: string, output: string) {
   } as const;
 }
 
+/** The store's id for the session of the fixture's call standing now. */
+const FIXTURE_LIVE_SESSION = "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f";
+
 /**
  * What Luke's planning model did on the fixture's calls: an earlier turn
  * that read the members code and answered, and the turn standing now, which
@@ -475,8 +478,9 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
     startedAt: Date.parse("2026-10-07T16:44:00Z"),
     state: PLAN_WORK_STATE.RUNNING,
     earlierOmitted: false,
-    // The call standing now's "who can withdraw an invite?" asked for it.
-    asked: ["fixture-1"],
+    // The call standing now's "who can withdraw an invite?" asked for it, under the service's own row id, which the line heard on the call is matched to by where it began.
+    asked: ["fixture-service-1"],
+    askedAt: [{ voiceSessionId: FIXTURE_LIVE_SESSION, fromMs: 1_200 }],
     parts: [
       {
         type: PLAN_WORK_PART.REASONING,
@@ -563,17 +567,21 @@ export const FIXTURE_PLANNING_CALL: Pick<
   voiceStatus: LIVE_STATUS.LISTENING,
   callPlanId: FIXTURE_PLAN.id,
   callTranscript: {
-    voiceSessionId: "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f",
+    voiceSessionId: FIXTURE_LIVE_SESSION,
     lines: [
       {
         rowId: "fixture-1",
         speaker: USER,
         words: "Picking up where we left off: who can withdraw an invite?",
+        startMs: 1_200,
+        endMs: 4_800,
       },
       {
         rowId: "fixture-2",
         speaker: ASSISTANT,
         words: "Either the member who sent it or any admin. I'm checking how removal works now.",
+        startMs: 5_400,
+        endMs: 9_900,
       },
     ],
   },

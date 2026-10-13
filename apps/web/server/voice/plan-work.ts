@@ -1,4 +1,8 @@
-import type { StoredMessageRecord, StoredTurnRecord } from "@sidecar/database/models/message-reads";
+import type {
+  SpokenAskRow,
+  StoredMessageRecord,
+  StoredTurnRecord,
+} from "@sidecar/database/models/message-reads";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
@@ -444,10 +448,23 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
   };
 }
 
-/** The spoken lines a turn took as its ask, as the wire holds them: the newest it carries, each id within its bound; nothing where none stands. */
-function askedOf(asked: readonly string[]): Pick<PlanWorkTurn, "asked"> {
-  const ids = asked.filter((id) => id.length <= PLAN_WORK_BOUNDS.LINE_ID_CHARS);
-  return ids.length === 0 ? {} : { asked: ids.slice(-PLAN_WORK_BOUNDS.ASKED_LINES) };
+/** The spoken lines a turn took as its ask, as the wire holds them: the newest it carries, each id within its bound, and where each began where its row says; nothing where none stands. */
+function askedOf(asked: readonly SpokenAskRow[]): Pick<PlanWorkTurn, "asked" | "askedAt"> {
+  const rows = asked
+    .filter((row) => row.clientId.length <= PLAN_WORK_BOUNDS.LINE_ID_CHARS)
+    .slice(-PLAN_WORK_BOUNDS.ASKED_LINES);
+  if (rows.length === 0) return {};
+  const askedAt = rows.flatMap(({ voiceSessionId, fromMs }) =>
+    voiceSessionId === null ||
+    fromMs === null ||
+    voiceSessionId.length > PLAN_WORK_BOUNDS.LINE_ID_CHARS
+      ? []
+      : [{ voiceSessionId, fromMs }],
+  );
+  return {
+    asked: rows.map((row) => row.clientId),
+    ...(askedAt.length === 0 ? undefined : { askedAt }),
+  };
 }
 
 /**
@@ -463,7 +480,8 @@ function askedOf(asked: readonly string[]): Pick<PlanWorkTurn, "asked"> {
  * (`records`, by the call's id, `hosted/child-models.ts`). The turn carries
  * what it ran on and spent too, as its own row recorded them, and the
  * developer's spoken lines it took as its ask (`asked`, by the ids the
- * voice's ledger minted), the newest the wire carries, where it took any.
+ * voice's ledger minted, and `askedAt`, by where on its call each began),
+ * the newest the wire carries, where it took any.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
@@ -471,7 +489,7 @@ export function planWorkOf(
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
   records: ReadonlyMap<string, TurnRecord> = new Map(),
-  asked: readonly string[] = [],
+  asked: readonly SpokenAskRow[] = [],
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {

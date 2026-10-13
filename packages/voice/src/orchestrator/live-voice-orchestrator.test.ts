@@ -583,15 +583,31 @@ it.effect(
       const said = (settled: boolean): LiveCaptionRow[] =>
         [
           row("row-1", CONVERSATION_ENTRY_KIND.ASK, "Invites should expire.", settled),
-          row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "After how many days?", settled),
+          {
+            ...row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "After how many days?", settled),
+            startMs: 1_500,
+            endMs: 2_400,
+          },
         ].map((line) => ({ ...line, voiceSessionId: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81" }));
       call.events.onCaptions(said(false));
       yield* settleFibers();
       assert.deepEqual(f.views.at(-1)?.callTranscript, {
         voiceSessionId: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
         lines: [
-          { rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words: "Invites should expire." },
-          { rowId: "row-2", speaker: TRANSCRIPT_SPEAKER.ASSISTANT, words: "After how many days?" },
+          {
+            rowId: "row-1",
+            speaker: TRANSCRIPT_SPEAKER.USER,
+            words: "Invites should expire.",
+            startMs: 0,
+            endMs: 1_000,
+          },
+          {
+            rowId: "row-2",
+            speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
+            words: "After how many days?",
+            startMs: 1_500,
+            endMs: 2_400,
+          },
         ],
       });
 

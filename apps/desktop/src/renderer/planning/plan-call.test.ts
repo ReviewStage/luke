@@ -27,7 +27,12 @@ import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PlanCall } from "./plan-call";
-import { type CallRecord, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import {
+  type CallRecord,
+  TRANSCRIPT_REGION,
+  type TranscriptRegion,
+  transcriptRegion,
+} from "./transcript-model";
 
 /** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */
 function callTab(
@@ -778,6 +783,52 @@ test("a turn still working on the live call ends on the working line under it, a
     "luke's work",
     "working",
   ]);
+});
+
+test("on the call standing now, Luke's work stands under the line heard asking for it however much is said after, and his answer is drawn once, as he said it", () => {
+  const heard = (speaker: TranscriptSpeaker, words: string, startMs: number) => ({
+    rowId: `window-${startMs}`,
+    speaker,
+    words,
+    startMs,
+    endMs: startMs + 2_000,
+  });
+  const region = transcriptRegion({
+    transcript: undefined,
+    heard: [
+      {
+        planId: "plan-1",
+        heardAt: 1_000,
+        live: true,
+        transcript: {
+          voiceSessionId: "call-live",
+          lines: [
+            heard(TRANSCRIPT_SPEAKER.USER, "Check how removal works.", 0),
+            heard(TRANSCRIPT_SPEAKER.ASSISTANT, "Hold on, I'm reading the repository.", 3_000),
+            heard(TRANSCRIPT_SPEAKER.ASSISTANT, "It already checks for an admin.", 20_000),
+            heard(TRANSCRIPT_SPEAKER.USER, "Good. Write that down.", 30_000),
+          ],
+        },
+      },
+    ],
+  });
+  // The service names the ask by its own row and where the line began, as the live call's work frame does.
+  const finished: PlanWorkTurn = {
+    ...readingTurn("turn-1", PLAN_WORK_STATE.DONE, ["service-row-ask"]),
+    askedAt: [{ voiceSessionId: "call-live", fromMs: 0 }],
+  };
+  const container = mounted(callTab({ region, turns: [finished], callLive: true }));
+  assert.deepEqual(readDown(container), [
+    "you: Check how removal works.",
+    "luke's work",
+    "luke: Hold on, I'm reading the repository.It already checks for an admin.",
+    "you: Good. Write that down.",
+  ]);
+  assert.equal(
+    container.textContent?.includes("Removal already checks for an admin."),
+    false,
+    "what Luke was handed to say is said once, as he said it",
+  );
 });
 
 test("a turn no line asked for keeps its words, since nothing said them aloud, and stands where it started", () => {

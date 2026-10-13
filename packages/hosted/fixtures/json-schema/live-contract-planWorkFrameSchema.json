@@ -353,6 +353,27 @@
           },
           "maxItems": 20
         },
+        "askedAt": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "voiceSessionId": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "fromMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "voiceSessionId",
+              "fromMs"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 20
+        },
         "model": {
           "type": "string",
           "maxLength": 200

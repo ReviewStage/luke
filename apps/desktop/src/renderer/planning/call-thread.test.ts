@@ -4,7 +4,12 @@ import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@sidecar/live";
 import type { UIMessage } from "ai";
 import { test } from "vitest";
 import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
-import { TRANSCRIPT_REGION, type TranscriptCallRow, transcriptRegion } from "./transcript-model";
+import {
+  type HeardCall,
+  TRANSCRIPT_REGION,
+  type TranscriptCallRow,
+  transcriptRegion,
+} from "./transcript-model";
 
 /** Synthetic calls, lines, and turns throughout. */
 const MINUTE = 60_000;
@@ -37,8 +42,13 @@ function call(
   };
 }
 
-function turn(key: string, startedAt: number, asked: readonly string[] = []): CallTurn<string> {
-  return { key, startedAt, asked, turn: key };
+function turn(
+  key: string,
+  startedAt: number,
+  asked: readonly string[] = [],
+  askedAt: CallTurn<string>["askedAt"] = [],
+): CallTurn<string> {
+  return { key, startedAt, asked, askedAt, turn: key };
 }
 
 /** The thread as a reader takes it in: each call's lines by their words and each turn's work by its key, marked spoken where a line asked for it. */
@@ -121,31 +131,72 @@ test("a turn no line on screen asked for stands where it started: in its call af
   ]);
 });
 
-test("a line heard on the call standing now names its row as a line on record does, so the work it asked for stands under it", () => {
-  const region = transcriptRegion({
-    transcript: undefined,
-    heard: [
-      {
-        planId: "plan-1",
-        heardAt: FIRST_CALL,
-        live: true,
-        transcript: {
-          voiceSessionId: "call-live",
-          lines: [
-            { rowId: "row-heard", speaker: USER, words: "Check how removal works." },
-            { rowId: "row-reply", speaker: ASSISTANT, words: "Checking." },
-          ],
+test("a line heard on the call standing now, under the voice window's own row id, takes the work asked by where it began, and keeps it as later lines are said and later work finishes", () => {
+  const heard = (lines: NonNullable<HeardCall["transcript"]>["lines"]) =>
+    transcriptRegion({
+      transcript: undefined,
+      heard: [
+        {
+          planId: "plan-1",
+          heardAt: FIRST_CALL,
+          live: true,
+          transcript: { voiceSessionId: "call-live", lines },
         },
-      },
-    ],
+      ],
+    });
+  const said = (rowId: string, speaker: TranscriptSpeaker, words: string, startMs: number) => ({
+    rowId,
+    speaker,
+    words,
+    startMs,
+    endMs: startMs + 2_000,
   });
+  const region = heard([
+    said("1", ASSISTANT, "Hi there! This plan looks new.", 0),
+    said("2", USER, "Can you check the brain for page tools?", 4_000),
+    said("3", ASSISTANT, "Hold on, I'm reading the repository.", 7_000),
+    said("4", ASSISTANT, "Yes, it has a show_page tool.", 20_000),
+    said("5", USER, "Make a fully interactive page.", 30_000),
+    // Luke's reply overlaps the ask, which an ask's span must not reach.
+    said("6", ASSISTANT, "Okay, I'll take a look.", 31_000),
+  ]);
   assert.equal(region.kind, TRANSCRIPT_REGION.READY);
   if (region.kind !== TRANSCRIPT_REGION.READY) return;
-  const thread = callThread(region.calls, [turn("turn-removal", FIRST_CALL, ["row-heard"])]);
+  // The service names each ask by its own row ids, which no heard line carries, and by where each began.
+  const thread = callThread(region.calls, [
+    turn(
+      "turn-page",
+      FIRST_CALL + 31_000,
+      ["service-row-make"],
+      [{ voiceSessionId: "call-live", fromMs: 31_500 }],
+    ),
+    turn(
+      "turn-brain",
+      FIRST_CALL + 5_000,
+      ["service-row-check"],
+      [{ voiceSessionId: "call-live", fromMs: 4_000 }],
+    ),
+    turn(
+      "turn-elsewhere",
+      FIRST_CALL + 9_000,
+      ["service-row-other"],
+      [{ voiceSessionId: "call-earlier", fromMs: 4_000 }],
+    ),
+  ]);
   assert.deepEqual(read(thread), [
     [
       "call-live",
-      ["user: Check how removal works.", "work turn-removal (spoken)", "assistant: Checking."],
+      [
+        "assistant: Hi there! This plan looks new.",
+        "user: Can you check the brain for page tools?",
+        "work turn-brain (spoken)",
+        "assistant: Hold on, I'm reading the repository.",
+        "assistant: Yes, it has a show_page tool.",
+        "user: Make a fully interactive page.",
+        "work turn-page (spoken)",
+        "assistant: Okay, I'll take a look.",
+        "work turn-elsewhere",
+      ],
     ],
   ]);
 });
