@@ -25,7 +25,7 @@ export const MAC_COMMAND_BOUNDS = {
 } as const;
 
 /** One command waiting for the Mac: its id, the shell text, and how long it may run. */
-const macCommandSchema = EffectSchema.Struct({
+export const macCommandSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   command: EffectSchema.String.check(
     EffectSchema.isMinLength(1),

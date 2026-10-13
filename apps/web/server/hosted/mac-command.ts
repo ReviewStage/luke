@@ -13,8 +13,10 @@ import {
   MAC_COMMAND_BOUNDS,
   type MacCommand,
   type MacCommandResult,
+  macCommandSchema,
 } from "@sidecar/hosted/mac-command-wire";
-import { Clock, Duration, Effect, Option, Schedule } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Clock, Duration, Effect, Option, Result, Schedule } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 
 /**
@@ -28,7 +30,10 @@ import type { SqlClient } from "effect/unstable/sql";
  * Otherwise it queues the command, looks for its result until the
  * command's own timeout and a grace for the Mac to answer have passed, and
  * withdraws the row whichever way it ends, so a row stands only while its
- * call does. The Mac's side is `GET /api/mac-commands`, held open while
+ * call does. A Mac may take a command only within the claim window of its
+ * queueing, so one it takes always ends inside the call's wait, and a row
+ * a call that died left behind is never run later. An ask the Mac's read
+ * would refuse is refused before it is queued. The Mac's side is `GET /api/mac-commands`, held open while
  * nothing waits and answered with every waiting command claimed for it,
  * and `POST`, its result (`../mac-commands-app.ts`).
  */
@@ -40,8 +45,14 @@ export const MAC_COMMAND_SERVICE = {
   POLL: Duration.millis(500),
   /** How lately a Mac must have read for a call to count it listening: one hold, and room for the next read to arrive. */
   LISTENER_FRESH: Duration.seconds(45),
-  /** How long past the command's own timeout a call waits for the Mac to say what it did. */
-  ANSWER_GRACE: Duration.seconds(30),
+  /**
+   * How long a command may wait for a Mac to take it; one not taken by then
+   * is never run. A listening Mac takes one within a poll, and a command
+   * taken inside this window ends inside the call's wait.
+   */
+  CLAIM_WINDOW: Duration.seconds(30),
+  /** How long past the command's own timeout a call waits for the Mac to say what it did: the claim window, and room for the answer to travel. */
+  ANSWER_GRACE: Duration.seconds(35),
 } as const;
 
 export const MAC_COMMAND_STATUS = {
@@ -58,6 +69,9 @@ export const MAC_COMMAND_REFUSAL = {
     "No answer: the developer's Mac did not say what the command did in time; it may or may " +
     "not have run.",
   UNAVAILABLE: "Not run: the command could not be queued. The call may be made again.",
+  UNREADABLE:
+    "Not run: `command` must be one non-empty shell command, and `timeout_seconds` a whole " +
+    `number from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
 } as const;
 
 // A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
@@ -70,6 +84,8 @@ export interface MacCommandAsk {
   readonly command: string;
   readonly timeoutSeconds?: number;
 }
+
+const readMacCommand = readEither(macCommandSchema);
 
 function notRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
@@ -113,11 +129,14 @@ export function runOnMac(
   userId: string,
   ask: MacCommandAsk,
 ): Effect.Effect<MacCommandAnswer, never, SqlClient.SqlClient> {
-  const queued: MacCommand = {
+  const asked = readMacCommand({
     id: randomUUID(),
     command: ask.command,
     timeoutSeconds: ask.timeoutSeconds ?? MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS,
-  };
+  });
+  // A command the Mac's read would refuse is refused here, before it is queued where it would spoil that read.
+  if (Result.isFailure(asked)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
+  const queued = asked.success;
   const run = Effect.gen(function* () {
     if (!(yield* macListening(userId))) return notRun(MAC_COMMAND_REFUSAL.NO_MAC);
     const answered = yield* queueMacCommand(userId, queued).pipe(
@@ -136,14 +155,17 @@ export function runOnMac(
  * or with none once the hold ends.
  */
 export function macCommandsFor(userId: string): PlanStoreEffect<readonly MacCommand[]> {
-  const grace = Duration.toSeconds(MAC_COMMAND_SERVICE.ANSWER_GRACE);
+  const queuedSince = Effect.map(
+    Clock.currentTimeMillis,
+    (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
+  );
   return markMacListening(userId).pipe(
     Effect.andThen(
-      macCommandsWaiting(userId, grace).pipe(
+      Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since)).pipe(
         Effect.repeat({ schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL), until: (any) => any }),
         Effect.timeoutOption(MAC_COMMAND_SERVICE.HOLD),
       ),
     ),
-    Effect.andThen(claimMacCommands(userId, grace)),
+    Effect.andThen(Effect.flatMap(queuedSince, (since) => claimMacCommands(userId, since))),
   );
 }

@@ -12,6 +12,7 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Duration, Effect, Layer, Option, Queue, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -180,6 +181,44 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
           Duration.toMillis(Duration.sum(Duration.seconds(60), MAC_COMMAND_SERVICE.ANSWER_GRACE)),
       );
       assert.deepEqual(yield* ask(settle(owner, queued.id)), NOT_FOUND);
+    }),
+  );
+
+  it.effect("an ask the Mac's read would refuse is refused before it is queued", () =>
+    Effect.gen(function* () {
+      const { owner } = yield* openAccounts;
+      yield* heldRead(owner);
+
+      const asks = [
+        { command: "" },
+        { command: "ls", timeoutSeconds: 0 },
+        { command: "ls", timeoutSeconds: 601 },
+      ];
+      for (const ask of asks) {
+        assert.deepEqual(yield* runOnMac(owner, ask), {
+          status: MAC_COMMAND_STATUS.NOT_RUN,
+          reason: MAC_COMMAND_REFUSAL.UNREADABLE,
+        });
+      }
+      assert.deepEqual(commandsOf(yield* heldRead(owner)), [], "nothing was queued");
+    }),
+  );
+
+  it.effect("a command no Mac took within the claim window is never handed to a later read", () =>
+    Effect.gen(function* () {
+      const { owner } = yield* openAccounts;
+      yield* heldRead(owner);
+      const call = yield* forkClockDriven(runOnMac(owner, { command: "open -a Xcode" }));
+      yield* Queue.take(call.asleep);
+      yield* TestClock.adjust(Duration.sum(MAC_COMMAND_SERVICE.CLAIM_WINDOW, Duration.seconds(1)));
+
+      const late = yield* heldRead(owner);
+
+      assert.deepEqual(commandsOf(late), []);
+      assert.deepEqual(yield* driven(call, Duration.seconds(5)), {
+        status: MAC_COMMAND_STATUS.NOT_RUN,
+        reason: MAC_COMMAND_REFUSAL.NO_ANSWER,
+      });
     }),
   );
 

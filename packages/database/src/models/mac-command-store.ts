@@ -3,7 +3,7 @@ import {
   type MacCommandResult,
   macCommandResultSchema,
 } from "@sidecar/hosted/mac-command-wire";
-import { and, asc, eq, gte, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { db } from "../core/query.js";
@@ -60,51 +60,41 @@ const insertCommand = SqlSchema.void({
 });
 
 /**
- * Whether a command still waits to be claimed: unclaimed, and queued
- * recently enough that its call is still looking for its result, so a row a
- * call that died left behind is never run by a Mac that reads later.
+ * Whether a command still waits to be claimed: unclaimed, and queued at or
+ * after the instant given, so a command no Mac took in time, or a row a
+ * call that died left behind, is never run by a Mac that reads later.
  */
-function waiting(userId: string, now: Date, graceSeconds: number): SQL | undefined {
+function waiting(userId: string, queuedSince: Date): SQL | undefined {
   return and(
     eq(macCommand.userId, userId),
     isNull(macCommand.claimedAt),
-    sql`${macCommand.queuedAt} + make_interval(secs => ${macCommand.timeoutSeconds} + ${graceSeconds}) > ${now}`,
+    gte(macCommand.queuedAt, queuedSince),
   );
 }
 
-const WaitingSchema = Schema.Struct({
-  userId: Schema.String,
-  now: Schema.Date,
-  graceSeconds: Schema.Number,
-});
-
 const claimWaiting = SqlSchema.findAll({
-  Request: WaitingSchema,
+  Request: Schema.Struct({ userId: Schema.String, queuedSince: Schema.Date, now: Schema.Date }),
   Result: Schema.Struct({
     id: Schema.String,
     command: Schema.String,
     timeoutSeconds: Schema.Number,
   }),
-  execute: ({ userId, now, graceSeconds }) =>
-    db
-      .update(macCommand)
-      .set({ claimedAt: now })
-      .where(waiting(userId, now, graceSeconds))
-      .returning({
-        id: macCommand.id,
-        command: macCommand.command,
-        timeoutSeconds: macCommand.timeoutSeconds,
-      }),
+  execute: ({ userId, queuedSince, now }) =>
+    db.update(macCommand).set({ claimedAt: now }).where(waiting(userId, queuedSince)).returning({
+      id: macCommand.id,
+      command: macCommand.command,
+      timeoutSeconds: macCommand.timeoutSeconds,
+    }),
 });
 
 const findWaiting = SqlSchema.findAll({
-  Request: WaitingSchema,
+  Request: Schema.Struct({ userId: Schema.String, queuedSince: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, now, graceSeconds }) =>
+  execute: ({ userId, queuedSince }) =>
     db
       .select({ id: macCommand.id })
       .from(macCommand)
-      .where(waiting(userId, now, graceSeconds))
+      .where(waiting(userId, queuedSince))
       .orderBy(asc(macCommand.queuedAt)),
 });
 
@@ -159,23 +149,17 @@ export function queueMacCommand(userId: string, queued: MacCommand): PlanStoreEf
   return Effect.flatMap(DateTime.nowAsDate, (now) => insertCommand({ ...queued, userId, now }));
 }
 
-/**
- * Whether any command of the account waits to be claimed, which is what a
- * held read looks at: one whose call waits `graceSeconds` past its timeout
- * for its result counts until then.
- */
-export function macCommandsWaiting(userId: string, graceSeconds: number): PlanStoreEffect<boolean> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(findWaiting({ userId, now, graceSeconds }), (rows) => rows.length > 0),
-  );
+/** Whether any command of the account queued at or after `queuedSince` waits to be claimed, which is what a held read looks at. */
+export function macCommandsWaiting(userId: string, queuedSince: Date): PlanStoreEffect<boolean> {
+  return Effect.map(findWaiting({ userId, queuedSince }), (rows) => rows.length > 0);
 }
 
-/** Claims every command of the account that waits, for the Mac whose read this is. */
+/** Claims every command of the account queued at or after `queuedSince` that waits, for the Mac whose read this is. */
 export function claimMacCommands(
   userId: string,
-  graceSeconds: number,
+  queuedSince: Date,
 ): PlanStoreEffect<readonly MacCommand[]> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) => claimWaiting({ userId, now, graceSeconds }));
+  return Effect.flatMap(DateTime.nowAsDate, (now) => claimWaiting({ userId, queuedSince, now }));
 }
 
 /** Keeps a claimed command's result; false where the account holds no such command claimed and unsettled. */

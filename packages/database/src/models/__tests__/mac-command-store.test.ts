@@ -27,7 +27,8 @@ import {
  * Synthetic accounts and commands throughout.
  */
 
-const GRACE_SECONDS = 30;
+/** The instant the clock reads now, which every command these tests queue is at or after. */
+const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis));
 
 const RESULT: MacCommandResult = {
   exitCode: 0,
@@ -57,14 +58,15 @@ it.layer(getTestDB())("the Mac command store", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, other } = yield* openAccounts;
+        const since = yield* now;
         const queued = command();
         yield* queueMacCommand(owner, queued);
 
-        const claimedByOther = yield* claimMacCommands(other, GRACE_SECONDS);
+        const claimedByOther = yield* claimMacCommands(other, since);
         const settledByOther = yield* settleMacCommand(other, queued.id, RESULT);
         const settledUnclaimed = yield* settleMacCommand(owner, queued.id, RESULT);
-        const claimed = yield* claimMacCommands(owner, GRACE_SECONDS);
-        const claimedAgain = yield* claimMacCommands(owner, GRACE_SECONDS);
+        const claimed = yield* claimMacCommands(owner, since);
+        const claimedAgain = yield* claimMacCommands(owner, since);
         const settled = yield* settleMacCommand(owner, queued.id, RESULT);
         const settledAgain = yield* settleMacCommand(owner, queued.id, { ...RESULT, exitCode: 1 });
 
@@ -81,22 +83,23 @@ it.layer(getTestDB())("the Mac command store", (it) => {
   );
 
   it.effect(
-    "a command whose call stopped waiting is never claimed, and a withdrawn one is gone",
+    "a command queued before the instant a read names is never claimed, and a withdrawn one is gone",
     () =>
       Effect.gen(function* () {
         const { owner } = yield* openAccounts;
-        const stale = command(10);
+        const stale = command();
         yield* queueMacCommand(owner, stale);
-        yield* TestClock.adjust(`${10 + GRACE_SECONDS} seconds`);
+        yield* TestClock.adjust("1 minute");
+        const since = yield* now;
         const fresh = command();
         yield* queueMacCommand(owner, fresh);
         const withdrawn = command();
         yield* queueMacCommand(owner, withdrawn);
         yield* withdrawMacCommand(owner, withdrawn.id);
 
-        assert.equal(yield* macCommandsWaiting(owner, GRACE_SECONDS), true);
-        assert.deepEqual(yield* claimMacCommands(owner, GRACE_SECONDS), [fresh]);
-        assert.equal(yield* macCommandsWaiting(owner, GRACE_SECONDS), false);
+        assert.equal(yield* macCommandsWaiting(owner, since), true);
+        assert.deepEqual(yield* claimMacCommands(owner, since), [fresh]);
+        assert.equal(yield* macCommandsWaiting(owner, since), false);
       }),
   );
 
