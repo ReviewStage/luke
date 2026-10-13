@@ -90,7 +90,7 @@ export function useAgentPullRequest(input: {
 
 /** The plan's agents' pull requests, and the reader that keeps them as its answers land. */
 export interface PlanPullRequests {
-  /** Each agent's pull request, by agent, of those whose last read named one. */
+  /** Each agent's pull request, by agent, of those whose latest read named one. */
   readonly pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
   /** One read of what an agent published, its answer kept here as it lands. */
   readonly read: PullRequestReader;
@@ -99,50 +99,73 @@ export interface PlanPullRequests {
 /** No agent has a pull request, one map so a render that has none hands down the same one. */
 const NO_PULL_REQUESTS: ReadonlyMap<string, CodingAgentPullRequest> = new Map();
 
+/** What one visit to a plan has read: each agent's pull request, and the asks behind them. */
+interface Visit {
+  readonly planId: string | undefined;
+  /** Each agent read on its own, by whether it had ended when it was asked. */
+  readonly asked: Map<string, boolean>;
+  /** Each agent's latest ask, numbered, whose answer alone is kept. */
+  readonly latest: Map<string, number>;
+}
+
 /**
  * Which of the plan's agents have a pull request, as the side panel's "+",
  * the plan's summary, and ⌘K offer its Changes tab by: every answer `read`
  * lands is kept, an agent's own tab's reads included, and each agent is
  * read once as the list first holds it and once more as it ends, since that
  * is when what it published settles. Nothing reads on a clock. An answer the
- * service could not give leaves what was kept standing.
+ * service could not give leaves what was kept standing. Note that what is
+ * kept is the visit's: opening the plan again reads every agent afresh, an
+ * answer to an ask made on an earlier visit is let go, and of two asks of
+ * one agent out at once only the later one's answer is kept, so an earlier
+ * read landing late never takes back a pull request a later one found.
  */
 export function usePlanPullRequests(
+  planId: string | undefined,
   agents: readonly Pick<CodingAgentSummary, "id" | "status">[] | undefined,
   readOnce: PullRequestReader,
 ): PlanPullRequests {
-  const [pullRequests, setPullRequests] = useState(NO_PULL_REQUESTS);
+  const [held, setHeld] = useState({ planId, pullRequests: NO_PULL_REQUESTS });
+  if (held.planId !== planId) setHeld({ planId, pullRequests: NO_PULL_REQUESTS });
   const latest = useRef(readOnce);
   latest.current = readOnce;
-  // Each agent read, by whether it had ended when it was asked.
-  const asked = useRef(new Map<string, boolean>());
+  const visit = useRef<Visit>({ planId, asked: new Map(), latest: new Map() });
+  if (visit.current.planId !== planId)
+    visit.current = { planId, asked: new Map(), latest: new Map() };
+  const asks = useRef(0);
 
-  const read = useCallback<PullRequestReader>(
-    (agentId) =>
-      latest.current(agentId).then((answer) => {
-        if ("failure" in answer) return answer;
-        const opened = answer.pullRequest;
-        setPullRequests((was) => {
-          if (opened === null && !was.has(agentId)) return was;
-          const next = new Map(was);
-          if (opened === null) next.delete(agentId);
-          else next.set(agentId, opened);
-          return next;
-        });
+  const read = useCallback<PullRequestReader>((agentId) => {
+    const on = visit.current;
+    asks.current += 1;
+    const ask = asks.current;
+    on.latest.set(agentId, ask);
+    return latest.current(agentId).then((answer) => {
+      if ("failure" in answer || visit.current !== on || on.latest.get(agentId) !== ask) {
         return answer;
-      }),
-    [],
-  );
+      }
+      const opened = answer.pullRequest;
+      setHeld((was) => {
+        if (was.planId !== on.planId) return was;
+        if (opened === null && !was.pullRequests.has(agentId)) return was;
+        const next = new Map(was.pullRequests);
+        if (opened === null) next.delete(agentId);
+        else next.set(agentId, opened);
+        return { planId: was.planId, pullRequests: next };
+      });
+      return answer;
+    });
+  }, []);
 
   useEffect(() => {
+    const { asked } = visit.current;
     for (const agent of agents ?? []) {
       const ended = !agentStillWriting(agent.status);
-      const before = asked.current.get(agent.id);
+      const before = asked.get(agent.id);
       if (before === true || before === ended) continue;
-      asked.current.set(agent.id, ended);
+      asked.set(agent.id, ended);
       read(agent.id).catch(() => undefined);
     }
   }, [agents, read]);
 
-  return { pullRequests, read };
+  return { pullRequests: held.planId === planId ? held.pullRequests : NO_PULL_REQUESTS, read };
 }

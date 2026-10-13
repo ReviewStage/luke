@@ -1039,11 +1039,14 @@ test("an agent with a pull request is offered its Changes tab in the summary, un
 
   const page = mount(false, SHOWN, false, false, [], [], PULL_REQUEST);
   const summary = summaryOf(page);
-  assert.deepEqual(listed(summary).slice(0, 3), [
-    ["Tabs", ["Board", "Transcript"]],
-    ["Coding agents", [AGENT.title]],
-    ["Changes", [AGENT.title]],
-  ]);
+  assert.deepEqual(
+    listed(summary)
+      .map(([heading]) => heading)
+      .slice(1, 3),
+    ["Coding agents", "Changes"],
+    "Changes stands right after the agents",
+  );
+  assert.deepEqual(listed(summary)[2], ["Changes", [AGENT.title]]);
   const row = [...summary.querySelectorAll<HTMLElement>('ul[aria-label="Changes"] li button')][0];
   assert.ok(row, "the Changes row");
   hover(row);

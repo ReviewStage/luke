@@ -667,7 +667,7 @@ export function useCodingAgents(input: {
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
-  const published = usePlanPullRequests(agents, readPullRequestOnce);
+  const published = usePlanPullRequests(planId, agents, readPullRequestOnce);
 
   const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),

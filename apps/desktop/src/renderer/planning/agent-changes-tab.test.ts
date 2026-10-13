@@ -395,6 +395,7 @@ test("the tab stands under a File tab's bar: the chosen file's path as breadcrum
 
   await tab.press("Hide files");
   assert.equal(tab.container.querySelector('aside[aria-label="Changed files"]'), null);
+  assert.match(tab.text(), /2 files changed \+2 −1/, "the count stands while the tree is hidden");
   await tab.press("Show files");
   assert.ok(tab.container.querySelector('.file-view-body > aside[aria-label="Changed files"]'));
 });

@@ -60,7 +60,8 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * shows and hides the tree for every File and Changes tab alike. The tree
  * is a File tab's own pane (`file-tree-pane.tsx`) narrowed to the changed
  * files, every folder open, each row lettered A, M, D, or R, searched in
- * place, with the pull request's count under it; choosing a file there or
+ * place, with the pull request's count under it, or under the diff while
+ * the tree is hidden; choosing a file there or
  * in a crumb's tree shows its diff. The diff is drawn in a File tab's lines
  * (`code-pane.tsx`), numbered on both sides in the same gutter, numbered
  * and wrapped as the File tabs' settings say, left out of the find and of
@@ -318,6 +319,12 @@ export function AgentChangesTab({
   }
   const count = pullRequest.files.length;
   const total = linesChanged(pullRequest.files);
+  const counted = (
+    <>
+      {count} {count === 1 ? "file" : "files"} changed{" "}
+      <LinesChanged additions={total.additions} deletions={total.deletions} />
+    </>
+  );
   return (
     <div className="file-view ph-no-capture">
       <FileViewBar
@@ -346,12 +353,7 @@ export function AgentChangesTab({
             only={changed.paths}
             marks={changed.marks}
             label="Changed files"
-            foot={
-              <>
-                {count} {count === 1 ? "file" : "files"} changed{" "}
-                <LinesChanged additions={total.additions} deletions={total.deletions} />
-              </>
-            }
+            foot={counted}
             listFolder={changed.folders}
             onOpen={choose}
             pane={slide.pane}
@@ -359,6 +361,8 @@ export function AgentChangesTab({
           />
         ) : null}
       </div>
+      {/* The count stands under the tree, and under the diff while the tree is hidden. */}
+      {slide.drawn ? null : <p className="file-tree-foot">{counted}</p>}
     </div>
   );
 }

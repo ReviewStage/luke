@@ -190,16 +190,21 @@ test("an answer the service could not give leaves what was drawn, and another ag
 /** The plan's agents as the list holds them: each by id, where it stands. */
 type Listed = readonly { id: string; status: CodingAgentStatus }[] | undefined;
 
+/** The plans the tests open. */
+const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const OTHER_PLAN = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
+
 /** Mounts the plan's pull requests over the agents given, every read held until the test answers it. */
 function mountPlan(initial: Listed) {
   const reads: HeldRead[] = [];
   let control: PlanPullRequests | undefined;
-  let relist: ((next: Listed) => void) | undefined;
+  let relist: ((next: { planId: string; agents: Listed }) => void) | undefined;
   function Probe() {
-    const [agents, setAgents] = useState(initial);
-    relist = setAgents;
+    const [held, setHeld] = useState({ planId: PLAN, agents: initial });
+    relist = setHeld;
     control = usePlanPullRequests(
-      agents,
+      held.planId,
+      held.agents,
       (agentId) => new Promise((answer) => reads.push({ agentId, answer })),
     );
     return null;
@@ -208,8 +213,15 @@ function mountPlan(initial: Listed) {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(createElement(Probe)));
-  const answer = async (agentId: string, answered: CodingAgentPullRequestAnswerView) => {
-    const at = reads.findIndex((read) => read.agentId === agentId);
+  const answer = async (
+    agentId: string,
+    answered: CodingAgentPullRequestAnswerView,
+    which: "first" | "last" = "first",
+  ) => {
+    const at =
+      which === "first"
+        ? reads.findIndex((read) => read.agentId === agentId)
+        : reads.findLastIndex((read) => read.agentId === agentId);
     const [read] = reads.splice(at, 1);
     assert.ok(read, `a read of ${agentId} is out`);
     read.answer(answered);
@@ -219,7 +231,7 @@ function mountPlan(initial: Listed) {
     reads,
     answer,
     opened: () => [...(control?.pullRequests.keys() ?? [])],
-    list: (next: Listed) => act(() => relist?.(next)),
+    list: (next: Listed, planId = PLAN) => act(() => relist?.({ planId, agents: next })),
     readOwn: (agentId: string) => {
       assert.ok(control);
       return control.read(agentId);
@@ -262,5 +274,36 @@ test("the plan reads each agent's pull request once as the list holds it and onc
   assert.deepEqual(plan.opened(), [OTHER, AGENT]);
   plan.readOwn(OTHER);
   await plan.answer(OTHER, BRANCH_ALONE);
+  assert.deepEqual(plan.opened(), [AGENT]);
+});
+
+test("a plan opened again reads every agent afresh and drops what an earlier visit kept or still had out", async () => {
+  const ended = { id: AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+  const plan = mountPlan([ended]);
+  await plan.answer(AGENT, OPENED);
+  assert.deepEqual(plan.opened(), [AGENT]);
+
+  plan.list(undefined, OTHER_PLAN);
+  assert.deepEqual(plan.opened(), [], "another plan's agents offer nothing of this one's");
+  plan.list([ended]);
+  assert.deepEqual(plan.opened(), []);
+  assert.deepEqual(
+    plan.reads.map((read) => read.agentId),
+    [AGENT],
+    "read again on the return",
+  );
+  plan.list(undefined, OTHER_PLAN);
+  await plan.answer(AGENT, OPENED);
+  plan.list(undefined);
+  assert.deepEqual(plan.opened(), [], "an answer to an ask from a visit left is let go");
+});
+
+test("of two reads of one agent out at once, only the later one's answer is kept, however late the earlier lands", async () => {
+  const plan = mountPlan([{ id: AGENT, status: CODING_AGENT_STATUS.RUNNING }]);
+  plan.list([{ id: AGENT, status: CODING_AGENT_STATUS.COMPLETED }]);
+  assert.equal(plan.reads.length, 2);
+
+  await plan.answer(AGENT, OPENED, "last");
+  await plan.answer(AGENT, BRANCH_ALONE);
   assert.deepEqual(plan.opened(), [AGENT]);
 });
