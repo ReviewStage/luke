@@ -9,6 +9,7 @@ import { sentLineStands } from "@sidecar/database/models/message-reads";
 import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
@@ -358,18 +359,32 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
+/** The steps a read held while its agent starts is driven by: past its hold, and under the grace an agent with no turn reads as starting within. */
+const STARTING_READ_STEPS =
+  Math.floor(
+    (Duration.toMillis(CODER.STARTING_GRACE) - Duration.toMillis(CODER.MESSAGES_HOLD)) /
+      Duration.toMillis(CODER.MESSAGES_POLL),
+  ) - 1;
+
 /**
- * A forked ask driven to its answer, the clock moved a step at a time so
- * each wait it holds elapses, then joined. The steps are bounded, because
- * a step lands while a query of the ask's is still on its way, and an ask
- * that is meant to answer inside its hold must not have the hold stepped
- * out from under it: a bound under the hold leaves the join to the query.
+ * A held read of a starting agent driven to its answer, each step taken
+ * only after a round trip to the test's database. Note that the steps are
+ * paced by the database rather than by the loop, because the read reaches
+ * its hold only after queries of its own: steps the loop races ahead with
+ * either pass the hold before the read waits on it, leaving its join
+ * waiting on a clock nothing moves, or, unbounded, carry the clock past the
+ * grace so the page reads the agent failed. A round trip queued behind the
+ * read's own keeps the two in step, and the bound keeps the clock inside
+ * the grace whatever the database's pace.
  */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration, steps = 1_000) =>
+const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   Effect.gen(function* () {
-    for (let attempt = 0; attempt < steps; attempt += 1) {
+    for (let attempt = 0; attempt < STARTING_READ_STEPS; attempt += 1) {
       if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
-      yield* TestClock.adjust(step);
+      yield* Effect.orDie(
+        Database.use((db) => db.select({ id: conversations.id }).from(conversations).limit(1)),
+      );
+      yield* TestClock.adjust(CODER.MESSAGES_POLL);
       yield* Effect.yieldNow;
     }
     return yield* Fiber.join(fiber);
@@ -516,12 +531,10 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
         assert.equal(starting.pollUnsafe(), undefined);
         yield* TestClock.adjust(CODER.MESSAGES_HOLD);
-        // The steps are bounded well inside the starting grace, so a read whose queries are slow to
-        // land is joined at a clock that still reads it starting rather than failed.
         const empty = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* driven(starting, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
+          yield* drivenWhileStarting(starting),
         );
         assert.deepEqual(empty.messages, []);
         assert.equal(empty.status, CODING_AGENT_STATUS.STARTING);
