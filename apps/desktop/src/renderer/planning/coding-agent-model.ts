@@ -210,6 +210,29 @@ export const STOP_FAILED = "The agent could not be stopped. Try again.";
 /** What the toast says when the service did not rename an agent, whose old name is drawn again. */
 export const RENAME_FAILED = "The agent could not be renamed. Try again.";
 
+/** What an agent's archive says once it landed, and what it says refused. */
+const ARCHIVED_WORDS = {
+  done: "Agent archived",
+  refused: "The agent could not be archived. Try again.",
+} as const;
+
+/** What an agent's unarchive says once it landed, and what it says refused. */
+const UNARCHIVED_WORDS = {
+  done: "Agent unarchived",
+  refused: "The agent could not be unarchived. Try again.",
+} as const;
+
+/** What a refused archive says of an agent still starting, or with a message awaiting its turn, which has no turn to stop yet. */
+export const ARCHIVE_NOT_READY = "The agent is still starting its turn. Try again in a moment.";
+
+/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a plan's do (`MARK_UNDOS`). */
+export function archiveWords(archived: boolean): {
+  readonly done: string;
+  readonly refused: string;
+} {
+  return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
+}
+
 /** What a Start that did not start says beside the button. */
 export function startFailureNote(failure: CodingAgentCallFailure): string {
   switch (failure) {

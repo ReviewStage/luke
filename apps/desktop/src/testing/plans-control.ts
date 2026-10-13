@@ -64,7 +64,10 @@ export function codingAgentsControl(
 ): CodingAgentsControl {
   return {
     agents: [],
+    archived: [],
     agentIds: [],
+    // A plan with no archived agent holds exactly the agents given.
+    heldIds: overrides.agentIds ?? [],
     keywords: [],
     draft: undefined,
     onNewDraft: () => "draft",
@@ -84,6 +87,14 @@ export function codingAgentsControl(
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onRename: () => Promise.resolve(false),
+    onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
+    // An agent read again stands as the control's list has it.
+    readAgent: (agentId) =>
+      Promise.resolve(
+        [...(overrides.agents ?? []), ...(overrides.archived ?? [])].find(
+          (agent) => agent.id === agentId,
+        ),
+      ),
     onStatus: ignore,
     onTitle: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),

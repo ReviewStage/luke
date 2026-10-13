@@ -31,6 +31,8 @@ interface Stood {
   draft?: string | undefined;
   fixture?: boolean;
   waiting?: boolean;
+  /** Every agent the plan holds, an archived one among them; its standing agents where unsaid. */
+  held?: readonly string[];
 }
 
 /** Mounts the column's tabs alone over what the plan holds now, answering the control as it stands. */
@@ -43,6 +45,7 @@ function mount(stood: Stood) {
       held.agents,
       held.draft,
       held.waiting ?? false,
+      held.held ?? held.agents,
     );
     return null;
   }
@@ -161,6 +164,14 @@ test("the Inbox is the posting plan's alone and stands only on a plan with an ag
   column.render({ plan: OTHER_PLAN, agents: [OTHER] });
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: OTHER }, MAIN_TAB.INBOX]);
   assert.equal(column.control().tab, MAIN_TAB.INBOX, "the plan opens on it");
+});
+
+test("the Inbox tab still stands once the plan's last agent is archived, since that agent's items still stand", () => {
+  const column = mount({ agents: [AGENT] });
+  act(() => column.control().onChoose(MAIN_TAB.INBOX));
+  column.render({ agents: [], held: [AGENT] });
+  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX]);
+  assert.equal(column.control().tab, MAIN_TAB.INBOX);
 });
 
 test("the agents' tabs follow the plan's in the order started, and the draft's after them while the plan holds it", () => {

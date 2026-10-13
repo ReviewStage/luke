@@ -120,9 +120,9 @@ function fixture() {
           asked.push(`default:${choice.model}:${choice.effort}`);
           return { choice };
         }),
-      codingAgentList: ({ planId }) =>
+      codingAgentList: ({ planId, includeArchived }) =>
         Effect.sync(() => {
-          asked.push(`list:${planId}`);
+          asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
           return { agents: [] };
         }),
       codingAgentStart: (params) =>
@@ -157,6 +157,11 @@ function fixture() {
       codingAgentStop: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`stop:${agentId}`);
+          return STARTED;
+        }),
+      codingAgentArchive: ({ agentId, archived }) =>
+        Effect.sync(() => {
+          asked.push(`archive:${agentId}:${String(archived)}`);
           return STARTED;
         }),
       codingAgentPullRequest: ({ agentId }) =>
@@ -245,6 +250,26 @@ it.effect(
 
       assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
       assert.deepEqual(asked, [`start:${PLAN_ID}:press-1`]);
+    }),
+);
+
+it.effect(
+  "a panel's list asks for the archived agents only where it names them, and an archive carries the agent and which way it goes, hearing the agent back",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_LIST, payload: { planId: PLAN_ID, includeArchived: true } },
+        PANEL,
+      );
+      const outcome = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_ARCHIVE, payload: { agentId: AGENT_ID, archived: true } },
+        PANEL,
+      );
+
+      assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
+      assert.deepEqual(asked, [`list:${PLAN_ID}:archived`, `archive:${AGENT_ID}:true`]);
     }),
 );
 

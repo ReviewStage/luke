@@ -12,6 +12,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -19,7 +20,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { newestToastSays } from "#testing/toast";
+import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { MODEL_CHANGE_FAILED, START_ARCHIVED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
@@ -486,6 +487,57 @@ it.effect(
         "The agent could not be started. Try again.",
         "the plan's own note says why on its return",
       );
+    }),
+);
+
+it.effect(
+  "the list is read with the archived agents and split from those standing; an archive moves the agent out of every list at once and its toast's Undo brings it back, and a refusal is answered for the caller to say, moving nothing",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
+      const OTHER = "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
+      const shelved = { ...STARTED, id: OTHER, archivedAt: 5 };
+      const archived = { ...STARTED, archivedAt: 9 };
+      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED, shelved] });
+      yield* Effect.promise(tab.mount);
+      assert.deepEqual(tab.asked[0], {
+        kind: ACT_KIND.CODING_AGENTS_LIST,
+        payload: { planId: PLAN, includeArchived: true },
+      });
+      assert.deepEqual(tab.control().agentIds, [AGENT]);
+      assert.deepEqual(tab.control().archived, [shelved]);
+
+      tab.answer(ACT_KIND.CODING_AGENTS_ARCHIVE, { agent: archived });
+      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [archived, shelved] });
+      const result = yield* Effect.promise(() => tab.control().onArchive(AGENT, true));
+      yield* Effect.promise(settle);
+      assert.deepEqual(result, { status: ACTION_RESULT_STATUS.ACCEPTED });
+      assert.deepEqual(tab.asked.at(-2), {
+        kind: ACT_KIND.CODING_AGENTS_ARCHIVE,
+        payload: { agentId: AGENT, archived: true },
+      });
+      assert.deepEqual(tab.control().agentIds, []);
+      assert.deepEqual(tab.control().archived, [archived, shelved]);
+      assert.equal(newestToastSays(), "Agent archivedUndo");
+
+      tab.answer(ACT_KIND.CODING_AGENTS_ARCHIVE, { agent: STARTED });
+      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED, shelved] });
+      act(() => newestToastAction()?.click());
+      yield* Effect.promise(settle);
+      assert.deepEqual(tab.asked.at(-2), {
+        kind: ACT_KIND.CODING_AGENTS_ARCHIVE,
+        payload: { agentId: AGENT, archived: false },
+      });
+      assert.deepEqual(tab.control().agentIds, [AGENT]);
+      assert.deepEqual(tab.control().archived, [shelved]);
+
+      tab.answer(ACT_KIND.CODING_AGENTS_ARCHIVE, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      const refused = yield* Effect.promise(() => tab.control().onArchive(OTHER, false));
+      assert.deepEqual(refused, {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "The agent could not be unarchived. Try again.",
+      });
+      assert.deepEqual(tab.control().archived, [shelved]);
     }),
 );
 

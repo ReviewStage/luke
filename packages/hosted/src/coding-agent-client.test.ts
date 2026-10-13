@@ -5,6 +5,7 @@ import {
   fakeHttpClientLayer,
   HTTP_STATUS,
   jsonResponse,
+  recordedRoutes,
 } from "@sidecar/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -433,6 +434,46 @@ it.effect(
       api.fail();
       const failed = yield* Effect.provide(client().stop(AGENT_ID), api.layer);
       assert.deepEqual(failed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "lists the archived agents among the rest only where asked, archives an agent or brings it back at its own address, as which way alone, and reads one still starting as not ready",
+  () =>
+    Effect.gen(function* () {
+      const archived = { ...AGENT, archivedAt: 1_800_000_300_000 };
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/agents`]: { answer: () => ({ agents: [archived] }) },
+        [`PATCH /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: archived }) },
+      });
+
+      const listed = yield* Effect.provide(client().list(PLAN_ID, true), api.layer);
+      yield* Effect.provide(client().list(PLAN_ID), api.layer);
+      const answer = yield* Effect.provide(
+        client().archive(AGENT_ID, { archived: true }),
+        api.layer,
+      );
+
+      assert.deepEqual(listed, { agents: [archived] });
+      assert.deepEqual(answer, { agent: archived });
+      assert.deepEqual(recordedRoutes(api.requests()), [
+        `GET /api/plans/${PLAN_ID}/agents?archived=include`,
+        `GET /api/plans/${PLAN_ID}/agents`,
+        `PATCH /api/agents/${AGENT_ID}`,
+      ]);
+      assert.deepEqual(JSON.parse(api.requests()[2]?.body ?? "{}"), { archived: true });
+
+      const starting = fakeCloudApi({
+        [`PATCH /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.AGENT_NOT_READY }),
+          status: HTTP_STATUS.CONFLICT,
+        },
+      });
+      const refused = yield* Effect.provide(
+        client().archive(AGENT_ID, { archived: true }),
+        starting.layer,
+      );
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
     }),
 );
 

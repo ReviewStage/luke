@@ -3188,6 +3188,107 @@ body,
   height: 16px;
 }
 
+/* The archived agents, folded under Archived at the foot of Coding agents
+   (`agent-archive.tsx`) as the sidebar folds its archived plans: an archive
+   box that gives way to the fold's chevron while hovered or reached from the
+   keyboard, the count after its name while folded, and each archived agent
+   muted, its Unarchive at its end in the sidebar rows' Pin and Archive
+   style, shown while the row is hovered or reached from the keyboard. */
+.plan-summary-archived {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+  margin-top: var(--list-gap);
+}
+
+.plan-summary-archived-toggle {
+  color: var(--text-secondary);
+}
+
+.plan-summary-fold {
+  display: grid;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  place-items: center;
+}
+
+.plan-summary-fold > * {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--duration-hover) ease,
+    transform var(--duration-hover) ease;
+}
+
+.plan-summary-fold > .settings-chevron {
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+}
+
+.plan-summary-archived-toggle[aria-expanded="true"] .settings-chevron {
+  transform: rotate(90deg);
+}
+
+.plan-summary-archived-toggle:is(:hover, :focus-visible)
+  .plan-summary-fold
+  > :not(.settings-chevron) {
+  opacity: 0;
+}
+
+.plan-summary-archived-toggle:is(:hover, :focus-visible) .plan-summary-fold > .settings-chevron {
+  opacity: 1;
+}
+
+.plan-summary-archived-toggle > .plan-summary-label {
+  flex: none;
+}
+
+.plan-summary-count {
+  flex: none;
+  margin-left: calc(var(--space-6) - var(--glyph-gap));
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-summary-archived-toggle:is(:hover, :focus-visible) .plan-summary-count {
+  opacity: 1;
+}
+
+.plan-summary-archived-agent {
+  --sidebar-plan-mark: 22px;
+  position: relative;
+}
+
+.plan-summary-archived-agent > .plan-summary-row {
+  padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
+  color: var(--text-secondary);
+}
+
+.plan-summary-archived-agent:hover > .plan-summary-row {
+  background: var(--raised);
+}
+
+.plan-summary-marks {
+  position: absolute;
+  top: 0;
+  right: var(--space-4);
+  display: flex;
+  height: var(--control-height);
+  align-items: center;
+  opacity: 0;
+}
+
+.plan-summary-archived-agent:is(:hover, :has(:focus-visible)) > .plan-summary-marks {
+  opacity: 1;
+}
+
+.plan-summary-archived-agent:is(:hover, :has(:focus-visible)) .failed-mark {
+  visibility: hidden;
+}
+
 /* Its width is the developer's, set inline. The document keeps room to be
    read beside it while the window allows, but never at the cost of the
    panel's own least width. The room full screen keeps beside the document is

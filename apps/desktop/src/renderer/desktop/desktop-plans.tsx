@@ -274,6 +274,7 @@ function PlanDocument({
               }}
               rename={archived ? undefined : rename}
               keys={plans.shown && !sideFocused}
+              shown={plans.shown}
               inbox={inbox.board.open.length}
             />
           }

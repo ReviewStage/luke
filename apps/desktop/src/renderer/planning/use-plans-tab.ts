@@ -508,6 +508,7 @@ export function usePlansTab(input: {
     agents.agentIds,
     agents.draft?.id,
     input.inboxWaiting.some((plan) => plan.planId === viewed.activePlanId),
+    agents.heldIds,
   );
   mainRef.current = mainTabs;
   const sidePanel = useSidePanel(

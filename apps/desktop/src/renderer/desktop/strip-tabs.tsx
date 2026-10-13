@@ -1,4 +1,4 @@
-import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentStatus, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { CloseIcon, CopyIcon, PencilIcon, PinIcon, PlusIcon, UnpinIcon } from "@sidecar/panel";
 import { ListXIcon, ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
@@ -23,7 +23,7 @@ import { MenuTab } from "./tab-strip";
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
  * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; and a transcript's two copies. Each strip ends in a "+" that
+ * beside it; a transcript's two copies; and an agent's Archive. Each strip ends in a "+" that
  * drops the shared searchable menu over what the strip may open. The
  * columns' own modules say which tabs and rows those are
  * (`main-tabs.tsx`, `side-panel.tsx`).
@@ -70,17 +70,20 @@ export interface TabDoors {
   onCopy?: ((copy: TranscriptCopy) => void) | undefined;
   /** Renames what the tab shows, for the plan's and an agent's. */
   onRename?: (() => void) | undefined;
+  /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
+  archive?: MenuAction | undefined;
 }
 
 /**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them: Close and Close others, the plan's tab offering only the second;
  * Pin tab or Unpin tab, which puts it in the sidebar or takes it out, and a
- * Rename beside it; and, for a transcript's tab, its two copies. Close
- * others stands dimmed where nothing else would close.
+ * Rename beside it; for a transcript's tab, its two copies; and last, for
+ * an agent's, its Archive, which takes the tab with it. Close others stands
+ * dimmed where nothing else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
-  const { onClose, onCopy, onRename } = doors;
+  const { onClose, onCopy, onRename, archive } = doors;
   const close: MenuAction[] =
     onClose === undefined
       ? []
@@ -130,6 +133,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
             },
           ],
         ]),
+    ...(archive === undefined ? [] : [[archive]]),
   ];
 }
 
@@ -182,6 +186,8 @@ export interface AddEntry {
   /** The mark at the row's end where the row says where its work stands, as the summary and the palette draw it: a failure's (`state-glyph.tsx`). */
   endMark?: React.JSX.Element | undefined;
   onPick: () => void;
+  /** The agent the row names, for a row of the plan's agents, whose menu archives it. */
+  agent?: CodingAgentSummary | undefined;
 }
 
 /**

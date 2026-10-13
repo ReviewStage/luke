@@ -29,6 +29,7 @@ import {
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -1834,6 +1835,84 @@ test("an agent whose turn failed keeps its harness's mark, wears an alert at its
   assert.match(cardParts()[2] ?? "", /^Stopped · /u);
 });
 
+/** The item of the menu standing over the window that says `label`. */
+function menuItem(label: string): HTMLButtonElement {
+  const item = [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return item;
+}
+
+test("an agent's tab menu archives an agent at rest at once, and asks first of one still working, whose answer archives it", async () => {
+  const archived: [string, boolean][] = [];
+  const container = mountAgentTabs({
+    onArchive: (agentId, archive) => {
+      archived.push([agentId, archive]);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  });
+  const rightClick = (label: string) =>
+    act(() => {
+      tabNamed(container, label).dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }),
+      );
+    });
+
+  rightClick("GPT 5.6 Sol");
+  act(() => menuItem("Archive agent").click());
+  await act(() => Promise.resolve());
+  assert.deepEqual(archived, [[UNTITLED_AGENT.id, true]]);
+  assert.equal(
+    document.querySelector('[role="alertdialog"]'),
+    null,
+    "an agent at rest asks nothing",
+  );
+
+  rightClick("Sign-out button in account menu");
+  act(() => menuItem("Archive agent").click());
+  const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  assert.ok(dialog, "a working agent asks first");
+  assert.equal(
+    dialog.querySelector("h2")?.textContent,
+    "Stop and archive Sign-out button in account menu?",
+  );
+  assert.equal(archived.length, 1, "nothing is archived while the question stands");
+  const stop = [...dialog.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "Stop and archive",
+  );
+  assert.ok(stop);
+  await act(async () => stop.click());
+  assert.deepEqual(archived, [
+    [UNTITLED_AGENT.id, true],
+    [TITLED_AGENT.id, true],
+  ]);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+});
+
+test("an agent drawn at rest is read again before it is archived unasked, and one that began a turn since is asked about first", async () => {
+  const archived: [string, boolean][] = [];
+  const container = mountAgentTabs({
+    readAgent: () => Promise.resolve({ ...UNTITLED_AGENT, status: CODING_AGENT_STATUS.RUNNING }),
+    onArchive: (agentId, archive) => {
+      archived.push([agentId, archive]);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  });
+  act(() => {
+    tabNamed(container, "GPT 5.6 Sol").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }),
+    );
+  });
+  act(() => menuItem("Archive agent").click());
+  await act(() => Promise.resolve());
+
+  const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  assert.ok(dialog, "the turn begun since is asked about");
+  assert.equal(dialog.querySelector("h2")?.textContent, "Stop and archive GPT 5.6 Sol?");
+  assert.deepEqual(archived, []);
+});
+
 test("a right-click on an agent's tab offers Rename where the pointer is, and Rename turns the tab into a field whose Return renames the agent and hands focus back", async () => {
   const renamed: [string, string][] = [];
   const container = mountAgentTabs({
@@ -3567,7 +3646,7 @@ function closable(page: HTMLElement, label: string): boolean {
   return page.querySelector(`.side-panel [aria-label="Close ${label}"]`) !== null;
 }
 
-test("a right-click on any of the panel's tabs offers Close and Close others, a fixed tab's and an agent's Pin tab, an agent's and a subagent's both copies of its transcript, and the menu keys open it under the focused tab", () => {
+test("a right-click on any of the panel's tabs offers Close and Close others, a fixed tab's and an agent's Pin tab, an agent's and a subagent's both copies of its transcript, an agent's Archive, and the menu keys open it under the focused tab", () => {
   const job = "Compare the two queue libraries.";
   const page = mountAgents(workerWork(job));
   act(() => tabNamed(page, "Work").click());
@@ -3589,6 +3668,7 @@ test("a right-click on any of the panel's tabs offers Close and Close others, a 
     pin,
     ["Rename", true],
     ...copies,
+    ["Archive agent", true],
   ]);
   closeMenu();
   assert.deepEqual(tabMenu(tabNamed(page, job)), [...everyTab, ...copies], "no pin of a subagent");

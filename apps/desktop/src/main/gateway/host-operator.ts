@@ -20,6 +20,7 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
+  type CodingAgentArchiveParams,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
@@ -250,6 +251,8 @@ export interface HostOperator {
   codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
+  codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
@@ -658,7 +661,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentList: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: params.planId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_LIST, {
+          planId: params.planId,
+          ...(params.includeArchived === undefined
+            ? undefined
+            : { includeArchived: params.includeArchived }),
+        }),
         codingAgentAnswer(codingAgentListAnswerViewSchema),
       ),
     codingAgentStart: (params) =>
@@ -714,6 +722,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStop: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentArchive: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
+          agentId: params.agentId,
+          archived: params.archived,
+        }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
     codingAgentPullRequest: (params) =>
