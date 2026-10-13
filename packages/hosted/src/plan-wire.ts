@@ -58,7 +58,7 @@ export const planAssumptionSchema = EffectSchema.Struct({
 /**
  * The default template's sections, in its order, by the names the fixed
  * template once kept them under: what its guidance and the prompts are keyed
- * by (`plan-template.ts`), and what a note an older agent takes names.
+ * by (`plan-template.ts`).
  */
 export const PLAN_FIELD = {
   CONTEXT: "context",

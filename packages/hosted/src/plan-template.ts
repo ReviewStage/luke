@@ -8,7 +8,7 @@ import {
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
-import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
+import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
 /**
  * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
@@ -23,8 +23,7 @@ import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./
  * about, and each is described once here: its heading, what it holds
  * (`PLAN_FIELD_PURPOSE`), and when it is good enough for a coding agent to
  * build from (`PLAN_FIELD_BAR`). The sections keep the keys the fixed
- * template once named its fields by (`PLAN_FIELD`), which is also what a note
- * an older agent takes names.
+ * template once named its fields by (`PLAN_FIELD`).
  *
  * Luke changes the text only by taking notes: a point added under a heading,
  * a phrase corrected, or a line struck. Each note lands in one place and
@@ -133,15 +132,6 @@ function contained(text: string): string {
   }
   if (fence !== undefined) lines.push(fence.marker);
   return lines.join("\n");
-}
-
-/** Text a heading carries on its one line. */
-/** One list item, its later lines indented under the marker so a multi-line entry stays one item. */
-function listItem(marker: string, text: string): string {
-  const [first, ...rest] = contained(text).split("\n");
-  const indent = " ".repeat(marker.length);
-  const continued = rest.map((line) => (line.length === 0 ? line : `${indent}${line}`));
-  return [`${marker}${first ?? ""}`, ...continued].join("\n");
 }
 
 /** The heading each section stands under in the default template, so a prompt names a section as the developer reads it. */
@@ -284,17 +274,8 @@ const removeNoteSchema = EffectSchema.Struct({
 
 const planNoteSchema = EffectSchema.Union([addNoteSchema, replaceNoteSchema, removeNoteSchema]);
 
-/**
- * A correction or a strike an agent started before heading notes aimed at
- * one field, taken within the section under that field's heading alone, as
- * the fixed template took it within the field.
- */
-type ScopedNote = Exclude<typeof planNoteSchema.Type, { readonly kind: typeof NOTE_KIND.ADD }> & {
-  readonly within: string;
-};
-
 /** One note: a point added under a heading, a phrase corrected, or a line struck. */
-export type PlanNote = typeof planNoteSchema.Type | ScopedNote;
+export type PlanNote = typeof planNoteSchema.Type;
 
 /** What the notetaker answers each run with: the notes the latest lines call for, in the order taken. */
 export const planNotesSchema = EffectSchema.Struct({
@@ -303,82 +284,6 @@ export const planNotesSchema = EffectSchema.Struct({
     "The notes the latest lines call for, in order; empty when nothing new was said.",
   ),
 });
-
-/**
- * A note as the fixed template's notetaker took it, naming the field it was
- * taken under: an addition went after what the field held, a list's item
- * without its marker where the field was a list, and a correction or a strike
- * named a phrase within the field. A coding agent started before notes named
- * headings still takes them so, and the journal keeps the ones it took, so
- * they are read still, as the note under that field's heading, a correction
- * or a strike kept within its section (`noteOf`).
- * TODO: delete, with `plan-agent-edits-migration.test.ts`, once migration
- * `20261013054758_plan_agent_edits_headings` is live (it rewrites every
- * journaled field note under its heading) and it is past 2026-10-14 00:00Z,
- * when no agent started before heading notes (#2275) can still be running.
- */
-const NOTE_FIELD = EffectSchema.Literals(Object.values(PLAN_FIELD));
-
-const fieldAddNoteSchema = EffectSchema.Struct({
-  kind: EffectSchema.Literal(NOTE_KIND.ADD),
-  field: NOTE_FIELD,
-  text: trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
-});
-
-const fieldReplaceNoteSchema = EffectSchema.Struct({
-  kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
-  field: NOTE_FIELD,
-  find: trimmedText(MAX_FIND_CHARS),
-  text: trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
-});
-
-const fieldRemoveNoteSchema = EffectSchema.Struct({
-  kind: EffectSchema.Literal(NOTE_KIND.REMOVE),
-  field: NOTE_FIELD,
-  find: trimmedText(MAX_FIND_CHARS),
-});
-
-/**
- * A note as it may be read: as the fixed template's notetaker took it, or
- * under a heading. Note that the field shapes are tried first, because a
- * correction naming a field also reads under the heading shape with the
- * field dropped, which would aim it at the whole text.
- */
-const readNoteSchema = EffectSchema.Union([
-  fieldAddNoteSchema,
-  fieldReplaceNoteSchema,
-  fieldRemoveNoteSchema,
-  addNoteSchema,
-  replaceNoteSchema,
-  removeNoteSchema,
-]);
-
-/** A note as it may be read, before it is taken as a note under a heading. */
-export type PlanReadNote = typeof readNoteSchema.Type;
-
-/** A note read in either shape as the note under a heading it stands for. */
-export function noteOf(note: PlanReadNote): PlanNote {
-  if (!("field" in note)) return note;
-  const heading = PLAN_FIELD_HEADING[note.field];
-  switch (note.kind) {
-    case NOTE_KIND.ADD: {
-      // A list's item is drawn as the fixed template drew it, its later lines indented under its marker.
-      const text = isTextField(note.field) ? note.text : listItem("- ", itemText(note.text));
-      return { kind: NOTE_KIND.ADD, section: heading, text };
-    }
-    case NOTE_KIND.REPLACE:
-      return { kind: NOTE_KIND.REPLACE, find: note.find, text: note.text, within: heading };
-    case NOTE_KIND.REMOVE:
-      return { kind: NOTE_KIND.REMOVE, find: note.find, within: heading };
-  }
-}
-
-/** Where a correction or a strike may look for its phrase: the whole text, or the one section an older agent aimed it at. */
-function searchedSpan(text: string, note: PlanNote): Span | undefined {
-  if (!("within" in note)) return { from: 0, to: text.length };
-  const section = planSections(text).find((each) => each.heading === note.within);
-  return section === undefined ? undefined : { from: section.from, to: section.to };
-}
 
 /** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
 const PLAN_AGENT_EDITS_KEPT = 50;
@@ -392,7 +297,7 @@ export const planAgentEditSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   /** Epoch milliseconds of the save. */
   at: EffectSchema.Number,
-  notes: EffectSchema.Array(readNoteSchema),
+  notes: EffectSchema.Array(planNoteSchema),
 });
 
 export type PlanAgentEdit = typeof planAgentEditSchema.Type;
@@ -411,25 +316,8 @@ const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
 /** A line of a template's section that opens anything but prose: a list item, a fence, a quote, a table row, or a heading. */
 const STARTER_CONTENT_LINE = /^\s*(?:(?:[-*+]|\d{1,9}[.)])(?:\s|$)|`{3,}|~{3,}|>|\||#)/u;
 
-/** The list markers a list item's text opens with, which the formatter draws itself. */
-const LEADING_LIST_MARKERS = /^(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
-
 /** A trailing line still being written that holds nothing but Markdown markers, whose escaping would change as it grows. */
 const MARKER_ONLY_LINE = /^[\s#>*+=`~<\-\d.)]+$/u;
-
-/**
- * A note's text as one item of a list. Note that we drop the list markers it
- * opens with, because the formatter draws each item's own marker and a second
- * would nest the item one bullet deeper.
- */
-function itemText(text: string): string {
-  return text.replace(LEADING_LIST_MARKERS, "").trim();
-}
-
-/** Whether a field of the fixed template held one Markdown answer, as against a list of items. */
-function isTextField(field: PlanField): boolean {
-  return field !== PLAN_FIELD.OPEN_QUESTIONS && field !== PLAN_FIELD.ASSUMPTIONS;
-}
 
 function escapedPattern(word: string): string {
   return word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -573,13 +461,7 @@ function applyNoteToText(
   started: string | undefined,
 ): string | undefined {
   if (note.kind === NOTE_KIND.ADD) return addedToText(text, note, started);
-  const searched = searchedSpan(text, note);
-  if (searched === undefined) return undefined;
-  const inside = located(text.slice(searched.from, searched.to), note.find);
-  const at =
-    inside === undefined
-      ? undefined
-      : { from: searched.from + inside.from, to: searched.from + inside.to };
+  const at = located(text, note.find);
   if (at === undefined || touchesHeading(text, at)) return undefined;
   if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
   // A correction inside a fence is code, written as given rather than contained as prose.
@@ -614,7 +496,7 @@ export function applyNotesToText(
   return { text: taken, missed };
 }
 
-const readNote = readEither(readNoteSchema, { excess: EXCESS_KEYS.DROP });
+const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
 
 /** Text still being written, cut back to its last line that cannot change how it is escaped. */
 function settledText(text: string): string {
@@ -631,7 +513,7 @@ function growingAddition(value: UnparsedWireValue): PlanNote | undefined {
   const text = settledText(value.text).trim();
   if (text.length === 0) return undefined;
   const read = readNote(unparsedWire({ ...value, text }));
-  return Result.isSuccess(read) ? noteOf(read.success) : undefined;
+  return Result.isSuccess(read) ? read.success : undefined;
 }
 
 /** An answer's notes as read, and how many of its notes did not read. */
@@ -642,15 +524,13 @@ export interface NotesRead {
 
 /**
  * The notes of an answer, each read on its own so a note that does not read
- * is passed over alone rather than costing the rest, and how many were; a
- * note in the fixed template's shape reads as the note under a heading it
- * stands for.
+ * is passed over alone rather than costing the rest, and how many were.
  */
 export function readNotes(answer: UnparsedWireValue): NotesRead {
   const values = isRecord(answer) && Array.isArray(answer.notes) ? answer.notes : [];
   const notes = values.flatMap((value: UnparsedWireValue) => {
     const read = readNote(value);
-    return Result.isSuccess(read) ? [noteOf(read.success)] : [];
+    return Result.isSuccess(read) ? [read.success] : [];
   });
   return { notes: notes.slice(0, MAX_NOTES), unread: values.length - notes.length };
 }
