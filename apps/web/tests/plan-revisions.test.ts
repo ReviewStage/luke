@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import {
   listRevisions,
   PLAN_REVISION,
@@ -29,7 +30,6 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,

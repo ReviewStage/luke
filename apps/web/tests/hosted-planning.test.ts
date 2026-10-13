@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   createPlan,
@@ -70,7 +71,6 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,

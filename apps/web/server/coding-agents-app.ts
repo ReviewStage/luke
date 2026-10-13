@@ -1,4 +1,16 @@
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
+import {
+  archiveCodingAgent,
+  awaitingLinesOf,
+  type CodingAgent,
+  type CodingAgentLatestTurn,
+  latestTurnsOf,
+  listCodingAgents,
+  RUNNING_TURN_STATUSES,
+  readCodingAgent,
+  renameCodingAgent,
+  updateCodingAgentChoice,
+} from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
@@ -79,18 +91,6 @@ import {
   titleMayLand,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
-import {
-  archiveCodingAgent,
-  awaitingLinesOf,
-  type CodingAgent,
-  type CodingAgentLatestTurn,
-  latestTurnsOf,
-  listCodingAgents,
-  RUNNING_TURN_STATUSES,
-  readCodingAgent,
-  renameCodingAgent,
-  updateCodingAgentChoice,
-} from "./hosted/coding-agent-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {

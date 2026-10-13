@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Option, Redacted } from "effect";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
 import {
   GITHUB_FIXTURE_BOT,

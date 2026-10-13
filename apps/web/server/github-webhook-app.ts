@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { listCodingAgentsOnBranches } from "@sidecar/database/models/coding-agent-store";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -11,7 +12,6 @@ import {
 import type { SqlClient } from "effect/unstable/sql";
 import type { GitHubApp } from "./github/github-app.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
-import { listCodingAgentsOnBranches } from "./hosted/coding-agent-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import {
   HOSTED_REFUSAL,

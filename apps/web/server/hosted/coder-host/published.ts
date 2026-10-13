@@ -1,3 +1,8 @@
+import {
+  type CodingAgent,
+  readCodingAgent,
+  recordCodingAgentPublished,
+} from "@sidecar/database/models/coding-agent-store";
 import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
@@ -13,11 +18,6 @@ import {
   type PullRequestReadFailure,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import {
-  type CodingAgent,
-  readCodingAgent,
-  recordCodingAgentPublished,
-} from "../coding-agent-store.js";
 import type { StoreFailure } from "../store-failure.js";
 import { CODER } from "./bounds.js";
 

@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  awaitingLinesOf,
+  type CodingAgent,
+  type CodingAgentBriefText,
+  createCodingAgent,
+  fillCodingAgentTitle,
+  latestTurnsOf,
+  readCodingAgent,
+  renameCodingAgent,
+  updateCodingAgentChoice,
+} from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
 import { createPlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
@@ -70,17 +81,6 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../server/hosted/coder-host/transcript";
-import {
-  awaitingLinesOf,
-  type CodingAgent,
-  type CodingAgentBriefText,
-  createCodingAgent,
-  fillCodingAgentTitle,
-  latestTurnsOf,
-  readCodingAgent,
-  renameCodingAgent,
-  updateCodingAgentChoice,
-} from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";

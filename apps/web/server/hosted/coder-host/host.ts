@@ -1,3 +1,11 @@
+import {
+  type CodingAgent,
+  readCodingAgentOfConversation,
+  readDelegation,
+  recordCodingAgentCompaction,
+  recordCodingAgentStep,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
 import { promptHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
@@ -21,14 +29,6 @@ import {
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
-import {
-  type CodingAgent,
-  readCodingAgentOfConversation,
-  readDelegation,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { logStoreFailure } from "../store-failure.js";

@@ -1,9 +1,9 @@
+import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { GitHubApp, type GitHubUserReadFailure, noreplyAddress } from "../../github/github-app.js";
-import type { CodingAgent } from "../coding-agent-store.js";
 import {
   type CheckoutIdentity,
   cloneRepository,

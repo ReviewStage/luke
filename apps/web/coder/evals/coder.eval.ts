@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
+import { type CodingAgent, createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -26,7 +27,6 @@ import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-ho
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
 import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
-import { type CodingAgent, createCodingAgent } from "../../server/hosted/coding-agent-store";
 import {
   readMessagesByConversationTyped,
   readTurnById,

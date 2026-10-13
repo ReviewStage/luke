@@ -1,7 +1,7 @@
+import type { TurnUsageRow } from "@sidecar/database/models/coding-agent-store";
 import type { StoredTurnUsage } from "@sidecar/database/schemas/storage";
 import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
 import type { BrainRunUsage } from "../../core.js";
-import type { TurnUsageRow } from "../coding-agent-store.js";
 import { type OfferedModel, tokensCostUsd } from "../model-catalog.js";
 
 /**

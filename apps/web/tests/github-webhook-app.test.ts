@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  listPublishedCodingAgents,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import {
@@ -13,12 +19,6 @@ import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { githubWebhookApp } from "../server/github-webhook-app";
-import {
-  type CodingAgent,
-  createCodingAgent,
-  listPublishedCodingAgents,
-  updateCodingAgentBranch,
-} from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {

@@ -1,9 +1,9 @@
+import type { CodingAgentContextRow } from "@sidecar/database/models/coding-agent-store";
 import {
   CONTEXT_WINDOW,
   type CodingAgentContext,
   type ContextWindow,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { CodingAgentContextRow } from "../coding-agent-store.js";
 import type { OfferedModel } from "../model-catalog.js";
 import { CODER } from "./bounds.js";
 
