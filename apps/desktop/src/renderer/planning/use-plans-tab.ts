@@ -8,6 +8,7 @@ import {
   type PlanningEditAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
+import type { Workspace } from "@sidecar/hosted/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -17,6 +18,7 @@ import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
+import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import {
   DIALOG_TONE,
   type DialogConfirm,
@@ -183,10 +185,26 @@ export interface PlansControl {
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
-  /** The plans the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
+  /** Every plan of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, the inbox, and the history find a plan in. */
   plans: PlanningView["plans"];
-  /** The archived plans, newest archived first, which the sidebar keeps under Archived. */
+  /** Every archived plan of every workspace, newest archived first. */
   archived: PlanningView["plans"];
+  /** The chosen workspace's share of `plans` and `archived`, which alone the sidebar lists; every plan while no workspace is chosen. */
+  listed: { plans: PlanningView["plans"]; archived: PlanningView["plans"] };
+  /** The workspaces the account is a member of, its personal one first; none before the first read lands. */
+  workspaces: readonly Workspace[];
+  /** The workspace the sidebar lists and New plan starts in; absent while none is listed, when every plan is listed. */
+  workspace: Workspace | undefined;
+  /** Lists another of the account's workspaces, and starts the next new plan in it. */
+  onChooseWorkspace: (workspaceId: string) => void;
+  /** Lists the personal workspace again, once the one listed is left. */
+  onLeftWorkspace: () => void;
+  /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
+  onCreateWorkspace: (name: string) => Promise<string | undefined>;
+  /** Opens the service's invite page for the listed workspace in the browser, or says in a toast why not. */
+  onInviteToWorkspace: () => void;
+  /** Opens GitHub to connect an organization to the listed workspace, or says in a toast why not. */
+  onConnectGitHub: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -536,7 +554,17 @@ export function usePlansTab(input: {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
   const planning = markedView(renamedView(renamedView(viewed, renames), drafts), marks);
+  // The sidebar lists the chosen workspace's plans alone, and everything
+  // else that finds a plan, the palette, the inbox, and the history, finds
+  // it among them all; with no workspace listed yet, every plan is listed.
+  const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
+  const listedWorkspace = workspace.chosen;
   const sidebar = sidebarPlans(planning.plans);
+  const listedSidebar = sidebarPlans(
+    listedWorkspace === undefined
+      ? planning.plans
+      : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
+  );
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
   const region = documentRegion(planning);
@@ -717,18 +745,33 @@ export function usePlansTab(input: {
   }
   // An answer clears the ask it answers, never one made since.
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
+  // A plan opened from another workspace, from the palette, the inbox, or
+  // the history, lists its workspace, so the sidebar holds the plan open.
+  const chooseWorkspace = workspace.choose;
+  const listedId = listedWorkspace?.id;
+  const plansNow = planning.plans;
+  const workspacesNow = viewed.workspaces;
   // Opening a plan, or leaving one, is leaving the window's Inbox for it.
   const select = useCallback(
     (planId: string) => {
       setInboxView(undefined);
+      const planWorkspace = plansNow.find((plan) => plan.id === planId)?.workspaceId;
+      const target = workspacesNow.find((each) => each.id === planWorkspace);
       const ask = { planId, over: openPlanId };
       const withdraw = () => setAsked((held) => (held === ask ? undefined : held));
       if (fixture === undefined) setAsked(ask);
+      // Note that the workspace moves only once the plan opened, because a
+      // plan that would not open must not leave the sidebar on another
+      // workspace, this launch or the next.
       act(ACT_KIND.PLANNING_SELECT, { planId }).then((opened) => {
-        if (!opened) withdraw();
+        if (!opened) {
+          withdraw();
+          return;
+        }
+        if (target !== undefined && target.id !== listedId) chooseWorkspace(target.id);
       }, withdraw);
     },
-    [act, fixture, openPlanId],
+    [act, fixture, openPlanId, plansNow, listedId, workspacesNow, chooseWorkspace],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
@@ -993,14 +1036,47 @@ export function usePlansTab(input: {
     ...input.unseenAgents.map((agent) => ({ agent })),
   ];
 
-  // A fixture's repositories are read from nowhere, as its plans are.
+  // A fixture's repositories are read from nowhere, as its plans are. The
+  // chip lists the repositories of the workspace its plan is in: the open
+  // plan's, else the one New plan starts in.
+  const repositoriesOf =
+    region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : listedWorkspace?.id;
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
     fixture !== undefined
       ? Promise.resolve(fixtureRepositories())
-      : act(ACT_KIND.PLANNING_REPOSITORIES, {}).catch(() => ({
+      : act(
+          ACT_KIND.PLANNING_REPOSITORIES,
+          repositoriesOf === undefined ? {} : { workspaceId: repositoriesOf },
+        ).catch(() => ({
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A fixture's workspaces are made, shared, and connected nowhere. A
+  // workspace made is listed at once, main's view holding it after; the
+  // invite and the connect open the browser, and a refusal of either says
+  // why in a toast, since the menu that asked has closed.
+  const createWorkspace = (name: string): Promise<string | undefined> => {
+    if (fixture !== undefined) return Promise.resolve(undefined);
+    return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
+      (created) => {
+        workspace.choose(created.id);
+        return undefined;
+      },
+      (refused: Error) => refused.message,
+    );
+  };
+  const refusedInToast = (refused: Error) =>
+    toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+  const inviteToWorkspace = () => {
+    if (fixture !== undefined || listedWorkspace === undefined) return;
+    act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: listedWorkspace.id }).catch(refusedInToast);
+  };
+  const connectGitHub = () => {
+    if (fixture !== undefined || listedWorkspace === undefined) return;
+    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: listedWorkspace.id }).catch(
+      refusedInToast,
+    );
+  };
 
   // A fixture's plans are given no repository, as they are read from nowhere.
   const setRepository = (
@@ -1060,12 +1136,15 @@ export function usePlansTab(input: {
   });
 
   // A started plan becomes the host's open one, which turns the page to it.
+  // It starts in the chosen workspace; with none listed the service starts
+  // it in the account's personal one.
   // A start opens its plan's call at once, except over a call standing about
   // another plan, which main leaves for this question to end or keep.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       name,
       ...(repository === null ? undefined : { repository }),
+      ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
     }).then(
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
@@ -1261,6 +1340,20 @@ export function usePlansTab(input: {
     signedIn,
     plans: [...sidebar.pinned, ...sidebar.rest],
     archived: sidebar.archived,
+    listed: {
+      plans: [...listedSidebar.pinned, ...listedSidebar.rest],
+      archived: listedSidebar.archived,
+    },
+    workspaces: viewed.workspaces,
+    workspace: listedWorkspace,
+    onChooseWorkspace: workspace.choose,
+    onCreateWorkspace: createWorkspace,
+    onInviteToWorkspace: inviteToWorkspace,
+    onConnectGitHub: connectGitHub,
+    onLeftWorkspace: () => {
+      const personal = viewed.workspaces.find((each) => each.personal);
+      if (personal !== undefined) workspace.choose(personal.id);
+    },
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
@@ -1387,10 +1480,17 @@ export function usePlansTab(input: {
     chosenPin: chosen !== undefined && chosen.pin.plan === boundFor ? chosen.pin : undefined,
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
     repositories: {
-      recent: recentRepositories(planning.plans),
+      // The recent repositories are the chip's workspace's own, so a new
+      // plan never starts on another workspace's repository.
+      recent: recentRepositories(
+        repositoriesOf === undefined
+          ? planning.plans
+          : planning.plans.filter((plan) => plan.workspaceId === repositoriesOf),
+      ),
       read: readRepositories,
       openGitHub,
       pictures: fixture === undefined,
+      scope: repositoriesOf,
     },
     repositoryMenu,
     onChangeRepository: changeRepository,

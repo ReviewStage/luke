@@ -7,6 +7,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
 import { NewPlanForm } from "./new-plan-form";
+import type { RepositoryChooser } from "./repository-chip";
 
 /**
  * The new-plan page as the developer meets it: a name drawn as the plan's
@@ -51,18 +52,29 @@ async function settle(): Promise<void> {
   });
 }
 
+/** What a page stands over besides the start's answer: a repository picked for it, and the chooser's workspace and recent repositories. */
+interface Staging {
+  readonly preset?: { readonly repository: string };
+  readonly chooser?: Partial<RepositoryChooser>;
+}
+
 /** The page over a start answered by `answer`, each start's name and repository written down. */
-async function mount(answer: string | undefined = undefined) {
+async function mount(answer: string | undefined = undefined, staging: Staging = {}) {
   const starts: [string, string | null][] = [];
   const control = plansControl();
   const newPlan = {
     ...control.newPlan,
+    ...(staging.preset === undefined ? {} : { preset: staging.preset }),
     start: (name: string, repository: string | null) => {
       starts.push([name, repository]);
       return Promise.resolve(answer);
     },
   };
-  const repositories = { ...control.repositories, recent: ["acme/web"] };
+  let repositories: RepositoryChooser = {
+    ...control.repositories,
+    recent: ["acme/web"],
+    ...staging.chooser,
+  };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -88,6 +100,12 @@ async function mount(answer: string | undefined = undefined) {
       await settle();
     },
     create,
+    /** Stands the page again over another chooser, as a workspace switch or the first workspaces read hands it. */
+    rechoose: async (next: Partial<RepositoryChooser>) => {
+      repositories = { ...repositories, ...next };
+      render(0);
+      await settle();
+    },
     type: (words: string) => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
       act(() => {
@@ -152,4 +170,30 @@ test("Create plan pressed creates the plan, and a refusal keeps the name and say
   assert.equal(page.note(), "Luke can't reach acme/web.");
   assert.equal(page.field.value, "Dark mode toggle");
   assert.equal(page.create.disabled, false, "the press can be made again");
+});
+
+test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
+  const page = await mount(undefined, {
+    preset: { repository: "alice/private" },
+    chooser: { scope: "workspace-personal", recent: ["alice/notes"] },
+  });
+  page.type("Dark mode");
+
+  await page.rechoose({ scope: "workspace-acme", recent: ["acme/relay"] });
+  await page.pressReturn();
+
+  assert.deepEqual(page.starts, [["Dark mode", "acme/relay"]]);
+});
+
+test("the workspace first resolving keeps a repository picked before the workspaces were read", async () => {
+  const page = await mount(undefined, {
+    preset: { repository: "alice/private" },
+    chooser: { scope: undefined, recent: ["alice/notes"] },
+  });
+  page.type("Dark mode");
+
+  await page.rechoose({ scope: "workspace-personal" });
+  await page.pressReturn();
+
+  assert.deepEqual(page.starts, [["Dark mode", "alice/private"]]);
 });

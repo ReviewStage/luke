@@ -34,7 +34,7 @@ export const WORKSPACE_ROLE = {
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
 
-const WORKSPACE_BOUNDS = {
+export const WORKSPACE_BOUNDS = {
   /** The most characters a workspace's name may spell, after its ends are trimmed. */
   MAX_NAME_CHARS: 64,
 } as const;

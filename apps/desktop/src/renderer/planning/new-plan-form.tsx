@@ -134,6 +134,7 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
       <div className="new-plan-property">
         <span className="new-plan-property-label">Repository</span>
         <RepositoryChip
+          key={props.chooser.scope}
           place={CHIP_PLACE.COMPOSER}
           value={props.repository}
           chooser={props.chooser}
@@ -199,6 +200,14 @@ export function NewPlanForm({
     if (newPlan.preset !== undefined) setChosen(newPlan.preset.repository);
   }
   const [template, setTemplate] = useState("");
+  // A repository picked in one workspace is none of another's, so a switch
+  // lets the pick go, in the render that brings it, as a preset is taken;
+  // the scope first resolving keeps a pick made before the workspaces read.
+  const [scope, setScope] = useState(repositories.scope);
+  if (repositories.scope !== scope) {
+    if (scope !== undefined) setChosen(undefined);
+    setScope(repositories.scope);
+  }
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const repository = chosen ?? repositories.recent[0] ?? null;

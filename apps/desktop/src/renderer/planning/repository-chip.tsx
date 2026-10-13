@@ -44,6 +44,8 @@ export interface RepositoryChooser {
   openGitHub: (url: string) => void;
   /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
   pictures: boolean;
+  /** The workspace the list is for, where one is chosen; a chip keyed by it reads afresh when it changes. */
+  scope?: string | undefined;
 }
 
 /** Where the chip stands, which is how it is sized. */
