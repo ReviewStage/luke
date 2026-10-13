@@ -1144,6 +1144,7 @@ body,
 .icon-button,
 .primary-button,
 .danger-button,
+.settings-segment,
 .desktop-toolbar-actions,
 .sidebar-new-plan,
 .sidebar-search,
@@ -2457,6 +2458,19 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+/* The board's two sections, Waiting and Settled, each under the sidebar's
+   own group header (`sidebar-group-header.tsx`), a section's gap apart. */
+.inbox-section + .inbox-section {
+  margin-top: var(--section-gap);
+}
+
+/* A card's head is a summary row inside the card's edge, its hover wash
+   inset from the card's corners as a row's is from the column's. */
+.inbox-card-head {
+  width: calc(100% - 2 * var(--space-4));
+  margin: var(--space-4) var(--space-4) 0;
 }
 
 .inbox-view-items {
