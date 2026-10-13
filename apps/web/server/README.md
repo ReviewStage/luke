@@ -905,18 +905,24 @@ classic app OAuth instead, so its tokens are refused by the server
 Slack's `identity.*` scopes with the rest, which Slack refuses to grant in
 one authorization ("Invalid permissions requested"). Slack's connector is
 therefore a plain OAuth connector against the MCP server's own
-authorization server, credentialed by a Slack app of the team's workspace
-that is internal (never publicly distributed, since the server serves
-Marketplace and internal apps alone). The app needs Connect's callback
-(`https://connect.vercel.com/callback`, or the `redirectUri` the create
-prints) among its Redirect URLs, the user token scopes below and no
-`identity.*` scope, and its Model Context Protocol switch on (Agents & AI
-Apps, `https://api.slack.com/apps/<appId>/app-assistant`): without it the
-server answers every request 400, which eve reports as an SSE transport
-error once its fallback fails too, and a token issued before the switch
-went on keeps that 400, so a developer connects again. Write its App Credentials into `slack-mcp.json`, by
-hand rather than through a shell command, so the secret stays out of shell
-history:
+authorization server, credentialed by a Slack app of the team's workspace:
+
+1. The app is internal, never publicly distributed, since the server serves
+   Marketplace and internal apps alone.
+2. Its Redirect URLs (OAuth & Permissions) include Connect's callback,
+   `https://connect.vercel.com/callback`, or the `redirectUri` the create
+   below prints where it prints one.
+3. Its User Token Scopes are the ones below, and none is an `identity.*`
+   scope.
+4. Its Model Context Protocol switch is on (Agents & AI Apps,
+   `https://api.slack.com/apps/<appId>/app-assistant`). Without it the
+   server answers every request 400 ("App is not enabled for Slack MCP
+   server access", which Settings shows on Slack's row), and a token issued
+   before the switch went on keeps that 400, so whoever connected before
+   connects again.
+5. Its App Credentials go into `slack-mcp.json`, written by hand rather than
+   through a shell command so the secret stays out of shell history, and
+   the connector is created from it:
 
 ```json
 {
