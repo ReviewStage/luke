@@ -114,11 +114,11 @@ const CheckRunsSchema = Schema.Struct({
 const FILES_PER_PAGE = 100;
 
 /** GitHub's own words for what became of a file; any it adds reads as changed in place. */
-const GITHUB_FILE_STATUS: Readonly<Record<string, ChangedFileStatus>> = {
-  added: CHANGED_FILE_STATUS.ADDED,
-  removed: CHANGED_FILE_STATUS.DELETED,
-  renamed: CHANGED_FILE_STATUS.RENAMED,
-};
+const GITHUB_FILE_STATUS = new Map<string, ChangedFileStatus>([
+  ["added", CHANGED_FILE_STATUS.ADDED],
+  ["removed", CHANGED_FILE_STATUS.DELETED],
+  ["renamed", CHANGED_FILE_STATUS.RENAMED],
+]);
 
 const PullRequestFilesSchema = Schema.Array(
   Schema.Struct({
@@ -326,7 +326,7 @@ export function checkSummaryOf(
  * so it carries an empty one rather than reading as binary.
  */
 function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): CodingAgentChangedFile {
-  const status = GITHUB_FILE_STATUS[file.status] ?? CHANGED_FILE_STATUS.MODIFIED;
+  const status = GITHUB_FILE_STATUS.get(file.status) ?? CHANGED_FILE_STATUS.MODIFIED;
   const movedOnly = status === CHANGED_FILE_STATUS.RENAMED && file.changes === 0;
   const patch = file.patch ?? (movedOnly ? "" : null);
   const omitted =

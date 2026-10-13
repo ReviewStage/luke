@@ -19,7 +19,7 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { InboxIcon } from "lucide-react";
+import { FileDiffIcon, InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -27,6 +27,7 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
+import { AgentChangesTab, changesTabLabel } from "../planning/agent-changes-tab";
 import { AgentGlyph, AgentMark, AgentSubagentTab, SubagentMark } from "../planning/agent-tab";
 import {
   AgentTabCard,
@@ -46,8 +47,10 @@ import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
 import {
+  type ChangesStripTab,
   inPlanOrder,
   isAgentTab,
+  isChangesTab,
   isFileTab,
   isSubagentTab,
   type StripTab,
@@ -67,6 +70,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import {
   type DrawnTabs,
+  drawsChanges,
   drawsSubagent,
   type FileHistoryStep,
   type FixedSidePanelTab,
@@ -336,7 +340,7 @@ interface DrawnTab {
 
 /**
  * The tabs the strip draws, in their kinds' order: the open fixed tabs, the
- * subagents, and the files. A delegated worker's transcript is read whole
+ * subagents, the files, and the agents' changes. A delegated worker's transcript is read whole
  * from the service for a copy, since its tab holds it only while shown; a
  * planning worker's is the session the plan's work already holds. A
  * subagent's tab hangs a card on hover, previewing its latest step from
@@ -349,10 +353,11 @@ function stripTabs(input: {
   agents: CodingAgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
+  changes: readonly ChangesStripTab[];
   held: HeldTranscripts;
   copied: TranscriptCopier;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, held, copied } = input;
+  const { panel, unread, agents, subagents, files, changes, held, copied } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -443,7 +448,15 @@ function stripTabs(input: {
     ),
     close: () => panel.onClose({ file: path }),
   }));
-  return [...fixed, ...subagentTabs, ...fileTabs];
+  const changesTabs = changes.map((tab) => {
+    const agent = agents.agents?.find((each) => each.id === tab.changes);
+    return {
+      tab,
+      look: look(tab, { icon: <FileDiffIcon />, label: changesTabLabel(agent, models) }),
+      close: () => panel.onClose(tab),
+    };
+  });
+  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs];
 }
 
 /**
@@ -475,6 +488,7 @@ function PanelTabs({
   subagents,
   workers,
   files,
+  changes,
   shownFiles,
   held,
 }: {
@@ -491,13 +505,15 @@ function PanelTabs({
   workers: readonly WorkWorkerBlock[];
   /** The open file tabs of files shown on the plan, in the strip's order. */
   files: readonly OpenFile[];
+  /** The open Changes tabs of agents whose tabs stand open, in the order opened. */
+  changes: readonly ChangesStripTab[];
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly ShownFile[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  const kinds = stripTabs({ panel, unread, agents, subagents, files, held, copied });
+  const kinds = stripTabs({ panel, unread, agents, subagents, files, changes, held, copied });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
@@ -753,6 +769,11 @@ function TabContent({
   onRevealed: () => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isChangesTab(tab)) {
+    return (
+      <AgentChangesTab key={tab.changes} agentId={tab.changes} control={agents} shown={shown} />
+    );
+  }
   if (isFileTab(tab)) {
     const file = files.find((each) => each.path === tab.file);
     // The tab stands for a file no longer open only until the panel moves
@@ -1119,6 +1140,8 @@ export function SidePanel({
   const files = panel.files.filter(
     (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
   );
+  // An agent's Changes tab stands while the agent's own tab does.
+  const changes = panel.changes.filter((each) => drawsChanges(each, { agents: openAgents }));
   const label =
     tab === undefined
       ? undefined
@@ -1126,7 +1149,12 @@ export function SidePanel({
         ? subagents.find((each) => sameTab(each.tab, tab))?.label
         : isFileTab(tab)
           ? tab.file
-          : SIDE_PANEL_TAB_KIND[tab].label;
+          : isChangesTab(tab)
+            ? changesTabLabel(
+                agents.agents?.find((each) => each.id === tab.changes),
+                agents.models,
+              )
+            : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1176,6 +1204,7 @@ export function SidePanel({
             subagents={subagents}
             workers={workers}
             files={files}
+            changes={changes}
             shownFiles={offered}
             held={drawnTranscripts}
           />

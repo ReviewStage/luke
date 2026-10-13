@@ -451,8 +451,6 @@ export const PATCH_OMITTED = {
   TOO_LARGE: "too-large",
 } as const;
 
-export type PatchOmitted = (typeof PATCH_OMITTED)[keyof typeof PATCH_OMITTED];
-
 export const CHANGES_BOUNDS = {
   /** The most files one read of a pull request's changes carries; a pull request with more is cut short, and says so. */
   MAX_FILES: 300,

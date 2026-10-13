@@ -668,6 +668,140 @@ button.code-card-path:hover {
   background: var(--desktop-well);
 }
 
+/* An agent's Changes tab (changes-view.tsx): a File tab's bar and its
+   tree to the right, the chosen file's unified diff in the file's place. */
+.changes-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.changes-count {
+  color: var(--text-primary);
+}
+
+.changes-truncated,
+.changes-notice {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.changes-truncated {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.changes-failed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.changes-diff {
+  min-width: 0;
+}
+
+.changes-diff-head {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--code-text);
+  font-size: 12px;
+}
+
+.changes-diff-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  direction: rtl;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What became of the file, as an editor's source control letters it. */
+.changes-status {
+  flex: 0 0 auto;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 600;
+}
+
+.changes-status[data-status="added"] {
+  color: var(--state-complete);
+}
+
+.changes-status[data-status="deleted"] {
+  color: var(--danger-text);
+}
+
+.changes-status[data-status="modified"],
+.changes-status[data-status="renamed"] {
+  color: var(--text-secondary);
+}
+
+/* The diff's rows: the old side's number, the new side's, then the line,
+   added rows on a green ground and removed rows on a red one. */
+.diff-lines {
+  padding: 0 0 var(--space-6);
+  color: var(--code-text);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.diff-line,
+.diff-hunk-header {
+  display: flex;
+}
+
+.diff-hunk-header {
+  margin-top: var(--space-6);
+  background: var(--code-pointed);
+  color: var(--code-line-number);
+}
+
+.diff-line[data-kind="added"] {
+  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
+}
+
+.diff-line[data-kind="removed"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.diff-line[data-kind="note"] .diff-line-text {
+  color: var(--code-line-number);
+  font-style: italic;
+}
+
+.diff-line-number {
+  flex: 0 0 auto;
+  width: 40px;
+  padding: 0 var(--space-6) 0 0;
+  color: var(--code-line-number);
+  text-align: right;
+  user-select: none;
+}
+
+.diff-line-text {
+  min-width: 0;
+  padding: 0 var(--content-inset) 0 var(--space-6);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* The tree's search field and its filter, in one row over the tree: the
    app's search well, a step shorter to sit in the panel's heading row. */
 .file-tree-search {

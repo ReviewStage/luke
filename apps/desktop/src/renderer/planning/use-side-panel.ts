@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fileName } from "./code-pane-model";
 import {
   type AgentStripTab,
+  type ChangesStripTab,
   type FileStripTab,
   inPlanOrder,
   isAgentTab,
+  isChangesTab,
   isFileTab,
   isSubagentTab,
   movedOrder,
@@ -48,7 +50,9 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent's tab, is held to the open plan's work, or to the plan's open
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
- * nowhere, so a launch opens none. A file's tab, opened from a snippet in
+ * nowhere, so a launch opens none. An agent's Changes tab, opened from the
+ * Changes chip at its tab's foot, is held to its agent's tab on the same
+ * terms, one per agent, and is pinned nowhere. A file's tab, opened from a snippet in
  * the Code tab or from the "+", is the one kind that stands many times, one
  * per file: it is held to the files Luke showed on the open plan the same
  * way, closes, and is kept nowhere. Opening a file
@@ -143,8 +147,8 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, or one file's. */
-export type SidePanelTab = FixedSidePanelTab | SubagentStripTab | FileStripTab;
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, or one agent's changes. */
+export type SidePanelTab = FixedSidePanelTab | SubagentStripTab | FileStripTab | ChangesStripTab;
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -344,6 +348,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly SubagentStripTab[];
   readonly files: readonly OpenFile[];
+  /** The open Changes tabs, by agent, in the order opened. */
+  readonly changes: readonly ChangesStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -396,6 +402,8 @@ export interface SidePanelControl {
   subagents: readonly SubagentStripTab[];
   /** The open file tabs, in the strip's order; they follow the subagent tabs, and only those of files shown on the open plan are drawn. */
   files: readonly OpenFile[];
+  /** The open Changes tabs in the order opened; they follow the file tabs, and only those whose agent's tab stands open are drawn. */
+  changes: readonly ChangesStripTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
@@ -630,13 +638,18 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isFileTab(tab) && !held.files.some((each) => each.path === tab.file)
       ? [...held.files, { path: tab.file, range: undefined, opened: 0 }]
       : held.files;
+  const changes =
+    isChangesTab(tab) && !held.changes.some((each) => sameTab(each, tab))
+      ? [...held.changes, tab]
+      : held.changes;
   const chosen = open ?? tab;
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
+    changes === held.changes &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, tab: chosen };
+    : { ...opened, subagents, files, changes, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -770,6 +783,15 @@ export function drawsSubagent(
   return drawn.agents === undefined || drawn.agents.includes(tab.delegation.agent);
 }
 
+/**
+ * Whether the plan draws the agent's Changes tab: while the agent has its
+ * tab open in the plan's column, or until the agents are read, as a
+ * delegated worker's tab stands.
+ */
+export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "agents">): boolean {
+  return drawn.agents === undefined || drawn.agents.includes(tab.changes);
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -790,6 +812,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnFixed(held, drawn.plan),
     ...drawnSubagents(held, drawn),
     ...drawnFiles(held, drawn).map((file) => ({ file })),
+    ...held.changes.filter((each) => drawsChanges(each, drawn)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -843,7 +866,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
       ? held.subagents.some((each) => sameTab(each, tab))
         ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
         : undefined
-      : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+      : isChangesTab(tab)
+        ? { ...held, changes: held.changes.filter((each) => !sameTab(each, tab)) }
+        : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -1009,6 +1034,7 @@ function settled(state: SidePanelState): HeldState {
     width: clampWidth(state.width),
     subagents: [],
     files: [],
+    changes: [],
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1097,6 +1123,7 @@ function shownTab(
   if (kept === undefined) return tabs[0];
   if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
   if (isFileTab(kept)) return files.includes(kept.file) ? kept : tabs[0];
+  if (isChangesTab(kept)) return drawsChanges(kept, { agents }) ? kept : tabs[0];
   return drawsSubagent(kept, { agents, subagents }) ? kept : tabs[0];
 }
 
@@ -1353,6 +1380,7 @@ export function useSidePanel(
     used,
     pins: state.pins,
     subagents: state.subagents,
+    changes: state.changes,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,
