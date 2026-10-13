@@ -1,13 +1,14 @@
 ---
 name: orchestrate
-description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator. Kicks each PR off in its own Conductor workspace on the user's chosen model and effort, uses GitHub stacked PRs where PRs depend on one another, has each workspace babysit its own PR and merge it on green or on the user's go, monitors the workspaces through messages rather than polling, and archives each workspace once its PR is merged. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces instead of doing the work here.
+description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator. Splits the plan into small PRs, gives each linear chain to one Conductor workspace as a GitHub stack on the user's chosen model and effort, runs independent chains in parallel, has each workspace babysit its PRs and merge them on green or on the user's go, monitors the workspaces through messages rather than polling, and archives each workspace once its PRs are merged. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces instead of doing the work here.
 ---
 
 # Orchestrate
 
 You do no implementation work in this workspace. You are the orchestrator: the
-plan or Linear issue already names the PRs and which depend on which; you kick
-each one off in a new Conductor workspace and manage the rollout to merge.
+plan or Linear issue describes the work; you split it into PRs, kick each
+stack of them off in a new Conductor workspace, and manage the rollout to
+merge.
 
 Arguments: `$ARGUMENTS` is the plan (a file path, a Linear issue key such as
 `LUKE-159`, or inline text), optionally followed by the model and effort the
@@ -17,9 +18,13 @@ file with `cat`. If the user did not name a model and effort, ask once with
 agent rather than guessing. In the same question, ask whether workers merge
 their PRs on green or hold for an explicit go; never assume either.
 
-Read the dependency order off the plan: independent PRs run in parallel from
-`main`; dependent PRs form a GitHub stack, each branched from the PR below it
-and linked with `gh stack link`.
+Split the plan into small PRs and draw the dependency graph. Every linear
+chain in it becomes one GitHub stack owned by one worker, which builds,
+opens, restacks, and babysits every PR in it. Independent PRs and chains each
+get their own worker, in parallel from `main`. Where chains branch off a
+shared PR (a tree), each branch-off chain gets its own worker based on that
+PR's branch, so siblings run in parallel. Prefer small PRs and deep stacks
+over a few large PRs.
 
 ## Step 1: Kick off each workspace
 
@@ -29,18 +34,18 @@ Record your own session id first; workers report back to it:
 echo "$CONDUCTOR_SESSION_ID"
 ```
 
-Create one workspace per PR, but only for PRs whose dependencies are met.
-Kick off every independent PR now with `--branch main`. Do not kick off a PR
-that depends on another until the PR below it has been opened and its branch
-is pushed; a workspace started earlier would branch from `main` and have
-nothing to build on. When the lower worker reports its PR is open, create the
-dependent workspace with that PR's branch as `--branch`. `workspace create`
-defaults to this workspace's project.
+Create one workspace per stack (an independent PR is a stack of one), but
+only for stacks whose base exists. Kick off every stack that starts from
+`main` now with `--branch main`. Do not kick off a branch-off chain until the
+shared PR's owner reports that PR open and its branch pushed; a workspace
+started earlier would branch from `main` and have nothing to build on. Then
+create the branch-off workspace with that PR's branch as `--branch`.
+`workspace create` defaults to this workspace's project.
 
 ```sh
 conductor workspace create \
   --branch <base-branch> \
-  --name "<PR title>" \
+  --name "<stack title>" \
   --agent claude \
   --model <model> \
   --effort <effort> \
@@ -52,23 +57,28 @@ BRIEF
 
 Every brief must contain:
 
-1. **The task**: the PR's scope, acceptance criteria, and the plan or issue
-   text it comes from. Say plainly what is out of scope.
-2. **Stacking**: the base branch and the full chain of branches below it,
-   bottom to top, and the instruction to open the PR with
-   `gh pr create --base <base-branch>` and then run
-   `gh stack link <bottom-branch> ... <base-branch> <this-branch>` with the
-   whole chain so GitHub records one stack however deep it goes. For an
-   independent PR, the base is `main` and no link is needed. A stacked worker
-   does not rebase its own branch when a lower PR changes; the orchestrator
-   restacks the chain in one pass (Step 2) and tells it its new head.
-3. **Babysit and merge**: watch CI and review comments, fix what fails, and
-   either merge on green or hold for an explicit go from the orchestrator, as
-   the user chose at kickoff; say which. A stacked PR merges only after the PR
-   below it has merged and this PR has been retargeted to `main`
-   (`gh pr edit --base main`) and rebased.
-4. **Report back, do not wait to be asked**: on each milestone (PR opened,
-   CI green, blocked, merged) send a message to the orchestrator:
+1. **The task**: every PR in the stack, bottom to top, each with its scope,
+   acceptance criteria, and the plan or issue text it comes from. Say plainly
+   what is out of scope.
+2. **Stacking**: the base branch, and the instruction to build the stack
+   bottom-up with `gh stack init --base <base-branch> <first-branch>` and
+   `gh stack add <next-branch>` for each PR above it, then open every PR with
+   `gh stack submit --auto --open` (without `--open`, `--auto` opens drafts).
+   After any change or merge below a PR, the owner restacks the whole stack
+   in one pass: `gh stack sync` (fetch, cascading rebase, atomic push, and
+   relink) when nothing conflicts; on a conflict, `gh stack rebase` with
+   `--continue` or `--abort`, then `gh stack push`, which pushes each branch
+   with `--force-with-lease`. Without the extension, the fallback is
+   `git rebase --update-refs` from the top branch and a `--force-with-lease`
+   push of every branch.
+3. **Babysit and merge**: watch CI and review comments on every PR in the
+   stack, fix what fails, and either merge on green or hold for an explicit
+   go from the orchestrator, as the user chose at kickoff; say which. A PR
+   merges only after the PR below it has merged, and a stack based on another
+   worker's PR merges only once that PR has merged and the stack's bottom PR
+   has been retargeted to `main` (`gh pr edit --base main`) and restacked.
+4. **Report back, do not wait to be asked**: on each milestone of each PR
+   (opened, CI green, blocked, merged) send a message to the orchestrator:
 
    ```sh
    conductor message create --session <ORCHESTRATOR_SESSION_ID> \
@@ -77,42 +87,31 @@ Every brief must contain:
 
    Also tell it to answer any message the orchestrator sends it.
 5. **Ask, do not guess**: when the task is ambiguous, the plan and the code
-   disagree, or a choice would change the PR's shape, send the question to the
+   disagree, or a choice would change a PR's shape, send the question to the
    orchestrator the same way and wait for the answer instead of picking an
    interpretation. The orchestrator holds the whole plan and the user's
-   intent; the worker holds one PR. Small judgment calls stay with the
+   intent; the worker holds one stack. Small judgment calls stay with the
    worker.
 
-Keep the workspace id, session id, branch, and PR url of each worker; you
-need them to reply, to kick off dependents, and to archive.
+Keep the workspace id, session id, branches, and PR urls of each worker; you
+need them to reply, to kick off branch-off chains, and to archive.
 
 ## Step 2: Monitor by messages, not polling
 
 Do not poll `session status` or `session message` in a loop. Workers message
 this session when something happens, and each message arrives as a new user
-turn. On each report:
+turn. You restack nothing; each owner restacks its own stack. On each report:
 
-- **PR opened**: if a stacked PR is waiting on this branch, kick that
-  workspace off now (Step 1) with this branch as its base.
+- **PR opened**: if a branch-off chain is waiting on this PR, kick that
+  workspace off now (Step 1) with this PR's branch as its base.
 - **CI green**: under hold, relay the user's go to the worker when it comes.
-- **Lower PR changed** (a fix, or a merge of `main`): have one worker, the
-  top of the stack's, restack the whole chain in one pass. It runs
-  `gh stack checkout <any PR in the stack>` to track the linked stack
-  locally, then `gh stack sync` (fetch, cascading rebase, atomic push, and
-  relink) when nothing conflicts. On a conflict, `gh stack rebase` does the
-  cascade with `--continue` or `--abort`, and `gh stack push` pushes each
-  branch with `--force-with-lease`. Without the extension, the fallback is
-  `git rebase --update-refs` from the top branch and a `--force-with-lease`
-  push of every branch. Then tell each worker its new head; workers only see
-  their own PR's CI through. Do not have each worker rebase its own branch
-  while you relay heads up the stack.
 - **Question or blocked**: answer from the plan and the other PRs' state by
   replying to that worker's session with
   `conductor message create --session <workerSessionId>`. Escalate to the
   user only when the decision is theirs, and relay the answer back yourself.
-- **Merged**: tell the next PR in the stack to retarget to `main`, have the
-  chain restacked onto `main` in one pass as above, and let the next PR merge
-  under the user's choice. Then archive the finished workspace:
+- **Merged**: if a branch-off chain is based on this PR, tell its worker to
+  retarget its bottom PR to `main` and restack. When every PR in a stack has
+  merged, archive that workspace:
 
   ```sh
   conductor workspace archive <workspaceId>
@@ -133,7 +132,8 @@ issue, update the issue with the merged PRs.
 
 - Never do the PR's implementation work in this workspace.
 - Use deep links, not ids, when pointing the user at a workspace or PR.
-- One PR per workspace. Do not reuse a worker for a second PR.
-- A dependent PR's workspace is created only after the PR it depends on is
-  open.
-- Do not archive a workspace whose PR is not merged.
+- One stack per workspace: a linear chain of PRs belongs to one worker. Do
+  not reuse a worker for a second stack.
+- A branch-off chain's workspace is created only after the PR it builds on
+  is open.
+- Do not archive a workspace while any PR in its stack is unmerged.
