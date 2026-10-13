@@ -115,5 +115,7 @@ export {
 export {
   HostedWorkspaceClient,
   type HostedWorkspaceClientOptions,
+  WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "./workspace-client.js";

@@ -1,12 +1,13 @@
 {
   "type": "object",
   "properties": {
-    "installationId": {
-      "type": "integer"
+    "url": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "required": [
-    "installationId"
+    "url"
   ],
   "additionalProperties": false
 }
