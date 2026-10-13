@@ -10,6 +10,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pageFrameUrl } from "#shared/page-frame";
 import { useCopyToast } from "../copy-feedback";
+import { FindScope } from "../find-in-tab";
 import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -104,13 +105,23 @@ function VersionStep({
  * The sources the tab has read, by version: each read the first time the
  * source of its version is shown, and held until Reload forgets them all.
  * A read that failed is held as one, so it is asked again only on Retry.
+ * Note that only the latest read of a version lands, because one asked
+ * before a Reload or a Retry may answer after it.
  */
 function usePageSources(readSource: ReadPageSource) {
   const [held, setHeld] = useState<ReadonlyMap<number, SourceRead>>(new Map());
   const latest = useRef(readSource);
   latest.current = readSource;
+  const asks = useRef({ count: 0, latest: new Map<number, number>() });
   const ask = useCallback((version: number) => {
-    const land = (read: SourceRead) => setHeld((was) => new Map(was).set(version, read));
+    asks.current.count += 1;
+    const asked = asks.current.count;
+    asks.current.latest.set(version, asked);
+    const land = (read: SourceRead) => {
+      if (asks.current.latest.get(version) === asked) {
+        setHeld((was) => new Map(was).set(version, read));
+      }
+    };
     land({ kind: SOURCE_READ.READING });
     latest.current(version).then(
       (answer) =>
@@ -122,7 +133,10 @@ function usePageSources(readSource: ReadPageSource) {
       () => land({ kind: SOURCE_READ.FAILED }),
     );
   }, []);
-  const forget = useCallback(() => setHeld(new Map()), []);
+  const forget = useCallback(() => {
+    asks.current.latest.clear();
+    setHeld(new Map());
+  }, []);
   return { held, ask, forget };
 }
 
@@ -177,15 +191,23 @@ function SourceMenu({ read }: { read: SourceRead | undefined }): React.JSX.Eleme
   );
 }
 
-/** The page's tab: its title, its versions where it has more than one, the source's toggle, a reload, and the page or its source. */
+/**
+ * The page's tab: its title, its versions where it has more than one, the
+ * source's toggle, a reload, and the page or its source. The side panel
+ * finds in no page tab, since a page's words stand in a frame no find
+ * reaches, so the tab offers ⌘F itself while its source is drawn.
+ */
 export function PagePane({
   planId,
   page,
   readSource,
+  findActive,
 }: {
   planId: string;
   page: PageLine;
   readSource: ReadPageSource;
+  /** Whether the panel holds the window's keys, so the source's find answers ⌘F. */
+  findActive: boolean;
 }): React.JSX.Element {
   // The version stepped to, none while the newest is followed.
   const [chosen, setChosen] = useState<number | undefined>(undefined);
@@ -203,73 +225,79 @@ export function PagePane({
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
   return (
-    <div className="page-view file-view ph-no-capture">
-      <header className="file-view-bar">
-        <span className="page-view-title">{page.title}</span>
-        <div className="file-view-actions">
-          {page.version > 1 ? (
-            <>
-              <VersionStep
-                label="Earlier version"
-                to={version > 1 ? version - 1 : undefined}
-                icon={<ChevronLeftIcon aria-hidden="true" />}
-                onStep={step}
-              />
-              <span className="page-view-version">
-                Version {version} of {page.version}
-              </span>
-              <VersionStep
-                label="Later version"
-                to={version < page.version ? version + 1 : undefined}
-                icon={<ChevronRightIcon aria-hidden="true" />}
-                onStep={step}
-              />
-            </>
-          ) : null}
-          <Tooltip label={toggleLabel}>
-            <button
-              type="button"
-              className="icon-button page-view-source-toggle"
-              aria-label={toggleLabel}
-              data-source={String(showingSource)}
-              onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
-            >
-              <CodeXmlIcon aria-hidden="true" />
-            </button>
-          </Tooltip>
-          <Tooltip label="Reload">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Reload page"
-              onClick={() => {
-                setReloads((was) => was + 1);
-                sources.forget();
-              }}
-            >
-              <RotateCwIcon aria-hidden="true" />
-            </button>
-          </Tooltip>
-          {showingSource ? <SourceMenu read={source} /> : null}
-        </div>
-      </header>
-      {showingSource ? (
-        <PageSource
-          title={page.title}
-          read={source ?? { kind: SOURCE_READ.READING }}
-          onRetry={() => ask(version)}
-        />
-      ) : (
-        <iframe
-          key={reloads}
-          className="page-view-frame"
-          title={page.title}
-          src={pageFrameUrl({ planId, pageId: page.id, version })}
-          sandbox={PAGE_SANDBOX}
-          allow=""
-          referrerPolicy="no-referrer"
-        />
-      )}
-    </div>
+    <FindScope
+      className="page-view-find"
+      active={findActive && showingSource}
+      subject={{ plan: planId, tab: { page: page.id } }}
+    >
+      <div className="page-view file-view ph-no-capture">
+        <header className="file-view-bar">
+          <span className="page-view-title">{page.title}</span>
+          <div className="file-view-actions">
+            {page.version > 1 ? (
+              <>
+                <VersionStep
+                  label="Earlier version"
+                  to={version > 1 ? version - 1 : undefined}
+                  icon={<ChevronLeftIcon aria-hidden="true" />}
+                  onStep={step}
+                />
+                <span className="page-view-version">
+                  Version {version} of {page.version}
+                </span>
+                <VersionStep
+                  label="Later version"
+                  to={version < page.version ? version + 1 : undefined}
+                  icon={<ChevronRightIcon aria-hidden="true" />}
+                  onStep={step}
+                />
+              </>
+            ) : null}
+            <Tooltip label={toggleLabel}>
+              <button
+                type="button"
+                className="icon-button page-view-source-toggle"
+                aria-label={toggleLabel}
+                data-source={String(showingSource)}
+                onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
+              >
+                <CodeXmlIcon aria-hidden="true" />
+              </button>
+            </Tooltip>
+            <Tooltip label="Reload">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Reload page"
+                onClick={() => {
+                  setReloads((was) => was + 1);
+                  sources.forget();
+                }}
+              >
+                <RotateCwIcon aria-hidden="true" />
+              </button>
+            </Tooltip>
+            {showingSource ? <SourceMenu read={source} /> : null}
+          </div>
+        </header>
+        {showingSource ? (
+          <PageSource
+            title={page.title}
+            read={source ?? { kind: SOURCE_READ.READING }}
+            onRetry={() => ask(version)}
+          />
+        ) : (
+          <iframe
+            key={reloads}
+            className="page-view-frame"
+            title={page.title}
+            src={pageFrameUrl({ planId, pageId: page.id, version })}
+            sandbox={PAGE_SANDBOX}
+            allow=""
+            referrerPolicy="no-referrer"
+          />
+        )}
+      </div>
+    </FindScope>
   );
 }

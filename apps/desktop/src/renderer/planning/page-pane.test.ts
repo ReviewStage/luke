@@ -7,6 +7,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { pageFrameUrl } from "#shared/page-frame";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { runAppCommand } from "../app-commands";
 import { PagePane, type ReadPageSource } from "./page-pane";
 
 /**
@@ -52,7 +54,9 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
   roots.push(root);
   const render = (listed: PageLine) =>
     act(() =>
-      root.render(createElement(PagePane, { planId: PLAN, page: listed, readSource: read })),
+      root.render(
+        createElement(PagePane, { planId: PLAN, page: listed, readSource: read, findActive: true }),
+      ),
     );
   render(page);
   const frame = () => {
@@ -144,4 +148,34 @@ test("a source the service did not answer says so in its place, and Retry reads 
   await act(async () => retry.click());
 
   assert.deepEqual(sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
+});
+
+test("⌘F finds in the source, and in the page itself it answers nothing", async () => {
+  const { press, container } = mount(FUNNEL);
+
+  const offeredOverPage = runAppCommand(APP_COMMAND.FIND);
+  await press("View source");
+  let offeredOverSource = false;
+  act(() => {
+    offeredOverSource = runAppCommand(APP_COMMAND.FIND);
+  });
+
+  assert.equal(offeredOverPage, false);
+  assert.equal(offeredOverSource, true);
+  assert.ok(container.querySelector("search[aria-label='Find']"));
+});
+
+test("a source read before a Reload that answers after it does not replace the fresh read", async () => {
+  const answers: ((html: string) => void)[] = [];
+  const { press, sourceLines } = mount(FUNNEL, () => {
+    const answer = new Promise<string>((resolve) => answers.push(resolve));
+    return answer.then((html) => ({ lines: [[{ text: html }]] }));
+  });
+
+  await press("View source");
+  await press("Reload page");
+  await act(async () => answers[1]?.("<h1>Fresh</h1>"));
+  await act(async () => answers[0]?.("<h1>Stale</h1>"));
+
+  assert.deepEqual(sourceLines(), ["1 <h1>Fresh</h1>"]);
 });
