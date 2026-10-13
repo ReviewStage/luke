@@ -24,12 +24,15 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import {
+  WORKSPACE_MEMBERS_QUERY,
   type Workspace,
+  type WorkspaceMember,
   type WorkspacesAnswer,
   workspaceAnswerSchema,
   workspaceCreateRequestSchema,
   workspaceGithubConnectAnswerSchema,
   workspaceGithubRequestSchema,
+  workspaceMembersAnswerSchema,
   workspacesAnswerSchema,
 } from "./workspace-wire.js";
 
@@ -48,7 +51,7 @@ import {
 export const WORKSPACE_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub takes an owner or admin. */
+  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub takes an owner or admin, and a personal workspace's members are read by nobody. */
   NOT_PERMITTED: "not-permitted",
   /** The workspace is not one the account is a member of. */
   NOT_FOUND: "not-found",
@@ -140,6 +143,18 @@ export class HostedWorkspaceClient {
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
     return this.#github(HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT, workspaceId, (body) =>
       this.#answered(body, workspaceAnswerSchema, (answer) => answer.workspace),
+    );
+  }
+
+  /** One workspace's members, owners first; or why there are none: not a member, a personal workspace, or no answer. */
+  members(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({ [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId });
+    return this.#answered(
+      { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${query}` },
+      workspaceMembersAnswerSchema,
+      (answer) => answer.members,
     );
   }
 

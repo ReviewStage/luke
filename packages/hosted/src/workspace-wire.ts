@@ -86,3 +86,21 @@ export const workspaceGithubRequestSchema = EffectSchema.Struct({
 export const workspaceGithubConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
+
+/** One member of a workspace: the account, its name and email, and its role. */
+export const workspaceMemberSchema = EffectSchema.Struct({
+  userId: EffectSchema.String,
+  name: EffectSchema.String,
+  email: EffectSchema.String,
+  role: workspaceSchema.fields.role,
+});
+
+export type WorkspaceMember = typeof workspaceMemberSchema.Type;
+
+/** A workspace's members, owners first, then admins, then members, each by name (GET). */
+export const workspaceMembersAnswerSchema = EffectSchema.Struct({
+  members: EffectSchema.Array(workspaceMemberSchema),
+});
+
+/** The query a members read names its workspace under. */
+export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;

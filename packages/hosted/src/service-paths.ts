@@ -110,6 +110,8 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
+  /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
+  WORKSPACES_MEMBERS: "/api/workspaces/members",
 } as const;
 
 /**
