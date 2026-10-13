@@ -877,8 +877,8 @@ vercel link
 vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect create mcp.sentry.dev --name sentry   # Sentry
-# Slack: an OAuth connector against Slack's MCP authorization server, below
-vercel connect attach <connector-uid> --yes          # production, preview, and development
+vercel connect attach <connector-uid> --yes          # each of the above: production, preview, and development
+# Slack: an OAuth connector against Slack's MCP authorization server, created and attached below
 ```
 
 Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
@@ -910,8 +910,9 @@ authorization server, credentialed by a Slack app of the team's workspace:
 1. The app is internal, never publicly distributed, since the server serves
    Marketplace and internal apps alone.
 2. Its Redirect URLs (OAuth & Permissions) include Connect's callback,
-   `https://connect.vercel.com/callback`, or the `redirectUri` the create
-   below prints where it prints one.
+   `https://connect.vercel.com/callback`, which is the one a connector uses
+   unless its own `redirectUri` names another (`vercel api
+   /v1/connect/connectors/<connector-id>`).
 3. Its User Token Scopes are the ones below, and none is an `identity.*`
    scope.
 4. Its Model Context Protocol switch is on (Agents & AI Apps,
@@ -920,9 +921,11 @@ authorization server, credentialed by a Slack app of the team's workspace:
    server access", which Settings shows on Slack's row), and a token issued
    before the switch went on keeps that 400, so whoever connected before
    connects again.
-5. Its App Credentials go into `slack-mcp.json`, written by hand rather than
-   through a shell command so the secret stays out of shell history, and
-   the connector is created from it:
+5. Its App Credentials go into `~/slack-mcp.json`, outside the checkout so
+   an interrupted setup cannot leave the secret where a commit picks it up,
+   and written by hand rather than through a shell command so it stays out
+   of shell history; the connector is created from it and linked to the
+   project:
 
 ```json
 {
@@ -945,8 +948,9 @@ authorization server, credentialed by a Slack app of the team's workspace:
 ```
 
 ```
-vercel connect create mcp.slack.com --name slack-mcp --connector-type oauth --data @slack-mcp.json --json
-rm slack-mcp.json
+vercel connect create mcp.slack.com --name slack-mcp --connector-type oauth --data @"$HOME/slack-mcp.json" --json
+rm "$HOME/slack-mcp.json"
+vercel connect attach mcp.slack.com/slack-mcp --yes   # production, preview, and development
 ```
 
 Those scopes are what the read and search tools `integrations.ts` offers
