@@ -1,5 +1,4 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
-import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
 import type { PlanAgentEdit } from "@sidecar/hosted/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -12,8 +11,8 @@ import { conversations } from "./storage.js";
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
  * account that started it: its name, whether it is pinned or archived, its
- * one document, a free Markdown text, who last changed each of its sections,
- * and the journal of the saves coding agents made on it. A save replaces the
+ * one document, a free Markdown text, and the journal of the saves coding
+ * agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
  * left the row as it stood. What the text held before is kept beside it, in
  * `plan_revision` (`plan-revision.ts`). The text is stored as written,
@@ -40,11 +39,6 @@ export const plan = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@sidecar/hosted/plan-document`). */
     document: text("document").notNull(),
-    /** Who last changed each section and when, by heading; empty until a save changes one. */
-    sectionWriters: jsonb("section_writers")
-      .$type<readonly PlanSectionWriter[]>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
     /**
      * The GitHub repository the plan is about, `owner/name` as GitHub spells
      * it, confirmed reachable through the Luke GitHub App by the account

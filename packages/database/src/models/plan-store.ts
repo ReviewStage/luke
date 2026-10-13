@@ -1,4 +1,4 @@
-import { type PlanSectionWriter, planSectionWriterSchema } from "@sidecar/hosted/plan-document";
+import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/hosted/plan-template";
 import {
@@ -20,7 +20,7 @@ import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
-import { readLastEdit, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
+import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 
 /**
  * plan-store.ts -- the named plans an account owns, and the one document each holds.
@@ -80,7 +80,7 @@ export interface StoredPlan {
   readonly conversationId: string | undefined;
   /** Whether the text was ever saved since the plan started: false while nobody has written it. */
   readonly saved: boolean;
-  /** Who last changed each section, by heading. */
+  /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly PlanSectionWriter[];
 }
 
@@ -121,7 +121,6 @@ const PLAN_COLUMNS = {
   userId: plan.userId,
   agentEdits: plan.agentEdits,
   document: plan.document,
-  sectionWriters: plan.sectionWriters,
   conversationId: plan.conversationId,
 };
 
@@ -143,7 +142,6 @@ const PlanRowSchema = Schema.Struct({
   agentEdits: Schema.Array(planAgentEditSchema),
   // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
-  sectionWriters: Schema.Array(planSectionWriterSchema),
   conversationId: Schema.NullOr(Schema.String),
 });
 
@@ -174,12 +172,13 @@ const findAgentLabels = SqlSchema.findAll({
  * the row's title, or its model while it has none. The row's own account is
  * the one they are read under.
  */
-function agentLabelsOf(row: PlanRow): PlanStoreEffect<ReadonlyMap<string, string>> {
+function agentLabelsOf(
+  row: PlanRow,
+  sectionWriters: readonly PlanSectionWriter[],
+): PlanStoreEffect<ReadonlyMap<string, string>> {
   const named = [
     ...row.agentEdits.map((edit) => edit.agentId),
-    ...row.sectionWriters.flatMap((writer) =>
-      writer.agentId === undefined ? [] : [writer.agentId],
-    ),
+    ...sectionWriters.flatMap((writer) => (writer.agentId === undefined ? [] : [writer.agentId])),
   ];
   const agentIds = [...new Set(named)];
   if (agentIds.length === 0) return Effect.succeed(new Map());
@@ -221,7 +220,7 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 /**
  * The row's plan, as the window and the model read it: its text as the
  * document's body with no assumptions, since they are a section of the text,
- * and who last changed each section. The row's own account is the one its
+ * and who last changed each section, as its revisions read. The row's own account is the one its
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A plan is saved once
  * a save has moved its last save past its start, which no creation and no
@@ -230,7 +229,8 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
-    const labels = yield* agentLabelsOf(row);
+    const sectionWriters = yield* readSectionWriters(row.userId, row.id);
+    const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
       label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
@@ -244,13 +244,13 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         document: { body: row.document, assumptions: [] },
-        sectionEdits: row.sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+        sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
       text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
-      sectionWriters: row.sectionWriters,
+      sectionWriters,
     };
   });
 }
@@ -332,17 +332,15 @@ const replaceText = SqlSchema.findOneOption({
     userId: Schema.String,
     planId: Schema.String,
     text: Schema.String,
-    sectionWriters: Schema.optionalKey(Schema.Array(planSectionWriterSchema)),
     agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, text, sectionWriters, agentEdits, now }) =>
+  execute: ({ userId, planId, text, agentEdits, now }) =>
     db
       .update(plan)
       .set({
         document: text,
-        ...(sectionWriters ? { sectionWriters } : undefined),
         ...(agentEdits ? { agentEdits } : undefined),
         updatedAt: now,
       })
@@ -582,17 +580,15 @@ export function readPlanForUpdate(
   );
 }
 
-/** What a save of a document plan's text writes beside it, each where it is handed. */
+/** What a save of a document plan's text writes beside it, where it is handed. */
 export interface PlanTextSaveExtras {
-  /** Who last changed each section. */
-  readonly sectionWriters?: readonly PlanSectionWriter[];
   /** The coding agents' journal. */
   readonly agentEdits?: readonly PlanAgentEdit[];
 }
 
 /**
- * Replaces the text of a plan that is one document, with who last changed
- * each section and the agents' journal where they are handed, and answers
+ * Replaces the text of a plan that is one document, with the agents' journal
+ * where it is handed, and answers
  * the plan as saved, or nothing where the account owns no such plan; nothing
  * is ever created here.
  */

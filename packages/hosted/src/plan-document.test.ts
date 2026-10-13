@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { changedSections, planSections, withSectionWriters } from "./plan-document.js";
+import { changedSections, planSections, sectionWritersOf } from "./plan-document.js";
 import { PLAN_ACTOR, PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 
 const TEXT = [
@@ -77,21 +77,46 @@ test("the sections a change moved are its changed, added, and second-of-a-name s
   assert.deepEqual(changedSections(before, before), []);
 });
 
-test("a save names its writer on each section it moved, keeps the rest, and forgets a section the text no longer holds", () => {
-  const before =
-    "## Context\n\nAdmins only.\n\n## Goal\n\nInvite by email.\n\n## Old\n\nGone soon.\n";
-  const after = "## Context\n\nAdmins only.\n\n## Goal\n\nInvite by link.\n";
-  const writers = [
-    { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: 1 },
-    { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at: 1 },
-    { section: "Old", actor: PLAN_ACTOR.NOTETAKER, at: 1 },
-  ];
+test("each section names the newest revision that changed it, and a section none changed or the text no longer holds names nobody", () => {
+  const base = "## Context\n\n## Goal\n\n## Risks\n";
+  const noted =
+    "## Context\n\nAdmins only.\n\n## Goal\n\nInvite by email.\n\n## Old\n\nGone soon.\n\n## Risks\n";
+  const edited = "## Context\n\nAdmins only.\n\n## Goal\n\nInvite by link.\n\n## Risks\n";
 
   assert.deepEqual(
-    withSectionWriters(writers, { before, after }, { actor: PLAN_ACTOR.DEVELOPER }, 5),
+    sectionWritersOf(base, [
+      { text: noted, who: { actor: PLAN_ACTOR.NOTETAKER, duringCall: true }, at: 1 },
+      { text: edited, who: { actor: PLAN_ACTOR.DEVELOPER }, at: 5 },
+    ]),
     [
-      { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: 1 },
+      { section: "Context", actor: PLAN_ACTOR.NOTETAKER, duringCall: true, at: 1 },
       { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, at: 5 },
+    ],
+  );
+  assert.deepEqual(sectionWritersOf(base, []), []);
+});
+
+test("a heading renamed with nothing beneath it changed keeps its writer, and one renamed with its words changed names the renamer", () => {
+  const base = "## Goal\n\n## Risks\n";
+  const noted = "## Goal\n\nInvite by email.\n\n## Risks\n\nSpam.\n";
+  const renamed = "## Goals\n\nInvite by email.\n\n## Dangers\n\nSpam and abuse.\n";
+  const agentWrote = "## Goals\n\nInvite by email or link.\n\n## Dangers\n\nSpam and abuse.\n";
+  const noter = { text: noted, who: { actor: PLAN_ACTOR.NOTETAKER }, at: 1 };
+  const renamer = { text: renamed, who: { actor: PLAN_ACTOR.DEVELOPER }, at: 5 };
+
+  assert.deepEqual(sectionWritersOf(base, [noter, renamer]), [
+    { section: "Goals", actor: PLAN_ACTOR.NOTETAKER, at: 1 },
+    { section: "Dangers", actor: PLAN_ACTOR.DEVELOPER, at: 5 },
+  ]);
+  assert.deepEqual(
+    sectionWritersOf(base, [
+      noter,
+      renamer,
+      { text: agentWrote, who: { actor: PLAN_ACTOR.AGENT, agentId: "agent-1" }, at: 9 },
+    ]),
+    [
+      { section: "Dangers", actor: PLAN_ACTOR.DEVELOPER, at: 5 },
+      { section: "Goals", actor: PLAN_ACTOR.AGENT, agentId: "agent-1", at: 9 },
     ],
   );
 });
