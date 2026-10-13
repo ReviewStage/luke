@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { listMcpTools, MCP_TOOLS_FAILURE } from "../server/hosted/mcp-tools";
 import { mcpServerFake } from "./support/mcp-server-fake";
 
@@ -74,5 +75,38 @@ it.effect(
         ),
       );
       assert.equal(shapeless.reason, MCP_TOOLS_FAILURE.UNREADABLE);
+    }),
+);
+
+it.effect(
+  "a list still going past every page the read takes is no list, rather than a part held as whole",
+  () =>
+    Effect.gen(function* () {
+      const server = mcpServerFake({
+        token: TOKEN,
+        pages: Array.from({ length: 60 }, (_, page) => [{ name: `tool_${page}` }]),
+      });
+      const failure = yield* Effect.flip(
+        listMcpTools(URL, TOKEN).pipe(Effect.provide(fakeHttpClientLayer(server.respond))),
+      );
+      assert.equal(failure.reason, MCP_TOOLS_FAILURE.UNREADABLE);
+    }),
+);
+
+it.effect(
+  "a server that never answers the session's end still has its list answered, once the end's own bound passes",
+  () =>
+    Effect.gen(function* () {
+      const server = mcpServerFake({ token: TOKEN, pages: [[{ name: "search" }]] });
+      // The end of the session waits on an answer that never comes.
+      const respond: typeof server.respond = (url, init) =>
+        init.method === "DELETE"
+          ? new Promise<Response>(() => undefined)
+          : server.respond(url, init);
+      const read = yield* Effect.forkChild(
+        listMcpTools(URL, TOKEN).pipe(Effect.provide(fakeHttpClientLayer(respond))),
+      );
+      yield* TestClock.adjust("3 seconds");
+      assert.deepEqual(yield* Fiber.join(read), [{ name: "search", description: "" }]);
     }),
 );

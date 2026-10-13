@@ -97,14 +97,25 @@ const INTEGRATIONS_PATH = {
 /** How long a provider's tools stay read for an account before the next ask reads the server again. */
 export const INTEGRATION_TOOLS_TTL_MS = 5 * 60 * 1000;
 
-/** One provider's tools as read for an account, and when. */
+/** One provider's tools as read for an account, when, and under which grant: a sign-in completed since names another. */
 interface ToolsRead {
   readonly at: number;
+  readonly connectedAt: number | undefined;
   readonly tools: readonly McpTool[];
 }
 
 /** The tools read lately, by account and then by provider, for as long as the instance stands. */
 type ToolsCache = Map<string, Map<IntegrationProvider, ToolsRead>>;
+
+/** Every read past its time let go, so an instance that stands long holds the lists of no account that stopped asking. */
+function heldToolsSwept(cache: ToolsCache, now: number): void {
+  for (const [userId, reads] of cache) {
+    for (const [provider, read] of reads) {
+      if (now - read.at >= INTEGRATION_TOOLS_TTL_MS) reads.delete(provider);
+    }
+    if (reads.size === 0) cache.delete(userId);
+  }
+}
 
 /** The query the rewrite carries the provider in. */
 const PROVIDER_QUERY = "provider";
@@ -280,7 +291,12 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
   const held = cache.get(userId)?.get(provider);
-  if (held !== undefined && seams.now() - held.at < INTEGRATION_TOOLS_TTL_MS) {
+  const grant = row.connectedAt?.getTime();
+  if (
+    held !== undefined &&
+    held.connectedAt === grant &&
+    seams.now() - held.at < INTEGRATION_TOOLS_TTL_MS
+  ) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools: held.tools });
   }
   const name = INTEGRATION_NAME[provider];
@@ -300,8 +316,9 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   const allowed = definition.ALLOWED_TOOLS;
   const tools =
     allowed === undefined ? listed : listed.filter((tool) => allowed.includes(tool.name));
+  heldToolsSwept(cache, seams.now());
   const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
-  accountReads.set(provider, { at: seams.now(), tools });
+  accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
   cache.set(userId, accountReads);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools });
 });

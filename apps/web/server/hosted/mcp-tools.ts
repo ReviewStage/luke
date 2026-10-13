@@ -33,11 +33,18 @@ const MCP_METHOD = {
   TOOLS_LIST: "tools/list",
 } as const;
 
-/** The most pages of tools read before the list stops, so a server that never ends its cursor cannot hold the read. */
-const MAX_PAGES = 10;
+/**
+ * The most pages of tools read, so a server that never ends its cursor
+ * cannot hold the read: a list still going past them is no list at all,
+ * because a part of one would be drawn and held as if it were whole.
+ */
+const MAX_PAGES = 50;
 
 /** How long the whole read may take. */
 const READ_TIMEOUT = Duration.seconds(10);
+
+/** How long ending the session may take, after which it is let go: the list is already read. */
+const END_TIMEOUT = Duration.seconds(2);
 
 /** The most of a description's first line a tool keeps. */
 const DESCRIPTION_MAX_CHARS = 160;
@@ -193,24 +200,26 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
       for (const tool of read.tools)
         tools.push({ name: tool.name, description: firstLine(tool.description) });
       cursor = read.nextCursor;
-      if (cursor === undefined) break;
+      if (cursor === undefined) return tools;
     }
-    return tools;
+    return yield* unreadable;
   });
 
-  /** The session ended as a courtesy; whether the server heard it changes nothing. */
+  /** The session ended as a courtesy, within its own bound; whether the server heard it changes nothing. */
   const end = Effect.suspend(() =>
     session === undefined
       ? Effect.void
       : Effect.ignore(
-          client.execute(
-            HttpClientRequest.delete(url).pipe(
-              HttpClientRequest.setHeaders({
-                authorization: `Bearer ${token}`,
-                [MCP_HEADER.SESSION]: session,
-              }),
-            ),
-          ),
+          client
+            .execute(
+              HttpClientRequest.delete(url).pipe(
+                HttpClientRequest.setHeaders({
+                  authorization: `Bearer ${token}`,
+                  [MCP_HEADER.SESSION]: session,
+                }),
+              ),
+            )
+            .pipe(Effect.timeout(END_TIMEOUT)),
         ),
   );
 

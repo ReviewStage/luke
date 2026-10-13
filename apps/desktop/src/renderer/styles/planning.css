@@ -2006,8 +2006,9 @@ button.attached-file-face:hover img {
 }
 
 /* The count follows the server's name, in the menu's muted detail type, and
-   lifts to the body's colour while its list is open, which is while it is
-   hovered or focused; the switch or the button keeps the row's end. */
+   lifts to the body's colour while its list is open, which is while its row
+   is hovered or the count focused, as a menu row opens its submenu; the
+   switch or the button keeps the row's end. */
 .agent-servers-tools-count {
   padding: 0 var(--space-4);
   border-radius: var(--menu-row-radius);
@@ -2017,7 +2018,7 @@ button.attached-file-face:hover img {
   font-variant-numeric: tabular-nums;
 }
 
-.agent-servers-tools:is(:hover, :focus-within) .agent-servers-tools-count {
+.agent-servers-row:is(:hover, :focus-within) .agent-servers-tools-count {
   color: var(--text-body);
 }
 
@@ -2050,8 +2051,20 @@ button.attached-file-face:hover img {
   list-style: none;
 }
 
-.agent-servers-tools:is(:hover, :focus-within) .agent-servers-tools-menu {
+.agent-servers-row:is(:hover, :focus-within) .agent-servers-tools-menu {
   display: block;
+}
+
+/* The list stands outside the row, past the popover's inset and a gap, so a
+   strip of its own reaches back across both: the pointer crossing to the
+   list never leaves the row whose hover keeps it drawn. */
+.agent-servers-tools-menu::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: calc(var(--menu-inset) + 9px + 2px);
+  content: "";
 }
 
 .agent-servers-tool {

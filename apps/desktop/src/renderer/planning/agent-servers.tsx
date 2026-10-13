@@ -55,9 +55,10 @@ const SERVERS_SETTINGS = "Manage in Settings";
 
 /**
  * A connected server's count of tools, and the list of them beside the
- * popover, drawn while the count is hovered or holds the focus: the list
- * stands in the page throughout and the stylesheet shows it, so a pointer
- * crossing from the count into the list keeps it open.
+ * popover, drawn while the server's row is hovered or the count holds the
+ * focus, as a menu row opens its submenu: the list stands in the page
+ * throughout and the stylesheet shows it, so a pointer crossing from the row
+ * into the list keeps it open.
  */
 function ToolsCount({
   name,

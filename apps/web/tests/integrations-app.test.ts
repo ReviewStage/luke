@@ -60,6 +60,8 @@ interface StoredRow {
   readonly status: IntegrationRowStatus;
   readonly state: string | undefined;
   readonly stateIssuedAt: number | undefined;
+  /** When the sign-in the row stands for completed, where the case names one. */
+  readonly connectedAt?: number;
 }
 
 /** Every row the store holds, by account and then by provider. */
@@ -130,6 +132,7 @@ function rowOf(
     status: stored.status,
     state: stored.state,
     stateIssuedAt: stored.stateIssuedAt === undefined ? undefined : new Date(stored.stateIssuedAt),
+    connectedAt: stored.connectedAt === undefined ? undefined : new Date(stored.connectedAt),
   };
 }
 
@@ -611,6 +614,11 @@ test("a provider's tools are read from its server once, and served from what was
   now += 2;
   await handler(TOOLS());
   assert.equal(sessions(), 2);
+
+  // A sign-in completed since names another grant, whose tools are read afresh however soon.
+  state.rows.set(USER_ID, new Map([[LINEAR, { ...CONNECTED, connectedAt: now }]]));
+  await handler(TOOLS());
+  assert.equal(sessions(), 3);
 });
 
 test("a provider read-only by its allow-list answers only the tools it allows, whatever its server lists", async () => {
