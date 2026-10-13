@@ -4492,9 +4492,13 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   --duration-hover: 0s;
 }
 
-/* Its glyph, its words, and its action share a first row as tall as the
-   action, so they read across on one line whether or not a second follows. */
+/* Its glyph, its words' first line, and its action share a first row as
+   tall as the action, each centred on it, so they read across on one line
+   however many follow; its words wrap at the card's own line. */
 .toast {
+  --toast-line: 18px;
+  --toast-row: 24px;
+  --toast-glyph: 16px;
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -4508,7 +4512,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
     0 12px 36px var(--shadow);
   color: var(--text-primary);
   font-size: 13px;
-  line-height: 18px;
+  line-height: var(--toast-line);
   pointer-events: none;
   animation:
     toast-fade var(--duration-quick) var(--motion-exit),
@@ -4524,10 +4528,10 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 }
 
 .toast > svg {
-  width: 16px;
-  height: 16px;
+  width: var(--toast-glyph);
+  height: var(--toast-glyph);
   flex: none;
-  margin-top: var(--space-4);
+  margin-top: calc((var(--toast-row) - var(--toast-glyph)) / 2);
   color: var(--state-complete);
 }
 
@@ -4541,21 +4545,32 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   color: var(--text-secondary);
 }
 
-/* Its words, and the line under them that says where or what. */
+/* Its words, and the line under them that says where or what, a title's
+   step apart as a card's title and its secondary line are, each cut to two
+   lines; the column stands as far below its last line as above its first. */
 .toast-text {
   display: flex;
   min-width: 0;
   flex: 1;
   flex-direction: column;
+  gap: var(--space-2);
+  padding-block: calc((var(--toast-row) - var(--toast-line)) / 2);
+}
+
+.toast-words,
+.toast-detail {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .toast-words {
   font-weight: 600;
-  line-height: 24px;
 }
 
 .toast-detail {
-  padding-bottom: var(--space-2);
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 16px;
@@ -4578,7 +4593,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 /* The action is a small solid button in the full ink, the one thing on the
    card to press. */
 .toast-action {
-  height: 24px;
+  height: var(--toast-row);
   flex: none;
   padding: 0 var(--space-8);
   border: 0;
