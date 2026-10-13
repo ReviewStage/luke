@@ -45,6 +45,8 @@ function view(patch: Partial<PlanningView>): PlanningView {
   return {
     plans: [],
     listStatus: PLANNING_READ.READY,
+    workspaces: [],
+    available: [],
     document: { status: PLANNING_READ.IDLE },
     ...patch,
   };
@@ -116,7 +118,7 @@ test("a refusal about a repository is said by its reason, and a repository's pag
   assert.match(repositoryFailureNote(PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE), /can't see/u);
   assert.match(
     repositoryFailureNote(PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED),
-    /Sign in with GitHub/u,
+    /Connect GitHub in Settings/u,
   );
   assert.equal(repositoryFailureNote(PLAN_CALL_FAILURE.UNANSWERED), START_FAILED_NOTE);
   assert.equal(repositoryPageUrl("acme/relay"), "https://github.com/acme/relay");

@@ -99,6 +99,7 @@ import {
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
+  planningRepositoriesParamsSchema,
   planningRevisionAnswerSchema,
   planningRevisionParamsSchema,
   planningRevisionsAnswerSchema,
@@ -111,7 +112,17 @@ import {
   planningStartRequestSchema,
   planningTreeAnswerSchema,
   planningTreeParamsSchema,
+  planningWorkspaceJoinParamsSchema,
+  planningWorkspaceLeaveParamsSchema,
+  planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMembersParamsSchema,
 } from "@sidecar/hosted/planning-view";
+import {
+  type Workspace,
+  type WorkspaceMember,
+  workspaceMemberSchema,
+  workspaceSchema,
+} from "@sidecar/hosted/workspace-wire";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
   APP_SETTING_SCHEMA,
@@ -202,6 +213,10 @@ export const ACT_KIND = {
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
   WEB_OPEN: "web.open",
+  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_CONNECT: "github.connect",
+  /** The page that disconnects the account's GitHub, opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_DISCONNECT: "github.disconnect",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -222,6 +237,19 @@ export const ACT_KIND = {
   PLANNING_REVISION: "planning.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
+  /**
+   * The account's workspaces, asked of the service: the workspace of a
+   * GitHub App installation it reaches joined, answered as joined; one
+   * workspace's members read; one member removed, answered with the members
+   * who remain; and one workspace left. A join, a removal, and a leave read
+   * the workspaces again, so they arrive on the document. A join GitHub no
+   * longer shows the account, and a write its role does not allow, are each
+   * refused in words that say so.
+   */
+  WORKSPACE_JOIN: "workspace.join",
+  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
+  WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
+  WORKSPACE_LEAVE: "workspace.leave",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -397,6 +425,31 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
       }),
   };
 }
+
+/**
+ * What a workspace act whose role does not allow it is refused with, in place
+ * of its kind's own sentence: a member removing someone, an owner removed or
+ * leaving, or a personal workspace, which is managed and left by nobody.
+ */
+export const WORKSPACE_NOT_PERMITTED_REFUSAL =
+  "Your role in this workspace does not allow that." as const;
+
+/**
+ * What an act that needs the account's GitHub is refused with where none is
+ * connected, or the one connected must be connected again: a join. A window
+ * that draws it offers Connect GitHub beside it.
+ */
+export const GITHUB_CONNECT_REFUSAL = "Connect GitHub in Settings to join this workspace." as const;
+
+/**
+ * What a join is refused with where the service does not show the account
+ * the installation, or refuses it the workspace: GitHub no longer shows it
+ * that installation, so there is nothing of its to join.
+ */
+export const WORKSPACE_JOIN_NOT_FOUND_REFUSAL =
+  "GitHub doesn't show you that installation." as const;
+
+const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 
 /**
  * Whether a value reads under a schema at all, for a result the payload's own
@@ -627,7 +680,7 @@ export const ACT = {
     refusal: "Could not archive that plan on this system.",
   },
   [ACT_KIND.PLANNING_REPOSITORIES]: {
-    payload: noPayload,
+    payload: actSchema(planningRepositoriesParamsSchema),
     result: wireResult<PlanningRepositoriesAnswer>(isReadable(planningRepositoriesAnswerSchema)),
     refusal: "Could not read your GitHub repositories on this system.",
   },
@@ -651,7 +704,29 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not open that link on this system.",
   },
+  [ACT_KIND.GITHUB_CONNECT]: press("Could not open GitHub's connection page on this system."),
+  [ACT_KIND.GITHUB_DISCONNECT]: press("Could not open GitHub's connection page on this system."),
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
+  [ACT_KIND.WORKSPACE_JOIN]: {
+    payload: actSchema(planningWorkspaceJoinParamsSchema),
+    result: wireResult<Workspace>(isReadable(workspaceSchema)),
+    refusal: "Could not join that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
+    payload: actSchema(planningWorkspaceMembersParamsSchema),
+    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
+    refusal: "Could not read that workspace's members on this system.",
+  },
+  [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
+    payload: actSchema(planningWorkspaceMemberRemoveParamsSchema),
+    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
+    refusal: "Could not remove that member on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LEAVE]: {
+    payload: actSchema(planningWorkspaceLeaveParamsSchema),
+    result: answersNothing,
+    refusal: "Could not leave that workspace on this system.",
+  },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     payload: actSchema(planningBoardSaveParamsSchema),
     result: answersNothing,

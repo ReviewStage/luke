@@ -6,10 +6,12 @@ import type {
   PlanningEditParams,
   PlanningFileAnswer,
   PlanningFileParams,
+  PlanningGitHubPageAnswer,
   PlanningPinParams,
   PlanningPinRepositoryParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
+  PlanningRepositoriesParams,
   PlanningRevisionAnswer,
   PlanningRevisionParams,
   PlanningRevisionsAnswer,
@@ -22,9 +24,24 @@ import type {
   PlanningStartRequest,
   PlanningTreeAnswer,
   PlanningTreeParams,
+  PlanningWorkspaceJoinAnswer,
+  PlanningWorkspaceJoinParams,
+  PlanningWorkspaceLeaveAnswer,
+  PlanningWorkspaceLeaveParams,
+  PlanningWorkspaceMemberRemoveParams,
+  PlanningWorkspaceMembersAnswer,
+  PlanningWorkspaceMembersParams,
+  WorkspaceCallFailure,
 } from "@sidecar/hosted/planning-view";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
+import {
+  ACT,
+  ACT_KIND,
+  GITHUB_CONNECT_REFUSAL,
+  WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+} from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
@@ -47,7 +64,9 @@ export interface PlanningActsDependencies {
     planningPinRepository(params: PlanningPinRepositoryParams): Effect.Effect<boolean>;
     planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
-    planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+    planningRepositories(
+      params: PlanningRepositoriesParams,
+    ): Effect.Effect<PlanningRepositoriesAnswer>;
     planningSetRepository(
       params: PlanningSetRepositoryParams,
     ): Effect.Effect<PlanningSetRepositoryAnswer>;
@@ -60,6 +79,18 @@ export interface PlanningActsDependencies {
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+    githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+    githubDisconnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+    workspaceJoin(params: PlanningWorkspaceJoinParams): Effect.Effect<PlanningWorkspaceJoinAnswer>;
+    workspaceMembers(
+      params: PlanningWorkspaceMembersParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceMemberRemove(
+      params: PlanningWorkspaceMemberRemoveParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceLeave(
+      params: PlanningWorkspaceLeaveParams,
+    ): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
   };
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
@@ -90,6 +121,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.WEB_OPEN
+  | typeof ACT_KIND.GITHUB_CONNECT
+  | typeof ACT_KIND.GITHUB_DISCONNECT
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
@@ -99,13 +132,54 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
-  | typeof ACT_KIND.PLANNING_RESTORE;
+  | typeof ACT_KIND.PLANNING_RESTORE
+  | typeof ACT_KIND.WORKSPACE_JOIN
+  | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_LEAVE;
+
+type WorkspaceActKind =
+  | typeof ACT_KIND.WORKSPACE_JOIN
+  | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
   if (!sender.panel) {
     throw new ActRefused({ message: ACT[kind].refusal });
   }
+}
+
+/**
+ * A workspace act the host answered without its answer, refused: a join the
+ * service would not grant in words that say GitHub does not show the
+ * installation, a write the account's role does not allow in words that
+ * say so, and anything else in its kind's own words.
+ */
+function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure) {
+  const refused = failure !== WORKSPACE_CALL_FAILURE.UNANSWERED;
+  const message =
+    failure === WORKSPACE_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED
+      ? GITHUB_CONNECT_REFUSAL
+      : kind === ACT_KIND.WORKSPACE_JOIN && refused
+        ? WORKSPACE_JOIN_NOT_FOUND_REFUSAL
+        : failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
+          ? WORKSPACE_NOT_PERMITTED_REFUSAL
+          : ACT[kind].refusal;
+  return Effect.fail(new ActRefused({ message }));
+}
+
+/** A GitHub page the host named, opened in the browser; refused in the act's own words where it named none. */
+function openedPage(
+  kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
+  page: PlanningGitHubPageAnswer,
+  openExternal: (url: string) => Promise<void>,
+) {
+  const refused = new ActRefused({ message: ACT[kind].refusal });
+  return "url" in page
+    ? Effect.tryPromise({ try: () => openExternal(page.url), catch: () => refused })
+    : Effect.fail(refused);
 }
 
 export function planningActRows(
@@ -160,9 +234,9 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.PLANNING_ARCHIVE, sender);
       return host.planningArchive(params);
     },
-    [ACT_KIND.PLANNING_REPOSITORIES]: (_payload, sender) => {
+    [ACT_KIND.PLANNING_REPOSITORIES]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);
-      return host.planningRepositories();
+      return host.planningRepositories(params);
     },
     [ACT_KIND.PLANNING_SET_REPOSITORY]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SET_REPOSITORY, sender);
@@ -177,6 +251,20 @@ export function planningActRows(
     [ACT_KIND.GITHUB_OPEN]: ({ url }, sender) => {
       refuseUnlessPanel(ACT_KIND.GITHUB_OPEN, sender);
       return dependencies.openExternal(url);
+    },
+    // The address of either page is the service's own, named by the host,
+    // and never one a window handed in, so the act carries none.
+    [ACT_KIND.GITHUB_CONNECT]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_CONNECT, sender);
+      return Effect.flatMap(host.githubConnect(), (page) =>
+        openedPage(ACT_KIND.GITHUB_CONNECT, page, dependencies.openExternal),
+      );
+    },
+    [ACT_KIND.GITHUB_DISCONNECT]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_DISCONNECT, sender);
+      return Effect.flatMap(host.githubDisconnect(), (page) =>
+        openedPage(ACT_KIND.GITHUB_DISCONNECT, page, dependencies.openExternal),
+      );
     },
     // The address is an http or https one by the act's own schema, so it
     // opens in the browser and never in a file's or another app's handler.
@@ -229,6 +317,36 @@ export function planningActRows(
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
       return host.planningBoardSave(params);
+    },
+    [ACT_KIND.WORKSPACE_JOIN]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_JOIN, sender);
+      return Effect.flatMap(host.workspaceJoin(params), (answer) =>
+        "workspace" in answer
+          ? Effect.succeed(answer.workspace)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_JOIN, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBERS_READ, sender);
+      return Effect.flatMap(host.workspaceMembers(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_REMOVE, sender);
+      return Effect.flatMap(host.workspaceMemberRemove(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_REMOVE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_LEAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LEAVE, sender);
+      return Effect.flatMap(host.workspaceLeave(params), (answer) =>
+        "left" in answer ? Effect.void : refusedWorkspace(ACT_KIND.WORKSPACE_LEAVE, answer.failure),
+      );
     },
   };
 }

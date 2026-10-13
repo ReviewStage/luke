@@ -132,6 +132,10 @@ export interface RepositoryFixture {
 export interface InstallationFixture {
   readonly id: number;
   readonly login: string;
+  /** GitHub's id for the account it is on; one derived from the installation's when unsaid. */
+  readonly accountId?: number;
+  /** The kind of account it is on; a user when unsaid. */
+  readonly accountType?: "User" | "Organization";
   readonly repositories: readonly RepositoryFixture[];
   readonly permissions?: Readonly<Record<string, string>>;
 }
@@ -232,7 +236,11 @@ export function githubReaching(
         total_count: installations.length,
         installations: sliceOf(installations, sent.url).map((installation) => ({
           id: installation.id,
-          account: { login: installation.login, type: "User" },
+          account: {
+            login: installation.login,
+            id: installation.accountId ?? 50_000 + installation.id,
+            type: installation.accountType ?? "User",
+          },
           repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
           permissions: installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS,
           app_id: Number(GITHUB_FIXTURE.APP_ID),

@@ -12,6 +12,7 @@ import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
+import * as githubConnectionWire from "./github-connection-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
@@ -24,6 +25,7 @@ import * as planWire from "./plan-wire.js";
 import * as providerKeyWire from "./provider-key-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
+import * as workspaceWire from "./workspace-wire.js";
 
 /**
  * Every schema the hosted wire declares, as the JSON Schema it emits. A wire
@@ -144,6 +146,12 @@ const EFFECT_MODULE_SCHEMAS = {
     dictationRequestSchema: dictationWire.dictationRequestSchema,
     dictationAnswerSchema: dictationWire.dictationAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof dictationWire>,
+  "github-connection-wire": {
+    githubConnectAnswerSchema: githubConnectionWire.githubConnectAnswerSchema,
+    githubConnectionAnswerSchema: githubConnectionWire.githubConnectionAnswerSchema,
+    githubConnectClaimRequestSchema: githubConnectionWire.githubConnectClaimRequestSchema,
+    githubConnectClaimAnswerSchema: githubConnectionWire.githubConnectClaimAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof githubConnectionWire>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
@@ -261,6 +269,18 @@ const EFFECT_MODULE_SCHEMAS = {
     planTranscriptSchema: transcriptWire.planTranscriptSchema,
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
+  "workspace-wire": {
+    workspaceSchema: workspaceWire.workspaceSchema,
+    availableWorkspaceSchema: workspaceWire.availableWorkspaceSchema,
+    workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
+    workspaceJoinRequestSchema: workspaceWire.workspaceJoinRequestSchema,
+    workspaceJoinAnswerSchema: workspaceWire.workspaceJoinAnswerSchema,
+    workspaceMemberSchema: workspaceWire.workspaceMemberSchema,
+    workspaceMembersAnswerSchema: workspaceWire.workspaceMembersAnswerSchema,
+    workspaceMemberRemovalSchema: workspaceWire.workspaceMemberRemovalSchema,
+    workspaceLeaveRequestSchema: workspaceWire.workspaceLeaveRequestSchema,
+    workspaceLeaveAnswerSchema: workspaceWire.workspaceLeaveAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;
 
 const declaredSchemas = (

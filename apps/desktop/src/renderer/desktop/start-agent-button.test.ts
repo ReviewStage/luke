@@ -534,14 +534,14 @@ test("why the last Start did not start is said beside the button", () => {
         available: true,
         reason: undefined,
         busy: false,
-        note: "Sign in with GitHub again to start an agent.",
+        note: "Connect GitHub in Settings to start an agent.",
         onPress: () => undefined,
       },
     }),
   );
   assert.equal(
     page.querySelector('[role="alert"]')?.textContent,
-    "Sign in with GitHub again to start an agent.",
+    "Connect GitHub in Settings to start an agent.",
   );
 });
 

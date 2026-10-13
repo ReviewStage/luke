@@ -88,7 +88,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_ARCHIVE,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: true },
   },
-  [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
+  [ACT_KIND.PLANNING_REPOSITORIES]: {
+    kind: ACT_KIND.PLANNING_REPOSITORIES,
+    payload: { workspaceId: "workspace-acme" },
+  },
   [ACT_KIND.PLANNING_SET_REPOSITORY]: {
     kind: ACT_KIND.PLANNING_SET_REPOSITORY,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", repository: "acme/relay" },
@@ -109,6 +112,24 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { url: "https://example.com/docs" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
+  [ACT_KIND.GITHUB_CONNECT]: { kind: ACT_KIND.GITHUB_CONNECT },
+  [ACT_KIND.GITHUB_DISCONNECT]: { kind: ACT_KIND.GITHUB_DISCONNECT },
+  [ACT_KIND.WORKSPACE_JOIN]: {
+    kind: ACT_KIND.WORKSPACE_JOIN,
+    payload: { installationId: 4_200_017 },
+  },
+  [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
+    kind: ACT_KIND.WORKSPACE_MEMBERS_READ,
+    payload: { workspaceId: "workspace-acme" },
+  },
+  [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
+    kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
+    payload: { workspaceId: "workspace-acme", userId: "user-grace" },
+  },
+  [ACT_KIND.WORKSPACE_LEAVE]: {
+    kind: ACT_KIND.WORKSPACE_LEAVE,
+    payload: { workspaceId: "workspace-acme" },
+  },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     kind: ACT_KIND.PLANNING_BOARD_SAVE,
     payload: {

@@ -504,6 +504,17 @@ export function App(): React.JSX.Element {
             updates,
             settings,
             shortcuts,
+            // The workspace Settings shows members of is the one the sidebar lists.
+            workspace: {
+              workspace: plans.workspace,
+              onLeft: plans.onLeftWorkspace,
+              onInstall: plans.onInstallApp,
+            },
+            github: {
+              connection: plans.github,
+              onConnect: plans.onConnectGitHub,
+              onDisconnect: plans.onDisconnectGitHub,
+            },
           }}
         />
       </div>

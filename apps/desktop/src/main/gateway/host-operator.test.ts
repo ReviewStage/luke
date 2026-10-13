@@ -226,6 +226,33 @@ it.effect(
 );
 
 it.effect(
+  "a plan's start carries the workspace it was started in to the host, and a start naming none carries no workspace field",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+
+      yield* operator.planningStart({
+        name: "Billing export",
+        repository: "acme/ledger",
+        workspaceId: "workspace-acme",
+      });
+      yield* operator.planningStart({ name: "Teammate invitations" });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [
+            GATEWAY_METHOD.PLANNING_START,
+            { name: "Billing export", repository: "acme/ledger", workspaceId: "workspace-acme" },
+          ],
+          [GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" }],
+        ],
+      );
+    }),
+);
+
+it.effect(
   "the standard context window travels to the host with a Start, a change, and the default, and a choice naming none carries no window field",
   () =>
     Effect.gen(function* () {

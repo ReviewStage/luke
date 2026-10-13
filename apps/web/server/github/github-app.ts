@@ -31,6 +31,10 @@
 
 import { createPrivateKey, createSign, type KeyObject } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  type GitHubAccountType,
+} from "@sidecar/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { account } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
@@ -143,6 +147,9 @@ const BOT_LOGIN_SUFFIX = "[bot]";
  */
 const PAGING = { PER_PAGE: 100, MAX_PAGES: 50 } as const;
 
+/** The kinds of account an installation's workspace is made for; an enterprise's is none of them. */
+const ACCOUNT_TYPES: readonly GitHubAccountType[] = Object.values(GITHUB_ACCOUNT_TYPE);
+
 export interface GitHubAppSettings {
   /** The App's numeric id, which is the JWT's issuer. */
   readonly appId: string;
@@ -161,6 +168,10 @@ interface GitHubInstallation {
   readonly id: number;
   /** The user or organization the App is installed on; absent for an enterprise install, which has no login. */
   readonly accountLogin: string | undefined;
+  /** GitHub's own id for that account, which a workspace is keyed on; absent where the login is. */
+  readonly accountId: number | undefined;
+  /** Whether that account is a user or an organization; absent for any other kind. */
+  readonly accountType: GitHubAccountType | undefined;
   readonly repositorySelection: GitHubRepositorySelection;
   /** Whether the installation grants the App every permission that reads a pull request's CI (`CI_READ_PERMISSIONS`). */
   readonly ciReadable: boolean;
@@ -251,6 +262,12 @@ interface GitHubUserRepositories {
   readonly repositories: readonly GitHubRepository[];
 }
 
+/** A repository the user reaches, and GitHub's id for the installation it is reached through. */
+interface GitHubReachedRepository {
+  readonly repository: GitHubRepository;
+  readonly installationId: number;
+}
+
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
 export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
@@ -275,6 +292,16 @@ export interface GitHubAppService {
     GitHubUserReadFailure,
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
+  /**
+   * Whether the signed-in user reaches the installation, read on the user's
+   * own token as one repository of it (`GET
+   * /user/installations/{id}/repositories?per_page=1`): any answer GitHub
+   * gives at all is reach, and a not found or a forbidden is none.
+   */
+  readonly userReachesInstallation: (
+    userId: string,
+    installationId: number,
+  ) => Effect.Effect<boolean, GitHubUserReadFailure, HttpClient.HttpClient | SqlClient.SqlClient>;
   /** The repositories the signed-in user reaches through the App, read on the user's own token: every installation they reach, each paged through. */
   readonly userRepositories: (
     userId: string,
@@ -295,6 +322,32 @@ export interface GitHubAppService {
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepository>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
+   * One repository by `owner/name` as `userRepository` reads it, with the id
+   * of the installation it is reached through: the installation on the
+   * owner, the only one that can reach it.
+   */
+  readonly userRepositoryInstallation: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubReachedRepository>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
+   * The repositories one installation reaches for the signed-in user, read on
+   * the user's own token and paged through, most recently updated first;
+   * none for an installation the token does not reach.
+   */
+  readonly userInstallationRepositories: (
+    userId: string,
+    installationId: number,
+  ) => Effect.Effect<
+    readonly GitHubRepository[],
     GitHubUserReadFailure,
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
@@ -396,7 +449,13 @@ interface ReadySettings extends GitHubAppSettings {
 
 const InstallationSchema = Schema.Struct({
   id: Schema.Number,
-  account: Schema.NullOr(Schema.Struct({ login: Schema.optional(Schema.String) })),
+  account: Schema.NullOr(
+    Schema.Struct({
+      login: Schema.optional(Schema.String),
+      id: Schema.optional(Schema.Number),
+      type: Schema.optional(Schema.String),
+    }),
+  ),
   repository_selection: Schema.Literals(Object.values(GITHUB_REPOSITORY_SELECTION)),
   /** What the installation grants the App, by permission name; read for the CI permissions alone. */
   permissions: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -493,6 +552,20 @@ const writeSealedTokens = SqlSchema.void({
       .where(eq(account.id, sealed.id)),
 });
 
+/**
+ * Every GitHub row of the GitHub user given, whichever Luke account holds it.
+ * Note that Luke writes Better Auth's own `account` table here, because a
+ * webhook carries no session and Better Auth offers no server call that
+ * unlinks a provider account for a user who is not the one asking.
+ */
+const deleteGithubAccountsOf = SqlSchema.void({
+  Request: Schema.String,
+  execute: (githubUserId) =>
+    db
+      .delete(account)
+      .where(and(eq(account.providerId, GITHUB_PROVIDER_ID), eq(account.accountId, githubUserId))),
+});
+
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
@@ -530,6 +603,8 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
   return {
     id: record.id,
     accountLogin: record.account?.login,
+    accountId: record.account?.id,
+    accountType: ACCOUNT_TYPES.find((type) => type === record.account?.type),
     repositorySelection: record.repository_selection,
     ciReadable: Object.keys(CI_READ_PERMISSIONS).every((permission) => permission in granted),
   };
@@ -545,6 +620,19 @@ function userOf(record: UserRecord): GitHubUser {
  * private: `<id>+<login>@users.noreply.github.com`, which is what a commit
  * by the account is attributed through.
  */
+/**
+ * Forgets a GitHub user's authorization of the App, as GitHub's
+ * `github_app_authorization` delivery reports it revoked: the account row, and
+ * the sealed tokens on it that no longer reach anything, go. The Luke account
+ * keeps every other way it signs in; one whose only way in was GitHub signs
+ * in with GitHub again, which links a fresh row.
+ */
+export function forgetRevokedAuthorization(
+  githubUserId: number,
+): Effect.Effect<void, StoreFailure, SqlClient.SqlClient> {
+  return deleteGithubAccountsOf(String(githubUserId));
+}
+
 export function noreplyAddress(user: GitHubUser): string {
   return `${user.id}+${user.login}@${GITHUB_NOREPLY_DOMAIN}`;
 }
@@ -913,6 +1001,23 @@ function githubAppService(
         return Option.some(installationOf(record));
       }).pipe(Effect.scoped),
     userInstallations: (userId) => Effect.flatMap(userToken(userId), installationsOnToken),
+    userReachesInstallation: (userId, installationId) =>
+      Effect.gen(function* () {
+        const token = yield* userToken(userId);
+        const request = githubRead(
+          `/user/installations/${installationId}/repositories`,
+          token,
+        ).pipe(HttpClientRequest.setUrlParams({ per_page: "1" }));
+        const response = yield* sendAsUser(request);
+        if (
+          response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
+          response.status === GITHUB_HTTP_STATUS.FORBIDDEN
+        ) {
+          return false;
+        }
+        yield* readBody(response, InstallationRepositoriesSchema);
+        return true;
+      }).pipe(Effect.scoped),
     userRepositories: (userId) =>
       Effect.gen(function* () {
         const token = yield* userToken(userId);
@@ -931,6 +1036,20 @@ function githubAppService(
         reachableRepository(userId, fullName),
         Option.map((reached) => reached.repository),
       ),
+    userRepositoryInstallation: (userId, fullName) =>
+      Effect.map(
+        reachableRepository(userId, fullName),
+        Option.map((reached) => ({
+          repository: reached.repository,
+          installationId: reached.installation.id,
+        })),
+      ),
+    userInstallationRepositories: (userId, installationId) =>
+      Effect.gen(function* () {
+        const token = yield* userToken(userId);
+        const repositories = yield* repositoriesOfInstallation(token, installationId);
+        return [...repositories].sort(byMostRecentlyUpdated);
+      }),
     repositoryReadToken: (userId, fullName) =>
       repositoryToken(userId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
     repositoryCiReadable: (userId, fullName) =>

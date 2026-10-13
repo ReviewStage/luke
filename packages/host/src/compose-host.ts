@@ -7,9 +7,11 @@ import {
 } from "@sidecar/gateway";
 import {
   HostedCodingAgentClient,
+  HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
   HostedPlanClient,
+  HostedWorkspaceClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
@@ -120,14 +122,24 @@ export const hostAssemblyLayer: Layer.Layer<
       showPlanCode: (code) => showPlanCode(code),
       showPlanWork: (work) => showPlanWork(work),
     });
+    const workspaceClient = new HostedWorkspaceClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      ...account.token,
+    });
     const planning = yield* composePlanning({
       kernel,
       account,
       endPlanCall: (planId) => live.service.endPlanCall(planId),
-      client: new HostedPlanClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
+      client: Object.assign(
+        new HostedPlanClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
+        {
+          workspaces: workspaceClient,
+          github: new HostedGitHubConnectionClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            ...account.token,
+          }),
+        },
+      ),
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
