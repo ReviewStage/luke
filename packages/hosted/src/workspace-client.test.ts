@@ -191,38 +191,38 @@ it.effect(
 );
 
 it.effect(
-  "names a removal or a leave the service refused, and reads a leave of another workspace as no answer",
+  "names a removal or a leave the service refused, and reads a malformed answer as none",
   () =>
     Effect.gen(function* () {
-      const workspaces = client();
-      const both = (layer: ReturnType<typeof fakeCloudApi>["layer"]) =>
-        Effect.provide(
-          Effect.all([workspaces.removeMember(ACME.id, GRACE.userId), workspaces.leave(ACME.id)]),
-          layer,
-        );
-      const refusingBoth = (error: string, status: number) =>
-        fakeCloudApi({
-          "POST /api/workspaces/members/remove": { answer: () => ({ error }), status },
-          "POST /api/workspaces/leave": { answer: () => ({ error }), status },
-        });
+      const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
+      const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
+      const notPermitted = fakeCloudApi({
+        "POST /api/workspaces/members/remove": forbidden,
+        "POST /api/workspaces/leave": forbidden,
+      });
+      const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
+      const notFound = fakeCloudApi({
+        "POST /api/workspaces/members/remove": missing,
+        "POST /api/workspaces/leave": missing,
+      });
       const elsewhere = fakeCloudApi({
         "POST /api/workspaces/members/remove": {
           answer: () => ({ members: [{ ...ADA, role: "guest" }] }),
         },
         "POST /api/workspaces/leave": { answer: () => ({ workspaceId: PERSONAL.id }) },
       });
+      const workspaces = client();
+      const both = (layer: typeof notPermitted.layer) =>
+        Effect.provide(
+          Effect.all([workspaces.removeMember(ACME.id, GRACE.userId), workspaces.leave(ACME.id)]),
+          layer,
+        );
 
       const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
-      const missed = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
+      const outside = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
       const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
-      assert.deepEqual(
-        yield* both(refusingBoth(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN).layer),
-        [refused, refused],
-      );
-      assert.deepEqual(
-        yield* both(refusingBoth(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND).layer),
-        [missed, missed],
-      );
+      assert.deepEqual(yield* both(notPermitted.layer), [refused, refused]);
+      assert.deepEqual(yield* both(notFound.layer), [outside, outside]);
       assert.deepEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
     }),
 );

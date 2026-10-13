@@ -29,16 +29,6 @@ import type { StoreFailure } from "./store-failure.js";
  * status, and a disconnect deletes the row, which is Luke's own.
  */
 
-const findInstallationOfWorkspace = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: Schema.Struct({ installationId: Schema.Number }),
-  execute: (organizationId) =>
-    db
-      .select({ installationId: githubInstallation.installationId })
-      .from(githubInstallation)
-      .where(eq(githubInstallation.organizationId, organizationId)),
-});
-
 /** The roles that connect and disconnect a workspace's GitHub organization: an owner or an admin. */
 export const GITHUB_CONNECT_ROLES: ReadonlySet<string> = new Set([
   WORKSPACE_ROLE.OWNER,
@@ -157,6 +147,16 @@ const upsertInstallation = SqlSchema.void({
       .values({ organizationId: row.organizationId, ...linked, createdAt: row.now })
       .onConflictDoUpdate({ target: githubInstallation.organizationId, set: linked });
   },
+});
+
+const findInstallationOfWorkspace = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ installationId: Schema.Number }),
+  execute: (organizationId) =>
+    db
+      .select({ installationId: githubInstallation.installationId })
+      .from(githubInstallation)
+      .where(eq(githubInstallation.organizationId, organizationId)),
 });
 
 const updateInstallationStatus = SqlSchema.void({

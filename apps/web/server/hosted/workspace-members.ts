@@ -14,8 +14,8 @@ import { SqlSchema } from "effect/unstable/sql";
  * Drizzle as `workspace-store.ts` reads it, since the plugin's own
  * `listMembers` takes a session cookie a desktop's bearer never carries. A
  * removal and a leaving are the plugin's `removeMember` and
- * `leaveOrganization` in kind, but both take a session cookie too, so the
- * row is deleted here instead: no organization hook is configured that the
+ * `leaveOrganization` in kind, but both take the same cookie, so the row is
+ * deleted here instead: no organization hook is configured that the
  * plugin's own delete would have run. Who may do which is the caller's to
  * decide.
  */

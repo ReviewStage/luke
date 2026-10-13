@@ -139,18 +139,18 @@ sets the column not null). A plan's summary on the wire names it as `workspaceId
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
 statement joins into its own where clause.
 
-A workspace's members are read through `server/workspaces-app.ts` under the
-bearer, since the plugin's own `listMembers` takes a session cookie a Mac
-never holds. `GET /api/workspaces/members?workspaceId=` answers a
+A workspace's members are read, removed, and left through
+`server/workspaces-app.ts` under the bearer, since the plugin's own
+`listMembers`, `removeMember`, and `leaveOrganization` take a session cookie
+a Mac never holds. `GET /api/workspaces/members?workspaceId=` answers a
 workspace's members to a member, read through Drizzle
-(`hosted/workspace-members.ts`), owners first, then admins, then members. A
-workspace the account is not in is `not-found`; a personal one
-`not-permitted`. `POST /api/workspaces/members/remove` lets an owner or an
-admin remove a member who is not an owner, and `POST /api/workspaces/leave`
-lets anyone but an owner leave; both delete the `member` row through
-Drizzle, since the plugin's own `removeMember` and `leaveOrganization` take a
-session cookie, and no organization hook is configured that its delete would
-run. `tests/workspaces-app.test.ts` holds each over the plugin on
+(`hosted/workspace-members.ts`), owners first, then admins, then members.
+`POST /api/workspaces/members/remove` lets an owner or an admin remove a
+member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
+an owner leave; both delete the `member` row through Drizzle, no
+organization hook being configured that the plugin's own delete would run.
+A workspace the account is not in is `not-found`; a personal one, or a role
+that does not allow it, `not-permitted`. `tests/workspaces-app.test.ts` holds each over the plugin on
 PGlite.
 
 Dynamic client registration stays disabled. One public client is compiled in:
@@ -332,8 +332,8 @@ answered and ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
-its plans stay reachable, and nothing is deleted. A `github_app_authorization` delivery, which GitHub also
-sends every App unsubscribed
+its plans stay reachable, and nothing is deleted. A `github_app_authorization`
+delivery, which GitHub also sends every App unsubscribed
 ([GitHub: github_app_authorization](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)),
 with action `revoked` deletes the `account` rows of provider `github` whose
 `accountId` is the delivery's `sender.id`, and the sealed tokens on them,

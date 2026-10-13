@@ -22,7 +22,7 @@ import { workspaceIdSchema } from "./plan-wire.js";
  *
  * A member of a workspace reads its members; an owner or an admin removes
  * one who is not an owner, and anyone but an owner leaves. A personal
- * workspace is managed and left by nobody.
+ * workspace's members are read, removed, and left by nobody.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
