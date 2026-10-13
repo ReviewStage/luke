@@ -20,8 +20,8 @@ import {
  * developer and Luke both read, and nothing draws them muted. Every new plan
  * starts as a copy of it (`plan-store.ts`'s `createPlan`; `docs/PLANNING.md`,
  * "The template"), and a note Luke adds to a section that still holds exactly
- * what the template put there takes the place of those words
- * (`plan-template.ts`'s `applyNotesToText`).
+ * what the template put there, one paragraph of guidance, takes the place of
+ * those words (`plan-template.ts`'s `applyNotesToText`).
  *
  * Every write that changes the template is kept as a revision, read and
  * restored the way a plan's are: `GET /api/account/plan-template/revisions`

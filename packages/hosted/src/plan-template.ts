@@ -36,8 +36,9 @@ import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./
  * would open a heading or an HTML block is escaped, and a code fence left
  * open is closed, so no note can open a section of its own or swallow the
  * ones after it. A point added to a section that still holds exactly what
- * the plan's template put there takes the place of that guidance, so a
- * filled section never keeps its prompt above its answer. The schema
+ * the plan's template put there, one paragraph of guidance, takes the place
+ * of that guidance, so a filled section never keeps its prompt above its
+ * answer. The schema
  * guarantees shape only; whether a note is understood or agreed is the
  * model's judgment.
  */
@@ -407,6 +408,9 @@ export function withAgentEdit(
 /** A line that opens a Markdown list item. */
 const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
 
+/** A line of a template's section that opens anything but prose: a list item, a fence, a quote, a table row, or a heading. */
+const STARTER_CONTENT_LINE = /^\s*(?:(?:[-*+]|\d{1,9}[.)])(?:\s|$)|`{3,}|~{3,}|>|\||#)/u;
+
 /** The list markers a list item's text opens with, which the formatter draws itself. */
 const LEADING_LIST_MARKERS = /^(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
 
@@ -487,13 +491,18 @@ function fenceClosed(words: string): string {
 
 /**
  * Whether a section still holds exactly what the plan's template put under
- * its heading, its guidance written over by nobody yet; never where the
- * template the plan started from is not known.
+ * its heading, and that is guidance: one paragraph of prose. Note that a
+ * template's list, code, quote, table, or deeper heading is never taken for
+ * guidance, because a template may start a section with content of its own,
+ * and that is kept with the point added after it. Never where the template
+ * the plan started from is not known.
  */
-function untouched(section: PlanSection, started: string | undefined): boolean {
+function guidanceOnly(section: PlanSection, started: string | undefined): boolean {
   if (started === undefined) return false;
   const was = planSections(started).find((each) => each.heading === section.heading);
-  return was?.text === section.text;
+  if (was?.text !== section.text) return false;
+  const lines = section.text.split("\n").slice(1).join("\n").trim().split("\n");
+  return lines.every((line) => line.trim().length > 0 && !STARTER_CONTENT_LINE.test(line));
 }
 
 /**
@@ -516,7 +525,7 @@ function addedToText(
     const head = fenceClosed(text.trimEnd());
     return `${head.length === 0 ? "" : `${head}\n\n`}## ${heading}\n\n${added}\n`;
   }
-  if (untouched(section, started)) {
+  if (guidanceOnly(section, started)) {
     const headingLine = section.text.split("\n", 1)[0] ?? "";
     return `${text.slice(0, section.from)}${headingLine}\n\n${added}${text.slice(section.to)}`;
   }

@@ -161,6 +161,17 @@ test("a section whose guidance the developer wrote over keeps every word, the po
   );
 });
 
+test("a section a template started with a list keeps it, the point added after it", () => {
+  const template = "## Testing\n\n- Run the smoke test.\n";
+  const { text } = applyNotesToText(
+    template,
+    [add(PLAN_HEADING.TESTING, "- Check invite expiry.")],
+    template,
+  );
+
+  assert.equal(text, "## Testing\n\n- Run the smoke test.\n- Check invite expiry.\n");
+});
+
 test("a plan whose template is not known has a point added after the guidance", () => {
   const { text } = applyNotesToText(TEMPLATE, [add(PLAN_HEADING.GOAL, "Members invite by email.")]);
 

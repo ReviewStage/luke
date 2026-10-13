@@ -761,11 +761,12 @@ headings, each with one plain guidance sentence. The template is plain
 Markdown with no convention of its own: whatever guidance it holds is
 ordinary text the developer and Luke both see and write over. The first
 point Luke's notes add to a section that still holds exactly what the
-plan's template put under its heading takes the place of those words
-(`packages/hosted/src/plan-template.ts`'s `applyNotesToText`), so a filled
-section never keeps its prompt above its answer; once anything else stands
-there, a point is added after it, and the developer's own edits are never
-rewritten.
+plan's template put under its heading, where that is one paragraph of prose,
+takes the place of those words (`packages/hosted/src/plan-template.ts`'s
+`applyNotesToText`), so a filled section never keeps its prompt above its
+answer. A template's list, code, quote, or table is its own starting content
+and is kept; once anything else stands in a section, a point is added after
+it, and the developer's own edits are never rewritten.
 
 Settings › Plan template is where the developer edits it
 (`apps/desktop/src/renderer/settings/plan-template-page.tsx`), signed in
