@@ -23,7 +23,9 @@ import { cn } from "./utils";
  * "Thought", because the stored part carries the words alone and no
  * measure of how long they took, and while closed the thought's own words
  * after it, cut to the line, as a command's row reads its command. Open,
- * the line says "Thought" alone, since the words are under it whole.
+ * the line says "Thought" alone, since the words are under it whole. As a
+ * call's line, "Thought" is in the full ink, and the brain and the preview
+ * in the muted one.
  */
 
 /** What the folded line says. */
@@ -62,7 +64,7 @@ export function ReasoningTrigger({
     >
       <BrainIcon className="size-4 shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate">
-        {children}
+        <span className="text-foreground">{children}</span>
         {drawn || preview === "" ? null : ` ${preview}`}
       </span>
     </FoldSummary>

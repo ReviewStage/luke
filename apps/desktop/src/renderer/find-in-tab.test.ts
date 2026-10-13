@@ -250,7 +250,7 @@ test("a match folded away in a closed fold is found, and showing it opens the fo
   assert.equal(read.querySelector("pre"), null, "the closed fold draws nothing again");
 });
 
-test("a closed thought's or command's words are found once, in the body the line previews, and showing them opens its fold", () => {
+test("a closed thought's or command's words, described or not, are found once, in the body the line previews, and showing them opens its fold", () => {
   installHighlights();
   const tab = mounted([
     createElement(TranscriptReasoning, { key: "thought", text: "List the sources first." }),
@@ -263,9 +263,19 @@ test("a closed thought's or command's words are found once, in the body the line
       output: { kind: TOOL_BLOCK.TEXT, text: "invite.ts" },
       errorText: undefined,
     }),
+    createElement(TranscriptTool, {
+      key: "described",
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind: CALL_KIND.COMMAND,
+      subject: "pnpm test",
+      description: "Run the tests",
+      input: { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "passed" },
+      errorText: undefined,
+    }),
   ]);
-  const [thought, command] = [...tab.container.querySelectorAll("details")];
-  assert.ok(thought && command);
+  const [thought, command, described] = [...tab.container.querySelectorAll("details")];
+  assert.ok(thought && command && described);
 
   chord(FIND);
   typeInto(field(tab.container), "sources");
@@ -276,6 +286,10 @@ test("a closed thought's or command's words are found once, in the body the line
   typeInto(field(tab.container), "ls src");
   assert.equal(tally(tab.container), "1 of 1");
   assert.equal(command.open, true);
+
+  typeInto(field(tab.container), "pnpm test");
+  assert.equal(tally(tab.container), "1 of 1");
+  assert.equal(described.open, true);
 });
 
 test("text arriving in the tab while the bar is open is found without moving the match the find is at", async () => {
