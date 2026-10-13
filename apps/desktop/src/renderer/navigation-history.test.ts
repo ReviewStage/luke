@@ -575,7 +575,12 @@ test("Back from what a version's Open opened returns to the version history on t
   openVersionHistory(INVITATIONS);
   await landed();
   const older = document.body.querySelectorAll(".version-item")[1];
-  click(older?.querySelector<HTMLButtonElement>(".version-row-sections"));
+  click(older?.querySelector<HTMLButtonElement>("button[aria-label='Version actions']"));
+  click(
+    [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === "Show changes",
+    ),
+  );
   await landed();
   click(
     [...document.body.querySelectorAll<HTMLButtonElement>(".version-section-row")].find(
@@ -584,11 +589,8 @@ test("Back from what a version's Open opened returns to the version history on t
   );
   assert.deepEqual(chosenVersion(), { revision: 1, section: "Decisions" });
 
-  click(
-    document.body.querySelector<HTMLButtonElement>(
-      ".version-sections-head button[aria-label='Open in Transcript']",
-    ),
-  );
+  // The author at the sections' head opens where the version was written.
+  click(document.body.querySelector<HTMLButtonElement>("button.version-sections-source"));
   assert.equal(where(), INVITATIONS.name);
   assert.equal(command("["), true);
   await landed();
