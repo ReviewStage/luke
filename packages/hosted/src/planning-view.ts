@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
-import { CODING_AGENT_BOUNDS, turnRecordFields } from "./coding-agent-wire.js";
+import { CODING_AGENT_BOUNDS, storedObjectSchema, turnRecordFields } from "./coding-agent-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -262,6 +262,44 @@ const planWorkPartSchema = EffectSchema.Union([
 export type PlanWorkPart = typeof planWorkPartSchema.Type;
 
 /**
+ * A journal as the agent tab reads one: its parts as the AI SDK stored them
+ * (the model's words, its reasoning, and each tool call with its input and
+ * answer, under the tool's own name), the newest kept and every string in
+ * them cut to the text bound, so a turn that read a large file still travels
+ * small. The desktop reads each call by its tool's name
+ * (`@sidecar/hosted/agent-tools`), as it reads a coding agent's.
+ */
+const planWorkJournalSchema = EffectSchema.Array(storedObjectSchema).check(
+  EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.PARTS),
+);
+
+/**
+ * One worker a turn handed work to, by the call that started it: the job it
+ * was handed, the task eve runs it as, where it stands as its own session
+ * reads (running while it works, though its call answered the moment it
+ * started), and its session as a journal, with when its newest task began
+ * and ended, its title, and what that task ran on and spent.
+ */
+const planWorkWorkerSchema = EffectSchema.Struct({
+  callId: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.LINE_ID_CHARS)),
+  taskId: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.NAME_CHARS)),
+  ),
+  task: workText,
+  state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
+  earlierOmitted: EffectSchema.Boolean,
+  journal: planWorkJournalSchema,
+  startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
+  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
+  title: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+  ),
+  ...turnRecordFields,
+});
+
+export type PlanWorkWorker = typeof planWorkWorkerSchema.Type;
+
+/**
  * One planning turn as the Work tab draws it: the turn, when it started and
  * ended, how far it has got, the newest of what the model wrote and called,
  * oldest first, and what it ran on and spent. Unlike `plan.activity`, this
@@ -279,6 +317,14 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   /** Whether older parts than these were left out. */
   earlierOmitted: EffectSchema.Boolean,
   parts: EffectSchema.Array(planWorkPartSchema),
+  /** The turn's own journal, as the agent tab reads one; absent from a service older than it. */
+  journal: EffectSchema.optionalKey(planWorkJournalSchema),
+  /** The workers the turn handed work to, in the order it started them; absent from a service older than it. */
+  workers: EffectSchema.optionalKey(
+    EffectSchema.Array(planWorkWorkerSchema).check(
+      EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.PARTS),
+    ),
+  ),
   /**
    * The developer's spoken lines the turn took as its ask, by the ids the
    * Transcript names them by, in the order they were said: those of the asks

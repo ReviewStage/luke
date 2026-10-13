@@ -7,11 +7,12 @@ import {
   type PlanWorkState,
   type PlanWorkTool,
   type PlanWorkTurn,
+  type PlanWorkWorker,
 } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
-import { toolCallView } from "./tool-call-model";
+import { delegationView, toolCallView } from "./tool-call-model";
 import { CALL_KIND, TURN_ROW, type TurnRow } from "./turn-rows";
 import { workerOf, workRowsOf } from "./work-model";
 
@@ -407,4 +408,112 @@ test("a skill load, which the wire says as another tool named load_skill, is rea
     false,
   );
   assert.deepEqual(load?.said, { kind: CALL_KIND.LOAD_SKILL, subject: "release-notes" });
+});
+
+/** A worker the turn delegated to in the background, as a service that sends its own session sends it. */
+function delegated(state: PlanWorkState, journal: PlanWorkWorker["journal"]): PlanWorkWorker {
+  return {
+    callId: "call-1",
+    taskId: "delegate-7k2m9q",
+    task: "Compare the two queue libraries.",
+    state,
+    earlierOmitted: false,
+    journal,
+    startedAt: 5,
+    model: "openai/gpt-5.5",
+    effort: "low",
+  };
+}
+
+/** A turn as a service that sends its own journal sends it: the parts as the AI SDK stored them, and its workers beside them. */
+function journaled(
+  state: PlanWorkState,
+  journal: NonNullable<PlanWorkTurn["journal"]>,
+  workers: readonly PlanWorkWorker[] = [],
+): PlanWorkTurn {
+  return { ...turn(state, []), journal, workers };
+}
+
+/** The planning model's background delegate as eve stores it: answered at its receipt. */
+const DELEGATE_CALL = {
+  type: "tool-delegate",
+  toolCallId: "call-1",
+  state: "output-available",
+  input: { task: "Compare the two queue libraries." },
+  output: "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+};
+
+test("a worker delegated in the background reads as running while its own session runs, though its call answered at its receipt, and keeps running past the turn that started it while the call stands", () => {
+  const session = [
+    {
+      type: "tool-run_in_repository",
+      toolCallId: "w-1",
+      state: "input-available",
+      input: { command: "ls vendor" },
+    },
+  ];
+  const turns = [
+    journaled(
+      PLAN_WORK_STATE.DONE,
+      [
+        DELEGATE_CALL,
+        { type: "text", text: "I've asked a worker to compare them.", state: "done" },
+      ],
+      [delegated(PLAN_WORK_STATE.RUNNING, session)],
+    ),
+  ];
+
+  const [running] = callsOf(turns);
+  assert.ok(running !== undefined && delegates(running));
+  assert.equal(running.state, TOOL_STATE.INPUT_AVAILABLE);
+  const worker = workerOf(workRowsOf(turns, true), "call-1");
+  assert.equal(worker?.call.running, true);
+  assert.deepEqual(
+    agentParts(worker?.session?.message ?? { id: "", role: "assistant", parts: [] }).map((part) =>
+      part.kind === AGENT_PART.TOOL ? [part.tool, part.state] : [part.kind],
+    ),
+    [["run_in_repository", TOOL_STATE.INPUT_AVAILABLE]],
+  );
+
+  const [ended] = callsOf(turns, false);
+  assert.equal(ended?.state, TOOL_STATE.OUTPUT_AVAILABLE);
+});
+
+test("a worker delegated in the background names the pair its session ran on, and reads as failed where its session failed", () => {
+  const turns = (state: PlanWorkState) => [
+    journaled(PLAN_WORK_STATE.DONE, [DELEGATE_CALL], [delegated(state, [])]),
+  ];
+
+  const [done] = callsOf(turns(PLAN_WORK_STATE.DONE));
+  assert.ok(done !== undefined);
+  assert.equal(done.state, TOOL_STATE.OUTPUT_AVAILABLE);
+  assert.deepEqual(delegationView(done, undefined).choice, {
+    model: "openai/gpt-5.5",
+    effort: "low",
+  });
+
+  const [failed] = callsOf(turns(PLAN_WORK_STATE.FAILED));
+  assert.equal(failed?.state, TOOL_STATE.OUTPUT_ERROR);
+});
+
+test("a call a turn's journal holds unanswered reads as running while the turn moves, and as having run once the call it ran on ended, never as failed", () => {
+  const turns = [
+    journaled(PLAN_WORK_STATE.RUNNING, [
+      {
+        type: "tool-run_in_repository",
+        toolCallId: "a",
+        state: "input-available",
+        input: { command: "ls" },
+      },
+    ]),
+  ];
+
+  assert.deepEqual(
+    callsOf(turns).map((part) => [part.tool, part.state]),
+    [["run_in_repository", TOOL_STATE.INPUT_AVAILABLE]],
+  );
+  assert.deepEqual(
+    callsOf(turns, false).map((part) => [part.tool, part.state]),
+    [["run_in_repository", TOOL_STATE.OUTPUT_AVAILABLE]],
+  );
 });

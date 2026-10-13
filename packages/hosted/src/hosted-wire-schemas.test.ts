@@ -74,6 +74,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
     codingAgentTodosInputSchema: codingAgentWire.codingAgentTodosInputSchema,
+    storedObjectSchema: codingAgentWire.storedObjectSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "inbox-wire": {
     inboxKeySchema: inboxWire.inboxKeySchema,
