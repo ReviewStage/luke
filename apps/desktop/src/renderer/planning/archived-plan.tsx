@@ -25,13 +25,13 @@ const ARCHIVED_PLAN_COPY = {
 /** The banner across the top of an archived plan's document, with Unarchive as its primary button. */
 export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): React.JSX.Element {
   return (
-    <section className="archived-banner" aria-label={ARCHIVED_PLAN_COPY.TITLE}>
-      <span className="archived-banner-glyph" aria-hidden="true">
+    <section className="document-banner archived-banner" aria-label={ARCHIVED_PLAN_COPY.TITLE}>
+      <span className="document-banner-glyph" aria-hidden="true">
         <ArchiveIcon />
       </span>
-      <div className="archived-banner-words">
-        <p className="archived-banner-title">{ARCHIVED_PLAN_COPY.TITLE}</p>
-        <p className="archived-banner-detail">{ARCHIVED_PLAN_COPY.DETAIL}</p>
+      <div className="document-banner-words">
+        <p className="document-banner-title">{ARCHIVED_PLAN_COPY.TITLE}</p>
+        <p className="document-banner-detail">{ARCHIVED_PLAN_COPY.DETAIL}</p>
       </div>
       <button type="button" className="primary-button" onClick={onUnarchive}>
         {ARCHIVED_PLAN_COPY.UNARCHIVE}

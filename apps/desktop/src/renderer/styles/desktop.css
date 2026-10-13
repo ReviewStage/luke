@@ -1473,12 +1473,11 @@ body,
 
 /* The document ------------------------------------------------------------- */
 
-/* An archived plan's quiet line over its document: a hairline strip in the
-   secondary voice, with the press that brings the plan back. */
-/* An archived plan's banner: a card over the document, on the document's
-   own reading width, so the one action the plan takes is the first thing
-   read, the way Notion marks a page in the trash. */
-.archived-banner {
+/* A banner over a document: a card on the document's own reading width, so
+   what it says is the first thing read. An archived plan's says so with the
+   one action the plan takes, the way Notion marks a page in the trash, and
+   the plan template's says what the template is for, with its reset. */
+.document-banner {
   display: flex;
   box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
@@ -1491,7 +1490,7 @@ body,
   background: var(--desktop-well);
 }
 
-.archived-banner-glyph {
+.document-banner-glyph {
   display: grid;
   width: 32px;
   height: 32px;
@@ -1502,12 +1501,12 @@ body,
   color: var(--text-secondary);
 }
 
-.archived-banner-glyph svg {
+.document-banner-glyph svg {
   width: 16px;
   height: 16px;
 }
 
-.archived-banner-words {
+.document-banner-words {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -1515,17 +1514,17 @@ body,
   gap: var(--space-2);
 }
 
-.archived-banner-words p {
+.document-banner-words p {
   margin: 0;
 }
 
-.archived-banner-title {
+.document-banner-title {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
 }
 
-.archived-banner-detail {
+.document-banner-detail {
   color: var(--text-secondary);
   font-size: 12.5px;
 }

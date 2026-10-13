@@ -25,7 +25,6 @@ import type {
 import { FeedbackSection } from "./feedback-section";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
-import { PlanTemplateSection } from "./plan-template-page";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { VoiceSection } from "./voice-page";
@@ -170,10 +169,6 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView ? (
         <AppearanceSection view={panelView} writes={writes} />
-      ) : null}
-
-      {view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
-        <PlanTemplateSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? (

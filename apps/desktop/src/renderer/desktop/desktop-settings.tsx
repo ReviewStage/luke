@@ -1,4 +1,5 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { BackIcon, LaptopIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
@@ -8,6 +9,7 @@ import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/cal
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { SETTINGS_PAGE } from "../settings/pages";
+import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
 import {
   SettingsPanel,
@@ -43,7 +45,8 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * are the panel's own, drawn by `SettingsPanel`; its front-page index, with
  * the Voice row's attention mark, and its back buttons are this list's job
  * here, and a page's reset rides the toolbar's right edge beside the page's
- * title.
+ * title. The plan template is the one page drawn apart from the panel: it is
+ * a plan's page, document and all (`../settings/plan-template-page.tsx`).
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -171,17 +174,21 @@ export function DesktopSettings({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>
-      <section className="settings-page" aria-label={shown.title}>
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">{shown.title}</h1>
+      {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
+        <PlanTemplatePage signedIn={settings.account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      ) : (
+        <section className="settings-page" aria-label={shown.title}>
+          <header className="desktop-toolbar">
+            <div className="desktop-toolbar-heading">
+              <h1 className="desktop-toolbar-title">{shown.title}</h1>
+            </div>
+            {reset ? <div className="desktop-toolbar-actions">{reset}</div> : null}
+          </header>
+          <div className="settings-page-scroll">
+            <SettingsPanel {...settings} />
           </div>
-          {reset ? <div className="desktop-toolbar-actions">{reset}</div> : null}
-        </header>
-        <div className="settings-page-scroll">
-          <SettingsPanel {...settings} />
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }
