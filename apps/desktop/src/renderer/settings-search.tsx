@@ -366,7 +366,7 @@ export function SettingsSearchField({
     <search className="settings-search">
       {/* The label is the whole well, so a press on the magnifier or the
           padding lands the caret the way a press on the text would. */}
-      <label className="settings-search-well">
+      <label className="settings-search-well field-well">
         <SearchIcon />
         <input
           ref={field}

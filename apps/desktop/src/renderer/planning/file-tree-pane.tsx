@@ -55,7 +55,7 @@ function TreeSearch({
   onQuery: (query: string) => void;
 }): React.JSX.Element {
   return (
-    <label className="settings-search-well file-tree-search-well">
+    <label className="settings-search-well field-well file-tree-search-well">
       <SearchIcon />
       <input
         ref={field}

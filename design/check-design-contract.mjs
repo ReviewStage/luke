@@ -18,6 +18,12 @@ const SPACING_DECLARATION =
 const COLOUR_LITERAL =
   /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(|(?<![\w-])(?:white|black)(?![\w-])/iu;
 const MASK_PROPERTY = /^(?:-webkit-)?mask(?:-image)?$/u;
+// The keyboard's ring is base.css's, drawn on the --focus-ring tokens. A rule
+// that takes it away says what marks the focus instead, as `/* no ring: … */`
+// on the declaration, and a rule that draws one draws it on the tokens.
+const RING_REMOVED = /(?<![\w-])outline(?:-style)?\s*:\s*(?:none|0)\s*;(?![ \t]*\/\*\s*no ring:)/u;
+const FOCUS_SELECTOR = /:focus(?:-visible|-within)?\b/u;
+const OUTLINE_DECLARATION = /(?<![\w-])(outline(?:-color|-width|-offset)?)\s*:\s*([^;]+);/gu;
 
 // A value less every calc that spends a token, which may adjust it by a pixel
 // as a border asks.
@@ -122,6 +128,23 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
           failures.push(`${name}: ${bare} spends a literal colour in ${property}; use a token`);
         }
       }
+    }
+
+    const oneLine = bare.replace(/\s+/gu, " ");
+    if (RING_REMOVED.test(body)) {
+      failures.push(
+        `${name}: ${oneLine} takes the focus ring away; say what marks focus instead with /* no ring: … */`,
+      );
+    }
+    const offTokens = [...body.matchAll(OUTLINE_DECLARATION)].some(
+      ([, property, value]) =>
+        /\d*\.?\d+px\b/u.test(withoutTokenCalcs(value)) ||
+        ((property === "outline" || property === "outline-color") &&
+          !/^(?:none|0)$/u.test(value.trim()) &&
+          !/var\(--focus-ring\)/u.test(value)),
+    );
+    if (FOCUS_SELECTOR.test(bare) && offTokens) {
+      failures.push(`${name}: ${oneLine} draws a focus ring off the --focus-ring tokens`);
     }
 
     if (SPACED_SHEETS.has(name)) {

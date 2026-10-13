@@ -250,7 +250,7 @@ button.plan-unit-byline:focus-visible {
 }
 
 .plan-document-block:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the tint below marks the block */
 }
 
 .plan-document-block:focus-visible::before {
@@ -266,7 +266,7 @@ button.plan-unit-byline:focus-visible {
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .plan-title-text {
   caret-color: var(--accent);
-  outline: none;
+  outline: none; /* no ring: the caret alone, edited where it is drawn */
   overflow-wrap: anywhere;
 }
 
@@ -292,7 +292,7 @@ button.plan-unit-byline:focus-visible {
 .plan-document-text {
   --plan-section-gap: 1.5em;
   caret-color: var(--accent);
-  outline: none;
+  outline: none; /* no ring: a document, or a well that rings for it */
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -611,7 +611,7 @@ button.code-card-path:hover {
 
 /* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
 .file-crumb-tree:focus {
-  outline: none;
+  outline: none; /* no ring: the tree's own row carries it */
 }
 
 .file-crumb-notice {
@@ -1463,7 +1463,7 @@ button.attached-file-face:hover img {
 }
 
 .attachment-viewer:focus {
-  outline: none;
+  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .attachment-viewer[data-view="text"] {
@@ -1713,7 +1713,7 @@ button.attached-file-face:hover img {
 }
 
 .agent-context-popover:focus-visible {
-  outline: none;
+  outline: none; /* no ring: a popover holding focus for its controls */
 }
 
 .agent-context-head {
@@ -1895,11 +1895,6 @@ button.attached-file-face:hover img {
   background: var(--raised);
 }
 
-.agent-published-row:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 .agent-published-row[data-state="merged"] .account-mark {
   color: var(--state-merged);
 }
@@ -1985,11 +1980,6 @@ button.subagent-line:hover {
   background: var(--raised-strong);
 }
 
-button.subagent-line:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 .subagent-job {
   overflow: hidden;
   white-space: nowrap;
@@ -2028,11 +2018,6 @@ button.subagent-line:focus-visible {
   opacity: 0.4;
 }
 
-.inbox-option:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 /* An image block on the Inbox tab (`inbox-board.tsx`): the picture the
    agent took, at the card's own reading width and no wider than itself, a
    press on it opening the attached-file viewer. The spinner's room stands
@@ -2052,11 +2037,6 @@ button.subagent-line:focus-visible {
   display: block;
   max-width: 100%;
   height: auto;
-}
-
-.inbox-image:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 
 .inbox-image-pending {
