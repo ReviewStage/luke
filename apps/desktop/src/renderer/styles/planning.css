@@ -2043,6 +2043,24 @@ button.attached-file-face:hover img {
   margin-left: auto;
 }
 
+/* Why a connected server lists no tools, after its name in the attention
+   tint at the count's size, cut where the row's button begins while the
+   name keeps its width; the whole line is the row's title. */
+.agent-servers-row:has(.agent-servers-problem) .plan-compose-menu-name {
+  flex: none;
+}
+
+.agent-servers-problem {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0 var(--space-4);
+  color: var(--state-attention);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The tools stand beside the popover, on its leading side since it hangs
    from the composer's trailing edge, up from the row's foot since it stands
    at the panel's foot, and scroll down inside themselves past a bounded

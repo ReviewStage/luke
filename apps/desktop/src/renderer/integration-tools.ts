@@ -1,52 +1,56 @@
-import type { IntegrationToolsView } from "@sidecar/hosted/integration-view";
+import {
+  INTEGRATION_CALL_FAILURE,
+  type IntegrationToolsView,
+} from "@sidecar/hosted/integration-view";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 
 /**
- * integration-tools.ts -- the tools each connected integration's server offers, read for as long as a surface that lists them is drawn.
+ * integration-tools.ts -- what each connected integration's server answered when asked for its tools, read for as long as a surface that draws it is drawn.
  *
- * A provider's tools are read once each time the surface is drawn, as soon
- * as it stands connected, and never polled: the service holds what it read
- * for a few minutes, so a popover opened again costs the server nothing. A
- * read that answered no list leaves that provider with none, which is drawn
- * as no count at all rather than an error.
+ * A provider's tools are read as soon as it stands connected, and again
+ * whenever the window is focused, which is how the developer comes back
+ * from mending a connection in the browser; never polled otherwise. The
+ * service holds a list it read for a few minutes, so a read again costs a
+ * working server nothing, and holds no refusal, so a mended one reads as
+ * mended. Each read stands until the next one answers, so a surface does
+ * not blink back to checking. What a read means for the row is
+ * `integration-health.ts`'s to say.
  */
 
-/** One tool as a list draws it. */
-export interface IntegrationTool {
-  readonly name: string;
-  readonly description: string;
-}
+/** What each provider's tools read answered so far; a provider absent here has not answered yet. */
+export type IntegrationToolsReads = Partial<Record<IntegrationProvider, IntegrationToolsView>>;
 
-/** The tools of each provider read so far; a provider absent here has not answered yet, or answered none. */
-export type IntegrationToolsByProvider = Partial<
-  Record<IntegrationProvider, readonly IntegrationTool[]>
->;
+const UNANSWERED: IntegrationToolsView = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
 
-/** The tools of every provider in `connected`, read once each while the caller is drawn. */
+/** The tools read of every provider in `connected`, asked once per focus of the window while the caller is drawn. */
 export function useIntegrationTools(
   connected: readonly IntegrationProvider[],
-): IntegrationToolsByProvider {
+): IntegrationToolsReads {
   const { act } = useAct();
-  const [tools, setTools] = useState<IntegrationToolsByProvider>({});
-  const asked = useRef(new Set<IntegrationProvider>());
+  const [reads, setReads] = useState<IntegrationToolsReads>({});
+  const [focus, setFocus] = useState(0);
+  // The focus each provider was last asked under, so each is asked once per focus.
+  const asked = useRef(new Map<IntegrationProvider, number>());
 
-  // Each provider is asked the first render it stands connected, and only then.
+  useEffect(() => {
+    const focused = () => setFocus((count) => count + 1);
+    window.addEventListener("focus", focused);
+    return () => window.removeEventListener("focus", focused);
+  }, []);
+
   useEffect(() => {
     for (const provider of connected) {
-      if (asked.current.has(provider)) continue;
-      asked.current.add(provider);
+      if (asked.current.get(provider) === focus) continue;
+      asked.current.set(provider, focus);
       act(ACT_KIND.INTEGRATIONS_TOOLS, { provider }).then(
-        (answer: IntegrationToolsView) => {
-          if ("failure" in answer) return;
-          setTools((read) => ({ ...read, [provider]: answer.tools }));
-        },
-        () => undefined,
+        (answer: IntegrationToolsView) => setReads((read) => ({ ...read, [provider]: answer })),
+        () => setReads((read) => ({ ...read, [provider]: UNANSWERED })),
       );
     }
   });
 
-  return tools;
+  return reads;
 }

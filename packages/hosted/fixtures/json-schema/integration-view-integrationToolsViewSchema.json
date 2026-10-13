@@ -1,32 +1,66 @@
 {
   "anyOf": [
     {
-      "type": "object",
-      "properties": {
-        "tools": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "description": {
-                "type": "string"
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "description"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "name",
-              "description"
-            ],
-            "additionalProperties": false
-          }
+            }
+          },
+          "required": [
+            "tools"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "problem": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "refused",
+                    "rejected",
+                    "unreachable",
+                    "unreadable"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "problem"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "tools"
-      ],
-      "additionalProperties": false
+      ]
     },
     {
       "type": "object",

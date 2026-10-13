@@ -14,8 +14,15 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import {
+  CONNECTION_HEALTH,
+  type ConnectionHealth,
+  connectionHealth,
+  toolsCount,
+} from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
+import { useIntegrationTools } from "../integration-tools";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
@@ -25,8 +32,11 @@ import { SettingsGroup } from "./settings-group";
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
  *
  * One row per provider: its mark and name, and under it where its connection
- * stands once that needs saying — connected, a sign-in under way, or one
- * expired. A Connect sends the browser to sign in with the provider; a
+ * stands once that needs saying — connected with the count of its server's
+ * tools, a sign-in under way, or one expired. A connection is said to be
+ * connected only once its server answered with its tools; one whose server
+ * answered why it would not says why instead and offers Reconnect
+ * (`integration-health.ts`). A Connect sends the browser to sign in with the provider; a
  * connected row's ⋯ (or a right-click on it) offers Disconnect, which asks
  * first in the confirm dialog. The window never sees a sign-in address; the
  * host opens it. Where every
@@ -34,16 +44,50 @@ import { SettingsGroup } from "./settings-group";
  * when it is drawn and whenever the window is focused, which is how the
  * developer comes back from the browser. A provider this deployment offers
  * no connector for says so and offers nothing. Every line is fixed by the
- * build; nothing the service said beyond its status words is drawn.
+ * build, but for the one-line reason a provider's server gave, which the
+ * service passes on only where it carries no credential.
  */
 
 const PAGE_LINE = {
   CONNECTED: "Connected",
+  CHECKING: "Checking…",
   SIGNED_OUT: "Sign in to connect integrations.",
   READ_FAILED: "Your integrations could not be read.",
   NOT_AVAILABLE: "Not available",
   NOT_OPENED: "Luke could not open your browser to sign in.",
 } as const;
+
+/** What a row's line looks like: connected with its dot, a problem in the attention tint, or plain. */
+const LINE_STATE = {
+  CONNECTED: "connected",
+  ATTENTION: "attention",
+  PLAIN: "plain",
+} as const;
+
+type LineState = (typeof LINE_STATE)[keyof typeof LINE_STATE];
+
+/** The line under a row's name, and how it looks. */
+interface RowLine {
+  readonly text: string;
+  readonly state: LineState;
+}
+
+/** A connected row's line, from how its server answered. */
+function connectedLine(health: ConnectionHealth): RowLine {
+  switch (health.kind) {
+    case CONNECTION_HEALTH.WORKING:
+      return {
+        text: `${PAGE_LINE.CONNECTED} · ${toolsCount(health.tools.length)}`,
+        state: LINE_STATE.CONNECTED,
+      };
+    case CONNECTION_HEALTH.BROKEN:
+      return { text: health.problem, state: LINE_STATE.ATTENTION };
+    case CONNECTION_HEALTH.CHECKING:
+      return { text: PAGE_LINE.CHECKING, state: LINE_STATE.PLAIN };
+    case CONNECTION_HEALTH.UNKNOWN:
+      return { text: PAGE_LINE.CONNECTED, state: LINE_STATE.CONNECTED };
+  }
+}
 
 /**
  * The line under a row's name: where the connection stands, or nothing where
@@ -53,15 +97,16 @@ const PAGE_LINE = {
 function rowLine(
   provider: IntegrationProvider,
   status: IntegrationStatus | undefined,
-): string | undefined {
+  health: ConnectionHealth,
+): RowLine | undefined {
   const name = INTEGRATION_NAME[provider];
   switch (status) {
     case INTEGRATION_STATUS.CONNECTED:
-      return PAGE_LINE.CONNECTED;
+      return connectedLine(health);
     case INTEGRATION_STATUS.PENDING:
-      return `Finish signing in to ${name} in your browser.`;
+      return { text: `Finish signing in to ${name} in your browser.`, state: LINE_STATE.PLAIN };
     case INTEGRATION_STATUS.EXPIRED:
-      return "Sign-in expired.";
+      return { text: "Sign-in expired.", state: LINE_STATE.ATTENTION };
     case INTEGRATION_STATUS.DISCONNECTED:
     case undefined:
     case INTEGRATION_STATUS.UNAVAILABLE:
@@ -72,11 +117,14 @@ function rowLine(
 function IntegrationRow({
   provider,
   status,
+  health,
   statuses,
 }: {
   provider: IntegrationProvider;
   /** Where the connection stands, or nothing while it has not been read; the row offers nothing until it has. */
   status: IntegrationStatus | undefined;
+  /** How a connected provider's server answered when asked for its tools. */
+  health: ConnectionHealth;
   statuses: IntegrationStatuses;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -123,7 +171,8 @@ function IntegrationRow({
     },
   );
 
-  const line = rowLine(provider, status);
+  const line = rowLine(provider, status, health);
+  const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN;
   const actions = connected
     ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
     : [];
@@ -136,17 +185,14 @@ function IntegrationRow({
         <span className="settings-copy">
           <strong>{name}</strong>
           {line === undefined ? null : (
-            <small
-              className="settings-state"
-              data-state={status === INTEGRATION_STATUS.EXPIRED ? "attention" : status}
-            >
-              {line}
+            <small className="settings-state" data-state={line.state}>
+              {line.text}
             </small>
           )}
         </span>
         {status === INTEGRATION_STATUS.UNAVAILABLE ? (
           <span className="settings-unavailable">{PAGE_LINE.NOT_AVAILABLE}</span>
-        ) : status === undefined || connected ? null : (
+        ) : status === undefined || (connected && !broken) ? null : (
           <button
             type="button"
             className="toolbar-button bordered-button"
@@ -154,7 +200,11 @@ function IntegrationRow({
             title={`Sign in to ${name} in your browser`}
             onClick={connect}
           >
-            {status === INTEGRATION_STATUS.DISCONNECTED ? "Connect" : "Connect again"}
+            {status === INTEGRATION_STATUS.DISCONNECTED
+              ? "Connect"
+              : broken
+                ? "Reconnect"
+                : "Connect again"}
           </button>
         )}
       </MenuRow>
@@ -183,6 +233,11 @@ function IntegrationRow({
  */
 function IntegrationRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
+  const reads = useIntegrationTools(
+    INTEGRATION_PROVIDER_LIST.filter(
+      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
+    ),
+  );
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
   return (
@@ -201,6 +256,7 @@ function IntegrationRows(): React.JSX.Element {
             key={provider}
             provider={provider}
             status={statuses.statusOf(provider)}
+            health={connectionHealth(provider, reads[provider])}
             statuses={statuses}
           />
         ))}

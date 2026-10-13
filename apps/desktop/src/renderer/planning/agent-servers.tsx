@@ -1,12 +1,17 @@
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import {
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
 import { GearIcon, McpIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
 import type { IntegrationStatuses } from "../integration-statuses";
-import { type IntegrationTool, useIntegrationTools } from "../integration-tools";
+import { useIntegrationTools } from "../integration-tools";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
@@ -15,7 +20,6 @@ import {
   type ServerRow,
   serverRows,
   switchedServers,
-  toolsCount,
 } from "./agent-servers-model";
 
 /**
@@ -27,7 +31,9 @@ import {
  * as the model menu is: one row per server with its mark and its name
  * (`agent-servers-model.ts`). A connected server's row names how many tools
  * it offers, a count that opens the list of them beside the popover on
- * hover or focus, and ends with this agent's switch. One not connected ends
+ * hover or focus, and ends with this agent's switch; one whose server
+ * answered why it lists none says why beside its name and ends with
+ * Reconnect instead (`../integration-health.ts`). One not connected ends
  * with Connect, which sends the browser to sign in there and then, as
  * Settings does, and becomes the switch once the sign-in settles; Settings
  * is one press away at the gear beside the title for everything else. Where
@@ -117,14 +123,17 @@ function ServersPopover({
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
   const { act } = useAct();
+  const reads = useIntegrationTools(
+    INTEGRATION_PROVIDER_LIST.filter(
+      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
+    ),
+  );
   const rows = serverRows({
     statusOf: statuses.statusOf,
+    healthOf: (provider) => connectionHealth(provider, reads[provider]),
     readFailed: statuses.readFailed,
     disabled: servers.disabled,
   });
-  const tools = useIntegrationTools(
-    rows.filter((row) => row.kind === SERVER_ROW.SWITCH).map((row) => row.provider),
-  );
   const [connecting, setConnecting] = useState<IntegrationProvider | undefined>(undefined);
 
   // The popover takes focus as it opens, so Escape and focus leaving it are heard.
@@ -154,9 +163,7 @@ function ServersPopover({
       case SERVER_ROW.SWITCH:
         return (
           <>
-            {tools[row.provider] !== undefined ? (
-              <ToolsCount name={row.name} tools={tools[row.provider] ?? []} />
-            ) : null}
+            {row.tools !== undefined ? <ToolsCount name={row.name} tools={row.tools} /> : null}
             <button
               type="button"
               className="agent-servers-switch"
@@ -237,6 +244,11 @@ function ServersPopover({
           >
             <IntegrationMark provider={row.provider} />
             <span className="plan-compose-menu-name">{row.name}</span>
+            {row.problem !== undefined ? (
+              <span className="agent-servers-problem" title={row.problem}>
+                {row.problem}
+              </span>
+            ) : null}
             {end(row)}
           </div>
         ))}
