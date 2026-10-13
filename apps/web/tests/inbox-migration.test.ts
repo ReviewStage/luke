@@ -206,6 +206,10 @@ it.effect(
             applied.map(([, name]) => name),
             [MIGRATION],
           );
+          // Note that the store reads below gate on the workspace a later migration adds, so the
+          // database is carried the rest of the way first; the triggers 0088 left still stand.
+          yield* journal(latest);
+          yield* runWebMigrations(folder);
 
           const items = yield* planInboxItems(agent.userId, agent.planId);
           assert.ok(items.every((item) => item.version === BLOCKS_VERSION));
