@@ -216,10 +216,6 @@
     "dest": "/api/default.js?route=workspaces"
   },
   {
-    "src": "/api/workspaces/join",
-    "dest": "/api/default.js?route=workspaces/join"
-  },
-  {
     "src": "/api/workspaces/members",
     "dest": "/api/default.js?route=workspaces/members"
   },

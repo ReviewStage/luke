@@ -16,10 +16,8 @@ import { workspaceIdSchema } from "./plan-wire.js";
  * A workspace's id is the one a plan's summary
  * names, `plan-wire.ts`'s `workspaceIdSchema`.
  *
- * An account joins the workspace of an installation it may join by the
- * installation's id, once GitHub confirms it still reaches it, and a member
- * of a workspace reads its members. A personal workspace is joined by
- * nobody, and its members are read by nobody.
+ * A member of a workspace reads its members; a personal workspace's
+ * members are read by nobody.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -46,8 +44,6 @@ export const workspaceSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
-export type Workspace = typeof workspaceSchema.Type;
-
 /** A workspace the account may join: the GitHub App installation it stands for, by GitHub's id, and its name, the account's login. */
 export const availableWorkspaceSchema = EffectSchema.Struct({
   installationId: EffectSchema.Int.check(EffectSchema.isGreaterThan(0)),
@@ -63,14 +59,6 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
 });
 
 export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
-
-/** Joining the workspace of a GitHub App installation (POST), by GitHub's id for the installation. */
-export const workspaceJoinRequestSchema = EffectSchema.Struct({
-  installationId: availableWorkspaceSchema.fields.installationId,
-});
-
-/** The workspace joined, with the account's role in it: a member's, or the one it already held. */
-export const workspaceJoinAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
 
 /** One member of a workspace: the account, its name and email, and its role. */
 export const workspaceMemberSchema = EffectSchema.Struct({

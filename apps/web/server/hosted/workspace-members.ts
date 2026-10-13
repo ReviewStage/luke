@@ -1,6 +1,5 @@
 import { db } from "@sidecar/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@sidecar/database/github-installation-vocabulary";
-import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
 import {
   roleOf,
   type Workspace,
@@ -12,19 +11,16 @@ import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace"
 import type { WorkspaceMember, WorkspaceRole } from "@sidecar/hosted/workspace-wire";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { and, asc, eq } from "drizzle-orm";
-import { type Cause, Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
-import type { StoreFailure } from "./store-failure.js";
 
 /**
- * workspace-members.ts -- who is in a workspace, and the joins that add to it.
+ * workspace-members.ts -- who is in a workspace, and the account's own standing in it.
  *
  * A member is the organization plugin's `member` row, read here through
- * Drizzle as `workspace-store.ts` reads it. A join is the plugin's own
- * server-only `addMember`, handed in as a seam the way a workspace's
- * creation is. Who may read the members is the caller's to decide from
- * `membershipOf`.
+ * Drizzle as `workspace-store.ts` reads it, since the plugin's own
+ * `listMembers` takes a session cookie a desktop's bearer never carries.
+ * Who may read the members is the caller's to decide from `membershipOf`.
  */
 
 /** The order roles are listed in: owners, then admins, then members. */
@@ -58,21 +54,6 @@ const findMembership = SqlSchema.findOneOption({
       .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
       .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
       .limit(1),
-});
-
-const findActiveInstallationWorkspace = SqlSchema.findOneOption({
-  Request: Schema.Number,
-  Result: Schema.Struct({ organizationId: Schema.String }),
-  execute: (installationId) =>
-    db
-      .select({ organizationId: githubInstallation.organizationId })
-      .from(githubInstallation)
-      .where(
-        and(
-          eq(githubInstallation.installationId, installationId),
-          eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.ACTIVE),
-        ),
-      ),
 });
 
 const findMembers = SqlSchema.findAll({
@@ -109,16 +90,6 @@ export function membershipOf(
   );
 }
 
-/** The workspace of an active installation, by GitHub's id for it; nothing for one suspended, removed, or never synced. */
-export function installationWorkspaceOf(
-  installationId: number,
-): WorkspaceStoreEffect<Option.Option<string>> {
-  return Effect.map(
-    findActiveInstallationWorkspace(installationId),
-    Option.map((row) => row.organizationId),
-  );
-}
-
 /** A workspace's members, owners first, then admins, then members, each by name. */
 export function listMembers(
   organizationId: string,
@@ -126,26 +97,5 @@ export function listMembers(
   return Effect.map(findMembers(organizationId), (rows) => {
     const members = rows.map((row) => ({ ...row, role: roleOf(row.role) }));
     return ROLE_ORDER.flatMap((role) => members.filter((one) => one.role === role));
-  });
-}
-
-/**
- * The account made a member of the workspace through the plugin, and its
- * standing as it then is, a member's. Where the plugin refused because a
- * racing join made it a member first, the standing is read all the same; a
- * refusal that left it outside is answered as it was.
- */
-export function addMember(
-  userId: string,
-  organizationId: string,
-  seams: WorkspaceSeams,
-): Effect.Effect<Option.Option<Workspace>, StoreFailure | Cause.UnknownError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const added = yield* Effect.result(seams.addMember({ userId, organizationId }));
-    const standing = yield* membershipOf(userId, organizationId);
-    if (Option.isNone(standing) && Result.isFailure(added)) {
-      return yield* Effect.fail(added.failure);
-    }
-    return standing;
   });
 }

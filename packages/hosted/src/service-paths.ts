@@ -103,12 +103,6 @@ export const HOSTED_SERVICE_PATH = {
    * declares the answer.
    */
   WORKSPACES: "/api/workspaces",
-  /**
-   * Joins the workspace of a GitHub App installation the account's GitHub
-   * still reaches (POST); joining one the account is in answers it as it is.
-   * `workspace-wire.ts` declares both bodies.
-   */
-  WORKSPACES_JOIN: "/api/workspaces/join",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
 } as const;

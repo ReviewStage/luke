@@ -6,10 +6,8 @@ import type { AccountToken } from "./account-token.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
   WORKSPACE_MEMBERS_QUERY,
-  type Workspace,
   type WorkspaceMember,
   type WorkspacesAnswer,
-  workspaceJoinAnswerSchema,
   workspaceMembersAnswerSchema,
   workspacesAnswerSchema,
 } from "./workspace-wire.js";
@@ -48,21 +46,6 @@ export class HostedWorkspaceClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES },
       workspacesAnswerSchema,
-    );
-  }
-
-  /** Joins the workspace of the installation, answered as the account now sees it; nothing where the service refused or did not answer. */
-  join(installationId: number): Effect.Effect<Workspace | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.POST,
-          path: HOSTED_SERVICE_PATH.WORKSPACES_JOIN,
-          body: JSON.stringify({ installationId }),
-        },
-        workspaceJoinAnswerSchema,
-      ),
-      (answer) => answer?.workspace,
     );
   }
 

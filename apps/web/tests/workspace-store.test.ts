@@ -106,7 +106,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             raced.push(id);
             return yield* Effect.fail(new Cause.UnknownError(undefined, "Organization exists"));
           }),
-        addMember: plugin.addMember,
       };
 
       const ensured = yield* ensurePersonalWorkspace(userId, racing);

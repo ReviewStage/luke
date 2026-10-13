@@ -87,35 +87,21 @@ const GRACE = {
   role: "member",
 };
 
-it.effect(
-  "joins an installation's workspace and reads its members, each asked as the service names it",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        "POST /api/workspaces/join": { answer: () => ({ workspace: SHARED }) },
-        "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
-      });
-      const workspaces = client();
+it.effect("reads a workspace's members under the workspace's id, as the service ordered them", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
+    });
+    const workspaces = client();
 
-      const joined = yield* Effect.provide(workspaces.join(JOINABLE.installationId), api.layer);
-      const members = yield* Effect.provide(workspaces.members(SHARED.id), api.layer);
+    const members = yield* Effect.provide(workspaces.members(SHARED.id), api.layer);
 
-      assert.deepEqual(joined, SHARED);
-      assert.deepEqual(members, [ADA, GRACE]);
-      assert.deepEqual(
-        api.requests().map(({ method, pathname, search, body }) => ({
-          route: `${method} ${pathname}${search}`,
-          body: body === undefined ? undefined : JSON.parse(body),
-        })),
-        [
-          {
-            route: "POST /api/workspaces/join",
-            body: { installationId: JOINABLE.installationId },
-          },
-          { route: `GET /api/workspaces/members?workspaceId=${SHARED.id}`, body: undefined },
-        ],
-      );
-    }),
+    assert.deepEqual(members, [ADA, GRACE]);
+    assert.deepEqual(
+      api.requests().map(({ method, pathname, search }) => `${method} ${pathname}${search}`),
+      [`GET /api/workspaces/members?workspaceId=${SHARED.id}`],
+    );
+  }),
 );
 
 it.effect("answers nothing where the service refused", () =>
@@ -125,15 +111,10 @@ it.effect("answers nothing where the service refused", () =>
       status: HTTP_STATUS.FORBIDDEN,
     };
     const api = fakeCloudApi({
-      "POST /api/workspaces/join": refusal,
       "GET /api/workspaces/members": refusal,
     });
     const workspaces = client();
 
-    assert.equal(
-      yield* Effect.provide(workspaces.join(JOINABLE.installationId), api.layer),
-      undefined,
-    );
     assert.equal(yield* Effect.provide(workspaces.members(SHARED.id), api.layer), undefined);
   }),
 );

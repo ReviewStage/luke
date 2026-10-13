@@ -5,10 +5,7 @@ import {
   type Workspace,
 } from "@sidecar/database/models/workspace-store";
 import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
-import {
-  WORKSPACE_MEMBERS_QUERY,
-  workspaceJoinRequestSchema,
-} from "@sidecar/hosted/workspace-wire";
+import { WORKSPACE_MEMBERS_QUERY } from "@sidecar/hosted/workspace-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { type Cause, Effect, Layer, Option, Result } from "effect";
 import {
@@ -19,8 +16,7 @@ import {
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { unparsedWire } from "./core.js";
-import { GitHubApp } from "./github/github-app.js";
-import { githubUserReadOrRefusal } from "./github/github-refusal.js";
+import type { GitHubApp } from "./github/github-app.js";
 import {
   listAvailableWorkspaces,
   type SyncedInstallations,
@@ -34,16 +30,10 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
-  readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import type { StoreFailure } from "./hosted/store-failure.js";
-import {
-  addMember,
-  installationWorkspaceOf,
-  listMembers,
-  membershipOf,
-} from "./hosted/workspace-members.js";
+import { listMembers, membershipOf } from "./hosted/workspace-members.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -63,24 +53,17 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * resolved before any row is touched, and both lists are the bearer's
  * account's alone.
  *
- * `POST /api/workspaces/join` makes the account a member of the workspace of
- * an active installation, once its own GitHub token still reaches that
- * installation; joining one it is in already answers it as it stands.
  * `GET /api/workspaces/members` answers a workspace's members to a member
  * of it. A workspace the account is not in is not found; a personal one,
- * which nobody joins and whose members nobody manages, is not permitted.
+ * whose members nobody manages, is not permitted.
  */
 
 const WORKSPACES_PATH = {
   LIST: "/api/workspaces",
-  JOIN: "/api/workspaces/join",
   MEMBERS: "/api/workspaces/members",
 } as const;
 
-const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
-
-/** A join names one installation and nothing more. */
-const MAXIMUM_WORKSPACE_BODY_BYTES = 4 * 1024;
+const HTTP_METHOD = { GET: "GET" } as const;
 
 /** No installation synced, so nothing to join. */
 const NONE: SyncedInstallations = [];
@@ -177,41 +160,6 @@ const workspacesEndpoint = /* @__PURE__ */ Effect.fn("web/workspacesEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaces, available });
 });
 
-/**
- * POST: the account joins the workspace of an active installation. GitHub is
- * asked only for an account not in it yet, and an installation its token no
- * longer reaches is not found, as one with no workspace is.
- */
-const joinEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceJoinEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<
-  HttpServerResponse.HttpServerResponse,
-  HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
-> {
-  const { userId } = yield* signedInAs(seams, HTTP_METHOD.POST);
-  const body = yield* readJsonBodyEffect(MAXIMUM_WORKSPACE_BODY_BYTES);
-  const join = readEither(workspaceJoinRequestSchema)(body);
-  if (Result.isFailure(join)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { installationId } = join.success;
-  const workspace = yield* hostedStoreOrUnavailable(installationWorkspaceOf(installationId));
-  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const standing = yield* hostedStoreOrUnavailable(membershipOf(userId, workspace.value));
-  if (Option.isSome(standing)) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspace: standing.value });
-  }
-  const app = yield* GitHubApp;
-  const reaches = yield* githubUserReadOrRefusal(
-    app.userReachesInstallation(userId, installationId),
-  );
-  if (!reaches) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const joined = yield* pluginWriteOrUnavailable(
-    addMember(userId, workspace.value, seams.workspaces),
-  );
-  if (Option.isNone(joined)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspace: joined.value });
-});
-
 /** GET: a workspace's members, to a member of it. */
 const membersEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMembersEndpoint")(function* (
   seams: WorkspacesAppSeams,
@@ -237,7 +185,6 @@ export function workspacesApp(
 ): WebRoutes<SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.LIST, hostedRefusing(workspacesEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.JOIN, hostedRefusing(joinEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.MEMBERS, hostedRefusing(membersEndpoint(seams))),
     hostedNotFoundRoute,
   );
