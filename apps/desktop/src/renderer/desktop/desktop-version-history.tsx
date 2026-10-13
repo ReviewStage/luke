@@ -26,7 +26,11 @@ import {
 } from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION } from "../planning/planning-model";
-import { HISTORY_READ, type ViewedVersion } from "../planning/use-plan-history";
+import {
+  HISTORY_READ,
+  type OpenedSections,
+  type ViewedVersion,
+} from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { HarnessMark } from "../provider-marks";
@@ -487,17 +491,6 @@ function useOpenedRowShown(
   }, [selected, rows, log]);
 }
 
-/**
- * The revision whose sections are open, and the one of them drawn by its
- * heading, the first until another is chosen. Note that the section is
- * held by its heading rather than its place, because a save that joins the
- * revision while it is open can add a section before it.
- */
-interface OpenedSections {
-  readonly seq: number;
-  readonly heading: string | undefined;
-}
-
 /** The sections the open revision changed, once its version is read; nothing while it is read, or while no revision is open. */
 function openedSections(
   viewing: ViewedVersion | undefined,
@@ -576,7 +569,8 @@ function VersionPage({
 /**
  * The open plan's version history over the whole window: the versions where
  * the sidebar stands, with the way back at their head, and the version
- * chosen beside them. `onExit` leaves for wherever it was opened from.
+ * chosen beside them. `onExit` leaves for wherever it was opened from, and
+ * `onRestored` for the plan a restore landed on.
  */
 export function DesktopVersionHistory({
   sidebar,
@@ -584,6 +578,7 @@ export function DesktopVersionHistory({
   plans,
   account,
   onExit,
+  onRestored,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
@@ -591,6 +586,7 @@ export function DesktopVersionHistory({
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
   onExit: () => void;
+  onRestored: () => void;
 }): React.JSX.Element {
   const now = useMinute();
   const versions = plans.history;
@@ -599,7 +595,7 @@ export function DesktopVersionHistory({
   const rows = useRef(new Map<number, HTMLButtonElement>()).current;
   const sectionRows = useRef(new Map<number, HTMLButtonElement>()).current;
   const log = useRef<HTMLDivElement>(null);
-  const [opened, setOpened] = useState<OpenedSections | undefined>(undefined);
+  const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
   const reader = readerOf(account);
   const agents = plans.agents.agents ?? [];
@@ -607,10 +603,7 @@ export function DesktopVersionHistory({
   const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
   const restorable = plan?.archivedAt === undefined;
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
-  const restore = useVersionRestore(versions, plans.shown, restorable, versions.onClose);
-  // A newer version arriving while another's sections are open moves the
-  // history on to it, as it does over the list, so the sections give way.
-  if (opened !== undefined && versions.selected !== opened.seq) setOpened(undefined);
+  const restore = useVersionRestore(versions, plans.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: RevisionAuthor): SourceDoor | undefined => {
     const source = revisionSource(line);
@@ -628,10 +621,7 @@ export function DesktopVersionHistory({
     openedLine === undefined || openedAuthor === undefined
       ? undefined
       : sourceOf(openedLine, openedAuthor);
-  const openSections = (seq: number) => {
-    versions.onSelect(seq);
-    setOpened({ seq, heading: undefined });
-  };
+  const openSections = versions.onOpenSections;
   const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
     if (!restorable || line.seq === newest) return undefined;
@@ -642,13 +632,12 @@ export function DesktopVersionHistory({
   };
   const closeSections = () => {
     if (opened === undefined) return;
-    setOpened(undefined);
+    versions.onCloseSections();
     rows.get(opened.seq)?.focus();
   };
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, opened === undefined ? onExit : closeSections);
   const chooseUnit = (at: number) => {
-    const heading = sections?.find((section) => section.unit === at)?.heading;
-    setOpened((held) => held && { ...held, heading });
+    versions.onChooseSection(sections?.find((section) => section.unit === at)?.heading);
   };
   const units = sections?.map((section) => section.unit) ?? [];
   const seqs = revisions.map((line) => line.seq);

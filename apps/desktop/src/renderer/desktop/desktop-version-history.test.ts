@@ -213,6 +213,7 @@ function mount(
       name: "Teammate invitations",
       shown: open,
       seek,
+      returnTo: undefined,
       onRestored: (undo) => {
         if (undo !== undefined) service.undos.push(undo);
       },
@@ -225,7 +226,13 @@ function mount(
         kind: DOCUMENT_REGION.READY,
         plan: planOf(service.current, archivedNow),
       },
-      history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
+      history: {
+        ...history,
+        open,
+        onOpen: () => setOpen(true),
+        onReturn: () => setOpen(true),
+        onClose: () => setOpen(false),
+      },
       agents: codingAgentsControl({ agents: [INVITE_AGENT] }),
       onShowSource: (planId, source) => shownSources.push({ planId, source }),
     });
@@ -235,6 +242,7 @@ function mount(
       plans,
       account: READER,
       onExit: () => setOpen(false),
+      onRestored: () => setOpen(false),
     });
   }
   const container = document.createElement("div");
@@ -1154,6 +1162,7 @@ it.effect(
           name: "Teammate invitations",
           shown: true,
           seek: opened.seek,
+          returnTo: undefined,
           onRestored: () => undefined,
         });
         selected = () => history.selected;
@@ -1173,5 +1182,56 @@ it.effect(
       yield* answer(OTHER_ID, 3);
 
       assert.equal(selected(), 2, "the other plan's save found, not given way to its newest");
+    }),
+);
+
+it.effect(
+  "a version gone back to on a page past the first is read for on older pages, and gives way to the newest where the history holds none",
+  () =>
+    Effect.gen(function* () {
+      const lines = fakeService().lines;
+      /** The first page holds the two newest revisions; the oldest is on the page before them. */
+      const source: PlanHistorySource = {
+        readPage: (_planId, before) =>
+          Promise.resolve(
+            before === undefined
+              ? { revisions: lines.slice(0, 2), earlier: 2 }
+              : { revisions: lines.slice(2) },
+          ),
+        readRevision: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+        restore: () => Promise.resolve(false),
+      };
+      let viewed: () => number | undefined = () => undefined;
+      let returnOn: (revision: number) => void = () => undefined;
+      function Harness() {
+        const [revision, setRevision] = useState(1);
+        returnOn = setRevision;
+        const history = usePlanHistory({
+          source,
+          planId: PLAN_ID,
+          editedAt: undefined,
+          name: "Teammate invitations",
+          shown: revision !== 0,
+          seek: undefined,
+          returnTo: { revision, opened: undefined },
+          onRestored: () => undefined,
+        });
+        viewed = () => history.viewing?.line.seq;
+        return null;
+      }
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      const settle = Effect.promise(() => act(async () => undefined));
+      yield* Effect.promise(() => act(async () => root?.render(createElement(Harness))));
+      yield* settle;
+      yield* settle;
+      assert.equal(viewed(), 1, "the oldest revision, read from the page before the first");
+
+      act(() => returnOn(0));
+      act(() => returnOn(9));
+      yield* settle;
+      yield* settle;
+      assert.equal(viewed(), 3, "a revision the history does not hold gives way to the newest");
     }),
 );

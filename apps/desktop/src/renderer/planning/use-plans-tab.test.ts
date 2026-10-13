@@ -417,6 +417,45 @@ it.effect(
 );
 
 it.effect(
+  "Version history gone back to opens where it was left, on its version with its sections open on the section drawn, and opened afresh on the newest",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, planning: EDITED },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      act(() => tab.control().history.onOpenSections(1));
+      act(() => tab.control().history.onChooseSection("Goal"));
+      yield* landed;
+      const { spot } = tab.control().history;
+      assert.deepEqual(spot, { revision: 1, opened: { seq: 1, heading: "Goal" } });
+
+      act(() => tab.control().onShowSource(PLAN.id, { kind: REVISION_SOURCE.WORK, at: 10 }));
+      assert.equal(tab.control().history.open, false);
+      assert.equal(tab.control().history.spot, undefined);
+      act(() => tab.control().history.onReturn(PLAN.id, spot));
+      yield* landed;
+      assert.equal(tab.control().history.open, true);
+      assert.equal(tab.control().history.viewing?.line.seq, 1);
+      assert.deepEqual(tab.control().history.spot, spot);
+
+      act(() => tab.control().history.onClose());
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+      assert.deepEqual(tab.control().history.spot, { revision: undefined, opened: undefined });
+    }),
+);
+
+it.effect(
   "a section's save made while the version history was away, and saved over since, is sought in the history read again, not the list kept from before",
   () =>
     Effect.gen(function* () {
