@@ -159,7 +159,6 @@ const FIXTURE_PLAN_LIST: PlanningView = {
       active: true,
     },
   ],
-  available: [],
   document: { status: PLANNING_READ.IDLE },
 };
 

@@ -111,13 +111,15 @@ import {
   type PlanningTreeAnswer,
   type PlanningTreeParams,
   type PlanningView,
-  type PlanningWorkspaceJoinAnswer,
-  type PlanningWorkspaceJoinParams,
+  type PlanningWorkspaceAnswer,
+  type PlanningWorkspaceCreateParams,
+  type PlanningWorkspaceGitHubConnectAnswer,
   type PlanningWorkspaceLeaveAnswer,
   type PlanningWorkspaceLeaveParams,
   type PlanningWorkspaceMemberRemoveParams,
   type PlanningWorkspaceMembersAnswer,
   type PlanningWorkspaceMembersParams,
+  type PlanningWorkspaceParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
   planningPageAnswerSchema,
@@ -129,7 +131,8 @@ import {
   planningStartAnswerSchema,
   planningTreeAnswerSchema,
   planningViewSchema,
-  planningWorkspaceJoinAnswerSchema,
+  planningWorkspaceAnswerSchema,
+  planningWorkspaceGitHubConnectAnswerSchema,
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
   WORKSPACE_CALL_FAILURE,
@@ -271,8 +274,16 @@ export interface HostOperator {
   integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** The workspace of a GitHub App installation joined; the workspace, or why it was not. */
-  workspaceJoin(params: PlanningWorkspaceJoinParams): Effect.Effect<PlanningWorkspaceJoinAnswer>;
+  /** A workspace made under a name, owned by the account; the workspace, or why none was. */
+  workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
+  workspaceGitHubConnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+  /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
+  workspaceGitHubDisconnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(
     params: PlanningWorkspaceMembersParams,
@@ -709,10 +720,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: params.planId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
-    workspaceJoin: (params) =>
+    workspaceCreate: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_JOIN, { installationId: params.installationId }),
-        workspaceAnswer(planningWorkspaceJoinAnswerSchema),
+        client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceGitHubConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceGitHubConnectAnswerSchema),
+      ),
+    workspaceGitHubDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
