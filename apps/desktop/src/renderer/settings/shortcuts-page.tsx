@@ -11,8 +11,6 @@ import {
   type SettingsRowsInput,
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
-  voiceHotkeyKeycaps,
-  voiceHotkeyLabel,
 } from "@sidecar/settings";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useId, useRef, useState } from "react";
@@ -22,11 +20,12 @@ import {
   commandForKey,
   KEYED_COMMANDS,
   type KeyedCommand,
-  shortcutGlyphs,
+  shortcutAccelerator,
+  shortcutLabel,
 } from "#shared/shortcuts";
-import { Keycaps } from "../keycaps";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { Shortcut } from "../shortcut";
 import type { ShortcutControl } from "./controls";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";
@@ -42,15 +41,15 @@ const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a let
 /** Why a chord the window already answers cannot become a Luke key. */
 function windowChordRefusal(command: KeyedCommand): string {
   const { label, chord } = APP_SHORTCUTS[command];
-  return `${shortcutGlyphs(chord).join("")} is Luke's own shortcut for ${label}. Choose another.`;
+  return `${shortcutLabel(shortcutAccelerator(chord))} is Luke's own shortcut for ${label}. Choose another.`;
 }
 
 /**
- * How Luke is reached rather than what he can see. The chord is drawn as the
- * keys it is — one cap each, in the same column every other row's chord
- * stands in — on a button that is the chord's own field: pressing it, or
- * Change shortcut in the row's ⋯, starts a recording. The caps give way to a
- * ringed "Press a shortcut…", what a chord may be is said under the row's
+ * How Luke is reached rather than what he can see. The chord is drawn as
+ * every chord in the window is, in the same column every other row's chord
+ * stands in, inside a field of its own, because unlike the rows under it this
+ * key can be changed: pressing the field, or Change shortcut in the row's ⋯,
+ * starts a recording. The field rings and says "Press a shortcut…", what a chord may be is said under the row's
  * own description at once, the next whole chord is stored and registered at
  * once, and Escape (or pressing the field again) keeps the key that was
  * already there. A chord refused is explained in that same place, inline,
@@ -110,8 +109,8 @@ function ShortcutRow({
   const field = useRef<HTMLButtonElement | null>(null);
   const chordId = useId();
   // What the field holds, in words: its label names the act, so the key it
-  // stands at is what describes it to someone who cannot see the caps.
-  const chordWords = off ? "None" : shown ? voiceHotkeyLabel(shown) : "Unavailable";
+  // stands at is what describes it to someone who cannot see the field.
+  const chordWords = off ? "None" : shown ? shortcutLabel(shown) : "Unavailable";
 
   // Both Luke keys stay registered while a chord is recorded — the recording
   // ends by replacing one — so pressing a current chord mid-recording would
@@ -149,7 +148,7 @@ function ShortcutRow({
     ...(chosen && !recording
       ? [
           {
-            label: `Reset to ${voiceHotkeyLabel(defaultKey)}`,
+            label: `Reset to ${shortcutLabel(defaultKey)}`,
             icon: <ResetIcon />,
             disabled: busy,
             onSelect: () => void apply(undefined),
@@ -243,8 +242,8 @@ function ShortcutRow({
           void apply(read.accelerator);
         }}
       >
-        {/* The chord as its own keys while there is one to press, and a
-            sentence when there is not: "Press a shortcut…", "None" and
+        {/* The chord while there is one to press, and a sentence when
+            there is not: "Press a shortcut…", "None" and
             "Unavailable" are things being said about the key, not keys to
             draw — and the two absences differ: "None" was asked for, where
             "Unavailable" is another app owning the chord. */}
@@ -252,13 +251,11 @@ function ShortcutRow({
           {chordWords}
         </span>
         {recording ? (
-          <span className="shortcut-state" data-recording="true">
-            Press a shortcut…
-          </span>
+          <span className="shortcut-state">Press a shortcut…</span>
         ) : off ? (
           <span className="shortcut-state">None</span>
         ) : shown ? (
-          <Keycaps caps={voiceHotkeyKeycaps(shown)} />
+          <Shortcut accelerator={shown} />
         ) : (
           <span className="shortcut-state">Unavailable</span>
         )}
@@ -340,7 +337,7 @@ export function ShortcutSection({
  * The window's own shortcuts rather than keys taken from the machine: each
  * answers only while Luke's window has the keyboard, so they are fixed and
  * listed here to be found, not chosen, under the groups the table keeps —
- * the menu bar's own — each row the command's name and its chord's caps.
+ * the menu bar's own — each row the command's name and its chord.
  */
 export function WindowShortcutSections(): React.JSX.Element {
   return (
@@ -354,7 +351,7 @@ export function WindowShortcutSections(): React.JSX.Element {
               {...searchAnchorProps(command)}
             >
               <span className="shortcut-name">{APP_SHORTCUTS[command].label}</span>
-              <Keycaps caps={shortcutGlyphs(APP_SHORTCUTS[command].chord)} />
+              <Shortcut chord={APP_SHORTCUTS[command].chord} spoken />
             </div>
           ))}
         </SettingsGroup>

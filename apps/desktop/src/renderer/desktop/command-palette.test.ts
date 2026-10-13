@@ -321,7 +321,7 @@ function choose(words: string): void {
   act(() => row.click());
 }
 
-test("⌘K lists the commands the window can run now under Actions, each with its chord drawn as keys", () => {
+test("⌘K lists the commands the window can run now under Actions, each with its chord at the row's end", () => {
   mountWindow(PANEL_TAB.PLANS);
   openPalette();
   pressFilter("Actions");
@@ -334,10 +334,7 @@ test("⌘K lists the commands the window can run now under Actions, each with it
     "nothing offers the sidebar's chord here, so the palette leaves it out",
   );
   const settings = listedRows().find((row) => rowWords(row).startsWith("Settings"));
-  assert.deepEqual(
-    [...(settings?.querySelectorAll("kbd.keycap") ?? [])].map((cap) => cap.textContent),
-    ["⌘", ","],
-  );
+  assert.equal(settings?.querySelector(".shortcut")?.textContent, "⌘,");
 });
 
 test("All lists each kind's best few under its heading, and a kind's filter lists more of it", () => {

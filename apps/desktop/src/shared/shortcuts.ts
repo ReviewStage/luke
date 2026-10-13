@@ -93,7 +93,7 @@ interface ShortcutKey {
   aria?: string;
 }
 
-const SHORTCUT_KEY = {
+export const SHORTCUT_KEY = {
   N: { accelerator: "N", glyph: "N", key: "n", code: "KeyN" },
   A: { accelerator: "A", glyph: "A", key: "a", code: "KeyA" },
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
@@ -137,6 +137,33 @@ const SHORTCUT_KEY = {
     editsText: true,
   },
 } as const satisfies Record<string, ShortcutKey>;
+
+/** The glyph each key the table names is drawn in, by the name an accelerator gives it. */
+const KEY_GLYPHS: ReadonlyMap<string, string> = new Map(
+  Object.values(SHORTCUT_KEY).map((key) => [key.accelerator, key.glyph]),
+);
+
+/** The modifiers' glyphs in the order macOS writes a chord in. */
+const MODIFIER_GLYPHS = ["⌃", "⌥", "⇧", "⌘"] as const;
+
+/** Every name an accelerator gives a modifier, Electron's and its aliases, folded to the glyph macOS draws it in. */
+const MODIFIER_GLYPH = {
+  Control: "⌃",
+  Ctrl: "⌃",
+  Alt: "⌥",
+  Option: "⌥",
+  Shift: "⇧",
+  Command: "⌘",
+  Cmd: "⌘",
+  CommandOrControl: "⌘",
+  CmdOrCtrl: "⌘",
+} as const satisfies Record<string, (typeof MODIFIER_GLYPHS)[number]>;
+
+function modifierGlyph(name: string): string {
+  if (!Object.hasOwn(MODIFIER_GLYPH, name)) return name;
+  // SAFETY: Object.hasOwn narrows name to a key the glyph table documents.
+  return MODIFIER_GLYPH[name as keyof typeof MODIFIER_GLYPH];
+}
 
 /**
  * A chord: Command, the modifiers named here, and the key. A `bare` chord is
@@ -381,15 +408,23 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
     .join("+");
 }
 
-/** The chord as the glyphs a Mac draws it in, modifiers in the order macOS writes them. */
-export function shortcutGlyphs(chord: ShortcutChord): readonly string[] {
-  return [
-    chord.control ? "⌃" : undefined,
-    chord.option ? "⌥" : undefined,
-    chord.shift ? "⇧" : undefined,
-    chord.bare ? undefined : "⌘",
-    chord.key.glyph,
-  ].filter((glyph) => glyph !== undefined);
+/**
+ * Any chord as the window draws it: the modifiers in the order macOS writes
+ * them, ⌃⌥⇧⌘, then the key, set tight as a menu prints a key equivalent —
+ * ⇧⌘I, ⌥Space, Esc. It reads Electron's accelerator, the one spelling the
+ * window's chords (`shortcutAccelerator`) and the system-wide keys Settings
+ * stores share, so the two are drawn by one rule: a key the window's table
+ * names takes its glyph, ↩ for Return and ⌫ for Delete, and any other, Space
+ * or a letter, its name.
+ */
+export function shortcutLabel(accelerator: string): string {
+  const parts = accelerator.split("+");
+  const key = parts.at(-1) ?? "";
+  const held = new Set(parts.slice(0, -1).map(modifierGlyph));
+  // A name no modifier answers to is kept, ahead of the ones that do, rather than dropped.
+  const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
+  const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
+  return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key].join("");
 }
 
 /** The chord as `aria-keyshortcuts` spells it. */

@@ -1,0 +1,22 @@
+/* A chord as glyphs (`shortcut.tsx`): muted, set tight, and in the line of the
+   words beside it, the way a menu prints a key equivalent. Every place that
+   shows a chord draws this one look and sizes it with `--shortcut-text` and
+   `--shortcut-ink` rather than restyling it. */
+
+.shortcut {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--shortcut-ink, var(--text-tertiary));
+  /* The window's own type rather than the user agent's monospace for `kbd`:
+     the glyphs are the menu bar's, and a menu prints them in the system face. */
+  font-family: inherit;
+  font-size: var(--shortcut-text, 12px);
+  font-weight: 400;
+  /* Digits and letters at one advance, so ⌘1 and ⌘5 are one width. */
+  font-variant-numeric: tabular-nums;
+  /* A hair between the glyphs, as a menu sets ⇧⌘I, without spacing it into keys. */
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}

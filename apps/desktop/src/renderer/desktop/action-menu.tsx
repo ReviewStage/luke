@@ -1,8 +1,8 @@
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { KeyedCommand } from "#shared/shortcuts";
-import { ShortcutGlyphs } from "../tooltip";
+import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
+import { Shortcut } from "../shortcut";
 import { useDisclosure } from "../use-disclosure";
 
 /**
@@ -192,7 +192,7 @@ function moveFocus(event: React.KeyboardEvent<HTMLElement>): boolean {
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   if (action.checked === true) return <CheckIcon aria-hidden="true" className="plan-menu-check" />;
   if (action.command === undefined) return null;
-  return <ShortcutGlyphs command={action.command} className="plan-menu-end" />;
+  return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="plan-menu-end" />;
 }
 
 /** One item, as a menu draws it and as a list of the same offers outside a menu draws it. */

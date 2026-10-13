@@ -4,7 +4,7 @@ import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { BackIcon, EllipsisIcon, WingFace } from "@sidecar/panel";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PersonAvatar } from "../person-avatar";
@@ -39,9 +39,10 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import type { DialogConfirm } from "../settings/confirm-dialog";
+import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
-import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
+import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
@@ -715,7 +716,10 @@ export function DesktopVersionHistory({
         >
           <BackIcon />
           Back
-          <ShortcutGlyphs command={APP_COMMAND.EXIT_VERSION_HISTORY} className="row-shortcut" />
+          <Shortcut
+            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord}
+            className="row-shortcut"
+          />
         </button>
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>

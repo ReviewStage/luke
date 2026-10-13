@@ -43,8 +43,6 @@ export {
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
   voiceHotkeyCandidates,
-  voiceHotkeyKeycaps,
-  voiceHotkeyLabel,
 } from "./voice-hotkey.js";
 export {
   isZoomPercent,

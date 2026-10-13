@@ -15,7 +15,7 @@ import {
 } from "@sidecar/panel";
 import { InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
@@ -36,8 +36,9 @@ import { inColumn, type PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
+import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
-import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
+import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
@@ -562,7 +563,7 @@ function SidebarInboxRow({
           </span>
         </span>
       )}
-      <ShortcutGlyphs command={APP_COMMAND.INBOX} className="row-shortcut" />
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} className="row-shortcut" />
     </button>
   );
 }
@@ -732,7 +733,7 @@ export function DesktopSidebar({
       >
         <ComposeIcon />
         New plan
-        <ShortcutGlyphs command={APP_COMMAND.NEW_PLAN} className="row-shortcut" />
+        <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} className="row-shortcut" />
       </button>
       {/* Search is a second door to the command palette, drawn as New plan
           is, since it heads the list the same way. */}
@@ -744,7 +745,10 @@ export function DesktopSidebar({
       >
         <SearchIcon />
         Search
-        <ShortcutGlyphs command={APP_COMMAND.COMMAND_PALETTE} className="row-shortcut" />
+        <Shortcut
+          chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord}
+          className="row-shortcut"
+        />
       </button>
       <SidebarInboxRow
         unread={plans.signedIn ? plans.inboxReads.total : 0}

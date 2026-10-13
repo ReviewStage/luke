@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
+import { VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -93,9 +93,9 @@ function row(anchor: string): HTMLElement {
   return found;
 }
 
-/** The caps a row draws, one entry per key. */
-function caps(element: HTMLElement): readonly string[] {
-  return [...element.querySelectorAll(".keycap")].map((cap) => cap.textContent ?? "");
+/** The chord a row draws, as it reads, or nothing where it draws none. */
+function drawn(element: HTMLElement): string | undefined {
+  return element.querySelector(".shortcut")?.textContent ?? undefined;
 }
 
 async function chord(init: KeyboardEventInit): Promise<void> {
@@ -164,13 +164,18 @@ test("Tabs & panels lists the panes' and the tabs' own shortcuts, and none that 
   assert.doesNotMatch(document.body.textContent ?? "", /Show (board|code|transcript|work)/u);
 });
 
-test("a chord is drawn as one cap per key, in the order a Mac writes them", () => {
+test("a chord is drawn as its glyphs set tight, as a menu prints it, the system-wide keys' as the window's", () => {
   mountPage();
 
-  assert.deepEqual(caps(row(APP_COMMAND.TOGGLE_SIDE_PANEL)), ["⌥", "⌘", "B"]);
-  assert.deepEqual(caps(row(APP_COMMAND.MOVE_TAB_RIGHT)), ["⇧", "⌘", "→"]);
-  assert.deepEqual(caps(row(APP_COMMAND.EXIT_FULL_SCREEN)), ["Esc"]);
-  assert.deepEqual(caps(row(SETTINGS_SEARCH_ROW.TALK_KEY)), ["⌥", "Space"]);
+  assert.equal(drawn(row(APP_COMMAND.TOGGLE_SIDE_PANEL)), "⌥⌘B");
+  assert.equal(drawn(row(APP_COMMAND.MOVE_TAB_RIGHT)), "⇧⌘→");
+  assert.equal(drawn(row(APP_COMMAND.EXIT_FULL_SCREEN)), "Esc");
+  assert.equal(drawn(row(SETTINGS_SEARCH_ROW.TALK_KEY)), "⌥Space");
+  assert.equal(
+    row(APP_COMMAND.TOGGLE_SIDE_PANEL).querySelector(".shortcut")?.getAttribute("aria-hidden"),
+    null,
+    "a fixed row's chord is its whole value, so a reader hears it",
+  );
 });
 
 test("every shortcut the settings search offers lands on a row the page draws", () => {
@@ -190,20 +195,20 @@ test("recording the talk key says so in place, and Escape keeps the key that was
 
   act(() => changeButton().click());
   assert.equal(recording(), true);
-  assert.deepEqual(
-    caps(row(SETTINGS_SEARCH_ROW.TALK_KEY)),
-    [],
-    "the caps give way while a chord is typed",
+  assert.equal(
+    drawn(row(SETTINGS_SEARCH_ROW.TALK_KEY)),
+    undefined,
+    "the chord gives way while one is typed",
   );
   assert.match(row(SETTINGS_SEARCH_ROW.TALK_KEY).textContent ?? "", /Press a shortcut…/);
 
   await chord({ key: "Escape", code: "Escape" });
   assert.deepEqual(stored, []);
   assert.equal(recording(), false);
-  assert.deepEqual(caps(row(SETTINGS_SEARCH_ROW.TALK_KEY)), ["⌥", "Space"]);
+  assert.equal(drawn(row(SETTINGS_SEARCH_ROW.TALK_KEY)), "⌥Space");
 });
 
-test("recording from the keyboard wears one ring, the recording field's, not a second around the button holding it", async () => {
+test("recording from the keyboard wears one ring, the field's own, not a second inside it", async () => {
   const styled = await sheetStyle();
   mountPage();
   act(() => changeButton().click());
@@ -215,7 +220,7 @@ test("recording from the keyboard wears one ring, the recording field's, not a s
   );
 
   assert.equal(recording(), true);
-  assert.deepEqual(ringed, ["shortcut-state"]);
+  assert.deepEqual(ringed, ["shortcut-field"]);
 });
 
 test("a talk key that would take one of the window's own shortcuts is refused, and says whose it is", async () => {
@@ -276,11 +281,11 @@ test("the talk row's ⋯ removes the key, leaving none, and offers no reset to a
   assert.deepEqual(stored, [VOICE_HOTKEY_NONE]);
 });
 
-test("the talk key's field is described by the key it stands at, which its caps alone would not say to a reader", () => {
+test("the talk key's field is described by the key it stands at, which its drawn glyphs alone would not say to a reader", () => {
   mountPage();
   const described = () =>
     document.getElementById(changeButton().getAttribute("aria-describedby") ?? "")?.textContent;
-  assert.equal(described(), voiceHotkeyLabel("Alt+Space"));
+  assert.equal(described(), "⌥Space");
 
   act(() => changeButton().click());
   assert.equal(changeButton().getAttribute("aria-describedby"), null, "recording says itself");
