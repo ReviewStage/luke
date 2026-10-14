@@ -85,6 +85,35 @@ function buildCommit() {
   }
 }
 
+// The files that load before a bundle runs, as paths under `dist/`: the bundle
+// itself and every chunk it reaches through static imports, at any depth. A
+// bundle the metafile does not describe is one file, as an IIFE is.
+function loadedUpFront(metafile, bundle) {
+  const outputs = new Map(
+    Object.entries(metafile.outputs).map(([file, output]) => [
+      path.relative(outputRoot, path.resolve(file)),
+      output,
+    ]),
+  );
+  const loaded = new Set([bundle]);
+  for (const file of loaded) {
+    for (const { path: imported, kind } of outputs.get(file)?.imports ?? []) {
+      if (kind === "import-statement")
+        loaded.add(path.relative(outputRoot, path.resolve(imported)));
+    }
+  }
+  return [...loaded];
+}
+
+// A document loads the renderer as a module script, or the entry's first
+// `import` is a syntax error and the window stays blank.
+async function assertModuleEntry(document) {
+  const html = await fs.readFile(path.join(outputRoot, "renderer", document), "utf8");
+  if (!html.includes('<script type="module" src="renderer.js"></script>')) {
+    throw new Error(`${document} must load renderer.js with <script type="module">`);
+  }
+}
+
 function sentryPlugins() {
   if (!process.env.SENTRY_AUTH_TOKEN) return [];
   return [
@@ -101,7 +130,38 @@ await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
 await fs.mkdir(path.join(outputRoot, "icon"), { recursive: true });
 
+// The renderer every window parses, as ES modules: an entry and the chunks it
+// imports, with no wrapper around the whole and nothing kept apart for one,
+// which is about 6 KB gzipped smaller than the same code as one script. The
+// chunks are named by their content, because esbuild names every shared one
+// `chunk`. The metafile is what the bundle budget reads the chunks off.
+const rendererBuild = build({
+  entryPoints: { renderer: path.join(appRoot, "src/renderer/index.tsx") },
+  outdir: path.join(outputRoot, "renderer"),
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  splitting: true,
+  metafile: true,
+  target: "chrome140",
+  jsx: "automatic",
+  minify: true,
+  plugins: sentryPlugins(),
+  sourcemap: true,
+  logLevel: "info",
+  define: {
+    "process.env.NODE_ENV": '"production"',
+    // The analytics project the screen recorder files into, from the
+    // packaging environment rather than source, where secret scanners
+    // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
+    // kill switch the site's own counting has, so a local run or an
+    // unconfigured build cannot record into a stranger's project.
+    PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
+  },
+});
+
 await Promise.all([
+  rendererBuild,
   build({
     entryPoints: [path.join(appRoot, "src/main/index.ts")],
     outfile: path.join(outputRoot, "main.js"),
@@ -229,28 +289,6 @@ await Promise.all([
     minify: true,
     logLevel: "info",
   }),
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
-    outfile: path.join(outputRoot, "renderer/renderer.js"),
-    bundle: true,
-    platform: "browser",
-    format: "iife",
-    target: "chrome140",
-    jsx: "automatic",
-    minify: true,
-    plugins: sentryPlugins(),
-    sourcemap: true,
-    logLevel: "info",
-    define: {
-      "process.env.NODE_ENV": '"production"',
-      // The analytics project the screen recorder files into, from the
-      // packaging environment rather than source, where secret scanners
-      // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
-      // kill switch the site's own counting has, so a local run or an
-      // unconfigured build cannot record into a stranger's project.
-      PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
-    },
-  }),
 ]);
 
 await Promise.all([
@@ -272,6 +310,8 @@ await Promise.all([
     path.join(outputRoot, "renderer/call.html"),
   ),
 ]);
+
+await Promise.all(["index.html", "voice.html", "call.html"].map(assertModuleEntry));
 
 await Promise.all(
   (await fs.readdir(EXCALIDRAW_FONTS))
@@ -303,13 +343,24 @@ await Promise.all(
 // dependency that adds a fifth to the panel is a decision, and
 // `LUKE_UPDATE_BUNDLE_BUDGET=1` is how that decision is written down once it has
 // been made.
+//
+// Note that a bundle is measured with the chunks it imports, because those load
+// with it before anything runs; a chunk reached only by a dynamic `import()` is
+// fetched when that code first runs, and is left out. Each file is gzipped on
+// its own, as each is read on its own.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
+const { metafile } = await rendererBuild;
 const measured = Object.fromEntries(
   await Promise.all(
-    Object.keys(budget.gzipBytes).map(async (bundle) => [
-      bundle,
-      gzipSync(await fs.readFile(path.join(outputRoot, bundle)), { level: 9 }).length,
-    ]),
+    Object.keys(budget.gzipBytes).map(async (bundle) => {
+      const sizes = await Promise.all(
+        loadedUpFront(metafile, bundle).map(
+          async (file) =>
+            gzipSync(await fs.readFile(path.join(outputRoot, file)), { level: 9 }).length,
+        ),
+      );
+      return [bundle, sizes.reduce((sum, bytes) => sum + bytes, 0)];
+    }),
   ),
 );
 
