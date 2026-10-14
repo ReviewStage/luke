@@ -1,3 +1,4 @@
+import { rolloutSection } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
@@ -292,8 +293,21 @@ function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }):
 }
 
 /**
- * The plan's document: its name as the title over its text. `live` is the
- * plan's call in progress, which keeps the caret waiting where the typing
+ * The plan's rollout, after its text: the section Copy writes
+ * (`rolloutSection`), drawn read-only, since the rollout stands beside the
+ * text rather than in it and no edit of the text reaches it.
+ */
+function PlanRollout({ rollout }: { rollout: Plan["rollout"] }): React.JSX.Element {
+  return (
+    <section className="plan-body plan-rollout" aria-label="Rollout">
+      <MarkdownMessage words={rolloutSection(rollout)} className="plan-unit" />
+    </section>
+  );
+}
+
+/**
+ * The plan's document: its name as the title over its text, then its
+ * rollout. `live` is the plan's call in progress, which keeps the caret waiting where the typing
  * last stopped; `onShowHistory` opens the plan's version history from the
  * "Edited by" line, on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
@@ -467,6 +481,7 @@ export function PlanBody({
           />
         )}
       </div>
+      <PlanRollout rollout={plan.rollout} />
     </div>
   );
 }

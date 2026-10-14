@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { type Plan, ROLLOUT_BASE, type Rollout } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -11,6 +11,17 @@ const PLAN: Plan = {
   document: { body: "## Goal\nInvite a teammate by email.", assumptions: [] },
 };
 
+/** Two pull requests: a table on main, then a route on it. */
+const ROLLOUT: Rollout = [
+  {
+    title: "Add the invite table",
+    scope: "The `invite` table and its migration.",
+    base: ROLLOUT_BASE.MAIN,
+    acceptance: "A store test writes and reads an invite.",
+  },
+  { title: "Invite route", scope: "The `invite` route over the table.", base: 1, acceptance: null },
+];
+
 function bodyMarkup(plan: Plan): string {
   return renderToStaticMarkup(createElement(PlanBody, { plan, live: false }));
 }
@@ -20,4 +31,49 @@ test("the saved body is drawn as Markdown", () => {
 
   assert.match(markup, /<p class="markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
+});
+test("a plan draws its name as the title over its text, and only its rollout after it, even from a service that sends assumptions", () => {
+  const markup = bodyMarkup({
+    ...DOCUMENT_PLAN,
+    document: { ...DOCUMENT_PLAN.document, assumptions: [{ text: "Invites expire." }] },
+  });
+
+  assert.match(
+    markup,
+    /^<div class="plan-document-scroll"><div class="plan-body"><div class="markdown plan-title"><p class="markdown-heading" data-level="1">Teammate invitations<\/p><\/div><div class="markdown plan-unit"><p class="markdown-heading" data-level="1">Context<\/p>/u,
+  );
+  const headings = [
+    ...markup.matchAll(/<p class="markdown-heading" data-level="(\d)">([^<]*)<\/p>/gu),
+  ];
+  assert.deepEqual(
+    headings.map((match) => [match[1], match[2]]),
+    [
+      ["1", "Teammate invitations"],
+      ["1", "Context"],
+      ["2", "Goal"],
+      ["2", "Approach"],
+      ["2", "Assumptions"],
+      ["2", "Rollout"],
+    ],
+  );
+  assert.match(markup, /## Not a section/u, "a heading inside a fence is drawn as code");
+  assert.match(markup, /<li>Links are single use\.<\/li>/u);
+  assert.doesNotMatch(markup, /Invites expire|None recorded/u);
+});
+
+test("a plan's rollout is drawn read-only after everything else, even with an edit door", () => {
+  const markup = renderToStaticMarkup(
+    createElement(PlanBody, {
+      plan: { ...DOCUMENT_PLAN, rollout: ROLLOUT },
+      live: false,
+      onEdit: () => Promise.resolve({ saved: true } as const),
+    }),
+  );
+
+  const rollout = markup.slice(markup.indexOf('<section class="plan-body plan-rollout"'));
+  assert.ok(markup.endsWith("</section></div>"), "the rollout is the last thing drawn");
+  assert.match(rollout, /<strong>Add the invite table<\/strong> · base: main/u);
+  assert.match(rollout, /<strong>Invite route<\/strong> · base: #1/u);
+  assert.match(rollout, /Done when: A store test writes and reads an invite\./u);
+  assert.doesNotMatch(rollout, /plan-unit-editable|<button|contenteditable/u);
 });

@@ -371,6 +371,13 @@ export function readTemplateRevision(
     const document = documentAt(seq);
     return document === null
       ? Option.none()
-      : Option.some({ seq, document, previous: documentAt(seq - 1) });
+      : Option.some({
+          seq,
+          document,
+          // A template carries no rollout: that is a plan's, beside its text.
+          rollout: [],
+          previous: documentAt(seq - 1),
+          previousRollout: null,
+        });
   });
 }

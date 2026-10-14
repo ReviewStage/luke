@@ -1,5 +1,6 @@
-import type { PlanActor } from "@sidecar/hosted/plan-wire";
-import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import type { PlanActor, Rollout } from "@sidecar/hosted/plan-wire";
+import { sql } from "drizzle-orm";
+import { integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
@@ -34,6 +35,8 @@ export const planRevision = pgTable(
     liveSessionId: text("live_session_id"),
     /** The plan's whole text after the revision. */
     document: text("document").notNull(),
+    /** The plan's rollout after the revision. */
+    rollout: jsonb("rollout").$type<Rollout>().notNull().default(sql`'[]'::jsonb`),
     /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
     changes: integer("changes").notNull(),
     /** The revision's first save. */

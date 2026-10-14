@@ -83,6 +83,7 @@ const PLAN: Plan = {
   updatedAt: 1_000,
   repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
+  rollout: [],
 };
 
 /** The desktop's opening frame for a call about the plan the account holds. */

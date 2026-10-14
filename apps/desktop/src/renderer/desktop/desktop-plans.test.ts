@@ -26,6 +26,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "", assumptions: [] },
+  rollout: [],
 };
 
 test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {

@@ -213,6 +213,8 @@ const EFFECT_MODULE_SCHEMAS = {
     workspaceIdSchema: planWire.workspaceIdSchema,
     agentEditLineSchema: planWire.agentEditLineSchema,
     planAssumptionSchema: planWire.planAssumptionSchema,
+    rolloutItemSchema: planWire.rolloutItemSchema,
+    rolloutSchema: planWire.rolloutSchema,
     planDocumentSchema: planWire.planDocumentSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
     planRenameRequestSchema: planWire.planRenameRequestSchema,

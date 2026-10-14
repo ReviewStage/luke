@@ -8,7 +8,14 @@ import {
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
-import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
+import {
+  PLAN_BOUNDS,
+  PLAN_SECTION_BOUNDS,
+  type PlanField,
+  ROLLOUT_BASE,
+  type Rollout,
+  type RolloutItem,
+} from "./plan-wire.js";
 
 /**
  * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
@@ -55,6 +62,12 @@ export const PLAN_HEADING = {
   TESTING: "Testing",
   OPEN_QUESTIONS: "Open questions",
   ASSUMPTIONS: "Assumptions",
+  ROLLOUT: "Rollout",
+} as const;
+
+/** What stands in the rollout's place while it holds nothing; the only rendering of its empty state. */
+const PLAN_EMPTY_TEXT = {
+  NO_ROLLOUT: "_No rollout yet_",
 } as const;
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
@@ -133,6 +146,57 @@ function contained(text: string): string {
   if (fence !== undefined) lines.push(fence.marker);
   return lines.join("\n");
 }
+
+/** One list item, its later lines indented under the marker so a multi-line entry stays one item. */
+function listItem(marker: string, text: string): string {
+  const [first, ...rest] = contained(text).split("\n");
+  const indent = " ".repeat(marker.length);
+  const continued = rest.map((line) => (line.length === 0 ? line : `${indent}${line}`));
+  return [`${marker}${first ?? ""}`, ...continued].join("\n");
+}
+
+/** The words that open a rollout item's last paragraph where its acceptance is said. */
+const ROLLOUT_DONE_WHEN = "Done when: ";
+
+/** A rollout item's base as its line names it: main, or the earlier pull request's number in the list. */
+function rolloutBaseText(base: RolloutItem["base"]): string {
+  return base === ROLLOUT_BASE.MAIN ? base : `#${base}`;
+}
+
+/**
+ * One pull request of the rollout as a numbered item: its title and base on
+ * the first line, its scope under it, and what it is done when, where said.
+ * Note that a fence the scope leaves open is closed before the acceptance,
+ * because otherwise the acceptance would be drawn as the fence's code.
+ */
+function rolloutItemBlock(item: RolloutItem, position: number): string {
+  const title = item.title.replace(/\s+/gu, " ").trim();
+  const head = `**${title}** · base: ${rolloutBaseText(item.base)}`;
+  const done = item.acceptance === null ? [] : [`${ROLLOUT_DONE_WHEN}${item.acceptance}`];
+  return listItem(`${position}. `, [head, fenceClosed(item.scope), ...done].join("\n\n"));
+}
+
+/**
+ * The rollout as the section drawn after a plan's text: its heading over one
+ * numbered item per pull request, or over "No rollout yet" while it is empty.
+ * Note that this is drawn and never stored, because the rollout stands beside
+ * the text rather than in it, so an edit of the text can neither write nor
+ * lose it.
+ */
+export function rolloutSection(rollout: Rollout): string {
+  const items = rollout.map((item, at) => rolloutItemBlock(item, at + 1)).join("\n");
+  return `## ${PLAN_HEADING.ROLLOUT}\n\n${items.length === 0 ? PLAN_EMPTY_TEXT.NO_ROLLOUT : items}`;
+}
+
+/** What the rollout holds, in the words the planning model is shown beside each section's. */
+export const ROLLOUT_PURPOSE =
+  "The pull requests the work lands as, in order, each on main or on an earlier one.";
+
+/** When the rollout is good enough to hand out, held to the same bar as each section's. */
+export const ROLLOUT_BAR =
+  "Every pull request lands green alone, is one concern a reviewer reads in minutes, bases on " +
+  "the lowest pull request it cannot build without, and carries its own tests; a rollout of " +
+  "one pull request has been asked once whether it splits.";
 
 /** The heading each section stands under in the default template, so a prompt names a section as the developer reads it. */
 export const PLAN_FIELD_HEADING = {
@@ -371,9 +435,13 @@ function appended(current: string | null, text: string): string {
 /**
  * Words with any fence still open at their end closed on a line of its own,
  * so a point written after them is not taken into the code the fence holds.
+ * Note that the fence is sought over the words with each CRLF or lone CR read
+ * as a line break, as Markdown reads them, because a fence closed on a CRLF
+ * line is closed, and a second closing run would open a fence of its own.
  */
-function fenceClosed(words: string): string {
-  const open = openFenceAt(words, words.length + 1);
+export function fenceClosed(words: string): string {
+  const lines = words.replace(/\r\n?/gu, "\n");
+  const open = openFenceAt(lines, lines.length + 1);
   return open === undefined ? words : `${words}\n${open}`;
 }
 

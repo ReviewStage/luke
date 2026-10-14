@@ -57,6 +57,7 @@ Luke asks for microphone access the first time you start a call.
 | Testing | "When …, then …" cases for every goal and hard part, and the end-to-end check |
 | Open questions | Anything not yet decided |
 | Assumptions | Defaults Luke chose that you didn't state |
+| Rollout | The pull requests the work lands as, each on main or on an earlier one |
 
 The plan reads like the design doc two engineers would write after talking a
 task through, and holds each section to the bar a coding agent needs to build

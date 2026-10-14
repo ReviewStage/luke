@@ -89,6 +89,7 @@ test("a call's plan the list does not hold is named from the open document, or p
         updatedAt: 2,
         repository: null,
         document: { body: "# Billing export", assumptions: [] },
+        rollout: [],
       },
     },
   };

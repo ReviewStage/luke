@@ -11,6 +11,8 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionLine,
   type PlanRevisionsAnswer,
+  type Rollout,
+  rolloutSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -30,7 +32,7 @@ import { planReachableBy } from "./workspace-store.js";
  * The plan's one write (`plan-notes.ts`) records each save that changed the
  * plan here, inside the transaction that holds the plan's row, so the plan
  * and its history never disagree. A revision is the plan's content after it,
- * its whole text, so reading one or going back to one is a read and never a
+ * its whole text with the rollout beside it, so reading one or going back to one is a read and never a
  * replay.
  * Saves the same writer makes one after another are one revision, moved on
  * by each: the notetaker's on one call, a coding agent's, or the developer's,
@@ -73,14 +75,20 @@ export type PlanWriter =
   | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof PLAN_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
-/** One save to record: the plan, its writer, its content before and after, and how many changes it made. */
+/** A revision's text and the rollout beside it, as a restore takes them back. */
+export interface RevisionSnapshot {
+  readonly text: string;
+  readonly rollout: Rollout;
+}
+
+/** One save to record: the plan, its writer, its text and rollout before and after, and how many changes it made. */
 export interface PlanSaveRecord {
   readonly planId: string;
   readonly writer: PlanWriter;
-  /** The plan's text before the save. */
-  readonly before: string;
-  /** Its text after it. */
-  readonly after: string;
+  /** The plan's text and rollout before the save. */
+  readonly before: RevisionSnapshot;
+  /** Its text and rollout after it. */
+  readonly after: RevisionSnapshot;
   readonly changes: number;
   /** The plan's last save before this one, where it has been saved; none for a plan never written. */
   readonly savedBefore: Option.Option<Date>;
@@ -130,6 +138,7 @@ const insertRevision = SqlSchema.void({
     agentId: Schema.NullOr(Schema.String),
     liveSessionId: Schema.NullOr(Schema.String),
     document: Schema.String,
+    rollout: rolloutSchema,
     changes: Schema.Number,
     startedAt: Schema.Date,
     at: Schema.Date,
@@ -143,6 +152,7 @@ const moveRevisionOn = SqlSchema.void({
     planId: Schema.String,
     seq: Schema.Number,
     document: Schema.String,
+    rollout: rolloutSchema,
     changes: Schema.Number,
     at: Schema.Date,
   }),
@@ -263,6 +273,7 @@ const RevisionContentRowSchema = Schema.Struct({
   seq: Schema.Number,
   // Every revision is the plan's text since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
+  rollout: rolloutSchema,
 });
 
 /** The content of the plan at each revision named, with the plan's name as it stands now. */
@@ -279,6 +290,7 @@ const findRevisionContents = SqlSchema.findAll({
         .select({
           seq: planRevision.seq,
           document: planRevision.document,
+          rollout: planRevision.rollout,
         })
         .from(planRevision)
         .innerJoin(plan, eq(plan.id, planRevision.planId))
@@ -385,7 +397,8 @@ function recordEarlier(
           actor: PLAN_ACTOR.EARLIER,
           agentId: null,
           liveSessionId: null,
-          document: record.before,
+          document: record.before.text,
+          rollout: record.before.rollout,
           changes: 0,
           startedAt: at,
           at,
@@ -422,7 +435,8 @@ export function recordRevision(
       return yield* moveRevisionOn({
         planId: record.planId,
         seq: newest.value.seq,
-        document: after,
+        document: after.text,
+        rollout: after.rollout,
         changes: newest.value.changes + record.changes,
         at: now,
       });
@@ -434,7 +448,8 @@ export function recordRevision(
       actor: writer.actor,
       agentId: agentOf(writer),
       liveSessionId: callOf(writer),
-      document: after,
+      document: after.text,
+      rollout: after.rollout,
       changes: record.changes,
       startedAt: now,
       at: now,
@@ -514,21 +529,24 @@ export function listRevisions(
   });
 }
 
-/** The plan's text at one revision; nothing where it has no such revision, or the account reaches no such plan. */
+/** The plan's text and rollout at one revision; nothing where it has no such revision, or the account reaches no such plan. */
 export function readRevisionContent(
   userId: string,
   planId: string,
   seq: number,
-): Effect.Effect<Option.Option<string>, RevisionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<RevisionSnapshot>, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
-    Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
+    Option.map(Option.fromNullishOr(rows[0]), (row) => ({
+      text: row.document,
+      rollout: row.rollout,
+    })),
   );
 }
 
 /**
  * One revision of the plan as the History tab shows it: the plan
  * after it and before it, the first revision having nothing before it, each
- * its text as the document's body; nothing where the plan
+ * its text as the document's body with its rollout beside it; nothing where the plan
  * has no such revision, or the account reaches no such plan.
  */
 export function readRevision(
@@ -537,13 +555,19 @@ export function readRevision(
   seq: number,
 ): Effect.Effect<Option.Option<PlanRevisionAnswer["revision"]>, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq - 1, seq] }), (rows) => {
-    const documentAt = (at: number): PlanDocument | null => {
-      const row = rows.find((each) => each.seq === at);
-      return row === undefined ? null : { body: row.document, assumptions: [] };
-    };
-    const document = documentAt(seq);
-    return document === null
-      ? Option.none()
-      : Option.some({ seq, document, previous: documentAt(seq - 1) });
+    const documentOf = (row: { readonly document: string }): PlanDocument => ({
+      body: row.document,
+      assumptions: [],
+    });
+    const shown = rows.find((each) => each.seq === seq);
+    const previous = rows.find((each) => each.seq === seq - 1);
+    if (shown === undefined) return Option.none();
+    return Option.some({
+      seq,
+      document: documentOf(shown),
+      rollout: shown.rollout,
+      previous: previous === undefined ? null : documentOf(previous),
+      previousRollout: previous === undefined ? null : previous.rollout,
+    });
   });
 }

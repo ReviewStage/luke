@@ -30,6 +30,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: "acme/relay",
   document: { body: "", assumptions: [] },
+  rollout: [],
 };
 
 const PATH = "src/invites/accept.ts";

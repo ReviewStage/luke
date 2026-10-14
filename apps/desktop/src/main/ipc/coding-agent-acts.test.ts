@@ -219,7 +219,13 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`revision:${seq}`);
           return {
-            revision: { seq, document: { body: "## Why\n", assumptions: [] }, previous: null },
+            revision: {
+              seq,
+              document: { body: "## Why\n", assumptions: [] },
+              rollout: [],
+              previous: null,
+              previousRollout: null,
+            },
           };
         }),
       planTemplateRestore: ({ seq }) =>

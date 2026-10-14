@@ -24,6 +24,7 @@ const PLAN = {
     body: "# Teammate invitations",
     assumptions: [{ text: "Members and admins can both invite." }],
   },
+  rollout: [],
 };
 
 function client(): HostedPlanClient {

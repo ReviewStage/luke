@@ -22,6 +22,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
+  rollout: [],
 };
 
 const OTHER: PlanSummary = {

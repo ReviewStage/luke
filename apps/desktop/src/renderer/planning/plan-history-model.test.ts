@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_ACTOR,
+  type PlanLastEdit,
+  type PlanRevisionLine,
+  ROLLOUT_BASE,
+  type Rollout,
+} from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";
@@ -14,6 +20,7 @@ import {
   revisionOfSave,
   revisionSource,
   revisionSummary,
+  rolloutDiff,
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
@@ -321,4 +328,35 @@ test("a revision's Open goes to its agent's tab, Luke's call, or Luke's moment i
   );
   assert.equal(sourceLabel({ kind: REVISION_SOURCE.CALL, callId }, agent), "Open in Transcript");
   assert.equal(sourceLabel({ kind: REVISION_SOURCE.WORK, at: NOW }, agent), "Open in Work");
+});
+
+test("a version's rollout is drawn against the one before it, the pull request it changed marked and an unchanged one no change", () => {
+  const before: Rollout = [
+    {
+      title: "Add the invite table",
+      scope: "The table.",
+      base: ROLLOUT_BASE.MAIN,
+      acceptance: null,
+    },
+  ];
+  const after: Rollout = [
+    {
+      title: "Add the invite table",
+      scope: "The table and its index.",
+      base: ROLLOUT_BASE.MAIN,
+      acceptance: null,
+    },
+    { title: "Invite route", scope: "The route.", base: 1, acceptance: null },
+  ];
+
+  const diff = rolloutDiff(before, after);
+
+  assert.ok(diff.changed);
+  assert.deepEqual(
+    diff.units.map((unit) => [unit.key, unit.change]),
+    [["Rollout", VERSION_CHANGE.CHANGED]],
+  );
+  assert.ok(marked(diff, MARKDOWN_MARK.INSERTED).some((words) => words.includes("Invite route")));
+  assert.ok(marked(diff, MARKDOWN_MARK.INSERTED).some((words) => words.includes("its index")));
+  assert.ok(!rolloutDiff(after, after).changed);
 });

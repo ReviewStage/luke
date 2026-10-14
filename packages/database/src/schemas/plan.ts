@@ -1,5 +1,6 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { PlanAgentEdit } from "@sidecar/hosted/plan-template";
+import type { Rollout } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
@@ -43,6 +44,8 @@ export const plan = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@sidecar/hosted/plan-document`). */
     document: text("document").notNull(),
+    /** The pull requests the plan's work lands as, beside its text; empty until one is cut. */
+    rollout: jsonb("rollout").$type<Rollout>().notNull().default(sql`'[]'::jsonb`),
     /**
      * The GitHub repository the plan is about, `owner/name` as GitHub spells
      * it, confirmed reachable through the Luke GitHub App by the account
