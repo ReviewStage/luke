@@ -17,7 +17,9 @@ import { agentStillWriting } from "../planning/coding-agent-model";
  * to merge under Ship, since nothing merges without the developer. An
  * agent is stalled by holding an open item, not by a status of its own.
  * Every list is read from what the window already holds; nothing here
- * fetches.
+ * fetches. Note that the list's row names at most three pull requests,
+ * open and draft ones first (`PLAN_AGENTS_BOUNDS`), so a plan with more
+ * open than that shows the three the row names.
  */
 
 /** The steps of the line, left to right. */
@@ -48,11 +50,10 @@ interface FactoryBuilding {
   readonly pullRequest: PlanPullRequestLine | undefined;
 }
 
-/** An open Inbox item: what it asks, its plan, and the agent stalled on it where the plan's row names it. */
+/** An open Inbox item and its plan: the agent that posted it is stopped until it is answered. */
 interface FactoryQuestion {
   readonly plan: PlanSummary;
   readonly item: AppInboxWaitingItem;
-  readonly agent: PlanAgentLine | undefined;
 }
 
 /** A pull request waiting on the developer to merge it. */
@@ -68,8 +69,11 @@ interface FactoryShipped {
   readonly at: number;
 }
 
-/** When each pull request was first seen merged, by its plan and then its number. */
-export type MergedSeen = ReadonlyMap<string, ReadonlyMap<number, number>>;
+/** A pull request's identity within its plan: its page, where the service sends one, else its number. */
+type PullRequestIdentity = string | number;
+
+/** When each pull request was first seen merged, by its plan and then its identity. */
+export type MergedSeen = ReadonlyMap<string, ReadonlyMap<PullRequestIdentity, number>>;
 
 /** What the board is read from. */
 export interface FactoryInput {
@@ -116,6 +120,11 @@ function readyToMerge(pullRequest: PlanPullRequestLine): boolean {
   return pullRequest.state === PULL_REQUEST_STATE.OPEN && READY_CHECKS.has(pullRequest.checks);
 }
 
+/** Note that two repositories' pull requests may share a number, so a page tells them apart where there is one. */
+function identityOf(pullRequest: PlanPullRequestLine): PullRequestIdentity {
+  return pullRequest.url ?? pullRequest.number;
+}
+
 function pullRequestsOf(plan: PlanSummary): readonly PlanPullRequestLine[] {
   return plan.agents?.pullRequests ?? [];
 }
@@ -124,11 +133,7 @@ function pullRequestsOf(plan: PlanSummary): readonly PlanPullRequestLine[] {
 function placePlan(plan: PlanSummary, input: FactoryInput) {
   const agents = plan.agents;
   const items = input.waiting.find((each) => each.planId === plan.id)?.items ?? [];
-  const questions = items.map((item) => ({
-    plan,
-    item,
-    agent: agents?.agents.find((agent) => agent.id === item.agentId),
-  }));
+  const questions = items.map((item) => ({ plan, item }));
   const merges = pullRequestsOf(plan)
     .filter(readyToMerge)
     .map((pullRequest) => ({ plan, pullRequest }));
@@ -152,7 +157,7 @@ function shippedOf(plan: PlanSummary, input: FactoryInput): FactoryShipped[] {
   const seen = input.merged.get(plan.id);
   if (seen === undefined) return [];
   return pullRequestsOf(plan).flatMap((pullRequest) => {
-    const at = seen.get(pullRequest.number);
+    const at = seen.get(identityOf(pullRequest));
     const fresh = at !== undefined && input.now - at < SHIPPED_LINGER_MS;
     return fresh && pullRequest.state === PULL_REQUEST_STATE.MERGED
       ? [{ plan, pullRequest, at }]
@@ -204,20 +209,21 @@ export function noteMerged(
   after: readonly PlanSummary[],
   now: number,
 ): MergedSeen {
-  const next = new Map<string, Map<number, number>>();
+  const next = new Map<string, Map<PullRequestIdentity, number>>();
   for (const plan of after) {
     const was = before?.find((each) => each.id === plan.id);
-    const marks = new Map<number, number>();
+    const marks = new Map<PullRequestIdentity, number>();
     for (const pullRequest of pullRequestsOf(plan)) {
       if (pullRequest.state !== PULL_REQUEST_STATE.MERGED) continue;
-      const at = seen.get(plan.id)?.get(pullRequest.number);
+      const identity = identityOf(pullRequest);
+      const at = seen.get(plan.id)?.get(identity);
       const stood =
         was !== undefined &&
         pullRequestsOf(was).some(
-          (old) => old.number === pullRequest.number && STANDING_STATES.has(old.state),
+          (old) => identityOf(old) === identity && STANDING_STATES.has(old.state),
         );
       const mark = at ?? (stood ? now : undefined);
-      if (mark !== undefined && now - mark < SHIPPED_LINGER_MS) marks.set(pullRequest.number, mark);
+      if (mark !== undefined && now - mark < SHIPPED_LINGER_MS) marks.set(identity, mark);
     }
     if (marks.size > 0) next.set(plan.id, marks);
   }

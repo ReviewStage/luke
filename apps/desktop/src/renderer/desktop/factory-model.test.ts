@@ -126,7 +126,7 @@ test("the plan on the call is being planned however long ago it was saved, and s
   );
 });
 
-test("each open Inbox item waits under Build with the agent stalled on it, the longest waiting first, and is the wait to take first", () => {
+test("each open Inbox item waits under Build with its plan, the longest waiting first, and is the wait to take first", () => {
   const stalled = agent(1, CODING_AGENT_STATUS.COMPLETED);
   const billing = plan(1, "Mercury payouts", 2 * HOUR, agents([stalled]));
   const invites = plan(2, "Invitations", HOUR, agents([agent(2, CODING_AGENT_STATUS.RUNNING)]));
@@ -156,14 +156,10 @@ test("each open Inbox item waits under Build with the agent stalled on it, the l
   ];
   const drawn = board({ plans: [billing, invites], waiting });
   assert.deepEqual(
-    drawn.questions.map((question) => [
-      question.item.title,
-      question.plan.name,
-      question.agent?.id,
-    ]),
+    drawn.questions.map((question) => [question.item.title, question.plan.name]),
     [
-      ["Which account pays out?", "Mercury payouts", stalled.id],
-      ["Expire invites after a week?", "Invitations", undefined],
+      ["Which account pays out?", "Mercury payouts"],
+      ["Expire invites after a week?", "Invitations"],
     ],
   );
   // A plan whose only agent is stalled stands in the wait alone, not among the plans being built.
@@ -282,6 +278,35 @@ test("a pull request seen turning merged stands in Ship for a minute, then leave
   const later = NOW + SHIPPED_LINGER_MS;
   const kept = noteMerged(seen, [merged, long], [merged, long], later);
   assert.deepEqual(board({ plans: [merged, long], merged: kept, now: later }).shipped, []);
+});
+
+test("two repositories' pull requests sharing a number are told apart by their pages, so only the one seen merging ships", () => {
+  const old = {
+    ...pullRequest(12, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING),
+    url: "https://github.com/acme/a/pull/12",
+  };
+  const open = {
+    ...pullRequest(12, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
+    url: "https://github.com/acme/b/pull/12",
+  };
+  const done = agent(1, CODING_AGENT_STATUS.COMPLETED);
+  const before = plan(1, "Moved repositories", HOUR, agents([done], [open, old]));
+  const after = plan(
+    1,
+    "Moved repositories",
+    HOUR,
+    agents([done], [{ ...open, state: PULL_REQUEST_STATE.MERGED }, old]),
+  );
+  const seen = noteMerged(
+    noteMerged(EMPTY_MERGED, undefined, [before], NOW),
+    [before],
+    [after],
+    NOW,
+  );
+  assert.deepEqual(
+    board({ plans: [after], merged: seen }).shipped.map((row) => row.pullRequest.url),
+    ["https://github.com/acme/b/pull/12"],
+  );
 });
 
 test("with nothing standing anywhere, the board is empty and no wait comes first", () => {
