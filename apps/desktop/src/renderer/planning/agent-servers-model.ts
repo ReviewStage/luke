@@ -1,18 +1,18 @@
 import {
+  CONNECTION_HEALTH,
+  type ConnectionHealth,
+  type IntegrationTool,
+} from "@luke/features/integration-health";
+import { SIGN_IN, type SignIn, signInLine } from "@luke/features/integration-sign-in";
+import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import {
-  CONNECTION_HEALTH,
-  type ConnectionHealth,
-  type IntegrationTool,
-} from "../integration-health";
+import { searchTokens } from "@luke/ui/search-tokens";
 import { matchIntegration } from "../integration-search";
-import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
-import { searchTokens } from "../search-tokens";
 
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.

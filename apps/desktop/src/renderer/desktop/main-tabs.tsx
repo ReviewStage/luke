@@ -5,6 +5,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -15,13 +16,6 @@ import { agentTabLabel } from "../planning/coding-agent-model";
 import { DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../planning/tab-look";
-import {
-  inPlanOrder,
-  isDraftTab,
-  type StripTab,
-  sameTab,
-  tabKey,
-} from "../planning/tab-strip-model";
 import type { ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CONNECTION_HEALTH, connectionHealth } from "@luke/features/integration-health";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
@@ -10,7 +11,6 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { test } from "vitest";
-import { CONNECTION_HEALTH, connectionHealth } from "../integration-health";
 import {
   SERVER_ROW,
   SERVER_SECTION,

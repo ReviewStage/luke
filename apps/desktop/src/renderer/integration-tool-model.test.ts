@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { IntegrationTool } from "@luke/features/integration-health";
 import { test } from "vitest";
-import type { IntegrationTool } from "./integration-health";
 import { byName, TOOL_BADGE, toolBadge } from "./integration-tool-model";
 
 /**

@@ -1,6 +1,11 @@
+import {
+  holdsSlashWord,
+  matchingSkills,
+  type SkillOption,
+  skillWord,
+} from "@luke/ui/skill-mention";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useState } from "react";
 import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../plan-editor/contract";
-import { holdsSlashWord, matchingSkills, type SkillOption, skillWord } from "./skill-mention";
 
 /**
  * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the plan's repository keeps, and the chips the chosen ones are drawn as.

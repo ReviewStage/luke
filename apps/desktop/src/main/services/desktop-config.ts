@@ -1,5 +1,5 @@
 import type { RunMode } from "@luke/host";
-import type { BuildCommit } from "#shared/messages/update";
+import type { BuildCommit } from "@luke/settings/update";
 import type { UpdateMenu } from "../app-menu";
 
 /**

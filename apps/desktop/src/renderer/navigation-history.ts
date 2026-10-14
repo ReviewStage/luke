@@ -22,11 +22,11 @@
  * restore lands on the plan as Back would, where the plan stands behind.
  */
 
+import type { SettingsView } from "@luke/settings/settings-views";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { HistorySpot } from "./planning/use-plan-history";
 import type { PlansControl } from "./planning/use-plans-tab";
-import type { SettingsView } from "./settings-views";
 
 /** The most places the history holds; the oldest go first. */
 const HISTORY_LIMIT = 50;

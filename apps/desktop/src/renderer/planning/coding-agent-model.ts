@@ -22,6 +22,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
@@ -34,12 +35,11 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,7 +12,6 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { SentWords, SkillFiles } from "./skill-chip";
-import type { SkillOption } from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
 
 /**

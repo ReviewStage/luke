@@ -1,6 +1,6 @@
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { useId } from "react";
 import { ReadFailure } from "../read-failure";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "../settings-anchors";
 
 /**
  * settings-group.tsx -- one group of a Settings page: its name above a card of rows.

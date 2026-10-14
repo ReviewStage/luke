@@ -1,4 +1,4 @@
-import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { DICTATION_BOUNDS } from "./dictation-wire.js";
 
 /**
  * dictation-keywords.ts -- the words a dictated clip is likely to say, read off the plan it is about: what tells the transcription model to spell "pnpm" rather than hear "P N P M".

@@ -6,6 +6,7 @@ import {
   type PlanWorkTurn,
   type PlanWorkWorker,
 } from "@luke/features/planning-view";
+import { TURN_ROW, type TurnRow } from "@luke/features/turn-rows";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import {
@@ -20,7 +21,6 @@ import {
 import { TOOL_STATE } from "../ai-elements/tool";
 import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
 import { delegationView, toolCallView } from "./tool-call-model";
-import { TURN_ROW, type TurnRow } from "./turn-rows";
 import { workerOf, workFailed, workRowsOf } from "./work-model";
 
 /** What a reader scans a part as: words, a thought, a call, or a subagent. */

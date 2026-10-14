@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { ROW_PART, type RowReading, TURN_ROW, type TurnRow, turnRows } from "./turn-rows";
+import { ROW_PART, type RowReading, TURN_ROW, type TurnRow, turnRows } from "./turn-rows.js";
 
 /** A block as a tab hands it to the fold: what it is to the fold, its name, and whether it still moves. */
 interface Block {

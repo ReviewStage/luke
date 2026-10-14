@@ -8,6 +8,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -21,7 +22,6 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { shownFiles } from "../planning/code-pane-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SidePanelControl } from "../planning/use-side-panel";
-import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { CommandPalette } from "./command-palette";
 import { panelEntries } from "./side-panel";
 

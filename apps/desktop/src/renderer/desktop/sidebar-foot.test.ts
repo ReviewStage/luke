@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { UPDATE_STATUS } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
-import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";

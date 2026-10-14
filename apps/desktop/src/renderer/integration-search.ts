@@ -1,11 +1,11 @@
+import type { IntegrationTool } from "@luke/features/integration-health";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import type { IntegrationTool } from "./integration-health";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { byName } from "./integration-tool-model";
-import { matchesTokens, searchTokens } from "./search-tokens";
 
 /**
  * integration-search.ts -- what a query finds among the integrations and their tools, in Settings › Integrations' filter and the MCP popover's search alike.

@@ -1,6 +1,6 @@
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
-import { type BoardElement, boardElementSchema } from "@luke/features/board-wire";
 import { Schema } from "effect";
+import { BOARD_ELEMENT_TYPE } from "./board-vocabulary.js";
+import { type BoardElement, boardElementSchema } from "./board-wire.js";
 
 /**
  * board-scene.ts -- the canvas's scene held to what a board admits, before the panel asks for it saved.

@@ -3,11 +3,13 @@ import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
 } from "@luke/features/workspace-invitation-wire";
+import { managesWorkspace } from "@luke/features/workspace-role";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
+import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ExternalLinkIcon, UserMinusIcon, XIcon } from "lucide-react";
@@ -16,9 +18,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { Segmented } from "../segmented";
-import { SETTINGS_SECTION } from "../settings-views";
 import { SpinnerRegion } from "../spinner";
-import { managesWorkspace } from "../workspace-role";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
 import { SelectRow } from "./select-row";

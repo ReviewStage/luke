@@ -1,9 +1,9 @@
+import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
 import { CardDetail } from "../desktop/plan-card";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
-import { type SkillOption, skillWord } from "./skill-mention";
 
 /**
  * skill-ref.tsx -- a skill named anywhere in the window: the card it hangs, and its `/name` as the one button that hangs that card and opens its `SKILL.md`.

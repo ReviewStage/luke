@@ -177,7 +177,7 @@ await Promise.all([
       PACKAGED_BUILD_COMMIT: JSON.stringify(buildCommit()),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
-      // the run answers to; see app-identity.ts.
+      // the run answers to; see `@luke/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
     sourcemap: true,

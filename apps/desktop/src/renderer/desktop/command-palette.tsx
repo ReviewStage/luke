@@ -45,7 +45,9 @@
 
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, SearchIcon } from "@luke/ui";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -71,7 +73,6 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
-import { matchesTokens, searchTokens } from "../search-tokens";
 import { settingsPageOf } from "../settings/pages";
 import {
   landOnSettingsRow,
@@ -79,7 +80,6 @@ import {
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search";
-import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";

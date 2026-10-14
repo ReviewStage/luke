@@ -17,6 +17,14 @@ import {
 } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { LIVE_STATUS } from "@luke/live";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  type VoiceCommand,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
@@ -29,16 +37,8 @@ import {
   type AppInboxPlanHolding,
   RUN_PROFILE,
 } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import {
-  IDLE_VOICE_VIEW,
-  VOICE_COMMAND,
-  type VoiceCommand,
-  type VoiceView,
-} from "#shared/messages/voice-view";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { ToastHost } from "../toast";
 import { PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";

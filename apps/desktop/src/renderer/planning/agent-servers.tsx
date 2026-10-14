@@ -1,4 +1,10 @@
 import {
+  connectionHealth,
+  type IntegrationTool,
+  toolsCount,
+} from "@luke/features/integration-health";
+import { SIGN_IN_ACTION } from "@luke/features/integration-sign-in";
+import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
@@ -11,17 +17,15 @@ import {
   ProviderMark,
   SearchIcon,
 } from "@luke/ui";
+import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
-import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
 import { matchIntegration, shownTools } from "../integration-search";
-import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { Highlighted } from "../search-field";
-import { searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";

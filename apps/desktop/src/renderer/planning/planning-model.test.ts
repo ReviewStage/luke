@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import type { Plan } from "@luke/features/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { test } from "vitest";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { MICROPHONE_PRESS, microphoneButton } from "./planning-model";
 

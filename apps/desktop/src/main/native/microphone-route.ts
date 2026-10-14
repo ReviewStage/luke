@@ -4,7 +4,7 @@ import {
   MICROPHONE_TRANSPORT,
   type MicrophoneRoute,
   type MicrophoneTransport,
-} from "#shared/messages/audio";
+} from "@luke/voice/audio";
 import { lineWatcher } from "./line-watcher";
 import type { NativeHelperProcess } from "./native-helper";
 

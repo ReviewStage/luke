@@ -1,4 +1,5 @@
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@luke/settings";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type {
   AppSettingField,
   AppSettingsView,
@@ -8,7 +9,6 @@ import type {
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
 import { ResetIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";

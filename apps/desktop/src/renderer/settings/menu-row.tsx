@@ -1,8 +1,8 @@
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { EllipsisIcon } from "@luke/ui";
 import { useRef } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { searchAnchorProps } from "../settings-anchors";
 import { Tooltip } from "../tooltip";
 
 /**

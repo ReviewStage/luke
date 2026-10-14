@@ -9,8 +9,8 @@
  * calls Electron, so the rule is read and tested as the plain decision it is.
  */
 
+import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
 import type { WebContents } from "electron";
-import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
 
 /** The card's window, its shadow's room included, and its gap from the screen's corner. */
 export const CALL_WINDOW_BOUNDS = { WIDTH: 264, HEIGHT: 92, INSET: 8 } as const;

@@ -1,12 +1,12 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
 import { CopyIcon, DocumentIcon, UnpinIcon } from "@luke/ui";
+import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { shownFiles } from "../planning/code-pane-model";
 import { TAB_KIND, type TabSubject, tabLook } from "../planning/tab-look";
-import { isAgentTab, isChangesTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
 import type { PullRequestReader } from "../planning/use-agent-pull-request";
 import { MAIN_TAB } from "../planning/use-main-tabs";

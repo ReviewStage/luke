@@ -1,4 +1,4 @@
-import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
+import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.js";
 
 /**
  * failure-remedy.ts -- why a failure stands, as a typed word beside its sentence, and what the press that mends it says.

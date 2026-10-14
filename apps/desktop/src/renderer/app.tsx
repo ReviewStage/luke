@@ -3,8 +3,11 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@luke/settings";
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -14,8 +17,6 @@ import {
   RUN_PROFILE,
   sessionReplayBootstrap,
 } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
@@ -42,7 +43,6 @@ import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink } from "./settings-link";
-import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { fixtureUpdate } from "./update-row";

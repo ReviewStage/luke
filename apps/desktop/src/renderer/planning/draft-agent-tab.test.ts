@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import type { Failure } from "@luke/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -13,6 +14,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import type { SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -25,10 +27,8 @@ import {
 } from "#testing/composer";
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import type { Failure } from "../failure-remedy";
 import { GitHubConnectProvider } from "../github-connect";
 import { OpenSettingsProvider } from "../open-settings";
-import type { SettingsLink } from "../settings-views";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";

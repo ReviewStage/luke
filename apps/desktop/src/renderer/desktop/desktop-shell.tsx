@@ -1,5 +1,6 @@
 import type { FaceMotion } from "@luke/brand";
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -15,7 +16,6 @@ import { usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
-import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
 import { useColumnDock } from "./column-dock";

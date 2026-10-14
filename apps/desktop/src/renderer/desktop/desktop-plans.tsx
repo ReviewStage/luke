@@ -1,6 +1,7 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import { sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -26,7 +27,6 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { SkillFiles } from "../planning/skill-chip";
-import { sameTab } from "../planning/tab-strip-model";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";

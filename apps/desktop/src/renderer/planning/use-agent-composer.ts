@@ -7,8 +7,8 @@ import {
   type CodingAgentMessage,
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
+import type { Failure } from "@luke/features/failure-remedy";
 import { useEffect, useRef, useState } from "react";
-import type { Failure } from "../failure-remedy";
 import {
   type AgentRun,
   closesComposer,

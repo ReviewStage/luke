@@ -1,4 +1,4 @@
-import type { OutputAudioState } from "#shared/messages/audio";
+import type { OutputAudioState } from "@luke/voice/audio";
 import { LINE_UNAVAILABLE, lineWatcher } from "./line-watcher";
 import type { NativeHelperProcess } from "./native-helper";
 

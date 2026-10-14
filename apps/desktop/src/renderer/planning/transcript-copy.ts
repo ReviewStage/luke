@@ -7,6 +7,14 @@ import {
   type CodingAgentBrief,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  type CallKind,
+  callPlace,
+  TURN_ROW,
+  type TurnRow,
+} from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import {
@@ -18,14 +26,6 @@ import {
   workerLines,
 } from "./coding-agent-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
-import {
-  CALL_KIND,
-  CALL_WORDS,
-  type CallKind,
-  callPlace,
-  TURN_ROW,
-  type TurnRow,
-} from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
 
 /**

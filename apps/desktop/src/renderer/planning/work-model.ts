@@ -10,10 +10,10 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PLAN_WORK_STATE, type PlanWorkState } from "@luke/features/planning-view";
+import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
-import { CALL_KIND, CALL_WORDS, type CallKind } from "./turn-rows";
 
 /**
  * work-model.ts -- the open plan's Call tab as an agent's transcript reads: each planning turn one of Luke's messages, in the agent tab's own parts.

@@ -11,6 +11,19 @@ import type { PageLine } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
+import {
+  type ChangesStripTab,
+  inPlanOrder,
+  isChangesTab,
+  isFileTab,
+  isPageTab,
+  isSubagentTab,
+  type PageStripTab,
+  type StripTab,
+  type SubagentStripTab,
+  sameTab,
+  tabKey,
+} from "@luke/ui/tab-strip-model";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -44,19 +57,6 @@ import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
 import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
-import {
-  type ChangesStripTab,
-  inPlanOrder,
-  isChangesTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  type PageStripTab,
-  type StripTab,
-  type SubagentStripTab,
-  sameTab,
-  tabKey,
-} from "../planning/tab-strip-model";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,

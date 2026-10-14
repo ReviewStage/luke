@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { WorkspacePage } from "./settings/workspace-page";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "./settings-anchors";
 import { followSettingsLink } from "./settings-link";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 
 /**
  * A Settings link followed as the window follows it: Settings, then the

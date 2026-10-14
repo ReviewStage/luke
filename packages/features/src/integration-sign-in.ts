@@ -1,3 +1,4 @@
+import { Duration } from "effect";
 import {
   INTEGRATION_NAME,
   INTEGRATION_SIGN_IN_FAILURE,
@@ -5,14 +6,13 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { Duration } from "effect";
+} from "./integration-wire.js";
 
 /**
  * integration-sign-in.ts -- a Connect sign-in the window waits on, from the press to how it ended: still waiting, failed, or never finished.
  *
  * Settings › Integrations and the composer's MCP servers popover draw it
- * alike (`integration-statuses.ts` holds it). A sign-in happens in the
+ * alike (the desktop's `renderer/integration-statuses.ts` holds it). A sign-in happens in the
  * browser, and the window learns how it went only by reading where the
  * provider stands again, so this is what each read says of it. A read that
  * finds it connected ends it. A read that names it among the service's

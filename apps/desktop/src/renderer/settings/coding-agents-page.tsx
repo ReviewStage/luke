@@ -10,6 +10,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -35,7 +36,6 @@ import {
 } from "../planning/coding-agent-model";
 import { useOpenLink } from "../planning/use-open-link";
 import { Segmented } from "../segmented";
-import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";

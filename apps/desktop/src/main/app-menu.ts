@@ -8,9 +8,9 @@
  * says the key the window answers; the window's keymap is what answers it.
  */
 
+import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import { channels } from "#shared/bridge";
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { IDLE_PLANNING_VIEW, PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
+import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import { test } from "vitest";
-import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { callBarPlanId, callCard, callCardShown } from "./call-card-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

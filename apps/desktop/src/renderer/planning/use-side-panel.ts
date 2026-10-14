@@ -1,8 +1,5 @@
 import type { CodeRef } from "@luke/features/plan-wire";
 import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
-import { Option, Schema } from "effect";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { fileName } from "./code-pane-model";
 import {
   type AgentStripTab,
   type ChangesStripTab,
@@ -23,7 +20,10 @@ import {
   sameTab,
   TAB_WORDS,
   viewedLast,
-} from "./tab-strip-model";
+} from "@luke/ui/tab-strip-model";
+import { Option, Schema } from "effect";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { fileName } from "./code-pane-model";
 import { MAIN_TAB } from "./use-main-tabs";
 
 /**

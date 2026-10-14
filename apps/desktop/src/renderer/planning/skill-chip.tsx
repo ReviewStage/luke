@@ -1,4 +1,11 @@
 import {
+  holdsSlashWord,
+  type SkillOption,
+  skillTokens,
+  skillWord,
+  type TextRange,
+} from "@luke/ui/skill-mention";
+import {
   createContext,
   type ReactNode,
   useCallback,
@@ -9,13 +16,6 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
-import {
-  holdsSlashWord,
-  type SkillOption,
-  skillTokens,
-  skillWord,
-  type TextRange,
-} from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
 import { SkillRef, type SkillSubject } from "./skill-ref";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";

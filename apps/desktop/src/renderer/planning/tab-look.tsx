@@ -1,12 +1,12 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/ui";
+import { changesLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
 import { fileLook } from "./file-ref";
-import { changesLabelOf, TAB_WORDS } from "./tab-strip-model";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /**

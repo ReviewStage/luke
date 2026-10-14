@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { highlightSnippet } from "@luke/host";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { callInProgress, IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";

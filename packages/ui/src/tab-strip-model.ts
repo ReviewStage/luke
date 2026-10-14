@@ -2,7 +2,8 @@
  * tab-strip-model.ts -- what a tab of the window's two strips is, and how a strip orders, remembers, and replaces its tabs, as an editor's does.
  *
  * The plan's column and the side panel each hold a strip of tabs over the
- * open plan (`use-main-tabs.ts`, `use-side-panel.ts`). A tab is either a word
+ * open plan (the desktop's `planning/use-main-tabs.ts` and
+ * `planning/use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
  * started, one subagent, one file, one agent's changes, or one page. Two tabs are the
@@ -22,9 +23,9 @@
 
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
- * it is named (`tab-look.tsx`): the plan's Inbox, a draft agent's tab and
- * the "+" row that opens one, an agent the window holds nothing of, and an
- * agent's Changes before its agent is read. The side panel's fixed kinds
+ * it is named (the desktop's `planning/tab-look.tsx`): the plan's Inbox, a
+ * draft agent's tab and the "+" row that opens one, an agent the window holds
+ * nothing of, and an agent's Changes before its agent is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {

@@ -1,3 +1,4 @@
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import {
   DisplayIcon,
   DocumentIcon,
@@ -9,7 +10,6 @@ import {
   UserIcon,
 } from "@luke/ui";
 import { BellIcon, InfoIcon, UsersIcon } from "lucide-react";
-import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 
 /**
  * What each page is called in the Settings sidebar and at its own head. One

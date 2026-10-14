@@ -9,7 +9,9 @@ import {
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { DocumentIcon } from "@luke/ui";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon } from "lucide-react";
@@ -27,7 +29,6 @@ import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
-import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentComposer } from "./agent-composer";
@@ -85,7 +86,6 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
-import { CALL_KIND, CALL_WORDS } from "./turn-rows";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";

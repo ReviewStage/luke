@@ -12,9 +12,9 @@
 
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ReturnIcon } from "@luke/ui";
+import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";

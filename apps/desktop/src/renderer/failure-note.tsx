@@ -1,4 +1,4 @@
-import { type Failure, remedyLabel, retriesBesideRemedy } from "./failure-remedy";
+import { type Failure, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import { RetryButton } from "./retry-button";
 
 /**
