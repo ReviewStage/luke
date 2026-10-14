@@ -436,6 +436,10 @@ export class LiveSessionHolder {
       opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
+      // Note that a new call starts with no avatar, because the last call's end is not this one's.
+      if (this.#avatar.status !== LIVE_AVATAR_STATUS.OFF) {
+        this.#avatarMoved({ status: LIVE_AVATAR_STATUS.OFF });
+      }
       this.#options.onSessionCreated?.();
       return createdOf(opened);
     });

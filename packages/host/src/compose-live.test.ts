@@ -139,7 +139,7 @@ function subject() {
       );
       const created = yield* Fiber.join(fiber);
       assert.ok(created);
-      const socket = script.sockets[0];
+      const socket = script.sockets.at(-1);
       assert.ok(socket);
       return socket;
     });
@@ -369,5 +369,22 @@ it.effect("the call's end withdraws the grant and sends no stop of its own", () 
     });
     assert.deepEqual(avatarSends(socket), [start("request-1")]);
     assert.equal(f.tokenCrossedGateway(), false);
+  }),
+);
+
+it.effect("the next call starts with no avatar, whatever the last one's ended as", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const first = yield* f.openCall;
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    grantFor(first, "request-1");
+    yield* settle();
+    first.closeFromServer({ code: 1000 });
+    yield* settle();
+
+    const second = yield* f.openCall;
+
+    assert.notEqual(second, first);
+    assert.deepEqual(f.states.at(-1), { status: LIVE_AVATAR_STATUS.OFF });
   }),
 );
