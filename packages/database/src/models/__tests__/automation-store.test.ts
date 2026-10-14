@@ -32,7 +32,7 @@ import {
   settleAutomationRun,
   updateAutomation,
 } from "../automation-store.js";
-import { createPlan } from "../plan-store.js";
+import { createPlan, updatePlan } from "../plan-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
@@ -112,6 +112,53 @@ it.layer(getTestDB())("the automation store", (it) => {
             false,
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a plan given another repository or moved to another workspace takes its automations along, and a row an older build wrote reads its plan's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const elsewhere = randomUUID();
+        const now = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db.insert(organization).values({
+            id: elsewhere,
+            name: "Elsewhere",
+            slug: `elsewhere-${elsewhere}`,
+            createdAt: now,
+          }),
+        );
+        yield* Database.use((db) =>
+          db.insert(member).values({
+            id: randomUUID(),
+            organizationId: elsewhere,
+            userId: owner,
+            role: "owner",
+            createdAt: now,
+          }),
+        );
+
+        yield* updatePlan(owner, planId, { repository: "acme/moved", organizationId: elsewhere });
+        const followed = Option.getOrThrow(yield* readAutomation(owner, made.id));
+        // An older build's insert: no workspace and no repositories of its own.
+        yield* Database.use((db) =>
+          db
+            .update(automation)
+            .set({ organizationId: null, repositories: [] })
+            .where(eq(automation.id, made.id)),
+        );
+        const older = Option.getOrThrow(yield* readAutomation(owner, made.id));
+
+        assert.deepEqual(
+          [followed.organizationId, followed.repositories],
+          [elsewhere, ["acme/moved"]],
+          "the automation follows its plan",
+        );
+        assert.deepEqual([older.organizationId, older.repositories], [elsewhere, ["acme/moved"]]);
       }),
   );
 

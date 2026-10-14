@@ -110,9 +110,15 @@ const AUTOMATION_COLUMNS = {
   action: automation.action,
   guards: automation.guards,
   nextRunAt: automation.nextRunAt,
-  organizationId: automation.organizationId,
+  // Note that a row an older build wrote after the backfill, its workspace null and its
+  // repositories empty, reads its plan's, until the contract step fills it for good.
+  organizationId: sql<
+    string | null
+  >`coalesce(${automation.organizationId}, ${plan.organizationId})`,
   scope: automation.scope,
-  repositories: automation.repositories,
+  repositories: sql<
+    readonly string[]
+  >`case when ${automation.repositories} = '[]'::jsonb and ${plan.repository} is not null then jsonb_build_array(${plan.repository}) else ${automation.repositories} end`,
   targetKind: automation.targetKind,
   targetAgentId: automation.targetAgentId,
   archiveSuccessful: automation.archiveSuccessful,
