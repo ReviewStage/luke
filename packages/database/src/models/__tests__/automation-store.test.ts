@@ -1,0 +1,174 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
+  AUTOMATION_TRIGGER,
+} from "@sidecar/hosted/automation-wire";
+import { DateTime, Effect, Option } from "effect";
+import { Database } from "../../core/query.js";
+import { member, organization, user } from "../../schemas/auth.js";
+import { getTestDB } from "../../testing/index.js";
+import {
+  automationRunsSince,
+  createAutomation,
+  deleteAutomation,
+  listAutomationRuns,
+  listAutomations,
+  type NewAutomation,
+  readAutomation,
+  recordAutomationRun,
+  settleAutomationRun,
+  updateAutomation,
+} from "../automation-store.js";
+import { createPlan } from "../plan-store.js";
+
+/**
+ * An account's automations and their runs, over a real dialect: made only
+ * on a plan the account reaches, read and changed by that account alone,
+ * one run per firing however often it is claimed, and a run settled once.
+ *
+ * Synthetic accounts, workspaces, and plans throughout.
+ */
+
+const openAccount = Effect.gen(function* () {
+  const db = yield* Database;
+  const id = `user-${randomUUID()}`;
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  return id;
+});
+
+/** A plan in a workspace the account owns, as the organization plugin would leave the rows. */
+const openPlan = (userId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const organizationId = randomUUID();
+    const now = yield* DateTime.nowAsDate;
+    yield* db.insert(organization).values({
+      id: organizationId,
+      name: "Test Workspace",
+      slug: `workspace-${organizationId}`,
+      createdAt: now,
+    });
+    yield* db
+      .insert(member)
+      .values({ id: randomUUID(), organizationId, userId, role: "owner", createdAt: now });
+    const made = yield* createPlan(userId, {
+      organizationId,
+      name: "Nightly triage",
+      repository: "acme/api",
+    });
+    return made.id;
+  });
+
+const nightly = (planId: string): NewAutomation => ({
+  planId,
+  name: "Nightly flaky-test sweep",
+  trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "Europe/London" },
+  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Find and fix one flaky test." },
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: new Date("2026-10-15T01:00:00Z"),
+  webhookSecretHash: null,
+});
+
+it.layer(getTestDB())("the automation store", (it) => {
+  it.effect(
+    "an automation is made only on a plan the account reaches, and read, changed, and deleted by its own account alone",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const planId = yield* openPlan(owner);
+
+        assert.deepEqual(
+          yield* createAutomation(other, nightly(planId)),
+          Option.none(),
+          "an account outside the plan's workspace makes nothing on it",
+        );
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        assert.equal(made.enabled, true);
+        assert.equal(made.planName, "Nightly triage");
+        assert.deepEqual(made.trigger, nightly(planId).trigger);
+
+        assert.deepEqual(
+          (yield* listAutomations(owner)).map((each) => each.id),
+          [made.id],
+        );
+        assert.deepEqual(yield* listAutomations(other), []);
+        assert.deepEqual(yield* readAutomation(other, made.id), Option.none());
+        assert.deepEqual(
+          yield* updateAutomation(other, made.id, { enabled: false }),
+          Option.none(),
+        );
+        assert.equal(yield* deleteAutomation(other, made.id), false);
+
+        const paused = Option.getOrThrow(
+          yield* updateAutomation(owner, made.id, {
+            enabled: false,
+            nextRunAt: null,
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+          }),
+        );
+        assert.equal(paused.enabled, false);
+        assert.equal(paused.nextRunAt, null);
+        assert.deepEqual(paused.trigger, { kind: AUTOMATION_TRIGGER.WEBHOOK });
+        assert.equal(paused.name, made.name, "a field the change leaves out stands");
+
+        assert.equal(yield* deleteAutomation(owner, made.id), true);
+        assert.deepEqual(yield* readAutomation(owner, made.id), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a firing records one run however often it is claimed, settles once, and is read by its own account alone",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, nightly(yield* openPlan(owner))),
+        );
+        const firing = {
+          dedupeKey: "2026-10-15T01:00:00.000Z",
+          firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: Date.parse("2026-10-15T01:00:00Z") },
+          firedAt: new Date("2026-10-15T01:00:20Z"),
+        };
+
+        const first = Option.getOrThrow(yield* recordAutomationRun(made, firing));
+        const again = yield* recordAutomationRun(made, { ...firing, firedAt: new Date() });
+        assert.equal(first.status, AUTOMATION_RUN_STATUS.QUEUED);
+        assert.deepEqual(again, Option.none(), "the same firing claimed again records nothing");
+
+        const skipped = yield* settleAutomationRun(first.id, {
+          status: AUTOMATION_RUN_STATUS.SKIPPED,
+          reason: AUTOMATION_RUN_REASON.CONCURRENCY,
+        });
+        const failedAfter = yield* settleAutomationRun(first.id, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.UNAVAILABLE,
+        });
+        assert.equal(skipped, true);
+        assert.equal(failedAfter, false, "a run settles once");
+
+        const history = yield* listAutomationRuns(owner, made.id);
+        assert.deepEqual(
+          history.map((run) => [run.status, run.reason]),
+          [[AUTOMATION_RUN_STATUS.SKIPPED, AUTOMATION_RUN_REASON.CONCURRENCY]],
+        );
+        assert.deepEqual(yield* listAutomationRuns(other, made.id), []);
+        assert.equal(
+          (yield* automationRunsSince(made.id, new Date("2026-10-15T00:00:00Z"))).length,
+          1,
+        );
+        assert.equal(
+          (yield* automationRunsSince(made.id, new Date("2026-10-15T02:00:00Z"))).length,
+          0,
+          "a run fired before the instant is not counted",
+        );
+      }),
+  );
+});
