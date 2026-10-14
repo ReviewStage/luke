@@ -15,8 +15,9 @@ export const WORKSPACE_TASKS = ["typecheck"];
 
 /**
  * The tests, one task per workspace holding a `vitest.config.ts`, except that
- * apps/web's suite, more than half of the whole, is cut into three shards so
- * CI can run them on three runners. `scripts/repository-checks.sh` refuses a
+ * apps/web's suite, more than half of the whole, and @luke/service's, which it
+ * is moving into, are each cut into three shards so CI can run them on three
+ * runners. `scripts/repository-checks.sh` refuses a
  * workspace whose tests are under none of these names.
  */
 export const TEST_TASKS = ["test:vitest", "test:vitest:1", "test:vitest:2", "test:vitest:3"];

@@ -4,7 +4,7 @@ import {
   type UnparsedWireValue,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
-} from "../core.js";
+} from "@luke/service/core";
 
 /**
  * Which frames cross the service in which direction. The service is a pipe,

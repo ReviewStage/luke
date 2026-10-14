@@ -3,6 +3,7 @@
  */
 
 import { failureKind } from "@luke/runtime/effect";
+import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
@@ -11,7 +12,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
 /**

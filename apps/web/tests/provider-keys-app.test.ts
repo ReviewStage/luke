@@ -15,6 +15,7 @@ import {
   type ProviderKeysAnswer,
   providerKeysAnswerSchema,
 } from "@luke/features/provider-key-wire";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
@@ -24,7 +25,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { providerKeysApp } from "../server/provider-keys-app";
 
 /**

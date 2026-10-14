@@ -7,6 +7,12 @@ import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrUnavailable,
+} from "@luke/service/http/http-effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -17,8 +23,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { HOSTED_HTTP_STATUS } from "../http.js";
-import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
 import { mentionedContext } from "../mentioned-context.js";
 import { workspaceRepository } from "../workspace-repository.js";
 import { codingAgentStatusOf } from "./status.js";

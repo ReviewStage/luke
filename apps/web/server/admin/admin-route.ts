@@ -1,9 +1,9 @@
+import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
+import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "@luke/service/providers/posthog";
 import { type Cause, Effect } from "effect";
 import type { AdminSeams } from "../admin-app.js";
 import { auth } from "../auth.js";
 import { authSecrets, socialClientConfigured } from "../auth-deployment.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
-import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../hosted/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations, buildAdminMetrics } from "./admin-metrics.js";

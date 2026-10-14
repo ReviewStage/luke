@@ -1,13 +1,13 @@
-import type { Cause } from "effect";
-import { Effect, Option } from "effect";
-import { auth } from "../auth.js";
 import {
   isRecord,
   text,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "../core.js";
+} from "@luke/service/core";
+import type { Cause } from "effect";
+import { Effect, Option } from "effect";
+import { auth } from "../auth.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {

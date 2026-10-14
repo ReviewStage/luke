@@ -13,7 +13,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { and, eq, gt, ne, or, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import type { StoreFailure } from "./store-failure.js";
+import type { StoreFailure } from "../http/store-failure.js";
 
 /**
  * github-installations.ts -- the GitHub App installation connected to a workspace.

@@ -44,10 +44,23 @@ import {
   inboxReplyRefusal,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
+import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedNotFoundRoute,
+  hostedRefusing,
+  hostedStoreOrUnavailable,
+  readJsonBodyEffect,
+  type UserIdResolver,
+} from "@luke/service/http/http-effect";
+import { logStoreFailure } from "@luke/service/http/store-failure";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "./core.js";
 import type { GitHubApp } from "./github/github-app.js";
 import { githubReadOrRefusal } from "./github/github-refusal.js";
 import { pullRequestFiles } from "./github/pull-requests.js";
@@ -82,17 +95,6 @@ import {
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
-  hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-  type UserIdResolver,
-} from "./hosted/http-effect.js";
 import {
   answerInboxItem,
   readInboxAttachment,
@@ -101,8 +103,6 @@ import {
   withdrawInboxAnswer,
 } from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
-import { logStoreFailure } from "./hosted/store-failure.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.

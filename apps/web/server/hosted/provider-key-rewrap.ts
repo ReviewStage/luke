@@ -9,14 +9,14 @@ import {
   listEveryProviderKeyRow,
   rewrapProviderKeyRow,
 } from "@luke/database/models/provider-key-store";
-import { Effect, type Redacted, Result } from "effect";
 import {
   bearerMatchesSecret,
   errorResponse,
   HOSTED_API_ERROR,
   HOSTED_HTTP_STATUS,
   jsonResponse,
-} from "./http.js";
+} from "@luke/service/http/http";
+import { Effect, type Redacted, Result } from "effect";
 
 /**
  * provider-key-rewrap.ts -- every stored provider key moved onto the ring's current key-encryption key.

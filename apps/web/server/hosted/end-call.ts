@@ -1,11 +1,11 @@
-import { Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
   type StoredToolPart,
   TOOL_PART_STATE,
   type UnparsedWireValue,
   type WireRecord,
-} from "../core.js";
+} from "@luke/service/core";
+import { Schema } from "effect";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**

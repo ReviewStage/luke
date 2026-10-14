@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { ANY_METHOD, ANY_PATH, type WebRoutes } from "@luke/service/route";
 import { type Cause, type Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type { AdminViewer } from "./admin/admin-access.js";
@@ -10,7 +11,6 @@ import { type AdminUsersOptions, handleAdminUsers } from "./admin/admin-users.js
 import { adminViewerGate } from "./admin/gate.js";
 import { ADMIN_ROUTE_PATH } from "./admin/http.js";
 import { ADMIN_REFUSAL, adminRefusalResponse } from "./admin/http-effect.js";
-import { ANY_METHOD, ANY_PATH, type WebRoutes } from "./route.js";
 
 /**
  * The dashboard as the one route group its five functions serve: four reads

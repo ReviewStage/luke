@@ -25,6 +25,12 @@ import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
 /** Where the clients live, relative to the repository root; `packages` stands for every package's `src`. */
 const CALLER_ROOTS = ["apps/desktop/src", "packages", "scripts", "tools"] as const;
 const PACKAGES_ROOT = "packages";
+/**
+ * The packages that are the callee rather than a client: `@luke/service`
+ * holds the route groups themselves, whose dispatcher keys spell `/api/`
+ * paths that are not public routes.
+ */
+const CALLEE_PACKAGES: ReadonlySet<string> = new Set(["service"]);
 const PACKAGE_SOURCE_DIRECTORY = "src";
 const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist"]);
 
@@ -266,7 +272,7 @@ export async function callerDirectories(repoRoot: string): Promise<readonly stri
     }
     const packages = await readdir(join(repoRoot, PACKAGES_ROOT), { withFileTypes: true });
     for (const entry of packages) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory() || CALLEE_PACKAGES.has(entry.name)) continue;
       const contents = await readdir(join(repoRoot, PACKAGES_ROOT, entry.name), {
         withFileTypes: true,
       });

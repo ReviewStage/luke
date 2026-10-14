@@ -15,7 +15,7 @@ import {
   type TurnEventBody,
   type TurnStatus,
   UI_PART_TYPE,
-} from "../core.js";
+} from "@luke/service/core";
 import { END_CALL_TOOL, endsCall } from "./end-call.js";
 import {
   QUEUE_QUESTION_TOOL,

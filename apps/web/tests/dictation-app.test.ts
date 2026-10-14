@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import {
   HTTP_STATUS,
@@ -16,7 +17,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { dictationApp } from "../server/dictation-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 
 /**
  * A dictated clip answered by the group the way a function answers it, over

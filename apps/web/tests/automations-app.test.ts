@@ -39,6 +39,7 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -52,7 +53,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import {
   connectWorkspaceGitHub,

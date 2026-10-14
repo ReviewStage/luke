@@ -21,8 +21,8 @@ import {
   type CodingAgentSubagentTitle,
 } from "@luke/features/coding-agent-wire";
 import { PLAN_WORK_BOUNDS, PLAN_WORK_STATE, type PlanWorkTurn } from "@luke/features/planning-view";
+import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "@luke/service/core";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { CODER } from "./coder-host/bounds.js";

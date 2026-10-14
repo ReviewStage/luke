@@ -1,6 +1,6 @@
+import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "../../server/core.js";
 import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
 import {
   EDIT_PLAN_TOOL,

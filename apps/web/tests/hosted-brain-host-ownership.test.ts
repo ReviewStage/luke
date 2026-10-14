@@ -9,13 +9,13 @@ import {
   setConversationDeletedAt,
   startPlan,
 } from "@luke/database/testing";
+import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "@luke/service/core";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "../server/core";
 import { DEPLOYMENT_PRESENCE } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_ATTRIBUTE,

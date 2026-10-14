@@ -1,7 +1,7 @@
 import type { TurnUsageRow } from "@luke/database/models/coding-agent-store";
 import type { StoredTurnUsage } from "@luke/database/schemas/storage";
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
-import type { BrainRunUsage } from "../../core.js";
+import type { BrainRunUsage } from "@luke/service/core";
 import { type OfferedModel, standardModelIdOf, tokensCostUsd } from "../model-catalog.js";
 
 /**

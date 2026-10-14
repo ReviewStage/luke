@@ -17,9 +17,10 @@ import {
   inboxPostInputSchema,
   inboxReadInputSchema,
 } from "@luke/features/inbox-wire";
+import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@luke/service/core";
+import { logStoreFailure } from "@luke/service/http/store-failure";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
-import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import {
   agentInboxItems,
   closeInboxItem,
@@ -29,7 +30,6 @@ import {
   type InboxPostRefusal,
   postInboxItem,
 } from "../inbox-store.js";
-import { logStoreFailure } from "../store-failure.js";
 import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
 

@@ -51,6 +51,8 @@ import {
   type TranscriptMessage,
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
@@ -58,8 +60,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "../server/hosted/board-tool";
-import { LINK_OUTCOME } from "../server/hosted/github-installations";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";

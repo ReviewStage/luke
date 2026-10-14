@@ -9,7 +9,7 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
  * The hosted response vocabulary as an `HttpRouter` answers it, with the same
- * statuses and the same bytes `server/hosted/http.ts` answers with.
+ * statuses and the same bytes `http.ts` answers with.
  *
  * A refusal is the body itself rather than a `Schema.TaggedError`: `error` is
  * already the discriminant the desktop's hosted clients read, and the `_tag` a

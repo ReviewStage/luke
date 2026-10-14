@@ -19,18 +19,18 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlan } from "@luke/database/models/plan-store";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { Effect, Option, Result } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubRepository } from "../core.js";
-import { GitHubApp } from "../github/github-app.js";
-import { githubReachOrRefusal, logWorkspaceReadFailure } from "../github/github-refusal.js";
-import { memberWorkspaceOnOwner } from "./github-installations.js";
+import type { GitHubRepository } from "@luke/service/core";
+import { memberWorkspaceOnOwner } from "@luke/service/github/github-installations";
 import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
   repositoryNotReachable,
-} from "./http-effect.js";
-import type { StoreFailure } from "./store-failure.js";
+} from "@luke/service/http/http-effect";
+import type { StoreFailure } from "@luke/service/http/store-failure";
+import { Effect, Option, Result } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import { GitHubApp } from "../github/github-app.js";
+import { githubReachOrRefusal, logWorkspaceReadFailure } from "../github/github-refusal.js";
 
 /**
  * The workspace of a plan the account reaches, whose installation every

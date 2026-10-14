@@ -1,7 +1,7 @@
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineDynamic, defineTool } from "eve/tools";
-import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
 import { lookModelOutput } from "../../server/hosted/board-look.js";
 import { eveTurnIdOf, type HostedToolBinding } from "../../server/hosted/brain-host/host.js";
 import { PLANNER_TOOL_NAMES } from "../../server/hosted/brain-host/planning.js";

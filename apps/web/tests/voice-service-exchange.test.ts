@@ -25,10 +25,11 @@ import {
   SEED_ROLE,
   sessionInstructions,
 } from "@luke/live";
+import { HOSTED_API_ERROR, MESSAGE_ROLE } from "@luke/service/core";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
-import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -38,7 +39,6 @@ import {
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";

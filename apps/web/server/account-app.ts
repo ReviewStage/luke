@@ -20,6 +20,20 @@ import {
 import { planRevisionSeqSchema } from "@luke/features/plan-wire";
 import type { FastAccess } from "@luke/features/provider-key-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedMethod,
+  hostedNotFoundRoute,
+  hostedRefusalResponse,
+  hostedStoreOrUnavailable,
+  readJsonBodyEffect,
+  type UserIdResolver,
+} from "@luke/service/http/http-effect";
+import { forgetPosthogPersonEffect } from "@luke/service/providers/posthog";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { accountPreferencesFromWire } from "@luke/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -32,23 +46,9 @@ import {
 } from "effect/http";
 import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedMethod,
-  hostedNotFoundRoute,
-  hostedRefusalResponse,
-  hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-  type UserIdResolver,
-} from "./hosted/http-effect.js";
 import { type IntegrationConnect, revokeIntegrationGrants } from "./hosted/integration-connect.js";
 import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
-import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { retireSessions } from "./hosted/retire-sessions.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The account group: the signed-in desktop's own delete, preferences, and

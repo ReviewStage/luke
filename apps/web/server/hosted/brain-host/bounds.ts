@@ -3,7 +3,7 @@ import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnOrigin,
   type BrainTurnTrigger,
-} from "../../core.js";
+} from "@luke/service/core";
 
 /**
  * The bounds and names the hosted brain host runs under: how a request names

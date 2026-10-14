@@ -46,6 +46,16 @@ import {
   githubInstallLandingPath,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
+import {
+  type ConnectedInstallation,
+  GITHUB_CONNECT_ROLES,
+  LINK_OUTCOME,
+  linkInstallation,
+  recordConnectAuthorization,
+  spendConnectIntent,
+} from "@luke/service/github/github-installations";
+import { hostedNotFoundRoute } from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { generateRandomString } from "better-auth/crypto";
 import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -56,16 +66,6 @@ import {
   type GitHubWorkspaceReadFailure,
 } from "./github/github-app.js";
 import { logGitHubReadFailure, logWorkspaceReadFailure } from "./github/github-refusal.js";
-import {
-  type ConnectedInstallation,
-  GITHUB_CONNECT_ROLES,
-  LINK_OUTCOME,
-  linkInstallation,
-  recordConnectAuthorization,
-  spendConnectIntent,
-} from "./hosted/github-installations.js";
-import { hostedNotFoundRoute } from "./hosted/http-effect.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** The query GitHub puts on the Setup URL. */
 const SETUP_QUERY = {

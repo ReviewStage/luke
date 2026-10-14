@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { electron } from "@better-auth/electron";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
+import type { WireValue } from "@luke/service/core";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { bearer, jwt } from "better-auth/plugins";
@@ -15,7 +16,6 @@ import {
   JWT_KEY_STORAGE,
   SESSION_BEARER,
 } from "../server/auth-policy";
-import type { WireValue } from "../server/core";
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
 
 /**

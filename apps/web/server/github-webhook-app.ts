@@ -5,6 +5,18 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { setInstallationStatus } from "@luke/service/github/github-installations";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedNotFoundRoute,
+  hostedRefusing,
+  hostedStoreOrUnavailable,
+  parseJsonBytes,
+  readBodyBytesEffect,
+} from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -18,18 +30,6 @@ import { clearRevokedAuthorization, type GitHubApp } from "./github/github-app.j
 import { queueGithubRuns } from "./hosted/automation-github.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { setInstallationStatus } from "./hosted/github-installations.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
-  hostedStoreOrUnavailable,
-  parseJsonBytes,
-  readBodyBytesEffect,
-} from "./hosted/http-effect.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
@@ -53,7 +53,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * An installation's own deliveries, which GitHub sends every App without
  * its subscribing, move the status of the workspace that stands for it
- * (`hosted/github-installations.ts`): removed or suspended marks it
+ * (`@luke/service/github/github-installations`): removed or suspended marks it
  * inactive, and unsuspended active again. Nothing is deleted, so an installation
  * suspended and brought back keeps its members and its plans.
  *

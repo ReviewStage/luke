@@ -105,7 +105,7 @@ pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 # The function sources are checked alongside the packages because the builder
 # treats them identically: `apps/web/server` — whose `routes/` subtree holds one
 # module per deployed function — is the entry point of the very graph the doors
-# in `server/core.ts` exist to pull in, so a rule enforced on the packages alone
+# in `packages/service/src/core.ts` exist to pull in, so a rule enforced on the packages alone
 # leaves the directory nearest the failure uncovered. Side-effect imports count
 # — a door is spelled `import "…"` with no names, and an extensionless one fails
 # exactly the same way.

@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { utcDayKey } from "@luke/database/models/quota";
+import { DAY_MS } from "@luke/service/core";
 import { Clock, Effect } from "effect";
-import { DAY_MS } from "../core.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,

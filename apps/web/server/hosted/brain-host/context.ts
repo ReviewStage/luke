@@ -1,9 +1,9 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { listRecentMessages } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "@luke/service/core";
 import { isTextUIPart, isToolUIPart, type ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
-import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 
 /**
  * A conversation's stored messages as the model reads them back: a rotated

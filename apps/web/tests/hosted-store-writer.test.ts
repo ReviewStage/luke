@@ -18,11 +18,6 @@ import {
   readTurnById,
   setConversationDeletedAt,
 } from "@luke/database/testing";
-import { type ToolSet, tool, type UIMessage } from "ai";
-import { eq } from "drizzle-orm";
-import { Option, Result, Schema } from "effect";
-import { afterAll, test } from "vitest";
-import { z } from "zod";
 import {
   ACTION_RESULT_STATUS,
   BRAIN_REQUEST_STATUS,
@@ -51,7 +46,12 @@ import {
   type UnparsedWireValue,
   type UserMessageMetadata,
   unparsedWire,
-} from "../server/core";
+} from "@luke/service/core";
+import { type ToolSet, tool, type UIMessage } from "ai";
+import { eq } from "drizzle-orm";
+import { Option, Result, Schema } from "effect";
+import { afterAll, test } from "vitest";
+import { z } from "zod";
 
 /**
  * The store writer over the real migrations on PGlite. Synthetic fixtures

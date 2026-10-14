@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { runWithoutDatabase } from "@luke/database/testing/no-database";
+import { PRODUCT_EVENT, type WireValue } from "@luke/service/core";
+import { HOSTED_API_ERROR } from "@luke/service/http/http";
+import type { PosthogBatch } from "@luke/service/providers/posthog";
 import { atInstant, fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Option } from "effect";
 import { test } from "vitest";
-import { PRODUCT_EVENT, type WireValue } from "../server/core";
 import { type EventsOptions, handleEvents } from "../server/hosted/events";
-import { HOSTED_API_ERROR } from "../server/hosted/http";
-import type { PosthogBatch } from "../server/hosted/posthog";
 
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
 const PROJECT_KEY = "phc_project";

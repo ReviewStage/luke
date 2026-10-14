@@ -12,13 +12,13 @@ import {
   INTEGRATION_STATUS,
   integrationLandingPath,
 } from "@luke/features/integration-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { GitHubApp } from "../server/github/github-app";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   CONNECT_SIGN_IN_RESULT,
   type ConnectSignInResult,

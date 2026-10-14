@@ -11,9 +11,9 @@
  */
 
 import { join } from "node:path";
+import type { Route } from "@luke/service/route";
 import { dispatchRoutes } from "../../server/function-dispatch";
 import { readApiRewritesTable } from "../../server/function-rewrites";
-import type { Route } from "../../server/route";
 
 const WEB = join(import.meta.dirname, "..", "..");
 

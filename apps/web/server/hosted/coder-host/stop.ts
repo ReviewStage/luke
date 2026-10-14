@@ -9,6 +9,12 @@ import {
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrUnavailable,
+} from "@luke/service/http/http-effect";
 import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {
@@ -19,8 +25,6 @@ import {
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { HOSTED_HTTP_STATUS } from "../http.js";
-import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
 import { type AgentTurnStanding, codingAgentSummary } from "./status.js";
 
 /**

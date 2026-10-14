@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { webSqlClient } from "@luke/service/db/sql-client";
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/http";
-import { webSqlClient } from "./db/sql-client.js";
 import { type GitHubApp, githubAppFromEnvironment } from "./github/github-app.js";
 import { hostedEnvironment } from "./hosted/environment.js";
 import {
@@ -100,16 +100,6 @@ export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<
   return webRuntime().runPromise(effect);
 }
 
-/**
- * The edge's own runner as a composition below it is handed one: a
- * collaborator driven by something other than a request — a socket's
- * callbacks, a stream's reader — has no request fiber to compose into, so the
- * function that composes it hands it `runWeb` itself, and a test hands it the
- * runner over its own test database. It is not a second runtime and not a
- * fiber's own face: the runner it names is always one built at an edge.
- */
-export type WebStoreRun = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) => Promise<A>;
-
 /** What the doors an eve root opens onto the agent runtime may require (`hosted/agent-runtime/edge.ts`). */
 export type WebAgentServices =
   | DatabaseServices
@@ -119,7 +109,7 @@ export type WebAgentServices =
 
 /**
  * The edge's own runner as an eve root's doors are handed one, on the same
- * terms as `WebStoreRun`: the root's `host.ts` hands it `runWeb`, and a test
+ * terms as `WebStoreRun` (`@luke/service/run`): the root's `host.ts` hands it `runWeb`, and a test
  * the runner over its own test database and fakes of the rest.
  */
 export type WebAgentRun = <A, E>(effect: Effect.Effect<A, E, WebAgentServices>) => Promise<A>;

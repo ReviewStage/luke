@@ -35,6 +35,27 @@ import {
   planRevisionSeqSchema,
   planTreeRequestSchema,
 } from "@luke/features/plan-wire";
+import {
+  PLAN_LIST_ARCHIVED,
+  PLAN_LIST_QUERY,
+  planCreateRequestSchema,
+  planUpdateRequestSchema,
+  unparsedWire,
+  wireUuidSchema,
+} from "@luke/service/core";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedNotFoundRoute,
+  hostedRefusing,
+  hostedStoreOrArchived,
+  hostedStoreOrUnavailable,
+  readJsonBodyEffect,
+  type UserIdResolver,
+} from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import {
@@ -43,14 +64,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import {
-  PLAN_LIST_ARCHIVED,
-  PLAN_LIST_QUERY,
-  planCreateRequestSchema,
-  planUpdateRequestSchema,
-  unparsedWire,
-  wireUuidSchema,
-} from "./core.js";
 import type { GitHubApp } from "./github/github-app.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
@@ -62,18 +75,6 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
-  hostedStoreOrArchived,
-  hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-  type UserIdResolver,
-} from "./hosted/http-effect.js";
 import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { withPlanAgents } from "./hosted/plan-agents.js";
 import { readPlanFile } from "./hosted/plan-file.js";
@@ -97,7 +98,6 @@ import {
 } from "./hosted/planner-transcript.js";
 import { retireSessions } from "./hosted/retire-sessions.js";
 import { workspaceRepository } from "./hosted/workspace-repository.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, change, and delete.

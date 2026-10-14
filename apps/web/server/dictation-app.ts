@@ -6,16 +6,7 @@ import {
   type DictationAnswer,
   dictationRequestSchema,
 } from "@luke/features/dictation-wire";
-import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
-import { HostedEnvironment } from "./hosted/environment.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -25,10 +16,19 @@ import {
   hostedRefusing,
   readJsonBodyEffect,
   type UserIdResolver,
-} from "./hosted/http-effect.js";
-import { logStoreFailure } from "./hosted/store-failure.js";
+} from "@luke/service/http/http-effect";
+import { logStoreFailure } from "@luke/service/http/store-failure";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
+import { readEither } from "@luke/wire/effect";
+import { Clock, Effect, Layer, Option, Result } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { transcribeClip } from "./hosted/transcription.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * dictation-app.ts -- a clip the developer dictated into a message box, answered with its words.

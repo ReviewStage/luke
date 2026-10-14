@@ -266,7 +266,7 @@ from before the App, an expired refresh token, or a token that will not open
 under this deployment's secret. No repository read takes that token.
 
 A workspace's repositories are those of the one installation of the App
-connected to it (`hosted/github-installations.ts`), and nothing else: nobody's own GitHub account is asked what it
+connected to it (`packages/service/src/github/github-installations.ts`), and nothing else: nobody's own GitHub account is asked what it
 reaches, so a member who never signed in with GitHub reads, plans, and starts
 agents on the workspace's repositories all the same, and a workspace with
 nothing connected has none. `workspaceRepositories(organizationId)` mints a
@@ -548,7 +548,7 @@ template anywhere else is a leftover, not a pattern.
 
 `packages/database/src/core/query.ts` holds the `Database` service, its
 layer over the runtime's `PgClient` (provided beside the `SqlClient` by
-`server/db/sql-client.ts`, `core/sql-client.ts`, and `getTestDB()`), and
+`packages/service/src/db/sql-client.ts`, `core/sql-client.ts`, and `getTestDB()`), and
 `queryBuilder`, the session-less builder a subquery or a `with` clause is
 rendered with outside any statement. A module reads the database as
 `const db = yield* Database` in a generator, or `Database.use((db) => ...)`
@@ -631,7 +631,7 @@ identify. Root AGENTS.md's "Effect idioms" section names this edge with the
 process's others.
 
 The layer carries what a Vercel function's own platform already offers: an
-`HttpClient` over `fetch`, and the `SqlClient` of `server/db/sql-client.ts` over
+`HttpClient` over `fetch`, and the `SqlClient` of `packages/service/src/db/sql-client.ts` over
 the database `DATABASE_URL` names. `@effect/platform-node` is not on it, and
 `repository-checks.sh` refuses that specifier and `effect/sql` in the
 renderer, where there is no Node; a function inlines its whole graph and the
@@ -742,7 +742,7 @@ the plans group's four, and the dashboard's five behind the admin group are
 converted this way; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
 
-`server/hosted/http-effect.ts` is the response vocabulary that conversion
+`packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
 `readJsonBodyEffect` reading a bounded body off the request stream. A refusal is declared as its body
 rather than as a `Schema.TaggedError`, because `error` is already the
@@ -798,7 +798,7 @@ neither declares reaches the group's own wildcard route, `hostedNotFoundRoute`,
 and the hosted vocabulary's `not-found`. Each handler's own logic is carried
 unchanged — `server/hosted/events.ts` and `server/hosted/maintenance-sweep.ts` —
 behind a passthrough shaped like the auth group's (`effectPassthrough` in
-`server/hosted/http-effect.ts`): the `HttpServerRequest` becomes the `Request`
+`packages/service/src/http/http-effect.ts`): the `HttpServerRequest` becomes the `Request`
 the handler always took, and its `Response` is carried back with
 `HttpServerResponse.raw`.
 `server/events-app.ts` holds one query of its own, the events handler's

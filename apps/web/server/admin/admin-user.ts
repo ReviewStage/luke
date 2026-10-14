@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { DAY_MS } from "@luke/service/core";
 import { Clock, Effect } from "effect";
-import { DAY_MS } from "../core.js";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,

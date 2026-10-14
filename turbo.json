@@ -38,7 +38,7 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
-    // apps/web's suite in three vitest shards, one per CI runner.
+    // apps/web's suite and @luke/service's, each in three vitest shards, one per CI runner.
     "test:vitest:1": {
       "dependsOn": ["^transit"],
       "outputs": []

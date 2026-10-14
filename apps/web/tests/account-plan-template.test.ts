@@ -28,6 +28,7 @@ import {
   planTemplateAnswerSchema,
   planTemplateRevisionsAnswerSchema,
 } from "@luke/features/plan-document-template";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
@@ -36,7 +37,6 @@ import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
 import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";

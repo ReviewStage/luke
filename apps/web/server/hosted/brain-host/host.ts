@@ -7,12 +7,6 @@ import { listMessagesPast, type MessageCursor } from "@luke/database/models/mess
 import { readPlanOfConversation } from "@luke/database/models/plan-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
-import { isTextUIPart } from "ai";
-import { Effect, Option, Result, type Schema } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { MessageStreamEvent } from "eve/client";
-import type { SessionAuth, SessionContext } from "eve/context";
-import type { ToolContext as EveToolContext } from "eve/tools";
 import {
   ACTION_RESULT_STATUS,
   type BrainTurnTrigger,
@@ -21,7 +15,13 @@ import {
   MESSAGE_ROLE,
   type UnparsedWireValue,
   type WireRecord,
-} from "../../core.js";
+} from "@luke/service/core";
+import { isTextUIPart } from "ai";
+import { Effect, Option, Result, type Schema } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { MessageStreamEvent } from "eve/client";
+import type { SessionAuth, SessionContext } from "eve/context";
+import type { ToolContext as EveToolContext } from "eve/tools";
 import type { GitHubApp } from "../../github/github-app.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";

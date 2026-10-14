@@ -13,8 +13,6 @@ import {
   type PlanWorkTurn,
   type PlanWorkWorker,
 } from "@luke/features/planning-view";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
-import { Schema } from "effect";
 import {
   isStoredToolPart,
   type StoredToolPart,
@@ -23,7 +21,9 @@ import {
   TOOL_PART_STATE,
   TURN_STATUS,
   UI_PART_TYPE,
-} from "../core.js";
+} from "@luke/service/core";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
+import { Schema } from "effect";
 import {
   EVE_DELEGATION_INPUT,
   EVE_DELEGATION_TOOL,

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import type { WireValue } from "@luke/service/core";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "../server/auth-policy";
-import type { WireValue } from "../server/core";
 
 /**
  * A GitHub sign-in, configured as `auth.ts` configures it, over an in-memory

@@ -9,9 +9,9 @@ import {
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { MESSAGE_ROLE, type StoredUIMessage } from "@luke/service/core";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
-import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { getTestDB } from "@luke/database/testing";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { macCommandsApp } from "../server/mac-commands-app";
 
 /**

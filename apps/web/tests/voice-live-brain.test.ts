@@ -13,6 +13,7 @@ import {
   startPlan,
 } from "@luke/database/testing";
 import type { PlanWorkTurn } from "@luke/features/planning-view";
+import { ASK_ORIGIN, TURN_SLOW_STEP } from "@luke/service/core";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -27,7 +28,6 @@ import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { ASK_ORIGIN, TURN_SLOW_STEP } from "../server/core";
 import { askStanding } from "../server/hosted/brain-ask";
 import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";

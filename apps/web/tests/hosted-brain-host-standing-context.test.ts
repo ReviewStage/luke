@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { openPlanConversation, savePlanText } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { insertMessage, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "@luke/service/core";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   conversationReachableBy,

@@ -1,13 +1,13 @@
 import { DICTATION_AUDIO_TYPE } from "@luke/features/dictation-wire";
+import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { HOSTED_OPENAI_DEFAULTS } from "@luke/service/providers/openai";
 import { readEither } from "@luke/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
-import { HOSTED_HTTP_STATUS } from "./http.js";
-import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";
 
 /**
  * transcription.ts -- one dictated clip turned into its words by OpenAI's transcription model, on Luke's key.

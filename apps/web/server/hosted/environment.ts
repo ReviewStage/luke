@@ -1,11 +1,11 @@
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
+import { text } from "@luke/service/core";
+import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
+import { POSTHOG_ENVIRONMENT } from "@luke/service/providers/posthog";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
 import { GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
-import { text } from "../core.js";
 import { HOSTED_ANTHROPIC_ENVIRONMENT } from "./anthropic.js";
 import { CRON_ENVIRONMENT } from "./maintenance-bounds.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "./openai.js";
-import { POSTHOG_ENVIRONMENT } from "./posthog.js";
 
 /**
  * What the deployment's environment says about the hosted tier, read once as

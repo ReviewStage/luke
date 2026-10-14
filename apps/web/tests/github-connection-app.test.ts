@@ -5,6 +5,8 @@ import { OrganizationRefused } from "@luke/database/models/workspace-seams";
 import { account } from "@luke/database/schemas/auth";
 import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
 import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
+import type { WireValue } from "@luke/service/core";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
@@ -23,10 +25,8 @@ import {
   GITHUB_SIGN_IN,
   SESSION_BEARER,
 } from "../server/auth-policy";
-import type { WireValue } from "../server/core";
 import { githubConnectionApp } from "../server/github-connection-app";
 import { type GitHubUnlink, githubUnlink } from "../server/hosted/github-unlink";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 
 /**
  * Connecting an account's GitHub, end to end over Better Auth as `auth.ts`

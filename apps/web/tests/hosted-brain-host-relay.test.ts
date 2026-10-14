@@ -10,10 +10,6 @@ import {
   readMessagesByConversationTyped,
   readTurnsByConversation,
 } from "@luke/database/testing";
-import { isToolUIPart } from "ai";
-import { Effect, Result } from "effect";
-import type { MessageStreamEvent } from "eve/client";
-import { afterAll } from "vitest";
 import {
   ASK_ORIGIN,
   MESSAGE_AUTHOR,
@@ -23,7 +19,11 @@ import {
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
-} from "../server/core";
+} from "@luke/service/core";
+import { isToolUIPart } from "ai";
+import { Effect, Result } from "effect";
+import type { MessageStreamEvent } from "eve/client";
+import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import {
   memoryRelayState,
