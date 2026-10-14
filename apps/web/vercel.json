@@ -193,6 +193,18 @@
           "dest": "/api/default.js?route=events"
         },
         {
+          "src": "/api/github/connect",
+          "dest": "/api/default.js?route=github/connect"
+        },
+        {
+          "src": "/api/github/connect/claim",
+          "dest": "/api/default.js?route=github/connect/claim"
+        },
+        {
+          "src": "/api/github/connection",
+          "dest": "/api/default.js?route=github/connection"
+        },
+        {
           "src": "/api/github/install",
           "dest": "/api/default.js?route=github/install"
         },
