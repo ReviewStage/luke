@@ -438,7 +438,7 @@ body,
   width: 100%;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-6) var(--row-inset);
+  padding: var(--space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
   color: var(--text-secondary);
@@ -4869,13 +4869,13 @@ body:has(.app-stage[data-capture="true"])
 
 /* New plan (`new-plan-dialog.tsx`): the dialog's card, its one-line name in
    the feedback note's well, and its foot led by the repository chip with
-   the answers at its end. */
+   the answers at its end. New workspace's name is the same field. */
 .new-plan-dialog {
   width: min(460px, 100%);
   gap: var(--space-12);
 }
 
-.new-plan-dialog-name {
+.dialog-name-field {
   width: 100%;
   padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline);
@@ -4888,7 +4888,7 @@ body:has(.app-stage[data-capture="true"])
   transition: border-color var(--duration-hover) ease;
 }
 
-.new-plan-dialog-name::placeholder {
+.dialog-name-field::placeholder {
   color: var(--text-tertiary);
 }
 

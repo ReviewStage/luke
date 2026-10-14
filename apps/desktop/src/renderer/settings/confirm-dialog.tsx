@@ -121,6 +121,7 @@ export function ConfirmDialog({
   const cancel = useRef<HTMLButtonElement | null>(null);
   const invoker = useRef<HTMLElement | null>(null);
   const answered = useRef(false);
+  const pressedBackdrop = useRef(false);
   const titleId = useId();
   const bodyId = useId();
 
@@ -164,6 +165,8 @@ export function ConfirmDialog({
     // behind a question nobody has answered. A button's own Enter and Space
     // are its default action, which this leaves alone.
     event.stopPropagation();
+    // A key an input method is composing with is the method's, not the dialog's.
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Tab") {
       trappedTab(event);
       return;
@@ -181,13 +184,18 @@ export function ConfirmDialog({
   };
 
   return createPortal(
-    // The dimmed window takes a press as Cancel, and the keys pressed
+    // A press that begins and ends on the dimmed window is Cancel, so a text
+    // selection dragged out of the card's field is none; the keys pressed
     // anywhere in the card reach it on their way out.
     // biome-ignore lint/a11y/noStaticElementInteractions: the dimmed window is a pointer target alone; the keys it hears come from the card's own focus.
     <div
       className="confirm-dialog-backdrop"
+      onPointerDown={(event) => {
+        pressedBackdrop.current = event.target === event.currentTarget;
+      }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) dismiss();
+        if (pressedBackdrop.current && event.target === event.currentTarget) dismiss();
+        pressedBackdrop.current = false;
       }}
       onKeyDown={keyDown}
     >

@@ -26,10 +26,11 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 /**
  * Settings' Workspace page over a bridge answering as the host would: the
  * picker chooses the workspace the page shows, a team workspace's members
- * are read and listed, an owner or an admin is offered Remove for anyone but
- * an owner, a member leaves, a refusal the role earns says so, an owner or
- * admin invites by address and role and copies or cancels what is pending,
- * and a team's owner or admin connects or disconnects the workspace's GitHub
+ * are read and listed, the page holding itself back while they are, an
+ * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
+ * a member leaves, a refusal the role earns says so, an owner or admin
+ * invites by address and role and copies or cancels what is pending, and a
+ * team's owner or admin connects or disconnects the workspace's GitHub
  * repositories.
  * Synthetic accounts.
  */
@@ -66,6 +67,8 @@ const PERSONAL: Workspace = {
 let stored: WorkspaceMember[] = [];
 /** Every act the section sent, in order. */
 let sent: Act[] = [];
+/** Whether the service refuses to read the members. */
+let refuseMembersRead = false;
 /** Whether the service refuses the next removal for the account's role. */
 let refuseRemoval = false;
 /** The invitations the test's service holds pending. */
@@ -89,6 +92,9 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
+      if (refuseMembersRead) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+      }
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_MEMBER_REMOVE:
       if (refuseRemoval) {
@@ -150,6 +156,7 @@ beforeEach(() => {
   installScrollIntoView();
   stored = [OWNER, MEMBER];
   sent = [];
+  refuseMembersRead = false;
   refuseRemoval = false;
   invitations = [];
   refuseInvitation = false;
@@ -213,10 +220,43 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
-const memberRow = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".workspace-member")].find(
+/** The page's row naming `name`. */
+const rowNamed = (page: HTMLElement, name: string) =>
+  [...page.querySelectorAll<HTMLElement>(".settings-row")].find(
     (row) => row.querySelector("strong")?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
+
+/** The rows of the invitations still pending, by the line each wears. */
+const invitationRows = (page: HTMLElement) =>
+  [...page.querySelectorAll<HTMLElement>(".settings-row")].filter((row) =>
+    row.querySelector("small")?.textContent?.startsWith("Invited · "),
+  );
+
+/** The items of the ⋯ on `row`, or none where it draws no ⋯. */
+function rowActions(row: HTMLElement): string[] {
+  const ellipsis = row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+  if (ellipsis === null) return [];
+  act(() => ellipsis.click());
+  const items = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+  act(() => ellipsis.click());
+  return items;
+}
+
+/** Chooses `label` from the ⋯ on `row`. */
+async function chooseAction(row: HTMLElement, label: string): Promise<void> {
+  const ellipsis =
+    row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    assert.fail("the row draws no ⋯");
+  act(() => ellipsis.click());
+  const item =
+    [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`no ${label} in the row's menu`);
+  act(() => item.click());
+  await settle();
+}
 
 /** The confirm dialog a press raised. */
 function dialog(): HTMLElement {
@@ -229,6 +269,10 @@ async function confirm(verb: string): Promise<void> {
   await settle();
 }
 
+/** What the Workspace picker says under its name: the account's role, or that the workspace is personal. */
+const pickerLine = (page: HTMLElement) =>
+  rowNamed(page, "Workspace").querySelector("small")?.textContent;
+
 test("the chosen team workspace's members are listed with their email and role, and a member is offered no Remove", async () => {
   const { page } = await mount(ACME);
 
@@ -237,22 +281,46 @@ test("the chosen team workspace's members are listed with their email and role, 
     [ACT_KIND.WORKSPACE_MEMBERS_READ],
   );
   assert.equal(
-    memberRow(page, "Dana").querySelector("small")?.textContent,
+    rowNamed(page, "Dana").querySelector("small")?.textContent,
     "dana@example.com · Owner",
   );
   assert.equal(
-    memberRow(page, "Sam").querySelector("small")?.textContent,
+    rowNamed(page, "Sam").querySelector("small")?.textContent,
     "sam@example.com · Member",
   );
-  assert.deepEqual(buttons(page, "Remove"), []);
+  assert.deepEqual(rowActions(rowNamed(page, "Sam")), []);
+});
+
+test("while the members are being read the page holds itself back, and a read that failed says so with Retry", async () => {
+  refuseMembersRead = true;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control: WorkspaceSettingsControl = {
+    workspaces: [PERSONAL, ACME],
+    workspaceId: ACME.id,
+    onChooseWorkspace: () => undefined,
+    onLeft: () => undefined,
+  };
+  act(() => root.render(createElement(WorkspacePage, { control })));
+  const heldBack = container.querySelector(".settings-reading") !== null;
+  await settle();
+
+  assert.equal(heldBack, true);
+  assert.equal(container.querySelector('[role="alert"]')?.textContent, "Could not read.");
+  refuseMembersRead = false;
+  act(() => button(container, "Retry").click());
+  await settle();
+  assert.ok(rowNamed(container, "Sam"));
+  assert.equal(container.querySelector(".settings-reading"), null);
 });
 
 test("an admin is offered Remove for a member but not for the owner, and Remove asks before it removes", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  assert.deepEqual(buttons(memberRow(page, "Dana"), "Remove"), []);
-  const sam = memberRow(page, "Sam");
-  act(() => button(sam, "Remove").click());
+  assert.deepEqual(rowActions(rowNamed(page, "Dana")), []);
+  await chooseAction(rowNamed(page, "Sam"), "Remove from workspace");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
   await confirm("Remove");
 
@@ -263,15 +331,17 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
       .map((request) => request.payload),
     [{ workspaceId: ACME.id, userId: MEMBER.userId }],
   );
-  assert.equal(page.querySelectorAll(".workspace-member").length, 1);
+  assert.equal(
+    [...page.querySelectorAll(".settings-row strong")].some((each) => each.textContent === "Sam"),
+    false,
+  );
 });
 
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  const sam = memberRow(page, "Sam");
-  act(() => button(sam, "Remove").click());
+  await chooseAction(rowNamed(page, "Sam"), "Remove from workspace");
   await confirm("Remove");
 
   assert.equal(
@@ -302,31 +372,28 @@ test("the personal workspace says it is yours and lists no members and no GitHub
   const { page } = await mount(PERSONAL);
 
   assert.deepEqual(sent, []);
-  assert.equal(
-    page.querySelector(".workspace-identity small")?.textContent,
-    "Your personal workspace. Its plans are yours alone.",
-  );
-  assert.equal(page.querySelector(".workspace-member"), null);
+  assert.equal(pickerLine(page), "Your personal workspace. Its plans are yours alone.");
   assert.equal(page.querySelector(".workspace-invite"), null);
-  assert.ok(
-    !page.querySelector(".workspace-github"),
-    "the personal workspace offers no GitHub repositories",
+  assert.deepEqual(
+    [...page.querySelectorAll(".settings-row strong")].map((each) => each.textContent),
+    ["Workspace"],
+    "the personal workspace offers no members and no GitHub repositories",
   );
 });
 
-test("an admin sees the team's GitHub organization and disconnects it after confirming", async () => {
+test("an admin sees the team's GitHub organization and disconnects it from its ⋯ after confirming", async () => {
   const { page } = await mount({
     ...ACME,
     role: WORKSPACE_ROLE.ADMIN,
     github: { login: "acme", active: true },
   });
-  const row = page.querySelector(".workspace-github") ?? assert.fail("no GitHub row");
+  const row = rowNamed(page, "GitHub organization");
 
-  act(() => button(row, "Disconnect").click());
+  await chooseAction(row, "Disconnect");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT);
   await confirm("Disconnect");
 
-  assert.equal(row.querySelector("strong")?.textContent, "Repositories from acme");
+  assert.equal(row.querySelector("small")?.textContent, "acme");
   assert.equal(askedFirst, true);
   assert.deepEqual(
     sent
@@ -338,14 +405,13 @@ test("an admin sees the team's GitHub organization and disconnects it after conf
 
 test("an owner of a workspace with no GitHub organization is offered Connect, a connected one Choose repositories on GitHub, and a member sees no GitHub repositories", async () => {
   const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  act(() => button(owner.page, "Connect…").click());
+  act(() => button(rowNamed(owner.page, "GitHub organization"), "Connect").click());
   const admin = await mount({
     ...ACME,
     role: WORKSPACE_ROLE.ADMIN,
     github: { login: "acme", active: true },
   });
-  const choose = admin.page.querySelector(".workspace-github") ?? assert.fail("no GitHub row");
-  act(() => button(choose, "Choose repositories…").click());
+  act(() => button(rowNamed(admin.page, "GitHub organization"), "Choose repositories").click());
   const member = await mount({ ...ACME, github: { login: "acme", active: true } });
   await settle();
 
@@ -355,10 +421,15 @@ test("an owner of a workspace with no GitHub organization is offered Connect, a 
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }, { workspaceId: ACME.id }],
   );
-  assert.equal(member.page.querySelector(".workspace-github"), null);
+  assert.equal(
+    [...member.page.querySelectorAll(".settings-row strong")].some(
+      (each) => each.textContent === "GitHub organization",
+    ),
+    false,
+  );
 });
 
-test("the picker shows another workspace on the page, its name, the account's role, and its own members", async () => {
+test("the picker shows another workspace on the page, the account's role, and its own members", async () => {
   const beta: Workspace = {
     ...ACME,
     id: "workspace-beta",
@@ -378,8 +449,8 @@ test("the picker shows another workspace on the page, its name, the account's ro
   act(() => option.click());
   await settle();
 
-  assert.equal(page.querySelector(".workspace-identity strong")?.textContent, "Beta");
-  assert.equal(page.querySelector(".workspace-identity small")?.textContent, "Your role: Admin");
+  assert.ok(page.querySelector('button[aria-label="Workspace: Beta"]'), "the picker names Beta");
+  assert.equal(pickerLine(page), "Your role: Admin");
   assert.deepEqual(
     sent
       .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ)
@@ -392,35 +463,33 @@ test("the picker shows another workspace on the page, its name, the account's ro
 async function invite(page: HTMLElement, email: string, role: string, presses = 1): Promise<void> {
   const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
   const address = form.querySelector("input") ?? assert.fail("no address field");
-  const chosen = form.querySelector("select") ?? assert.fail("no role choice");
+  const roleWords = role === WORKSPACE_ROLE.ADMIN ? "Admin" : "Member";
   act(() => {
     // React reads a typed value off the element's own setter, as a keystroke sets it.
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(address, email);
     address.dispatchEvent(new Event("input", { bubbles: true }));
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(chosen, role);
-    chosen.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  act(() => button(form, roleWords).click());
   act(() => {
     for (let press = 0; press < presses; press += 1) form.requestSubmit();
   });
   await settle();
 }
 
-test("an admin invites an address as a role, sees it pending with its link to copy, and cancels it", async () => {
+test("an admin invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
-  const row = page.querySelector(".workspace-invitation") ?? assert.fail("no pending invitation");
+  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
   const listed = [
     row.querySelector("strong")?.textContent,
     row.querySelector("small")?.textContent,
   ];
   act(() => button(row, "Copy link").click());
-  act(() => button(row, "Cancel").click());
-  await settle();
+  await chooseAction(row, "Cancel invitation");
 
-  assert.deepEqual(listed, ["alan@example.com", "Admin"]);
-  assert.equal(page.querySelector(".workspace-invitation"), null);
+  assert.deepEqual(listed, ["alan@example.com", "Invited · Admin"]);
+  assert.deepEqual(invitationRows(page), []);
   assert.deepEqual(
     sent
       .filter((request) => request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ)
@@ -456,7 +525,7 @@ test("a first read still out when an invitation lands does not take the new invi
   await settle();
 
   assert.deepEqual(
-    [...page.querySelectorAll(".workspace-invitation strong")].map((each) => each.textContent),
+    invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
     ["alan@example.com"],
   );
 });
@@ -467,12 +536,12 @@ test("an invitation made stays listed with its link when the read after it fails
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
 
-  const row = page.querySelector(".workspace-invitation") ?? assert.fail("the invitation was lost");
+  const row = invitationRows(page)[0] ?? assert.fail("the invitation was lost");
   assert.equal(row.querySelector("strong")?.textContent, "alan@example.com");
   assert.ok(button(row, "Copy link"));
 });
 
-test("Cancel sends nothing while an invitation is on its way", async () => {
+test("Cancel invitation sends nothing while an invitation is on its way", async () => {
   invitations = [
     {
       id: "inv-sam",
@@ -489,8 +558,15 @@ test("Cancel sends nothing while an invitation is on its way", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
-  const row = page.querySelector(".workspace-invitation") ?? assert.fail("no pending invitation");
-  act(() => button(row, "Cancel").click());
+  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
+  const ellipsis =
+    row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? assert.fail();
+  act(() => ellipsis.click());
+  const cancel =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Cancel invitation",
+    ) ?? assert.fail("no Cancel invitation");
+  act(() => cancel.click());
   release();
   await settle();
 
@@ -507,7 +583,7 @@ test("Invite pressed again while one is on its way sends one invitation", async 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER, 2);
 
   assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
-  assert.equal(page.querySelector(".settings-note"), null);
+  assert.equal(page.querySelector(".error-message"), null);
 });
 
 test("an address already invited is said under the form, and a member is offered no invitations", async () => {
@@ -517,8 +593,11 @@ test("an address already invited is said under the form, and a member is offered
   const member = await mount(ACME);
   await settle();
 
-  assert.equal(admin.page.querySelector(".settings-note")?.textContent, ALREADY_INVITED_REFUSAL);
-  assert.equal(admin.page.querySelector(".workspace-invitation"), null);
+  assert.equal(
+    admin.page.querySelector('.error-message[role="alert"]')?.textContent,
+    ALREADY_INVITED_REFUSAL,
+  );
+  assert.deepEqual(invitationRows(admin.page), []);
   assert.equal(member.page.querySelector(".workspace-invite"), null);
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length,
@@ -533,8 +612,7 @@ test("a Disconnect asked for one workspace does not stand over another listed in
     github: { login: "acme", active: true },
   };
   const { page, relist } = await mount(connected);
-  const row = page.querySelector(".workspace-github") ?? assert.fail("no GitHub row");
-  act(() => button(row, "Disconnect").click());
+  await chooseAction(rowNamed(page, "GitHub organization"), "Disconnect");
   const asked = dialog().querySelector("h2")?.textContent;
 
   await relist({
