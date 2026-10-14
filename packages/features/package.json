@@ -13,6 +13,7 @@
     "./agent-tools": "./src/agent-tools.js",
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",
+    "./chat-wire": "./src/chat-wire.js",
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
     "./desktop-session-wire": "./src/desktop-session-wire.js",

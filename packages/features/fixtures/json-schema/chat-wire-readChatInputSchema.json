@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "channel": {
+      "type": "string",
+      "maxLength": 81
+    },
+    "thread": {
+      "type": "number",
+      "minimum": 0
+    },
+    "before": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

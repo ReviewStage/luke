@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "human",
+        "agent",
+        "planner"
+      ]
+    },
+    "handle": {
+      "type": "string"
+    },
+    "userId": {
+      "type": "string"
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "planId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "left": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "handle",
+    "left"
+  ],
+  "additionalProperties": false
+}

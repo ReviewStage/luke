@@ -1,0 +1,14 @@
+{
+  "anyOf": [
+    {
+      "type": "string",
+      "maxLength": 1000
+    },
+    {
+      "type": "number"
+    },
+    {
+      "type": "boolean"
+    }
+  ]
+}
