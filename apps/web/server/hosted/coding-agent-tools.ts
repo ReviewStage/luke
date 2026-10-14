@@ -95,8 +95,7 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
   NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
   NOT_REACHABLE:
-    "Not sent: the developer no longer reaches the agent's repository through the Luke GitHub App.",
-  SIGN_IN_REQUIRED: "Not sent: the developer must sign in with GitHub again first.",
+    "Not sent: the GitHub installation connected to the plan's workspace no longer reaches the agent's repository.",
   NOT_READY:
     "Not sent: the agent's session is still coming up; the same message a moment later is taken.",
   RETIRED:
@@ -115,8 +114,7 @@ export const START_CODING_AGENT_REFUSAL = {
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this plan names no GitHub repository yet.",
   NOT_REACHABLE:
-    "Not started: the developer no longer reaches the plan's repository through the Luke GitHub App.",
-  SIGN_IN_REQUIRED: "Not started: the developer must sign in with GitHub again first.",
+    "Not started: the GitHub installation connected to the plan's workspace does not reach the plan's repository.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
   ARCHIVED: "Not started: this plan is archived; the developer unarchives it first.",
@@ -126,14 +124,12 @@ export const START_CODING_AGENT_REFUSAL = {
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED, START_CODING_AGENT_REFUSAL.SIGN_IN_REQUIRED],
   [HOSTED_API_ERROR.PLAN_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
 ]);
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
 const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, CODING_AGENT_TOOL_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED, CODING_AGENT_TOOL_REFUSAL.SIGN_IN_REQUIRED],
   [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_TOOL_REFUSAL.NOT_READY],
   [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_TOOL_REFUSAL.RETIRED],
   [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_TOOL_REFUSAL.NO_AGENT],

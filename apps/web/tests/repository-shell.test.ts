@@ -12,9 +12,12 @@ import {
   runInRepository,
 } from "../server/hosted/repository-shell";
 import {
+  connectWorkspaceGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
+  type InstallationFixture,
   openGithubUser,
+  type SentToGitHub,
 } from "./support/github-app-fake";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 import { startPlan } from "./support/workspaces";
@@ -31,8 +34,12 @@ import { startPlan } from "./support/workspaces";
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** The installation the user reaches the repository through. */
-const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+/** An installation reaching the repository, under the id given: each test connects its own to its plan's workspace, since one installation stands for one workspace. */
+const installationOf = (id: number): InstallationFixture => ({
+  id,
+  login: RELAY.owner,
+  repositories: [RELAY],
+});
 
 const LISTING = { exitCode: 0, stdout: "README.md\nsrc\n", stderr: "" } as const;
 
@@ -40,14 +47,16 @@ const LISTING = { exitCode: 0, stdout: "README.md\nsrc\n", stderr: "" } as const
 const COMMANDS: CommandTable = (command) =>
   command === "ls" ? LISTING : command === "cat secret" ? { ...LISTING, stdout: "x" } : undefined;
 
-/** A GitHub that reaches the repository and mints for its installation. */
-const reachingGithub = () => githubReaching([INSTALLATION]);
-
-/** An account holding one plan, on the repository given, and the sandbox its session opens. */
-const openPlan = (repository: string | null, commands: CommandTable = COMMANDS) =>
+/** An account holding one plan, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens. */
+const openPlan = (
+  repository: string | null,
+  installation: InstallationFixture,
+  commands: CommandTable = COMMANDS,
+) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const started = yield* startPlan(userId, { name: "Teammate invitations", repository });
+    yield* connectWorkspaceGitHub(started.workspaceId, installation);
     const sandbox = sandboxDouble(commands);
     const call: RepositoryCall = {
       plan: { userId, planId: started.id },
@@ -66,6 +75,11 @@ const run = (
 /** The token as the firewall carries it: GitHub's Basic header over the token user. */
 const TOKEN_HEADER = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
 
+/** Whether the request mints a token for named repositories, rather than the listing token the installation's repositories are read on. */
+function mintsForRepositories(sent: SentToGitHub): boolean {
+  return sent.url.endsWith("/access_tokens") && "repositories" in JSON.parse(sent.body);
+}
+
 /** Whether the text carries the token, plain or as the header. */
 function carriesToken(text: string): boolean {
   return text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN) || text.includes(TOKEN_HEADER);
@@ -76,8 +90,9 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
     "the first call checks the repository out at its default branch through the firewall, and the next reuses it",
     () =>
       Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-        const github = reachingGithub();
+        const installation = installationOf(7);
+        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, installation);
+        const github = githubReaching([installation]);
 
         const first = yield* run(call, "ls", github.layer);
         const sentForFirst = github.sent.length;
@@ -95,11 +110,11 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
         ]);
         assert.equal(sandbox.openings, 2);
         // The token was minted for that one repository with contents read, and the second call asked GitHub nothing.
-        const mint = github.sent.find((sent) => sent.url.endsWith("/access_tokens"));
+        const mint = github.sent.find(mintsForRepositories);
         assert.ok(mint);
         assert.equal(
           mint.url,
-          `https://api.github.com/app/installations/${INSTALLATION.id}/access_tokens`,
+          `https://api.github.com/app/installations/${installation.id}/access_tokens`,
         );
         assert.deepEqual(JSON.parse(mint.body), {
           repositories: [RELAY.name],
@@ -129,9 +144,10 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
     "the token reaches the firewall and nothing else: no run, no output, no result carries it",
     () =>
       Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
+        const installation = installationOf(8);
+        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, installation);
 
-        const answered = yield* run(call, "ls", reachingGithub().layer);
+        const answered = yield* run(call, "ls", githubReaching([installation]).layer);
 
         assert.equal(carriesToken(JSON.stringify(answered)), false);
         assert.equal(carriesToken(JSON.stringify(sandbox.runs)), false);
@@ -140,10 +156,11 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
       }),
   );
 
-  it.effect("a repository the developer no longer reaches through the App checks nothing out", () =>
+  it.effect("a repository the workspace's installation no longer reaches checks nothing out", () =>
     Effect.gen(function* () {
-      const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-      const elsewhere = githubReaching([{ ...INSTALLATION, repositories: [] }]);
+      const installation = installationOf(9);
+      const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, installation);
+      const elsewhere = githubReaching([{ ...installation, repositories: [] }]);
 
       const answered = yield* run(call, "ls", elsewhere.layer);
 
@@ -153,10 +170,7 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
       });
       assert.deepEqual(sandbox.clones, []);
       assert.deepEqual(sandbox.policies, []);
-      assert.equal(
-        elsewhere.sent.some((sent) => sent.url.endsWith("/access_tokens")),
-        false,
-      );
+      assert.equal(elsewhere.sent.some(mintsForRepositories), false);
     }),
   );
 });

@@ -50,7 +50,7 @@ const LANDING_CARD = {
     badge: "Not completed",
     settled: false,
     title: "Luke could not confirm the installation",
-    body: "Return to Luke and start the install again from a plan.",
+    body: "Return to Luke and choose Connect GitHub again in Settings › Workspace.",
   },
   [GITHUB_INSTALL_STATUS.UNAVAILABLE]: {
     badge: "Not completed",
@@ -61,26 +61,20 @@ const LANDING_CARD = {
   [GITHUB_INSTALL_STATUS.CONNECTED]: {
     badge: "Connected",
     settled: true,
-    title: "The GitHub organization is connected to your workspace",
+    title: "GitHub is connected to your workspace",
     body: "Its repositories are available to everyone in the workspace. Return to Luke. You can close this tab.",
   },
   [GITHUB_INSTALL_STATUS.ALREADY_CONNECTED]: {
     badge: "Not connected",
     settled: false,
-    title: "That GitHub organization is connected to another workspace",
-    body: "One GitHub organization connects to one workspace. Disconnect it there first, or choose another.",
+    title: "That GitHub account is connected to another workspace",
+    body: "One GitHub account or organization connects to one workspace. Disconnect it there first, or choose another.",
   },
   [GITHUB_INSTALL_STATUS.EXPIRED]: {
     badge: "Not connected",
     settled: false,
     title: "This connection link has expired",
-    body: "Return to Luke and choose Connect GitHub org again.",
-  },
-  [GITHUB_INSTALL_STATUS.GITHUB_SIGN_IN_REQUIRED]: {
-    badge: "Not connected",
-    settled: false,
-    title: "Luke could not confirm it with your GitHub account",
-    body: "Connect GitHub in Luke's Settings, then choose Connect GitHub org again.",
+    body: "Return to Luke and choose Connect GitHub again.",
   },
 } as const satisfies Readonly<Record<GitHubInstallStatus, LandingCard>>;
 

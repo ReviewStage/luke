@@ -303,14 +303,11 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The repository as the row keeps it: null where none was named, or the
- * full name as GitHub spells it once the App confirms the account reaches
- * it, through the workspace's installation where it has one
- * (`hosted/workspace-repository.ts`). The workspace is read only where a
- * repository is named. The refusal names which it was: the account's
- * token, or the repository.
+ * full name as GitHub spells it once the App confirms the workspace's
+ * installation reaches it (`hosted/workspace-repository.ts`). The workspace
+ * is read only where a repository is named.
  */
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
   workspace: Effect.Effect<string, HostedRefusal, DatabaseServices>,
   repository: string | null | undefined,
 ): Effect.fn.Return<
@@ -320,7 +317,7 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
 > {
   if (repository === undefined || repository === null) return null;
   const organizationId = yield* workspace;
-  const reached = yield* workspaceRepository(userId, organizationId, repository);
+  const reached = yield* workspaceRepository(organizationId, repository);
   return reached.fullName;
 });
 
@@ -396,7 +393,6 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const organizationId = yield* startingWorkspace(seams, userId, started.success.workspaceId);
   const repository = yield* reachableRepository(
-    userId,
     Effect.succeed(organizationId),
     started.success.repository,
   );
@@ -421,7 +417,7 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const changes = update.success;
   const repository =
     "repository" in changes
-      ? yield* reachableRepository(userId, planWorkspace(userId, planId), changes.repository)
+      ? yield* reachableRepository(planWorkspace(userId, planId), changes.repository)
       : undefined;
   const plan = yield* hostedStoreOrArchived(
     updatePlan(userId, planId, {

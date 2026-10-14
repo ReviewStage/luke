@@ -43,8 +43,14 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
+import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  NO_GITHUB,
+} from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
@@ -66,7 +72,9 @@ const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+
+/** The installation ids handed out so far: one installation stands for one workspace, so each plan's workspace connects its own. */
+let installationsConnected = 0;
 const CRON_SECRET = "cron-secret-1";
 const EVE_ORIGIN = "https://luke.test";
 const INSTRUCTION = "Also add tests for the expiry.";
@@ -220,10 +228,25 @@ async function agentOn(
   return { ...target, id: started.agent.id, sessionId: session };
 }
 
-/** eve's coding-agent service as a script beside the fake GitHub: every opening answered with a session of its own, every message to a session answered taken, and each written down. */
-function fakeCoderEve() {
+/**
+ * eve's coding-agent service as a script beside the fake GitHub, whose
+ * installation reaching the repository is connected to the workspace given:
+ * every opening answered with a session of its own, every message to a
+ * session answered taken, and each written down.
+ */
+async function fakeCoderEve(workspaceId: string) {
+  installationsConnected += 1;
+  const installation: InstallationFixture = {
+    id: 7 + installationsConnected,
+    login: RELAY.owner,
+    repositories: [RELAY],
+  };
+  assert.equal(
+    await database.run(connectWorkspaceGitHub(workspaceId, installation)),
+    LINK_OUTCOME.LINKED,
+  );
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
-  const github = githubReaching([INSTALLATION], undefined, undefined, (request) => {
+  const github = githubReaching([installation], undefined, undefined, (request) => {
     const { pathname } = new URL(request.url);
     if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
     sent.push({ path: pathname, headers: request.headers, body: request.body });
@@ -239,10 +262,10 @@ function fakeCoderEve() {
 }
 
 test("a message to the plan's agent steers its session as the deployment acting for the account, under the tool call's own key, and is sent once; another account's agent gets nothing, and a deployment with no secret sends nothing", async () => {
-  const userId = await database.run(openGithubUser());
+  const userId = await database.createUser();
   const plan = await planConversation(userId, RELAY_FULL_NAME);
   const agent = await agentOn(userId, plan.planId);
-  const eve = fakeCoderEve();
+  const eve = await fakeCoderEve(plan.workspaceId);
   const acting = brainHost({
     ...seams,
     deploymentSecret: () => Redacted.make(CRON_SECRET),
@@ -293,12 +316,12 @@ test("a message to the plan's agent steers its session as the deployment acting 
 });
 
 test("a member speaking in the plan conversation a teammate opened messages the teammate's agent: eve is reached as the deployment acting for the member, on the starter's session, and the line stands under the starter", async () => {
-  const opener = await database.run(openGithubUser());
-  const member = await database.run(openGithubUser());
+  const opener = await database.createUser();
+  const member = await database.createUser();
   const plan = await planConversation(opener, RELAY_FULL_NAME);
   await database.run(joinWorkspace(plan.workspaceId, member));
   const agent = await agentOn(opener, plan.planId);
-  const eve = fakeCoderEve();
+  const eve = await fakeCoderEve(plan.workspaceId);
   const acting = brainHost({
     ...seams,
     deploymentSecret: () => Redacted.make(CRON_SECRET),
@@ -336,9 +359,9 @@ function startedAgentOf(answer: WireRecord) {
 }
 
 test("Luke starts an agent on the call's plan as the deployment acting for the account: on the plan and the default choice with no task, on a task and the choice named, under the tool call's own key so the same call run again starts no second agent; a choice the catalog refuses is refused with the choices, and a deployment with no secret starts nothing", async () => {
-  const userId = await database.run(openGithubUser());
+  const userId = await database.createUser();
   const plan = await planConversation(userId, RELAY_FULL_NAME);
-  const eve = fakeCoderEve();
+  const eve = await fakeCoderEve(plan.workspaceId);
   const acting = brainHost({
     ...seams,
     deploymentSecret: () => Redacted.make(CRON_SECRET),

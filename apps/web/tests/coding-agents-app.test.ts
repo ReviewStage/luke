@@ -86,8 +86,10 @@ import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hoste
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
 import {
+  connectWorkspaceGitHub,
   type FakeGitHub,
   githubReaching,
+  type InstallationFixture,
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
@@ -113,7 +115,15 @@ const PLAN = "/api/plans/plan";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+
+/** The installation ids handed out so far: one installation stands for one workspace, so each plan's workspace connects its own. */
+let installationsConnected = 0;
+
+/** A fresh installation reaching the repository, on an account of its own. */
+function freshInstallation(): InstallationFixture {
+  installationsConnected += 1;
+  return { id: 7 + installationsConnected, login: RELAY.owner, repositories: [RELAY] };
+}
 
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
@@ -397,9 +407,9 @@ const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   });
 
 /**
- * An owner who signed in with GitHub and holds one plan on the repository,
- * another account beside them, and the group over a GitHub reaching the
- * repository and the eve given.
+ * An owner who holds one plan on the repository, its workspace connected to
+ * an installation reaching it, another account beside them, and the group
+ * over that GitHub and the eve given.
  */
 const openPlan = (
   options: {
@@ -419,14 +429,19 @@ const openPlan = (
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
     yield* savePlanText(owner, plan.id, SAVED);
+    const installation = freshInstallation();
+    assert.equal(
+      yield* connectWorkspaceGitHub(plan.workspaceId, installation),
+      LINK_OUTCOME.LINKED,
+    );
     const bearers = new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const github = githubReaching([INSTALLATION], undefined, undefined, options.github);
+    const github = githubReaching([installation], undefined, undefined, options.github);
     const eve = options.eve ?? fakeEve();
     const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
-    return { owner, other, plan, eve, github, ask, fetch };
+    return { owner, other, plan, installation, eve, github, ask, fetch };
   });
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
@@ -497,9 +512,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "a Start on a plan named before its workspace connected another installation is refused as not reachable, and opens nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, eve, ask } = yield* openPlan();
+        const { owner, plan, installation, eve, ask } = yield* openPlan();
         const linked = yield* linkInstallation(plan.workspaceId, {
-          installationId: INSTALLATION.id + 1,
+          installationId: installation.id + 10_000,
           accountId: 9_008,
           accountLogin: "elsewhere",
           accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,

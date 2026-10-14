@@ -248,81 +248,73 @@ paste are restored), and `BETTER_AUTH_SECRET`. A deployment missing any of
 them still builds the service, and every read of it answers
 `GitHubAppNotConfigured` naming what was missing, so a bundle loads with
 nothing configured. The service holds no client: its GitHub reads run on the
-ambient `HttpClient` and the account row on the ambient `SqlClient`, so
+ambient `HttpClient` and its rows on the ambient `SqlClient`, so
 `tests/github-app.test.ts` stands a fake at the GitHub boundary and PGlite
-beneath it. It answers three things. `appJwt` is the App speaking as itself,
-RS256 under the private key, issued a minute back and good for eight; it is
-what `installation(id)` reads `GET /app/installations/{id}` with, so an id
-GitHub hands the Setup URL is confirmed as this App's own or answered as none.
-`userToken(userId)` is the signed-in user's token off the row, unsealed; a
-token within a minute of its expiry is refreshed first at GitHub's token
-endpoint on the App's client, and the fresh pair is re-sealed in place. The
-read and the refresh run inside one transaction under `FOR UPDATE` on the
-row, because GitHub retires a refresh token the moment it is used and two
-requests refreshing at once would leave the second holding one GitHub no
-longer knows. GitHub answers a refused refresh with status 200 and an `error`
-body, which is read as `GitHubSignInRequired`, the same failure a row with no
-GitHub account, a row from before the App (no refresh token), an expired
-refresh token, or a token that will not open under this deployment's secret
-answers: in every case the user mends it by signing in with GitHub again.
-`userInstallations(userId)` is `GET /user/installations` on that token, read
-a hundred at a time until a page comes back short; a 401 there is a token
-GitHub refused before its stored expiry, which is the user having revoked
-the App's authorization, and is answered as `GitHubSignInRequired` too. A
-failure carries a status or a kind and never the request, since the request
-carried the bearer.
+beneath it. `appJwt` is the App speaking as itself, RS256 under the private
+key, issued a minute back and good for eight; it is what `installation(id)`
+reads `GET /app/installations/{id}` with, so an id GitHub hands the Setup URL
+is confirmed as this App's own or answered as none, and what every
+installation token is minted under (`POST
+/app/installations/{id}/access_tokens`). `userToken(userId)` is the signed-in
+user's token off the row, unsealed, read for one caller alone, GitHub's MCP
+server (`hosted/github-integration.ts`); a token within a minute of its expiry
+is refreshed first at GitHub's token endpoint on the App's client, and the
+fresh pair is re-sealed in place, inside one transaction under `FOR UPDATE`
+on the row, because GitHub retires a refresh token the moment it is used.
+GitHub answers a refused refresh with status 200 and an `error` body, which
+is read as `GitHubSignInRequired`, as is a row with no GitHub account, a row
+from before the App, an expired refresh token, or a token that will not open
+under this deployment's secret. No repository read takes that token.
 
-What the user reaches through the App is read the same way.
-`userRepositories(userId)` pages through the user's installations and, for
-each, `GET /user/installations/{id}/repositories`, which is the repositories
-the installation covers that the user can also access, and answers them
-most recently updated first with whether there was any installation at all;
-a listing is paged the same way, and one GitHub is still answering full
+A workspace's repositories are those of the one installation of the App
+connected to it (`hosted/github-installations.ts`), a personal workspace like
+any other, and nothing else: nobody's own GitHub account is asked what it
+reaches, so a member who never signed in with GitHub reads, plans, and starts
+agents on the workspace's repositories all the same, and a workspace with
+nothing connected has none. `workspaceRepositories(organizationId)` mints a
+token for the listing alone (`metadata: read`) and pages `GET
+/installation/repositories` a hundred at a time until a page comes back
+short, most recently updated first; a listing GitHub is still answering full
 pages of at the bound (`PAGING`, fifty pages) is answered as unreadable
-rather than as the part that was read; an installation uninstalled between
-the two reads reaches nothing rather than failing the whole.
-`userRepository(userId, "owner/name")` is the check a plan's repository
-passes before it is kept: only the installation on the owner can reach it,
-so only that one is paged, and only as far as the page the repository is on,
-the name is matched the way GitHub folds case, and what is answered is the
-full name as GitHub spells it; `userRepositoryInstallation` answers the
-same with the id of the installation it was reached through.
-`userInstallationRepositories(userId, installationId)` pages one
-installation's repositories on the user's token, most recently updated
-first. `repositoryReadToken(userId, "owner/name")`
-is the same check followed by the one token the App mints: `POST
-/app/installations/{id}/access_tokens` under the App's JWT, naming that one
-repository and `contents: read`, answered sealed beside the repository as
-GitHub spells it, or none where the user does not reach it. It is what the
-planning sandbox's checkout reads through (`hosted/repository-shell.ts`).
-A repository is reachable only through an installation. A public repository
-the token could read without one is deliberately not, because what the
-repository is for, a coding agent's checkout and pull request, needs the
-installation's permissions on it.
+rather than as the part that was read; none where nothing is connected or
+GitHub no longer knows the installation. `workspaceRepository(organizationId,
+"owner/name")` is the check a plan's repository passes before it is kept:
+only an installation on the owner can reach it, so the listing is paged only
+for that one and only as far as the page the repository is on, the name is
+matched the way GitHub folds case, and what is answered is the full name as
+GitHub spells it. `repositoryReadToken(organizationId, "owner/name")` is the
+same check followed by the one token the App mints for that repository:
+naming it alone and `contents: read`, answered sealed beside the repository
+as GitHub spells it, or none where the installation does not reach it. It is
+what the planning sandbox's checkout reads through
+(`hosted/repository-shell.ts`), and the File tab, the tree, and the skills
+beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
+`repositoryWriteToken` cuts contents and pull requests write, each with CI
+read beside it where the installation grants it; `appBot(token)` reads the
+App's bot user (`GET /users/<slug>[bot]`) on a token already minted, which
+is who a coding agent's commits are by. A plan's repository is reached
+through its plan's workspace, read afresh at each use, so a disconnect or a
+replaced installation decides the very next read.
 
 `GET /api/github/repositories` (`server/github-repositories-app.ts`) is that
 listing under the account bearer, answered as
 `packages/hosted/src/github-repositories-wire.ts` declares it: `installed`,
-`repositories` (owner, name, full name, default branch, private, and when
-GitHub last saw it change), and `installationUrl`, which is where the desktop
-sends an account with nothing installed. Nothing is stored. A
-`workspaceId` query names the workspace the listing is for: a workspace of
-an installation lists that installation's repositories alone, `installed`
-true, to a member of it; one the account is not in is `not-found` (404),
-and the query given twice is `invalid-request`. A personal workspace, or
-none named, lists everything as before. An account whose
-token the service cannot use, having never signed in with GitHub, signed in
-before the App, or had the token refused or revoked, is `github-sign-in-required`
-(403); a GitHub or a store the service could not reach is `unavailable`.
+whether the workspace has an installation connected, `repositories` (owner,
+name, full name, default branch, private, and when GitHub last saw it
+change), and `installationUrl`. Nothing is stored. A `workspaceId` query
+names the workspace the listing is for, to a member of it; none named is the
+account's personal workspace. One the account is not in is `not-found`
+(404), and the query given twice is `invalid-request`. A GitHub or a store
+the service could not reach is `unavailable`.
 `tests/github-repositories-app.test.ts` holds the route and
 `tests/github-app.test.ts` the reads beneath it, over
 `tests/support/github-app-fake.ts`.
 
-Installing the App is two browser navigations in `server/github-install-app.ts`,
-neither carrying an account bearer. `GET /api/github/install` sends the
-browser to `https://github.com/apps/<slug>/installations/new`, where the
-developer installs the App on an account or organization and chooses its
-repositories. The App's registered Setup URL, with "Redirect on update", is
+Installing the App is browser navigations in `server/github-install-app.ts`,
+none carrying an account bearer. `GET /api/github/install` sends the browser
+to `https://github.com/apps/<slug>/installations/new`, where the developer
+installs the App on an account or organization and chooses its repositories.
+The App's registered Setup URL, with "Redirect on update", is
 `https://tryluke.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
@@ -333,23 +325,40 @@ no installation yet), `not-found`, or `unavailable`.
 
 With a `state`, the install began as a workspace's connect, and the route
 never trusts `installation_id` alone: GitHub's guidance is that anyone can
-put any id on the Setup URL, so the installation must be confirmed as
-associated with the user who installed it
+put any id on the Setup URL, so a user access token for the user who
+installed the App must show the installation is theirs
 ([About the setup URL](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)).
-It spends the intent (deleted with `RETURNING`, so it links once; unknown,
-spent, or expired is `expired`), requires the intent's account to still be
-an owner or admin of the workspace, and the workspace not to be its personal
-one (`expired` otherwise), and reads
-`GET /user/installations` on that account's own GitHub token
-(`GitHubApp.userInstallations`): an installation it does not reach is
-`not-found`, and an account with no readable token is
-`github-sign-in-required`. Only then is the installation linked to the
-workspace (`connected`); one already linked to another workspace, or another
-installation on the same GitHub account, is `already-connected`.
+Luke keeps no user's token for that, so the route writes the installation's
+id and a random PKCE code verifier (Better Auth's `generateRandomString`, as
+its own flows make one) on the intent, and sends the browser through
+GitHub's web application flow
+([Generating a user access token for a GitHub App](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)):
+`https://github.com/login/oauth/authorize` with the App's client id, the
+callback `/api/github/installed/authorized` as `redirect_uri`, the intent's
+own state, and the verifier's S256 challenge. GitHub returns the browser to
+the callback with a one-time code. There the intent is spent (deleted with
+`RETURNING`, so it links once; unknown, spent, or expired is `expired`), its
+account must still be an owner or admin of the workspace (`expired`
+otherwise), and the code is exchanged with the verifier
+(`GitHubApp.authorizedInstallations`), `GET /user/installations` is read on
+the user access token once, and the token is revoked
+([Delete an app token](https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token));
+nothing of it is stored. An installation that user cannot see, a code GitHub
+refuses, or a declined authorization is `not-found`. Only then is the
+installation linked to the workspace (`connected`); one already linked to
+another workspace, or another installation on the same GitHub account, is
+`already-connected`.
+
+GitHub's "Request user authorization (OAuth) during installation" stays off:
+it disables the Setup URL and returns the code to the App's first callback
+URL, the sign-in's, and GitHub's docs say to run the full web flow with
+`redirect_uri` to choose the callback instead. So the App lists
+`https://tryluke.dev/api/github/installed/authorized` among its callback
+URLs, beside the sign-in's.
 
 The page draws a fixed card per status and interpolates nothing the address
 brought it; the desktop's repository chip picks the installation up by
-reading the account's repositories again when the window next takes focus
+reading the workspace's repositories again when the window next takes focus
 (`apps/desktop/src/renderer/planning/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`server/github-webhook-app.ts`),
@@ -365,8 +374,9 @@ ready_for_review, converted_to_draft), `check_suite`, a completed
 `check_run`, and `status` are read, for the repository's full name and the branches they
 name, and nothing of a delivery is kept or logged: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
-each one's pull request is read again from GitHub on its owner's own token
-through `agentPublished`, as the agent's tab reads it, which writes the row.
+each one's pull request is read again from GitHub on a token minted on its
+plan's workspace installation through `agentPublished`, as the agent's tab
+reads it, which writes the row.
 A redelivery reads the same again. GitHub's `ping` and any other event are
 answered and ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
@@ -377,8 +387,8 @@ delivery, which GitHub also sends every App unsubscribed
 ([GitHub: github_app_authorization](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)),
 with action `revoked` clears the sealed tokens, which no longer reach
 anything, from the `account` rows of provider `github` whose `accountId` is
-the delivery's `sender.id`, and keeps the rows: a read on the user's token
-then asks for a new sign-in, and that sign-in finds the same Luke account
+the delivery's `sender.id`, and keeps the rows: GitHub's MCP server then
+asks for a new sign-in, and that sign-in finds the same Luke account
 through the kept row even where GitHub's address has changed since, and
 writes fresh tokens onto it. Every other way the account signs in is kept.
 That is a write to Better Auth's own table, since a webhook carries no
@@ -1412,8 +1422,8 @@ rewrite reads the next segment as a plan's id.
 `server/workspaces-app.ts` answers the account's workspaces
 (`packages/hosted/src/workspace-wire.ts`). Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
-repositories come from at most one Luke GitHub App installation an owner or
-admin connects to it. Every request resolves the bearer first and ensures the
+repositories come only from the one Luke GitHub App installation an owner or
+admin connects to it, a personal workspace like any other. Every request resolves the bearer first and ensures the
 account's personal workspace.
 
 - `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
@@ -1430,10 +1440,9 @@ account's personal workspace.
 - `POST /api/workspaces/github/connect { workspaceId }`, for an owner or admin,
   writes a `github_install_intent` row (the SHA-256 of a random state, the
   account, the workspace, an hour's expiry) and answers `{ url }`: the App's
-  install address with that `state`. A member is `not-permitted` (403), and
-  so is the account's personal workspace, which is never connected because it
-  takes every repository the account reaches; a workspace the account is not
-  in is `not-found`.
+  install address with that `state`. A member is `not-permitted` (403); a
+  workspace the account is not in is `not-found`. A personal workspace
+  connects like any other.
 - `POST /api/workspaces/github/disconnect { workspaceId }`, for an owner or
   admin, deletes the workspace's `github_installation` row and answers
   `{ workspace }`.
@@ -1441,8 +1450,8 @@ account's personal workspace.
 A `github_installation` row (`packages/database/src/schemas/github-installation.ts`)
 ties one workspace to one installation, keyed on GitHub's installation id and
 account id (both unique), with the account's login and kind and the
-installation's status, which the installation webhook keeps. The Setup URL
-links it (below, under the install group). `tests/workspaces-app.test.ts` holds
+installation's status, which the installation webhook keeps. The connect's
+callback links it (above, under the install group). `tests/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
@@ -1502,22 +1511,15 @@ restores as `not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is
-kept only once `userRepositoryInstallation` on the `GitHubApp` confirms the account
-reaches it, read from GitHub on the account's own token before the row is
-written, so a plan never names a repository its owner could not reach
-through the Luke GitHub App at the moment it was named; the stored spelling
-is GitHub's, whatever case the request used. A start or a change naming one
-the App reaches no installation of for the account is
+kept only once `workspaceRepository` on the `GitHubApp` confirms the
+installation connected to the plan's workspace reaches it, read from GitHub
+before the row is written, so a plan never names a repository its workspace
+could not reach at the moment it was named; the stored spelling is GitHub's,
+whatever case the request used. A start or a change naming one outside that
+installation, or any in a workspace with nothing connected, is
 `repository-not-reachable` (403) with nothing written, the name beside it
-included; an account that must sign in with GitHub again is
-`github-sign-in-required` (403); and a GitHub the service could not read is
-`unavailable`, the plan standing as it was. A change naming null clears it.
-A plan in the workspace of a GitHub App installation (one with a
-`github_installation` row) may name only a repository reached through that
-installation, compared by GitHub's installation id rather than the owner's
-login; one of another installation is `repository-not-reachable` too, since
-the workspace does not reach it. A personal workspace's plan may name any
-repository the account reaches.
+included; a GitHub the service could not read is `unavailable`, the plan
+standing as it was. A change naming null clears it.
 
 A plan's text has one write, `server/hosted/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
@@ -1657,7 +1659,8 @@ reuse it; a plan whose repository changed meanwhile is checked out again,
 and the worker subagent shares the session's sandbox
 (`eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
 checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
-the owner still reaches the repository and mints a token for that one
+the installation of the plan's workspace still reaches the repository and
+mints a token for that one
 repository with contents read, which the shell sets as GitHub's `Basic`
 header at the sandbox's firewall, on `github.com` under the repository's own
 `.git/` endpoint alone, for the clone alone, and sets back to open internet
@@ -1670,8 +1673,8 @@ argument rather than spliced into shell text, and answers its exit code and
 up to 20,000 characters each of stdout and stderr. Every refusal is
 `not-run` with a reason the model can act on, and each is answered ahead of
 anything it would need: a plan with no repository yet opens no sandbox; a
-developer who must sign in with GitHub again, a repository the App no longer
-reaches for them, a GitHub that could not be read, a sandbox that could not
+repository the workspace's installation no longer reaches, a GitHub that
+could not be read, a sandbox that could not
 be opened or carries no firewall, and a clone that failed, with git's words,
 each check nothing out. `tests/repository-shell.test.ts` holds it over a
 sandbox double at eve's boundary (`tests/support/repository-sandbox.ts`), a
@@ -2662,12 +2665,10 @@ declares every request and answer, and `service-paths.ts` the addresses.
 both of the choice or neither, the account's default (`/api/account/preferences`)
 where neither, checked against the catalog with `acceptedModelChoice`, which
 also refuses a stored default that has since left the catalog. It refuses a
-plan with no repository (`no-repository`, 409), one the account no
-longer reaches through the App, or, in a workspace of an installation, through
-that installation, read at the start rather than when the plan named it
-(`repository-not-reachable`, 403; `server/hosted/workspace-repository.ts`), and an
-account that must sign in with GitHub again before the App can read for it
-(`github-sign-in-required`, 403), snapshots the
+plan with no repository (`no-repository`, 409) and one the installation of
+the plan's workspace no longer reaches, read at the start rather than when
+the plan named it (`repository-not-reachable`, 403;
+`server/hosted/workspace-repository.ts`), snapshots the
 plan's document as the Markdown Copy puts on the clipboard
 (`@sidecar/hosted/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
@@ -2721,8 +2722,8 @@ queues one. The route first reads whether a line already stands under the
 key (`sentLineStands`, by the `messages` row's `client_id`, which is
 `sentLineId(clientKey)`), and answers the agent as it stands with nothing
 sent again where one does, which is what makes a send repeated after a lost
-answer safe; then confirms the developer still reaches the repository
-(`repository-not-reachable` or `github-sign-in-required`, as a Start does),
+answer safe; then confirms the plan's workspace still reaches the repository
+(`repository-not-reachable`, as a Start does),
 hands the words to the agent's eve session under the developer's own
 bearer inside the conversation's lock (`writeAwaitingLine`, which reads the
 key again under the lock so two sends racing under one key send once), and
@@ -2774,9 +2775,10 @@ fails is logged and the sandbox stops regardless, and a turn that opened
 no sandbox writes nothing. A row with no branch published nothing, and
 GitHub is not asked; a row still on the repository's default branch, as
 an agent that only read leaves it, published nothing either. GitHub then says what stands, once the
-developer's reach of the repository through the App is confirmed as a Start
-confirms it (`repository-not-reachable`, 403, otherwise), on the
-developer's own App token (`github/pull-requests.ts`): the newest pull
+installation of the plan's workspace is confirmed to reach the repository as
+a Start confirms it (`repository-not-reachable`, 403, otherwise), on a token
+the App mints for that repository with pull requests read
+(`github/pull-requests.ts`): the newest pull
 request from the branch, else whether the branch was pushed at all, with
 the head's check runs and commit statuses read together for the one word,
 and a head whose checks the App may not read reading as `none` with a
@@ -2790,8 +2792,8 @@ turn's kept answer; a failed read is kept for no time. A tab reading beside
 every held page thus asks GitHub a few times a minute at most.
 `GET /api/agents/{id}/changes` answers the agent's changes for its Changes
 tab: the files of the pull request that kept answer names, with its page,
-read from GitHub's `pulls/{n}/files` afresh on each ask on the developer's
-own token (`github/pull-requests.ts`), a hundred to a page up to
+read from GitHub's `pulls/{n}/files` afresh on each ask on that same token
+(`github/pull-requests.ts`), a hundred to a page up to
 `CHANGES_BOUNDS.MAX_FILES`, each with its path, the path it moved from,
 what became of it, its lines added and removed, and its patch; a file
 GitHub sends no patch for, or whose patch runs past

@@ -241,9 +241,9 @@ export const AUTOMATION_RUN_REASON = {
   PLAN_UNREACHABLE: "plan-unreachable",
   /** The plan names no repository. */
   NO_REPOSITORY: "no-repository",
-  /** The account no longer reaches the repository through the Luke GitHub App. */
+  /** The GitHub installation connected to the plan's workspace no longer reaches the repository. */
   REPOSITORY_UNREACHABLE: "repository-unreachable",
-  /** The account must sign in with GitHub again before the App can act for it. */
+  /** No longer produced, but still read: rows written before repositories came only from the workspace's installation hold it. */
   GITHUB_SIGN_IN: "github-sign-in",
   /** The model or effort named is no longer offered. */
   MODEL: "model",

@@ -48,14 +48,17 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "../server/hosted/board-tool";
+import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
 import {
+  connectWorkspaceGitHub,
   type FakeGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
+  type InstallationFixture,
   NO_GITHUB,
   openGithubUser,
   type SentToGitHub,
@@ -67,12 +70,7 @@ import {
   makeSavedDocumentPlan,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
-import {
-  fakeWorkspaceSeams,
-  joinWorkspace,
-  openInstallationWorkspace,
-  openWorkspace,
-} from "./support/workspaces";
+import { fakeWorkspaceSeams, joinWorkspace, openWorkspace } from "./support/workspaces";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -81,8 +79,8 @@ import {
  * that does not exist, and what the notetaker's notes saved is what the window opens.
  * The path is the one the rewrite hands the group, the plan id moved from
  * the path into the `id` query. A plan's repository is kept only once the
- * Luke GitHub App, over a GitHub the test scripts, confirms the account
- * reaches it.
+ * Luke GitHub App, over a GitHub the test scripts, confirms the
+ * installation connected to the plan's workspace reaches it.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
@@ -271,7 +269,20 @@ function contentsOf(sent: SentToGitHub): Response | undefined {
     : contents();
 }
 
-const RELAY_REACHED = [{ id: 1, login: "Acme", repositories: [{ owner: "Acme", name: "Relay" }] }];
+/** The installation reaching the fixture repository, under the id given: every test sharing the database connects its own, since one installation stands for one workspace. */
+const relayInstallation = (id: number): InstallationFixture => ({
+  id,
+  login: "Acme",
+  repositories: [{ owner: "Acme", name: "Relay" }],
+});
+
+/** A workspace the account owns with the installation connected to it, as a finished connect leaves it; its id. */
+const openConnectedWorkspace = (ownerId: string, installation: InstallationFixture) =>
+  Effect.gen(function* () {
+    const workspaceId = yield* openWorkspace(ownerId);
+    assert.equal(yield* connectWorkspaceGitHub(workspaceId, installation), LINK_OUTCOME.LINKED);
+    return workspaceId;
+  });
 
 /** A note the developer drew, as the canvas would send it. */
 const NOTE = {
@@ -834,11 +845,16 @@ it.layer(getTestDB())("the plan routes", (it) => {
     "a file of the plan's repository reads a window as GitHub holds it on the default branch, naming that branch, on the App's token, each line cut as show_code cuts it; another account's plan reads as none",
     () =>
       Effect.gen(function* () {
-        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const relay = relayInstallation(7001);
+        const github = githubReaching([relay], undefined, {}, contentsOf);
         const { owner, other, ask } = yield* openAccounts(github);
+        const workspaceId = yield* openConnectedWorkspace(owner, relay);
         const planId = startedId(
           yield* ask(
-            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+            request(PLANS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, repository: "acme/relay" },
+            }),
           ),
         );
         const window = (userId: string, path: string, first: string, last: string) =>
@@ -895,11 +911,16 @@ it.layer(getTestDB())("the plan routes", (it) => {
     "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name, one GitHub found nothing at naming the branch it was looked for on",
     () =>
       Effect.gen(function* () {
-        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const relay = relayInstallation(7002);
+        const github = githubReaching([relay], undefined, {}, contentsOf);
         const { owner, ask } = yield* openAccounts(github);
+        const workspaceId = yield* openConnectedWorkspace(owner, relay);
         const planId = startedId(
           yield* ask(
-            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+            request(PLANS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, repository: "acme/relay" },
+            }),
           ),
         );
         const refusalOf = (path: string) =>
@@ -926,6 +947,48 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(yield* refusalOf("big.json"), { refusal: PLAN_FILE_REFUSAL.NOT_TEXT });
         assert.deepEqual(yield* refusalOf("assets/logo.png"), {
           refusal: PLAN_FILE_REFUSAL.NOT_TEXT,
+        });
+      }),
+  );
+
+  it.effect(
+    "a member who never signed in with GitHub reads a file of the plan's repository through the installation connected to the workspace",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(7003);
+        const github = githubReaching([relay], undefined, {}, contentsOf);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const workspaceId = yield* openConnectedWorkspace(owner, relay);
+        yield* joinWorkspace(workspaceId, other);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, repository: "acme/relay" },
+            }),
+          ),
+        );
+
+        // The member has no GitHub account row, so the read can only go through the installation.
+        const read = readAnswer(
+          planFileAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(FILE, other, {
+              id: planId,
+              query: { path: "src/invite.ts", first: "1", last: "2" },
+            }),
+          ),
+        );
+        assert.deepEqual(read, {
+          file: {
+            path: "src/invite.ts",
+            repository: "Acme/Relay",
+            branch: "main",
+            firstLine: 1,
+            lineCount: 4,
+            lines: ["one", "two"],
+          },
         });
       }),
   );
@@ -1138,19 +1201,21 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan in an installation's workspace takes that installation's repositories and refuses another's, at its start and in a change, while a personal plan takes either",
+    "a plan takes only its workspace installation's repositories, at its start and in a change, and a personal workspace with nothing connected takes none",
     () =>
       Effect.gen(function* () {
+        const acmeInstallation = {
+          id: 7101,
+          login: "acme",
+          accountId: 9101,
+          repositories: [{ owner: "acme", name: "relay" }],
+        };
         const github = githubReaching([
-          { id: 7101, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+          acmeInstallation,
           { id: 7102, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
         ]);
         const { owner, ask } = yield* openAccounts(github);
-        const acme = yield* openInstallationWorkspace(owner, {
-          installationId: 7101,
-          accountId: 9101,
-          accountLogin: "acme",
-        });
+        const acme = yield* openConnectedWorkspace(owner, acmeInstallation);
         const start = (body: WireBoundaryInput) =>
           ask(request(PLANS, owner, { method: "POST", body }));
         const change = (planId: string, repository: string) =>
@@ -1171,6 +1236,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const unnamed = startedId(yield* start({ ...LEDGER, workspaceId: acme }));
         const otherChange = yield* change(unnamed, "octocat/dotfiles");
         const ownChange = yield* change(unnamed, "acme/relay");
+        // The personal workspace has nothing connected, so even the repository the account's own workspace reaches is refused there.
+        const personalStart = yield* start({ ...LEDGER, repository: "acme/relay" });
         const personal = startedId(yield* start(LEDGER));
         const personalChanges = [
           yield* change(personal, "octocat/dotfiles"),
@@ -1181,9 +1248,15 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual([otherStart, otherChange], [notReachable, notReachable]);
         assert.equal(repositoryOf(HOSTED_HTTP_STATUS.OK, ownChange), "acme/relay");
         assert.deepEqual(
-          personalChanges.map((answered) => repositoryOf(HOSTED_HTTP_STATUS.OK, answered)),
-          ["octocat/dotfiles", "acme/relay"],
+          [personalStart, ...personalChanges],
+          [notReachable, notReachable, notReachable],
         );
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: personal })),
+        );
+        assert.equal(opened.plan.repository, null);
         const listed = readAnswer(
           planListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,

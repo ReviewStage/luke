@@ -54,11 +54,12 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
-import { GitHubApp } from "./github/github-app.js";
-import { githubUserReadOrRefusal } from "./github/github-refusal.js";
+import type { GitHubApp } from "./github/github-app.js";
+import { githubReadOrRefusal } from "./github/github-refusal.js";
 import { pullRequestFiles } from "./github/pull-requests.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
+  agentPullRequestReach,
   type PublishedCache,
   PublishedKey,
   withPublishedCache,
@@ -666,7 +667,7 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
         case "SchemaError":
           return hostedStoreOrUnavailable(Effect.fail(failure));
         default:
-          return githubUserReadOrRefusal(Effect.fail(failure));
+          return githubReadOrRefusal(Effect.fail(failure));
       }
     }),
   );
@@ -689,8 +690,8 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
 
 /**
  * GET reads the agent's changes: the files of the pull request its kept
- * published answer names, read from GitHub afresh on the developer's own
- * token, or none where it names no pull request yet.
+ * published answer names, read from GitHub afresh on a token minted for the
+ * agent's repository on its plan's workspace installation, or none where it names no pull request yet.
  */
 const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -704,10 +705,21 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   const { userId, agent } = yield* reachedAgent(seams, request);
   const { pullRequest } = yield* keptPublished(published, userId, agent);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
-  const listed = yield* githubUserReadOrRefusal(
-    Effect.gen(function* () {
-      const token = yield* (yield* GitHubApp).userToken(userId);
-      return yield* pullRequestFiles(token, agent.repository, pullRequest);
+  const listed = yield* Effect.gen(function* () {
+    const { token } = yield* agentPullRequestReach(userId, agent);
+    return yield* pullRequestFiles(token, agent.repository, pullRequest);
+  }).pipe(
+    Effect.catch((failure) => {
+      switch (failure._tag) {
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+        case "SqlError":
+        case "EffectDrizzleQueryError":
+        case "SchemaError":
+          return hostedStoreOrUnavailable(Effect.fail(failure));
+        default:
+          return githubReadOrRefusal(Effect.fail(failure));
+      }
     }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {

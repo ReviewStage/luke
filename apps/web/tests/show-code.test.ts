@@ -12,7 +12,7 @@ import {
   type RepositoryCall,
 } from "../server/hosted/repository-shell";
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
-import { githubReaching, openGithubUser } from "./support/github-app-fake";
+import { connectWorkspaceGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
 import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
 import { startPlan } from "./support/workspaces";
 
@@ -29,6 +29,7 @@ import { startPlan } from "./support/workspaces";
 
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+/** The installation connected to the plan's workspace, which reaches the repository. */
 const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
 
 const INVITE = [
@@ -53,11 +54,12 @@ const FILES: CheckoutFiles = {
   "wide.txt": "x".repeat(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS + 50),
 };
 
-/** An account holding one plan, on the repository given, and the sandbox its session opens over the files, its checkout at the commit given. */
+/** An account holding one plan, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens over the files, its checkout at the commit given. */
 const openPlan = (repository: string | null, commit?: string) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const started = yield* startPlan(userId, { name: "Teammate invitations", repository });
+    yield* connectWorkspaceGitHub(started.workspaceId, INSTALLATION);
     const sandbox = sandboxDouble(() => undefined, {
       files: FILES,
       ...(commit === undefined ? undefined : { commit }),

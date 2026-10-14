@@ -103,6 +103,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_INSTALLED: "/api/github/installed",
   /**
+   * The callback a workspace's connect returns through (GET): the Setup URL
+   * sends the browser to authorize the App once, GitHub returns it here with
+   * a one-time code, and the route confirms the installation with the user
+   * who authorized before linking it. A registered callback URL of the App.
+   */
+  GITHUB_INSTALLED_AUTHORIZED: "/api/github/installed/authorized",
+  /**
    * A connect intent for the account's GitHub (POST): a ten-minute,
    * single-use ticket bound to the account, answered with the web page that
    * links GitHub on the browser's session. `github-connection-wire.ts`

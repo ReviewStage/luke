@@ -10,7 +10,11 @@ import type {
 } from "@sidecar/hosted/coding-agent-wire";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { GitHubApp, type GitHubUserReadFailure } from "../../github/github-app.js";
+import {
+  GitHubApp,
+  type GitHubRepositoryToken,
+  type GitHubWorkspaceReadFailure,
+} from "../../github/github-app.js";
 import {
   branchStands,
   checkSummaryOf,
@@ -19,6 +23,7 @@ import {
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
 import type { StoreFailure } from "../store-failure.js";
+import { planWorkspace } from "../workspace-repository.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -31,8 +36,9 @@ import { CODER } from "./bounds.js";
  * (`coder-host/host.ts`'s `recordBranch`), and this module reads the row.
  * A row with no branch, as before the first turn ends in the sandbox or
  * where the checkout stood detached, published nothing, and GitHub is not
- * asked. GitHub then says what stands, once the developer's reach of the
- * repository through the App is confirmed as a Start confirms it: a row
+ * asked. GitHub then says what stands, once the installation of the plan's
+ * workspace is confirmed to reach the repository as a Start confirms it,
+ * on a token minted for that one repository with pull requests read: a row
  * still on the repository's default branch, as an agent that only read
  * leaves it, published nothing either; otherwise the newest pull request
  * from the branch, else whether the branch was pushed at all, with the
@@ -47,13 +53,13 @@ import { CODER } from "./bounds.js";
  * that failed is kept for no time, so the next ask tries again.
  */
 
-/** The developer no longer reaches the agent's repository through the App, so nothing of it is read. */
+/** The installation of the plan's workspace no longer reaches the agent's repository, so nothing of it is read. */
 class RepositoryNotReachable extends Data.TaggedError("RepositoryNotReachable")<{
   readonly repository: string;
 }> {}
 
-/** What a read of what an agent published may fail with: the store, GitHub on the developer's token, or a repository out of reach. */
-type PublishedReadFailure = StoreFailure | GitHubUserReadFailure | RepositoryNotReachable;
+/** What a read of what an agent published may fail with: the store, GitHub, or a repository out of reach. */
+type PublishedReadFailure = StoreFailure | GitHubWorkspaceReadFailure | RepositoryNotReachable;
 
 type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
@@ -84,6 +90,27 @@ function nothing(agent: CodingAgent): CodingAgentPullRequestAnswer {
 }
 
 /**
+ * A token that reads the agent's pull requests, minted for its one
+ * repository on the installation of its plan's workspace, as the account
+ * asking reaches the plan; refused as out of reach where either no longer
+ * stands.
+ */
+export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: CodingAgent,
+): Effect.fn.Return<GitHubRepositoryToken, PublishedReadFailure, PublishedServices> {
+  const workspace = yield* planWorkspace(userId, agent.planId);
+  const app = yield* GitHubApp;
+  const reached = Option.isNone(workspace)
+    ? Option.none()
+    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository);
+  if (Option.isNone(reached)) {
+    return yield* new RepositoryNotReachable({ repository: agent.repository });
+  }
+  return reached.value;
+});
+
+/**
  * What the agent published as GitHub holds it now: the newest pull request
  * from the branch its row holds, else the branch alone where GitHub holds
  * it, else nothing.
@@ -94,14 +121,10 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
   // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
-  const app = yield* GitHubApp;
-  const reached = yield* app.userRepository(userId, agent.repository);
-  if (Option.isNone(reached)) {
-    return yield* new RepositoryNotReachable({ repository: agent.repository });
-  }
+  const reached = yield* agentPullRequestReach(userId, agent);
   // The default branch is the checkout's own, not a branch the agent cut: nothing published from it.
-  if (agent.branch === reached.value.defaultBranch) return nothing(agent);
-  const token = yield* app.userToken(userId);
+  if (agent.branch === reached.repository.defaultBranch) return nothing(agent);
+  const { token } = reached;
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, agent.branch);
   if (Option.isSome(ofBranch)) return yield* withChecks(token, agent, ofBranch.value);
   const pushed = yield* branchStands(token, agent.repository, agent.branch);

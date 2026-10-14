@@ -70,14 +70,15 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * ensured first, so an account's first read makes it. `POST` creates a
  * workspace with the name given through the organization plugin's
  * server-only create, the account its owner. `POST /api/workspaces/github/connect`
- * answers where the browser goes to connect a GitHub organization: the
- * Luke GitHub App's install address with a single-use intent as its `state`,
- * which the Setup URL spends (`github-install-app.ts`); and
- * `.../disconnect` removes the workspace's connected installation; both take
- * an owner or admin of the workspace, and a workspace the account is not in
- * answers as none does. A personal workspace is never connected, since it
- * takes every repository the account reaches, so its connect is not
- * permitted. `GET /api/workspaces/members` answers a workspace's
+ * answers where the browser goes to connect GitHub: the Luke GitHub App's
+ * install address with a single-use intent as its `state`, which the connect's
+ * callback spends (`github-install-app.ts`); and `.../disconnect` removes the
+ * workspace's connected installation; both take an owner or admin of the
+ * workspace, a personal one like any other, and a workspace the account is
+ * not in answers as none does. A workspace's repositories are its
+ * installation's alone, so a personal workspace with nothing connected has
+ * none.
+ * `GET /api/workspaces/members` answers a workspace's
  * members to a member of it, `POST /api/workspaces/members/remove` lets an
  * owner or admin remove a member who is not an owner, and
  * `POST /api/workspaces/leave` lets anyone but an owner leave. A personal
@@ -306,7 +307,7 @@ const answeredWorkspace = Effect.fn("web/answeredWorkspace")(function* (
   return workspace.value;
 });
 
-/** POST: where the browser goes to connect a GitHub organization to the workspace; a personal one is not permitted. */
+/** POST: where the browser goes to connect GitHub to the workspace, a personal one like any other. */
 const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -316,8 +317,6 @@ const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function
   }
   const userId = yield* accountOf(seams);
   const workspace = yield* administeredWorkspace(userId);
-  // Note that a personal workspace is refused, because it takes every repository the account reaches.
-  if (workspace.personal) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const app = yield* GitHubApp;
   const installUrl = yield* app.installUrl.pipe(
     Effect.catch((failure) =>

@@ -55,9 +55,8 @@ export const HOSTED_API_ERROR = {
    */
   GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
   /**
-   * The Luke GitHub App reaches no such repository for this account: the App
-   * is not installed there, or the account has no access to it. Nothing was
-   * written.
+   * The GitHub installation connected to the workspace reaches no such
+   * repository, or the workspace has none connected. Nothing was written.
    */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The plan names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */

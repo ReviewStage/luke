@@ -179,8 +179,6 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
       return AUTOMATION_RUN_REASON.NO_REPOSITORY;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
       return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
-    case HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED:
-      return AUTOMATION_RUN_REASON.GITHUB_SIGN_IN;
     default:
       return AUTOMATION_RUN_REASON.UNAVAILABLE;
   }

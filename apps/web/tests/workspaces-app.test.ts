@@ -29,21 +29,26 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../server/github-install-app";
-import { createConnectIntent } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { type WorkspacesAppSeams, workspacesApp } from "../server/workspaces-app";
-import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
+import {
+  type FakeGitHub,
+  GITHUB_FIXTURE_REFUSED_CODE,
+  githubReaching,
+  openGithubUser,
+} from "./support/github-app-fake";
 import { openWorkspacePlugin } from "./support/workspace-plugin";
 
 /**
  * The account's workspaces, answered by their group the way a function
- * answers them, and a GitHub organization connected through the App's Setup
- * URL, over Better Auth's own organization plugin on PGlite and a GitHub the
- * test scripts: the bearer names the account and nothing else does, a
- * workspace a member creates is theirs to own, only an owner or admin
- * connects or disconnects GitHub, and the Setup URL links an installation to
- * a workspace only through a live intent and only where the account's own
- * GitHub token sees it, one installation to one workspace.
+ * answers them, and GitHub connected through the App's Setup URL and the
+ * one-time authorization after it, over Better Auth's own organization
+ * plugin on PGlite and a GitHub the test scripts: the bearer names the
+ * account and nothing else does, a workspace a member creates is theirs to
+ * own, only an owner or admin connects or disconnects GitHub, a personal
+ * workspace like any other, and an installation is linked to a workspace
+ * only through a live intent and only where the user who authorized sees
+ * it, one installation to one workspace.
  *
  * Synthetic accounts, bearers, installations, and logins throughout.
  */
@@ -193,11 +198,41 @@ const connectState = (
     return new URL(url).searchParams.get("state") ?? assert.fail("no state on the install address");
   });
 
-/** Where GitHub's return through the Setup URL lands the browser, as its status word. */
-const landedAt = (seams: WorkspaceSeams, github: FakeGitHub, query: Record<string, string>) =>
-  Effect.map(send(seams, github, setupRequest(query)), (answered) => {
-    assert.equal(answered.status, 303);
-    return answered.location?.replace(LANDING, "");
+/** GitHub's web flow, which hands every authorization this code unless a test says otherwise. */
+const ONE_TIME_CODE = "one-time-code";
+
+/**
+ * Where GitHub's return through the Setup URL lands the browser, as its
+ * status word: at once, or once GitHub's one-time authorization returns to
+ * the callback the Setup URL sent it on to, with the code given, or with
+ * none where the user declined.
+ */
+const landedAt = (
+  seams: WorkspaceSeams,
+  github: FakeGitHub,
+  query: Record<string, string>,
+  code: string | null = ONE_TIME_CODE,
+) =>
+  Effect.gen(function* () {
+    const setup = yield* send(seams, github, setupRequest(query));
+    assert.equal(setup.status, 303);
+    const location = setup.location ?? assert.fail("the Setup URL sent the browser nowhere");
+    if (location.startsWith(LANDING)) return location.replace(LANDING, "");
+    const authorize = new URL(location);
+    assert.equal(
+      `${authorize.origin}${authorize.pathname}`,
+      "https://github.com/login/oauth/authorize",
+    );
+    const callback = new URL(authorize.searchParams.get("redirect_uri") ?? "");
+    assert.equal(
+      callback.toString(),
+      `${ORIGIN}${HOSTED_SERVICE_PATH.GITHUB_INSTALLED_AUTHORIZED}`,
+    );
+    if (code !== null) callback.searchParams.set("code", code);
+    callback.searchParams.set("state", authorize.searchParams.get("state") ?? "");
+    const returned = yield* send(seams, github, new Request(callback, { redirect: "manual" }));
+    assert.equal(returned.status, 303);
+    return returned.location?.replace(LANDING, "");
   });
 
 /** The GitHub account a workspace in the list carries. */
@@ -354,7 +389,7 @@ it.effect(
 );
 
 it.effect(
-  "the Setup URL links the installation the account's own token sees to the intent's workspace, and the intent links once",
+  "the installation the one-time-authorized user sees is linked to the intent's workspace, the user's token is revoked, and the intent links once",
   () =>
     Effect.gen(function* () {
       const { api, seams, database } = yield* openWorkspacePlugin;
@@ -374,6 +409,7 @@ it.effect(
 
         assert.equal(first, GITHUB_INSTALL_STATUS.CONNECTED);
         assert.equal(again, GITHUB_INSTALL_STATUS.EXPIRED);
+        assert.equal(github.sent.filter((sent) => sent.method === "DELETE").length, 1);
         const connected = { login: "acme", active: true };
         assert.deepEqual(githubOf(yield* workspacesOf(seams, github, ada), acme.id), connected);
         assert.deepEqual(githubOf(yield* workspacesOf(seams, github, linus), acme.id), connected);
@@ -382,7 +418,7 @@ it.effect(
 );
 
 it.effect(
-  "a forged installation id the account's token cannot see, an expired intent, and a request link nothing",
+  "an installation id the one-time-authorized user cannot see, a declined or refused authorization, an expired intent, and a request link nothing",
   () =>
     Effect.gen(function* () {
       const { seams, database } = yield* openWorkspacePlugin;
@@ -396,6 +432,26 @@ it.effect(
           setup_action: "install",
           state: yield* connectState(seams, github, ada, acme.id),
         });
+        const declined = yield* landedAt(
+          seams,
+          github,
+          {
+            installation_id: String(ACME.id),
+            setup_action: "install",
+            state: yield* connectState(seams, github, ada, acme.id),
+          },
+          null,
+        );
+        const refused = yield* landedAt(
+          seams,
+          github,
+          {
+            installation_id: String(ACME.id),
+            setup_action: "install",
+            state: yield* connectState(seams, github, ada, acme.id),
+          },
+          GITHUB_FIXTURE_REFUSED_CODE,
+        );
         const stale = yield* connectState(seams, github, ada, acme.id);
         yield* TestClock.adjust("2 hours");
         const expired = yield* landedAt(seams, github, {
@@ -409,6 +465,8 @@ it.effect(
         });
 
         assert.equal(forged, GITHUB_INSTALL_STATUS.NOT_FOUND);
+        assert.equal(declined, GITHUB_INSTALL_STATUS.NOT_FOUND);
+        assert.equal(refused, GITHUB_INSTALL_STATUS.NOT_FOUND);
         assert.equal(expired, GITHUB_INSTALL_STATUS.EXPIRED);
         assert.equal(requested, GITHUB_INSTALL_STATUS.REQUESTED);
         assert.equal(githubOf(yield* workspacesOf(seams, github, ada), acme.id), null);
@@ -445,38 +503,28 @@ it.effect("an installation connected to one workspace is refused for a second", 
   }),
 );
 
-it.effect(
-  "a personal workspace is never connected: its owner's connect is not permitted, and a Setup URL return with an intent for it links nothing",
-  () =>
-    Effect.gen(function* () {
-      const { seams, database } = yield* openWorkspacePlugin;
-      yield* Effect.gen(function* () {
-        const ada = yield* openGithubAccount("Ada Lovelace");
-        const github = githubReaching([ACME]);
-        const [personal] = yield* workspacesOf(seams, github, ada);
-        assert.ok(personal?.personal);
+it.effect("a personal workspace connects GitHub like any other, by its owner", () =>
+  Effect.gen(function* () {
+    const { seams, database } = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const github = githubReaching([ACME]);
+      const [personal] = yield* workspacesOf(seams, github, ada);
+      assert.ok(personal?.personal);
 
-        const asked = yield* send(
-          seams,
-          github,
-          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT, ada, {
-            workspaceId: personal.id,
-          }),
-        );
-        const landed = yield* landedAt(seams, github, {
-          installation_id: String(ACME.id),
-          setup_action: "install",
-          state: yield* createConnectIntent(ada, personal.id),
-        });
+      const landed = yield* landedAt(seams, github, {
+        installation_id: String(ACME.id),
+        setup_action: "install",
+        state: yield* connectState(seams, github, ada, personal.id),
+      });
 
-        assert.deepEqual(
-          { status: asked.status, body: asked.body },
-          { status: 403, body: { error: HOSTED_API_ERROR.NOT_PERMITTED } },
-        );
-        assert.equal(landed, GITHUB_INSTALL_STATUS.EXPIRED);
-        assert.equal(githubOf(yield* workspacesOf(seams, github, ada), personal.id), null);
-      }).pipe(Effect.provide(database));
-    }),
+      assert.equal(landed, GITHUB_INSTALL_STATUS.CONNECTED);
+      assert.deepEqual(githubOf(yield* workspacesOf(seams, github, ada), personal.id), {
+        login: "acme",
+        active: true,
+      });
+    }).pipe(Effect.provide(database));
+  }),
 );
 
 it.effect(

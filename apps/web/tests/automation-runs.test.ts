@@ -41,7 +41,12 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { githubReaching, openGithubUser } from "./support/github-app-fake";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "./support/github-app-fake";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -59,7 +64,18 @@ import { startPlan } from "./support/workspaces";
  */
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+/**
+ * The installations reaching the repository, one for each automation's
+ * workspace, since one installation connects to one workspace and the
+ * suite's tests share a database.
+ */
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 32 }, (_, index) => ({
+  id: 7_000 + index,
+  login: RELAY.owner,
+  accountId: 70_000 + index,
+  repositories: [RELAY],
+}));
+let installationsConnected = 0;
 const SOL = "openai/gpt-6.1-sol";
 
 const CATALOG: readonly OfferedModel[] = [
@@ -97,9 +113,9 @@ function fakeEve() {
 }
 
 /** What a run reaches beside the store: GitHub reaching the repository, and the catalog. */
-const services = Layer.mergeAll(githubReaching([INSTALLATION]).layer, modelCatalogOf(CATALOG));
+const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, modelCatalogOf(CATALOG));
 
-/** An owner signed in with GitHub, a plan on the repository (or none), and an automation on it due a minute ago. */
+/** An owner, a plan on the repository of its workspace's installation (or none), and an automation on it due a minute ago. */
 const openAutomation = (
   options: { readonly repository?: string | null; readonly guards?: AutomationGuards } = {},
 ) =>
@@ -109,6 +125,9 @@ const openAutomation = (
       name: "Flaky tests",
       repository: options.repository === undefined ? `${RELAY.owner}/${RELAY.name}` : null,
     });
+    const installation = INSTALLATIONS[installationsConnected++];
+    assert.ok(installation);
+    yield* connectWorkspaceGitHub(plan.workspaceId, installation);
     const now = yield* Clock.currentTimeMillis;
     const made = yield* createAutomation(owner, {
       planId: plan.id,

@@ -10,7 +10,7 @@ import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp } from "../../github/github-app.js";
-import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
+import { githubReadOrRefusal } from "../../github/github-refusal.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -114,7 +114,9 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
   }
   const app = yield* GitHubApp;
-  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
+  const reached = yield* githubReadOrRefusal(
+    app.workspaceRepository(held.value.plan.workspaceId, agent.repository),
+  );
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));

@@ -11,9 +11,9 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   GitHubApp,
   type GitHubRepositoryToken,
-  type GitHubUserReadFailure,
+  type GitHubWorkspaceReadFailure,
 } from "../github/github-app.js";
-import { logGitHubReadFailure } from "../github/github-refusal.js";
+import { logGitHubReadFailure, logWorkspaceReadFailure } from "../github/github-refusal.js";
 import { readRepositoryFile } from "../github/repository-file.js";
 import {
   fileLines,
@@ -24,7 +24,6 @@ import {
   shownFileRefusal,
   shownLine,
 } from "./shown-file.js";
-import { logStoreFailure } from "./store-failure.js";
 
 /**
  * plan-file.ts -- a whole file of a plan's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.
@@ -35,9 +34,9 @@ import { logStoreFailure } from "./store-failure.js";
  * read from GitHub instead, at the head of the repository's default branch,
  * through the same reach the checkout is made through: the plan is read under
  * the account first, so a plan another account owns reads as no plan, then
- * the Luke GitHub App confirms the account reaches the plan's repository and
- * mints a token for that one repository with contents read
- * (`github-app.ts`'s `repositoryReadToken`). The token is used for the one
+ * the Luke GitHub App confirms the installation of the plan's workspace
+ * reaches the plan's repository and mints a token for that one repository
+ * with contents read (`github-app.ts`'s `repositoryReadToken`). The token is used for the one
  * read and goes nowhere else: not into the answer, a log line, or a trace.
  * What is shown is decided by the rule `show_code` is held to
  * (`shown-file.ts`), so a secret file is refused before anything is asked of
@@ -70,17 +69,9 @@ export function refused(refusal: PlanFileRefusal): PlanFileRefused {
   return { refusal };
 }
 
-/** A failed reach as the File tab hears it, written down by its kind alone where it is an outage. */
-function reachRefusal(failure: GitHubUserReadFailure): Effect.Effect<PlanFileRefused> {
-  switch (failure._tag) {
-    case "GitHubSignInRequired":
-      return Effect.succeed(refused(PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED));
-    case "GitHubAppNotConfigured":
-    case "GitHubUnavailable":
-      return Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE));
-    default:
-      return Effect.as(logStoreFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE));
-  }
+/** A failed reach as the File tab hears it: an outage, written down by its kind alone. */
+function reachRefusal(failure: GitHubWorkspaceReadFailure): Effect.Effect<PlanFileRefused> {
+  return Effect.as(logWorkspaceReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE));
 }
 
 /**
@@ -103,7 +94,7 @@ export function readPlanFile(
     const repository = stored.value.plan.repository;
     if (repository === null) return Option.some(refused(PLAN_FILE_REFUSAL.NO_REPOSITORY));
     if (isSecretFile(request.path)) return Option.some(refused(PLAN_FILE_REFUSAL.SECRET));
-    const answer = yield* readWindow(userId, repository, request).pipe(
+    const answer = yield* readWindow(stored.value.plan.workspaceId, repository, request).pipe(
       Effect.catchTag("GitHubUnavailable", (failure) =>
         Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
       ),
@@ -118,17 +109,18 @@ type PlanRepositoryReach =
   | { readonly refused: PlanFileRefused };
 
 /**
- * The Luke GitHub App's reach of the plan's repository for the account: a
- * token for that one repository with contents read, and the repository as
- * GitHub confirmed it, or the refusal a failed reach answers. The File
- * tab's file and its tree's folders are both read through it.
+ * The Luke GitHub App's reach of the plan's repository through the
+ * installation of the plan's workspace: a token for that one repository
+ * with contents read, and the repository as GitHub confirmed it, or the
+ * refusal a failed reach answers. The File tab's file and its tree's
+ * folders are both read through it.
  */
 export const reachPlanRepository = /* @__PURE__ */ Effect.fn("web/reachPlanRepository")(function* (
-  userId: string,
+  organizationId: string,
   repository: string,
 ) {
   const app = yield* GitHubApp;
-  return yield* app.repositoryReadToken(userId, repository).pipe(
+  return yield* app.repositoryReadToken(organizationId, repository).pipe(
     Effect.map((token) =>
       Option.isSome(token)
         ? ({ reached: token.value } satisfies PlanRepositoryReach)
@@ -158,11 +150,11 @@ function rawText(content: Uint8Array): string | undefined {
 
 /** The window read through the App's reach, or the refusal the reach or the rule answers. */
 const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
-  userId: string,
+  organizationId: string,
   repository: string,
   request: PlanFileRequest,
 ) {
-  const reach = yield* reachPlanRepository(userId, repository);
+  const reach = yield* reachPlanRepository(organizationId, repository);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
   const at = request.ref ?? confirmed.defaultBranch;

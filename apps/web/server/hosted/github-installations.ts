@@ -17,15 +17,17 @@ import type { StoreFailure } from "./store-failure.js";
 /**
  * github-installations.ts -- the GitHub App installation connected to a workspace.
  *
- * A workspace's repositories come from at most one installation of the Luke
- * GitHub App, which an owner or admin connects, tied to it by a
+ * A workspace's repositories come from the one installation of the Luke
+ * GitHub App connected to it and from nothing else, a personal workspace
+ * like any other; an owner or admin connects it, tied to it by a
  * `github_installation` row keyed on GitHub's own ids. One installation, and
  * so one GitHub account, stands for one workspace. A connect is an intent
  * first: a random state bound to the account and the workspace, stored only
- * as its SHA-256, carried to GitHub on the install address and spent once
- * when GitHub returns through the Setup URL, where the installation is
- * linked only after the account's own GitHub token shows it can see it
- * (`github-install-app.ts`). The installation webhook keeps each row's
+ * as its SHA-256, carried to GitHub on the install address. At the Setup URL
+ * the installation GitHub named and a PKCE code verifier are written on it,
+ * and it is spent once GitHub returns the browser from a one-time
+ * authorization of the App, where the installation is linked only after the
+ * user who authorized shows they can see it (`github-install-app.ts`). The installation webhook keeps each row's
  * status, and a disconnect deletes the row, which is Luke's own, and the
  * workspace's outstanding intents with it.
  */
@@ -58,10 +60,12 @@ export const LINK_OUTCOME = {
 
 export type LinkOutcome = (typeof LINK_OUTCOME)[keyof typeof LINK_OUTCOME];
 
-/** The intent a state stands for, once spent: the account that asked and the workspace it asked for. */
+/** The intent a state stands for, once spent: the account that asked, the workspace it asked for, and what the Setup URL wrote on it. */
 export interface ConnectIntent {
   readonly userId: string;
   readonly organizationId: string;
+  readonly installationId: number | null;
+  readonly codeVerifier: string | null;
 }
 
 /** A state's stored form. */
@@ -89,9 +93,34 @@ const insertIntent = SqlSchema.void({
     ),
 });
 
+const recordAuthorization = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    stateHash: Schema.String,
+    installationId: Schema.Number,
+    codeVerifier: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ stateHash: Schema.String }),
+  execute: ({ stateHash, installationId, codeVerifier, now }) =>
+    Database.use((db) =>
+      db
+        .update(githubInstallIntent)
+        .set({ installationId, codeVerifier })
+        .where(
+          and(eq(githubInstallIntent.stateHash, stateHash), gt(githubInstallIntent.expiresAt, now)),
+        )
+        .returning({ stateHash: githubInstallIntent.stateHash }),
+    ),
+});
+
 const deleteIntent = SqlSchema.findOneOption({
   Request: Schema.Struct({ stateHash: Schema.String, now: Schema.Date }),
-  Result: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    installationId: Schema.NullOr(Schema.Number),
+    codeVerifier: Schema.NullOr(Schema.String),
+  }),
   execute: ({ stateHash, now }) =>
     Database.use((db) =>
       db
@@ -102,6 +131,8 @@ const deleteIntent = SqlSchema.findOneOption({
         .returning({
           userId: githubInstallIntent.userId,
           organizationId: githubInstallIntent.organizationId,
+          installationId: githubInstallIntent.installationId,
+          codeVerifier: githubInstallIntent.codeVerifier,
         }),
     ),
 });
@@ -220,6 +251,24 @@ export function createConnectIntent(
   });
 }
 
+/**
+ * Writes on the intent a state stands for the installation GitHub named and
+ * the PKCE code verifier of the authorization that confirms it; false for a
+ * state unknown, spent, or expired.
+ */
+export function recordConnectAuthorization(
+  state: string,
+  installationId: number,
+  codeVerifier: string,
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      recordAuthorization({ stateHash: stateHashOf(state), installationId, codeVerifier, now }),
+      Option.isSome,
+    ),
+  );
+}
+
 /** The intent a state stands for, spent so it never links twice; nothing for a state unknown, already spent, or expired. */
 export function spendConnectIntent(
   state: string,
@@ -269,7 +318,7 @@ export function disconnectInstallation(
   return Effect.andThen(deleteWorkspaceIntents(organizationId), deleteInstallation(organizationId));
 }
 
-/** GitHub's id for the installation connected to the workspace, whatever its status; none for a workspace with none connected, a personal one among them. */
+/** GitHub's id for the installation connected to the workspace, whatever its status; none for a workspace with none connected. */
 export function installationOfWorkspace(
   organizationId: string,
 ): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {

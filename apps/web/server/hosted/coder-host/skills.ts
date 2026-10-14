@@ -25,5 +25,5 @@ export function agentSkills(
   target: ConversationTarget,
   agent: CodingAgent,
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
-  return repositorySkills(target, agent.repository, loadedMarkdown);
+  return repositorySkills(target, agent.planId, agent.repository, loadedMarkdown);
 }

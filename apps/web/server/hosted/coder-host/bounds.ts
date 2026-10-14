@@ -101,10 +101,8 @@ export const CODER_REFUSAL = {
     "Not run: the provider refused your own API key for the agent's model. Replace it in Settings.",
   ACCOUNT_KEY_NO_QUOTA:
     "Not run: the provider refused the work for your own API key's billing or quota.",
-  SIGN_IN_REQUIRED:
-    "Not run: the developer must sign in with GitHub again before the repository can be checked out.",
   NOT_REACHABLE:
-    "Not run: the agent's repository is not reachable for the developer through the Luke GitHub App.",
+    "Not run: the agent's repository is not reachable through the GitHub installation connected to its plan's workspace.",
   GITHUB_UNAVAILABLE: "Not run: GitHub could not be asked for the repository's credential.",
   NO_DELEGATION: "Not run: this session is no worker of a coding agent's.",
   NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of a coding agent's.",

@@ -1,21 +1,20 @@
 /**
- * github-repositories-app.ts -- the repositories the signed-in developer reaches through the Luke GitHub App.
+ * github-repositories-app.ts -- the repositories of a workspace: those of the GitHub installation connected to it.
  *
  * One read under the account bearer, `GET /api/github/repositories`, which
  * is what the desktop's repository chip lists from. The answer is read from
- * GitHub on the account's own token the moment it is asked for and stored
- * nowhere: every repository the App reaches for the account, most recently
- * updated first, whether the account has installed the App anywhere at all,
- * and where to send them to install it. A listing for a workspace of an
- * installation, named in the `workspaceId` query, is that installation's
- * repositories alone, to a member of it; a workspace the account is not in
- * is not found. A personal workspace, or none named, lists everything. An
- * account that must sign in with GitHub again is told so; a GitHub or a
- * store the service could not reach is unavailable.
+ * GitHub on a token the App mints for the listing the moment it is asked
+ * for and stored nowhere: every repository of the installation connected to
+ * the workspace named in the `workspaceId` query, or to the account's
+ * personal workspace where none is named, most recently updated first, to a
+ * member of it, and whether one is connected at all; a workspace the
+ * account is not in is not found. A workspace with nothing connected has no
+ * repositories. A GitHub or a store the service could not reach is
+ * unavailable.
  */
 
 import type { DatabaseServices } from "@sidecar/database/core/query";
-import { isWorkspaceMember } from "@sidecar/database/models/workspace-store";
+import { isWorkspaceMember, personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
@@ -30,10 +29,9 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { unparsedWire } from "./core.js";
+import { type GitHubRepository, unparsedWire } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
-import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { installationOfWorkspace } from "./hosted/github-installations.js";
+import { githubReadOrRefusal } from "./github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -57,27 +55,28 @@ export interface GitHubRepositoriesAppSeams {
 export type GitHubRepositoriesAppServices = DatabaseServices | GitHubApp | HttpClient.HttpClient;
 
 /**
- * The installation the listing is scoped to: none where no workspace is
- * named or the one named is personal, and not found for a workspace the
- * account is not a member of. More than one named, or one off the wire's
- * shape, is an invalid request.
+ * The workspace the listing is for: the one named, where the account is a
+ * member of it, or the account's personal one where none is named, which a
+ * first read may arrive ahead of and so finds none, with nothing connected.
+ * One not a member of is not found; more than one named, or one off the
+ * wire's shape, is an invalid request.
  */
-const listedInstallation = /* @__PURE__ */ Effect.fnUntraced(function* (
+const listedWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   request: Request,
-): Effect.fn.Return<Option.Option<number>, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<Option.Option<string>, HostedRefusal, DatabaseServices> {
   const named = new URL(request.url).searchParams.getAll(GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID);
-  if (named.length === 0) return Option.none();
+  if (named.length === 0) return yield* hostedStoreOrUnavailable(personalWorkspaceOf(userId));
   const read = readEither(workspaceIdSchema)(unparsedWire(named[0]));
   if (named.length !== 1 || Result.isFailure(read)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, read.success));
   if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return yield* hostedStoreOrUnavailable(installationOfWorkspace(read.success));
+  return Option.some(read.success);
 });
 
-/** GET: the repositories the bearer's account reaches through the App, or through the named workspace's installation. */
+/** GET: the repositories of the workspace's installation, and whether it has one. */
 const repositoriesEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoriesEndpoint")(function* (
   seams: GitHubRepositoriesAppSeams,
 ): Effect.fn.Return<
@@ -90,26 +89,20 @@ const repositoriesEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoriesEn
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const account = yield* seams.resolveUserId(request);
   if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const installation = yield* listedInstallation(account.value, request);
+  const workspace = yield* listedWorkspace(account.value, request);
   const app = yield* GitHubApp;
-  // Note that a workspace of an installation is installed by its being one, whatever its repositories.
-  const listing = Option.match(installation, {
-    onNone: () => app.userRepositories(account.value),
-    onSome: (installationId) =>
-      Effect.map(
-        app.userInstallationRepositories(account.value, installationId),
-        (repositories) => ({
-          installed: true,
-          repositories,
-        }),
-      ),
-  });
-  const [reached, installationUrl] = yield* githubUserReadOrRefusal(
-    Effect.all([listing, app.installUrl]),
+  const [listed, installationUrl] = yield* githubReadOrRefusal(
+    Effect.all([
+      Option.match(workspace, {
+        onNone: () => Effect.succeed(Option.none<readonly GitHubRepository[]>()),
+        onSome: app.workspaceRepositories,
+      }),
+      app.installUrl,
+    ]),
   );
   const answer: GitHubRepositoriesAnswer = {
-    installed: reached.installed,
-    repositories: reached.repositories,
+    installed: Option.isSome(listed),
+    repositories: Option.getOrElse(listed, () => []),
     installationUrl,
   };
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);

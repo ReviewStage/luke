@@ -127,7 +127,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const repository = plan.value.plan.repository;
   if (repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-  yield* workspaceRepository(userId, plan.value.plan.workspaceId, repository);
+  yield* workspaceRepository(plan.value.plan.workspaceId, repository);
   const brief =
     ask.task === undefined
       ? { planSnapshot: planMarkdown(plan.value.plan), task: null }

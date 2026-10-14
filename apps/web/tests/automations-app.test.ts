@@ -43,7 +43,12 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { githubReaching, openGithubUser } from "./support/github-app-fake";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "./support/github-app-fake";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -60,7 +65,18 @@ import { startPlan } from "./support/workspaces";
 
 const ORIGIN = "https://luke.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+/**
+ * The installations reaching the repository, one for each owner's workspace,
+ * since one installation connects to one workspace and the suite's tests
+ * share a database.
+ */
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 16 }, (_, index) => ({
+  id: 7_000 + index,
+  login: RELAY.owner,
+  accountId: 70_000 + index,
+  repositories: [RELAY],
+}));
+let installationsConnected = 0;
 
 const CATALOG: readonly OfferedModel[] = [
   {
@@ -96,7 +112,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      githubReaching([INSTALLATION]).layer,
+      githubReaching(INSTALLATIONS).layer,
       modelCatalogOf(CATALOG),
     );
     const app = HttpRouter.toWebHandler(
@@ -152,7 +168,7 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** An owner with a plan on the repository, another account beside them, and the group. */
+/** An owner with a plan on the repository of its workspace's installation, another account beside them, and the group. */
 const openAccounts = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const other = yield* openGithubUser();
@@ -160,6 +176,9 @@ const openAccounts = Effect.gen(function* () {
     name: "Issue triage",
     repository: `${RELAY.owner}/${RELAY.name}`,
   });
+  const installation = INSTALLATIONS[installationsConnected++];
+  assert.ok(installation);
+  yield* connectWorkspaceGitHub(plan.workspaceId, installation);
   const bare = yield* startPlan(owner, { name: "No repository yet" });
   const { ask, opened } = yield* standing(
     new Map([

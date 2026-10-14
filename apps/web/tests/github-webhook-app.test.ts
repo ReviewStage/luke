@@ -34,8 +34,10 @@ import { SqlClient } from "effect/sql";
 import { GITHUB_PROVIDER_ID, GitHubApp } from "../server/github/github-app";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
+import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
+  connectWorkspaceGitHub,
   type FakeGitHub,
   githubReaching,
   openGithubUser,
@@ -49,8 +51,8 @@ import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
  * a delivery is read before its signature over the body's own bytes holds
  * under the deployment's secret, a deployment with no secret refuses every
  * delivery, and a delivery about a pull request or its checks reads what the
- * agents on that branch published again on the owner's own token, which
- * the agent's row keeps for the plan list.
+ * agents on that branch published again through the installation connected
+ * to the plan's workspace, which the agent's row keeps for the plan list.
  *
  * Synthetic accounts, secrets, repositories, and deliveries throughout.
  */
@@ -61,7 +63,11 @@ const SECRET = "whsec-fixture-luke";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+/** The installation on the repository's owner; each agent's workspace connects one of its own, since one installation connects to one workspace and the tests share the database. */
+const installationOfRelay = () => {
+  const id = 700_000 + Math.floor(Math.random() * 90_000);
+  return { id, accountId: id + 1, login: RELAY.owner, repositories: [RELAY] };
+};
 /** The head's commit; each test cuts a branch of its own, since the agents of every test share the database. */
 const HEAD_SHA = "0123abcd";
 
@@ -180,7 +186,7 @@ function pullRequestDelivery(action: string, ref: string) {
   return { action, repository, pull_request: { number: 41, title: "Ignored", head: { ref } } };
 }
 
-/** An account reaching the repository, with one agent on a plan about it, its row on the pull request's branch. */
+/** An account whose plan's workspace reaches the repository, with one agent on a plan about it, its row on the pull request's branch. */
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -188,6 +194,11 @@ const openAgent = (pull: PullRequestFixture) =>
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
     });
+    const installation = installationOfRelay();
+    assert.equal(
+      yield* connectWorkspaceGitHub(plan.workspaceId, installation),
+      LINK_OUTCOME.LINKED,
+    );
     const started = yield* createCodingAgent(owner, {
       planId: plan.id,
       idempotencyKey: randomUUID(),
@@ -202,7 +213,7 @@ const openAgent = (pull: PullRequestFixture) =>
     ).agent;
     const ref = `luke/teammate-invitations-${randomUUID()}`;
     yield* updateCodingAgentBranch(owner, agent.id, ref);
-    const github = githubReaching([INSTALLATION], undefined, undefined, relayRepository(pull, ref));
+    const github = githubReaching([installation], undefined, undefined, relayRepository(pull, ref));
     /** What the agent's row keeps of its pull request now. */
     const kept = (): Effect.Effect<
       CodingAgentPullRequest | null | undefined,
@@ -312,7 +323,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "a user revoking the App's authorization clears that GitHub user's tokens alone, keeps the row, and a repository read asks for a new sign-in",
+    "a user revoking the App's authorization clears that GitHub user's tokens alone, keeps the row, and the user's token for GitHub's MCP server asks for a new sign-in",
     () =>
       Effect.gen(function* () {
         const githubUserIdOf = () => 800_000 + Math.floor(Math.random() * 90_000);
@@ -381,7 +392,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         );
 
         const read = yield* Effect.gen(function* () {
-          return yield* (yield* GitHubApp).userRepositories(revoking);
+          return yield* (yield* GitHubApp).userToken(revoking);
         }).pipe(Effect.provide(github.layer), Effect.flip);
 
         assert.equal(answered.status, 200);
@@ -426,7 +437,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             webhookSecretHash: null,
           }),
         );
-        const github = githubReaching([INSTALLATION]);
+        const github = githubReaching([]);
         const issue = (labels: readonly string[], senderType = "User") => ({
           action: "opened",
           repository: { full_name: repositoryName.toLowerCase() },
@@ -501,7 +512,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           webhookSecretHash: null,
         }),
       );
-      const github = githubReaching([INSTALLATION]);
+      const github = githubReaching([]);
       const suite = (branch: string, conclusion: string) => ({
         action: "completed",
         repository: { full_name: repositoryName, html_url: `https://github.com/${repositoryName}` },
