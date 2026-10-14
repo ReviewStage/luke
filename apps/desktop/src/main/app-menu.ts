@@ -6,8 +6,12 @@
  * where it can run, so the menu holds no state to keep in step with the
  * window. The chord beside each item is the shortcut table's, so the menu
  * says the key the window answers; the window's keymap is what answers it.
+ * What it does hold is the drawer's: the update item and the account's
+ * experiments, each told on its own clock, since a gated feature's items
+ * stand only while its experiment is on.
  */
 
+import { type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import { channels } from "#shared/bridge";
@@ -19,6 +23,7 @@ import {
   MENU_COMMAND_LABELS,
   type MenuCommand,
   shortcutAccelerator,
+  shortcutShown,
 } from "#shared/shortcuts";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
@@ -88,6 +93,8 @@ function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOption
 function commandItem(command: KeyedCommand): MenuItemConstructorOptions {
   const shortcut = APP_SHORTCUTS[command];
   return {
+    // The command names its item, so the menu's gate can find a gated feature's item by it.
+    id: command,
     label: menuTitle(shortcut.label),
     accelerator: shortcutAccelerator(shortcut.chord),
     click: sendCommand(command),
@@ -199,12 +206,93 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
  * the order Chrome's View keeps it, the call's microphone and speaker are
  * Call's, back and forward are Go's as Finder and Safari keep them, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
- * the people who make Luke are Help's.
+ * the people who make Luke are Help's. A gated feature's item stands only
+ * while `shown` says its command does (`shortcutShown`).
  */
 export function appMenuTemplate(
   appName: string,
   update?: UpdateMenu,
+  shown: (command: KeyedCommand) => boolean = () => true,
 ): MenuItemConstructorOptions[] {
+  return gated(fullMenuTemplate(appName, update), shown);
+}
+
+/** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
+function gatedOut(
+  item: MenuItemConstructorOptions,
+  shown: (command: KeyedCommand) => boolean,
+): boolean {
+  return item.id !== undefined && isKeyedCommandItem(item.id) && !shown(item.id);
+}
+
+function isKeyedCommandItem(id: string): id is KeyedCommand {
+  return id in APP_SHORTCUTS;
+}
+
+/** A separator left with nothing to separate: first, last, or beside another. */
+function strandedSeparator(items: readonly MenuItemConstructorOptions[], at: number): boolean {
+  if (items[at]?.type !== "separator") return false;
+  return at === 0 || at === items.length - 1 || items[at + 1]?.type === "separator";
+}
+
+/**
+ * The menus with a gated feature's items taken out while its experiment is
+ * off, every submenu walked, and a separator the removal stranded taken out
+ * with them, so an off experiment leaves no gap where its item stood.
+ */
+function gated(
+  items: readonly MenuItemConstructorOptions[],
+  shown: (command: KeyedCommand) => boolean,
+): MenuItemConstructorOptions[] {
+  const kept = items
+    .filter((item) => !gatedOut(item, shown))
+    .map((item) =>
+      Array.isArray(item.submenu) ? { ...item, submenu: gated(item.submenu, shown) } : item,
+    );
+  return kept.filter((_item, at) => !strandedSeparator(kept, at));
+}
+
+/** What the menu bar is drawn from: the update item, and the experiments the account has on. */
+interface MenuBarState {
+  readonly update: UpdateMenu | undefined;
+  readonly experiments: ExperimentChoices;
+}
+
+/** One change to what the menu bar is drawn from: a new update item (or none), or the account's experiments. */
+export type MenuBarChange =
+  | { readonly update: UpdateMenu | undefined }
+  | { readonly experiments: ExperimentChoices };
+
+/**
+ * The menu bar's one drawer: it draws the menus from what it was last told,
+ * and draws again only when a change moves them, since the updater and the
+ * account's experiments each tell it on their own clocks and neither knows
+ * the other's state. Called with nothing, it draws what it holds.
+ */
+export function menuBarDrawer(
+  appName: string,
+  draw: (template: MenuItemConstructorOptions[]) => void,
+): (change?: MenuBarChange) => void {
+  let state: MenuBarState = { update: undefined, experiments: NO_EXPERIMENTS };
+  let drawn = false;
+  return (change) => {
+    const next = change === undefined ? state : { ...state, ...change };
+    const moved =
+      next.update !== state.update ||
+      JSON.stringify(next.experiments) !== JSON.stringify(state.experiments);
+    if (drawn && !moved) return;
+    state = next;
+    drawn = true;
+    draw(
+      appMenuTemplate(appName, state.update, (command) =>
+        shortcutShown(command, state.experiments),
+      ),
+    );
+  };
+}
+
+/** Every menu and item, before the gate takes a gated feature's out. */
+function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstructorOptions[] {
   return [
     {
       label: appName,

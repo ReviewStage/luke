@@ -3,7 +3,7 @@ import { type RunMode, runModeFor } from "@luke/host";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "@luke/host/app-identity";
 import { buildCommit } from "@luke/host/build-commit";
 import { RUN_PROFILE } from "#shared/messages/app-state";
-import type { UpdateMenu } from "./app-menu";
+import type { MenuBarChange } from "./app-menu";
 import type { DesktopConfig } from "./services/desktop-config";
 import type { AppLinkInbox } from "./window/app-links";
 
@@ -30,7 +30,7 @@ export interface BootstrapDependencies {
   report: (message: string) => void;
   openExternal: (url: string) => Promise<void>;
   quit: () => void;
-  showMenuBar: (update?: UpdateMenu) => void;
+  showMenuBar: (change?: MenuBarChange) => void;
   /** The Luke links the system hands the app, heard from module scope, before the launch. */
   appLinks: AppLinkInbox;
   /**

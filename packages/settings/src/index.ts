@@ -1,4 +1,4 @@
-export { SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
+export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
   EXPERIMENT,
   EXPERIMENTS,
@@ -7,6 +7,7 @@ export {
   type ExperimentEntry,
   experimentChoicesFrom,
   experimentOn,
+  isExperiment,
   NO_EXPERIMENTS,
 } from "./experiments.js";
 export {

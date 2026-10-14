@@ -5,7 +5,13 @@ import {
   accountCall,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
-import { type AccountPreferences, accountPreferencesFromWire } from "@luke/settings";
+import {
+  type AccountPreferences,
+  accountPreferencesFromWire,
+  type ExperimentChoices,
+  experimentChoicesFrom,
+  NO_EXPERIMENTS,
+} from "@luke/settings";
 import {
   HTTP_METHOD,
   isRecord,
@@ -22,6 +28,11 @@ import type * as HttpClient from "effect/http/HttpClient";
 export interface AccountPreferencesAnswer {
   preferences: AccountPreferences;
   hasStoredSnapshot: boolean;
+  /**
+   * The experiments the account turned on or back off. A service that
+   * answers no such part predates it, and every experiment is off there.
+   */
+  experiments: ExperimentChoices;
 }
 
 interface AccountPreferencesClientOptions extends AccountToken {
@@ -39,9 +50,15 @@ function accountPreferencesAnswerFromWire(
   const preferences = accountPreferencesFromWire(value.preferences);
   if (preferences === undefined) return undefined;
   if (value.updatedAt !== undefined && !isWireNumber(value.updatedAt)) return undefined;
+  // Note that experiments are read on their own reader, which passes over a key it does not know,
+  // because a newer service's experiment must not cost this Mac the voice beside it.
+  const experiments =
+    value.experiments === undefined ? NO_EXPERIMENTS : experimentChoicesFrom(value.experiments);
+  if (experiments === undefined) return undefined;
   return {
     preferences,
     hasStoredSnapshot: value.updatedAt !== undefined,
+    experiments,
   };
 }
 
@@ -111,6 +128,27 @@ export class AccountPreferencesClient {
           method: HTTP_METHOD.PUT,
           path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
           body: JSON.stringify({ preferences: parsed }),
+        },
+        accountPreferencesAnswerSchema,
+      ),
+    );
+  }
+
+  /**
+   * Writes the experiments named, each on or off, over what the account
+   * holds, and answers the snapshot as it then stands: the service merges a
+   * patch rather than replacing the part, so a Mac that knows fewer
+   * experiments never erases another's.
+   */
+  writeExperiments(
+    experiments: ExperimentChoices,
+  ): Effect.Effect<AccountPreferencesAnswer | undefined> {
+    return this.#over(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.PUT,
+          path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
+          body: JSON.stringify({ experiments }),
         },
         accountPreferencesAnswerSchema,
       ),

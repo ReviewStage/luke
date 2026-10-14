@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { microphoneAccessRow, voiceAttentionNote } from "@luke/voice/microphone-access";
@@ -174,7 +175,9 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.ABOUT ? <UpdatesSection control={updates} /> : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? <WindowShortcutSections /> : null}
+      {view === SETTINGS_VIEW.SHORTCUTS ? (
+        <WindowShortcutSections experiments={settings?.experiments ?? NO_EXPERIMENTS} />
+      ) : null}
     </div>
   );
 }

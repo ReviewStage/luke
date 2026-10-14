@@ -8,7 +8,7 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_SETTING_SCHEMA, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
 import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
@@ -110,7 +110,13 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
           // settings already draws under the appearance they name.
           Effect.andThen(
             windows.applyAppearance(),
-            Effect.sync(() => windows.publishAppState()),
+            Effect.sync(() => {
+              windows.publishAppState();
+              // A gated feature's menu items follow the account's experiments as the windows' surfaces do.
+              config.showMenuBar({
+                experiments: state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
+              });
+            }),
           ),
           (defect) =>
             Effect.sync(() => {

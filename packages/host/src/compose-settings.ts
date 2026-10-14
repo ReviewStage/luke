@@ -1,6 +1,7 @@
 import type { AccountRefreshFailed } from "@luke/features";
 import {
   PRODUCT_EVENT,
+  PRODUCT_SETTING_VALUE,
   type ProductEventPropertiesFor,
   productEventFromWire,
   type RecordProductEvent,
@@ -21,12 +22,15 @@ import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
+  EXPERIMENT_COUNTED_AS,
+  type Experiment,
   isAppSettingField,
+  isExperiment,
   isSettingsResetScope,
   settingAnalytics,
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@luke/wire";
+import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
 import { Cause, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -37,12 +41,16 @@ import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
+import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { SettingsStore, type StoredAccount } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
+
+/** Why an experiment's switch did not move: experiments are an account's, and none is signed in. */
+const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
 
 /**
  * What the settings write path reaches in the other concerns. Every one of
@@ -156,6 +164,14 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         readAccountPreferenceAccountKey().pipe(Effect.orElseSucceed(() => undefined)),
     });
     let accountPreferencesHydratedAccount: string | undefined;
+    /**
+     * The one writer of the account's experiments. A reconcile reads how many
+     * writes it has sent before it asks the service, and caches the
+     * experiments it was answered only where none was sent meanwhile, since an
+     * answer read before a write would otherwise put back the switch the
+     * developer just moved.
+     */
+    const experiments = experimentWriter({ client: accountPreferencesClient, store });
 
     /**
      * One account-preferences action and the name its failure is reported
@@ -247,8 +263,16 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     ): Effect.fn.Return<boolean, PlatformError> {
       const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      const writesBefore = experiments.writesSent();
       const remote = yield* accountPreferencesClient.readPreferences();
       if (!remote || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      // The experiments are the service's to hold: what it answered is kept as it stands.
+      if (
+        experiments.writesSent() === writesBefore &&
+        (yield* store.cacheExperiments(accountKey, remote.experiments))
+      ) {
+        emitSettingsSnapshot(yield* store.snapshot());
+      }
 
       if (!remote.hasStoredSnapshot) {
         const preferences = yield* store.accountPreferences();
@@ -414,6 +438,31 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
             reporterOf(params),
           );
           if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
+          return carried(result);
+        }),
+      [GATEWAY_METHOD.EXPERIMENTS_SET]: (params) =>
+        Effect.gen(function* () {
+          const { experiment: named, on } = params;
+          if (!isExperiment(named)) return yield* invalid("experiment must name one");
+          if (!isWireBoolean(on)) return yield* invalid("on must be true or false");
+          const experiment: Experiment = named;
+          const accountKey = yield* readAccountPreferenceAccountKey().pipe(
+            Effect.orElseSucceed(() => undefined),
+          );
+          if (!accountKey) return carried(yield* refusedSettings(EXPERIMENT_SIGNED_OUT));
+          const result = yield* settingsWrite(
+            () => experiments.write(accountKey, experiment, on),
+            (saved) =>
+              Effect.sync(() => {
+                if (saved.reason) return;
+                recordProductEvent(PRODUCT_EVENT.EXPERIMENT_TOGGLE, {
+                  experiment: EXPERIMENT_COUNTED_AS[experiment],
+                  setting_value: on ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+                });
+              }),
+            EXPERIMENT_UNANSWERED,
+            reporterOf(params),
+          );
           return carried(result);
         }),
       [GATEWAY_METHOD.SETTINGS_RESET]: (params) =>

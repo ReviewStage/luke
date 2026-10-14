@@ -22,7 +22,7 @@ import { CloseIcon, SearchIcon } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
@@ -253,8 +253,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The window's own chords, fixed rather than chosen, listed below them.
-    ...APP_SHORTCUT_GROUPS.flatMap((group) =>
+    // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
+    ...shownShortcutGroups(input.settings.experiments).flatMap((group) =>
       group.commands.map((command) => ({
         id: command,
         label: APP_SHORTCUTS[command].label,

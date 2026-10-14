@@ -1,6 +1,6 @@
 import type { RunMode } from "@luke/host";
 import type { BuildCommit } from "@luke/settings/update";
-import type { UpdateMenu } from "../app-menu";
+import type { MenuBarChange } from "../app-menu";
 import type { AppLinkInbox } from "../window/app-links";
 
 /**
@@ -47,8 +47,12 @@ export interface DesktopConfig {
    */
   readonly openExternal: (url: string) => Promise<void>;
   readonly quit: () => void;
-  /** Draws the menu bar again, holding the update item `update` describes, or none. */
-  readonly showMenuBar: (update?: UpdateMenu) => void;
+  /**
+   * Draws the menu bar from what it was last told, moved by one change: the
+   * update item (or none), or the account's experiments, which decide whether
+   * a gated feature's items stand. Called with nothing, it draws what it holds.
+   */
+  readonly showMenuBar: (change?: MenuBarChange) => void;
   /** The Luke links the system hands the app, heard from before the launch (`../window/app-links.ts`). */
   readonly appLinks: AppLinkInbox;
 }

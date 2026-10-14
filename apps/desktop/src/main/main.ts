@@ -2,7 +2,7 @@ import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
 import { reportToStderr, tolerateClosedStderr } from "@luke/host/stderr-report";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
-import { appMenuTemplate } from "./app-menu";
+import { menuBarDrawer } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { initializeCrashReporting } from "./services/telemetry-service";
@@ -66,8 +66,9 @@ const config = bootstrapDesktop({
   report: reportToStderr,
   openExternal: (url) => shell.openExternal(url),
   quit: () => app.quit(),
-  showMenuBar: (update) =>
-    Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(app.name, update))),
+  showMenuBar: menuBarDrawer(app.name, (template) =>
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template)),
+  ),
   initializeCrashReporting,
   appLinks,
 });
