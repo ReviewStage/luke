@@ -15,7 +15,6 @@ import {
   isWireString,
   type WireRecord,
 } from "@luke/service/core";
-import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -47,11 +46,10 @@ import {
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  NO_GITHUB,
-} from "./support/github-app-fake";
+  FAKE_CODER_REPOSITORY_FULL_NAME,
+  fakeCoderEve as fakeCoderEveOver,
+} from "./support/fake-coder-eve";
+import { NO_GITHUB } from "./support/github-app-fake";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -69,11 +67,7 @@ afterAll(() => database.close());
 
 const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 
-const RELAY = { owner: "Acme", name: "Relay" } as const;
-const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-
-/** The installation ids handed out so far: one installation stands for one workspace, so each plan's workspace connects its own. */
-let installationsConnected = 0;
+const RELAY_FULL_NAME = FAKE_CODER_REPOSITORY_FULL_NAME;
 const CRON_SECRET = "cron-secret-1";
 const EVE_ORIGIN = "https://luke.test";
 const INSTRUCTION = "Also add tests for the expiry.";
@@ -227,37 +221,9 @@ async function agentOn(
   return { ...target, id: started.agent.id, sessionId: session };
 }
 
-/**
- * eve's coding-agent service as a script beside the fake GitHub, whose
- * installation reaching the repository is connected to the workspace given:
- * every opening answered with a session of its own, every message to a
- * session answered taken, and each written down.
- */
-async function fakeCoderEve(workspaceId: string) {
-  installationsConnected += 1;
-  const installation: InstallationFixture = {
-    id: 7 + installationsConnected,
-    login: RELAY.owner,
-    repositories: [RELAY],
-  };
-  assert.equal(
-    await database.run(connectWorkspaceGitHub(workspaceId, installation)),
-    LINK_OUTCOME.LINKED,
-  );
-  const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
-  const github = githubReaching([installation], undefined, undefined, (request) => {
-    const { pathname } = new URL(request.url);
-    if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
-    sent.push({ path: pathname, headers: request.headers, body: request.body });
-    if (pathname === "/eve/coder/v1/session") {
-      return Response.json({ sessionId: sessionId() }, { status: 202 });
-    }
-    return Response.json(
-      { sessionId: pathname.slice("/eve/coder/v1/session/".length), deliveryId: "delivery-1" },
-      { status: 202 },
-    );
-  });
-  return { services: github.layer, sent };
+/** eve's coding-agent service as a script beside the fake GitHub, its installation connected to the workspace given (`support/fake-coder-eve.ts`). */
+function fakeCoderEve(workspaceId: string) {
+  return fakeCoderEveOver(database.run, workspaceId, sessionId);
 }
 
 test("a message to the plan's agent steers its session as the deployment acting for the account, under the tool call's own key, and is sent once; another account's agent gets nothing, and a deployment with no secret sends nothing", async () => {

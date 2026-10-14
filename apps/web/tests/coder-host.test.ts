@@ -98,6 +98,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
+      eveOrigin: () => undefined,
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
       titleModel: () => titleModel,

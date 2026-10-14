@@ -13,7 +13,7 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import type { UnparsedWireValue, WireRecord } from "@luke/service/core";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -30,8 +30,15 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import {
+  CODING_AGENT_TOOL_REFUSAL,
+  type CodingAgentToolName,
+  type CodingAgentToolServices,
+  runCodingAgentTool,
+} from "../coding-agent-tools.js";
 import { ModelCatalog, type OfferedModel, offeredToAccount } from "../model-catalog.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../page-tool.js";
 import {
@@ -260,6 +267,19 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /**
+   * Runs one of the four tools about the plan's coding agents, the planning
+   * model's own (`../coding-agent-tools.ts`), on the agent's plan as the
+   * member whose turn this is, under eve's id for the call, so a call run
+   * again starts or sends nothing twice; the plan's other agents are reached
+   * as the deployment acting for that member, as a planning call reaches them.
+   */
+  codingAgents(
+    admitted: AdmittedConversation,
+    tool: CodingAgentToolName,
+    input: UnparsedWireValue,
+    callId: string,
+  ): Effect.Effect<WireRecord, never, CodingAgentToolServices>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -572,6 +592,40 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
+      ),
+
+    codingAgents: (admitted, tool, input, callId) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: found.failure };
+        }
+        const plan = { userId: admitted.caller, planId: found.success.planId };
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        const eve = yield* eveSessionsComposer;
+        const call = {
+          plan,
+          eve:
+            secret === undefined || origin === undefined
+              ? undefined
+              : eve({
+                  origin,
+                  caller: { secret, account: admitted.caller },
+                  mount: EVE_MOUNT.CODER,
+                }),
+          writer: seams.writer(),
+          clientKey: callId,
+        };
+        return yield* runCodingAgentTool(tool, call, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: CODING_AGENT_TOOL_REFUSAL.STORE,
+          }),
+        ),
       ),
 
     title: (admitted) =>

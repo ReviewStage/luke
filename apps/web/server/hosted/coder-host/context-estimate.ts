@@ -3,6 +3,7 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import { CODER_CODING_AGENT_TOOLS } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { SHOW_PAGE_TOOL } from "../page-tool.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
@@ -46,6 +47,12 @@ function shown(tool: Pick<ToolDefinition, "description" | "inputSchema">): Shown
     description: tool.description ?? "",
     inputSchema: serializeModelInputSchema(tool.inputSchema),
   };
+}
+
+/** One of the four tools about the plan's coding agents as the model is shown it, in the coding agent's own words. */
+function shownAgentTool(name: keyof typeof CODER_CODING_AGENT_TOOLS): ShownTool {
+  const tool = CODER_CODING_AGENT_TOOLS[name];
+  return { description: tool.description, inputSchema: emitJsonSchema(tool.inputSchema) };
 }
 
 /** Every tool the coder project authors, keyed so a tool added to the set without a definition here fails to compile. */
@@ -97,6 +104,10 @@ const AUTHORED_TOOLS = {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
   },
+  [CODER_TOOL.LIST_CODING_AGENTS]: shownAgentTool(CODER_TOOL.LIST_CODING_AGENTS),
+  [CODER_TOOL.READ_CODING_AGENT]: shownAgentTool(CODER_TOOL.READ_CODING_AGENT),
+  [CODER_TOOL.MESSAGE_CODING_AGENT]: shownAgentTool(CODER_TOOL.MESSAGE_CODING_AGENT),
+  [CODER_TOOL.START_CODING_AGENT]: shownAgentTool(CODER_TOOL.START_CODING_AGENT),
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */

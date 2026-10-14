@@ -2589,7 +2589,14 @@ row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the planning model's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next planning call while the
-agent runs on, and a turn may take only so many notes. The
+agent runs on, and a turn may take only so many notes. The agent is offered
+the planning model's four tools about the plan's coding agents as well
+(`server/hosted/coding-agent-tools.ts`, worded for an agent in
+`CODER_CODING_AGENT_TOOLS`), through the host's door (`coder-host/host.ts`'s
+`codingAgents`): it lists, reads, messages, and starts the agents on its own
+plan, bound to that plan exactly as a planning call is and reaching them as
+the deployment acting for the member whose turn it is, so one agent briefed
+to orchestrate starts and steers the others, and reaches no other plan's. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The

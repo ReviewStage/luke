@@ -48,7 +48,7 @@ import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-cat
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
- * coding-agent-tools.ts -- the planning model's four tools about the plan's coding agents: list them, read one's recent progress, message one, start one.
+ * coding-agent-tools.ts -- the four tools about the plan's coding agents, the planning model's and a coding agent's alike: list them, read one's recent progress, message one, start one.
  *
  * A planning call may turn to the agents working the plan: the developer
  * asks how one is doing, tells one what to do, or asks for a new one, and
@@ -70,6 +70,10 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * the agent's brief, or the developer's task in its place, on the model and
  * effort the developer named or else the account's default, checked against
  * the catalog, whose choices the refusal lists so Luke can ask or try again.
+ * A coding agent is offered the same four, in its own words
+ * (`CODER_CODING_AGENT_TOOLS`), bound to its own plan exactly as a planning
+ * call is, so an agent briefed to orchestrate starts, reads, and steers the
+ * plan's other agents and reaches no other plan's.
  * Every answer is data the model reads, never a credential: a call's input
  * is named and its output never, since a command's output is the
  * repository's own text and whatever the agent's shell printed.
@@ -147,7 +151,11 @@ export interface CodingAgentCall {
 }
 
 /** What a message or a start reaches: the store, GitHub through the App on the developer's standing, the network to eve, and the catalog a start's choice is checked against. */
-type CodingAgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
+export type CodingAgentToolServices =
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | ModelCatalog;
 
 const AGENT_ID = describeWire(wireUuidSchema, "The agent's id, as list_coding_agents answered it.");
 
@@ -239,6 +247,51 @@ export const START_CODING_AGENT_TOOL = {
     "and why nothing was started; a rejected model or effort lists the choices.",
   inputSchema: START_CODING_AGENT_INPUT,
 } as const;
+
+/**
+ * The same four tools as a coding agent is offered them: the planning
+ * model's own inputs and runs, in words written for an agent working on the
+ * plan beside the others rather than for Luke speaking to the developer, so
+ * one agent can start, read, and steer the plan's other agents.
+ */
+export const CODER_CODING_AGENT_TOOLS = {
+  [AGENT_TOOL.LIST_CODING_AGENTS]: {
+    ...LIST_CODING_AGENTS_TOOL,
+    description:
+      "List the coding agents on this plan, yourself among them: each with its id, its title, " +
+      "the model and effort it runs on, its status (starting, running, completed, failed, " +
+      "cancelled), the branch its sandbox is on if a turn has ended, and one line of what it " +
+      "last did. Call it to find an agent's id, or to see how the agents you started stand.",
+  },
+  [AGENT_TOOL.READ_CODING_AGENT]: {
+    ...READ_CODING_AGENT_TOOL,
+    description:
+      "Read one coding agent's recent progress on this plan: its status, the branch it pushed " +
+      "and the pull request from it as GitHub holds them, and a short tail of what it last said " +
+      "and did, newest last.",
+  },
+  [AGENT_TOOL.MESSAGE_CODING_AGENT]: {
+    ...MESSAGE_CODING_AGENT_TOOL,
+    description:
+      "Send one coding agent on this plan a message, as the developer would type it to the " +
+      "agent. It steers the turn under way, so the agent sees it at its next step, or starts a " +
+      "turn when the agent is idle. Answers `accepted` once the agent's session has taken it, " +
+      "or `rejected` and why nothing was sent.",
+  },
+  [AGENT_TOOL.START_CODING_AGENT]: {
+    ...START_CODING_AGENT_TOOL,
+    description:
+      "Start a new coding agent on this plan, exactly as the developer's Start button would: on " +
+      "the plan itself with no task, or on the task given, which is its whole brief, in the " +
+      "plan's place. It works in a sandbox of its own on the plan's repository, on the model " +
+      "and effort named, or on the developer's default with neither. Answers `accepted` with " +
+      "the agent's id, model, effort, and status once its session is open, or `rejected` and " +
+      "why nothing was started; a rejected model or effort lists the choices.",
+  },
+} as const;
+
+/** The name of one of the four tools about the plan's coding agents. */
+export type CodingAgentToolName = keyof typeof CODER_CODING_AGENT_TOOLS;
 
 /** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
 interface CallWords {
@@ -584,4 +637,22 @@ export function runStartCodingAgent(
       };
     }),
   );
+}
+
+/** One call of the four tools by its name, for a caller that holds the name rather than the tool: a coding agent's door (`coder-host/host.ts`). */
+export function runCodingAgentTool(
+  name: CodingAgentToolName,
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  switch (name) {
+    case AGENT_TOOL.LIST_CODING_AGENTS:
+      return runListCodingAgents(call);
+    case AGENT_TOOL.READ_CODING_AGENT:
+      return runReadCodingAgent(call, input);
+    case AGENT_TOOL.MESSAGE_CODING_AGENT:
+      return runMessageCodingAgent(call, input);
+    case AGENT_TOOL.START_CODING_AGENT:
+      return runStartCodingAgent(call, input);
+  }
 }

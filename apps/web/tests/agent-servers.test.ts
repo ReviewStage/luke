@@ -54,6 +54,7 @@ const codingHost = Effect.gen(function* () {
       reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
+    eveOrigin: () => undefined,
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
     titleModel: () => undefined,

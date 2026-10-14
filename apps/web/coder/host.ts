@@ -25,6 +25,7 @@ import {
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
 import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
+import type { CodingAgentToolName } from "../server/hosted/coding-agent-tools.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
   MAC_COMMAND_STATUS,
@@ -186,6 +187,30 @@ export function runShowPageTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
       return yield* host.showPage(admitted.success, input, sandbox);
+    }),
+  );
+}
+
+/**
+ * One call of the four tools about the plan's coding agents
+ * (`server/hosted/coding-agent-tools.ts`), for the agent's own tool files,
+ * under eve's id for the call; a session the host does not admit runs
+ * nothing and says why.
+ */
+export function runCodingAgentTool(
+  auth: SessionAuth,
+  sessionId: string,
+  callId: string,
+  tool: CodingAgentToolName,
+  input: UnparsedWireValue,
+): Promise<WireRecord> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
+      }
+      return yield* host.codingAgents(admitted.success, tool, input, callId);
     }),
   );
 }
