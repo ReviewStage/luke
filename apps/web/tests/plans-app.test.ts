@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { createAutomation, readAutomation } from "@sidecar/database/models/automation-store";
 import { writePage } from "@sidecar/database/models/plan-pages";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
 import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
@@ -14,6 +15,12 @@ import {
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
 } from "@sidecar/database/voice-vocabulary";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_PAUSE,
+  AUTOMATION_TRIGGER,
+} from "@sidecar/hosted/automation-wire";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import {
@@ -600,6 +607,53 @@ it.layer(getTestDB())("the plan routes", (it) => {
           readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(PLANS, owner)))
             .plans.length,
           1,
+        );
+      }),
+  );
+
+  it.effect(
+    "archiving a plan pauses its automations that were on, and bringing it back resumes none of them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const make = (name: string) =>
+          Effect.map(
+            createAutomation(owner, {
+              planId,
+              name,
+              trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
+              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+              guards: AUTOMATION_DEFAULT_GUARDS,
+              nextRunAt: new Date("2026-10-15T02:00:00Z"),
+              webhookSecretHash: null,
+            }),
+            Option.getOrThrow,
+          );
+        const on = yield* make("Nightly sweep");
+        const standing = (id: string) =>
+          Effect.map(readAutomation(owner, id), (read) => {
+            const { enabled, pausedReason, nextRunAt } = Option.getOrThrow(read);
+            return { enabled, pausedReason, nextRunAt };
+          });
+        const archive = (archived: boolean) =>
+          ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { archived } }));
+
+        yield* archive(true);
+        const archived = yield* standing(on.id);
+        yield* archive(false);
+
+        assert.deepEqual(archived, {
+          enabled: false,
+          pausedReason: AUTOMATION_PAUSE.PLAN_ARCHIVED,
+          nextRunAt: null,
+        });
+        assert.deepEqual(
+          yield* standing(on.id),
+          archived,
+          "bringing the plan back resumes nothing",
         );
       }),
   );

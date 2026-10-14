@@ -2896,7 +2896,12 @@ A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and three failed starts in a row pause the
 automation (`paused_reason` `failures`, `next_run_at` cleared). The agent's
 questions reach the Inbox and its end the finished-agent notification as
-any agent's do.
+any agent's do. An automation belongs to its plan: archiving the plan pauses
+every automation of it that was on (`paused_reason` `plan-archived`), and
+bringing the plan back resumes none, which their owner turns back on one by
+one. The sweep and a GitHub delivery also pass over a plan that is archived
+or whose owner left its workspace, and a webhook whose owner left answers as
+no automation at all.
 
 The guards are read, and the run claimed, under the automation's row lock
 (`withAutomationLocked`), so two acts on one automation's runs, a sweep and

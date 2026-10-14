@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
+import { pauseAutomationsOfPlan } from "@sidecar/database/models/automation-store";
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
@@ -432,6 +433,10 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // An archive puts the plan's automations away with it; bringing it back resumes none of them.
+  if ("archived" in changes && changes.archived) {
+    yield* hostedStoreOrUnavailable(pauseAutomationsOfPlan(planId));
+  }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: plan.value });
 });
 

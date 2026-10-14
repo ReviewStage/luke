@@ -5,6 +5,7 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
+  AUTOMATION_PAUSE,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
@@ -24,13 +25,15 @@ import {
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
+  pauseAutomationsOfPlan,
   readAutomation,
+  readWebhookAutomation,
   recordAutomationRun,
   replaceWebhookSecretHash,
   settleAutomationRun,
   updateAutomation,
 } from "../automation-store.js";
-import { createPlan } from "../plan-store.js";
+import { createPlan, updatePlan } from "../plan-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
@@ -282,6 +285,60 @@ it.layer(getTestDB())("the automation store", (it) => {
         yield* updateAutomation(owner, due.id, { nextRunAt: due.nextRunAt });
         assert.deepEqual(yield* claimDueAutomations(claim), []);
         assert.equal((yield* listAutomationRuns(owner, due.id)).length, 1);
+      }),
+  );
+
+  it.effect(
+    "an archived plan's schedules are never claimed even where its pause was lost, the pause turns off only what was on, and a leaver's webhook answers as none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner, "acme/archive");
+        const dueAt = new Date("2026-10-15T09:00:00Z");
+        const due = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), nextRunAt: dueAt }),
+        );
+        const off = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), nextRunAt: dueAt }),
+        );
+        yield* updateAutomation(owner, off.id, { enabled: false });
+        yield* updatePlan(owner, planId, { archived: true });
+
+        const claimed = yield* claimDueAutomations({
+          now: new Date("2026-10-15T09:05:00Z"),
+          limit: 50,
+          graceMs: 60 * 60_000,
+          nextAfter: () => new Date("2026-10-16T09:00:00Z"),
+        });
+        yield* pauseAutomationsOfPlan(planId);
+
+        assert.deepEqual(
+          claimed.filter((each) => each.automation.id === due.id),
+          [],
+          "the plan is archived, so its schedule fires nothing",
+        );
+        const reasonOf = (id: string) =>
+          Effect.map(readAutomation(owner, id), (read) => Option.getOrThrow(read).pausedReason);
+        assert.equal(yield* reasonOf(due.id), AUTOMATION_PAUSE.PLAN_ARCHIVED);
+        assert.equal(yield* reasonOf(off.id), null, "one already off is left as its owner left it");
+
+        const leaver = yield* openAccount;
+        const hook = Option.getOrThrow(
+          yield* createAutomation(leaver, {
+            ...nightly(yield* openPlan(leaver)),
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            nextRunAt: null,
+            webhookSecretHash: "0".repeat(64),
+          }),
+        );
+        const before = yield* readWebhookAutomation(hook.id);
+        yield* Database.use((db) => db.delete(member).where(eq(member.userId, leaver)));
+        assert.equal(Option.isSome(before), true);
+        assert.equal(
+          Option.isNone(yield* readWebhookAutomation(hook.id)),
+          true,
+          "an owner who left the plan's workspace holds a webhook no call can fire",
+        );
       }),
   );
 

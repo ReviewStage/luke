@@ -1,5 +1,6 @@
 import {
   AUTOMATION_FIRING,
+  AUTOMATION_PAUSE,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
@@ -475,6 +476,22 @@ const OWNER_REACHES_PLAN = exists(
 );
 
 /**
+ * The owner still reaches the plan and the plan is not archived: what the
+ * sweep and a GitHub delivery fire on. Note that archiving pauses a plan's
+ * automations as well, and this holds even where that pause was lost.
+ */
+const OWNER_REACHES_LIVE_PLAN = exists(
+  queryBuilder
+    .select({ id: plan.id })
+    .from(plan)
+    .innerJoin(
+      member,
+      and(eq(member.organizationId, plan.organizationId), eq(member.userId, automation.userId)),
+    )
+    .where(and(eq(plan.id, automation.planId), isNull(plan.archivedAt))),
+);
+
+/**
  * The enabled schedules due, soonest first, of owners who still reach
  * their plans, locked for this claim. Note that a row another claim holds is
  * skipped rather than waited on, because the cron may call twice in one
@@ -500,7 +517,7 @@ const lockDue = SqlSchema.findAll({
             eq(automation.enabled, true),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.SCHEDULE),
             lte(automation.nextRunAt, now),
-            OWNER_REACHES_PLAN,
+            OWNER_REACHES_LIVE_PLAN,
           ),
         )
         .orderBy(asc(automation.nextRunAt), asc(automation.id))
@@ -767,7 +784,7 @@ const findGithubAutomations = SqlSchema.findAll({
             sql`(coalesce(jsonb_array_length(${automation.trigger}->'branches'), 0) = 0 or (
               ${branch}::text is not null and jsonb_exists(${automation.trigger}->'branches', ${branch}::text)
             ))`,
-            OWNER_REACHES_PLAN,
+            OWNER_REACHES_LIVE_PLAN,
           ),
         )
         .orderBy(asc(automation.createdAt), asc(automation.id))
@@ -798,7 +815,13 @@ const findWebhookAutomation = SqlSchema.findOneOption({
           webhookSecretHash: automation.webhookSecretHash,
         })
         .from(automation)
-        .where(and(eq(automation.id, id), eq(automation.triggerKind, AUTOMATION_TRIGGER.WEBHOOK))),
+        .where(
+          and(
+            eq(automation.id, id),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.WEBHOOK),
+            OWNER_REACHES_PLAN,
+          ),
+        ),
     ),
 });
 
@@ -824,6 +847,22 @@ const swapWebhookSecret = SqlSchema.findAll({
           ),
         )
         .returning({ id: automation.id }),
+    ),
+});
+
+const writePlanPause = SqlSchema.void({
+  Request: Schema.Struct({ planId: Schema.String, now: Schema.Date }),
+  execute: ({ planId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({
+          enabled: false,
+          pausedReason: AUTOMATION_PAUSE.PLAN_ARCHIVED,
+          nextRunAt: null,
+          updatedAt: now,
+        })
+        .where(and(eq(automation.planId, planId), eq(automation.enabled, true))),
     ),
 });
 
@@ -1038,6 +1077,15 @@ export function expireQueuedAutomationRuns(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
   );
+}
+
+/**
+ * Pauses every automation of the plan that is on, as archived with it, so
+ * nothing fires them; bringing the plan back leaves them paused until their
+ * owner turns each one back on, rather than resuming what was put away.
+ */
+export function pauseAutomationsOfPlan(planId: string): PlanStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => writePlanPause({ planId, now }));
 }
 
 /** Pauses the automation for the reason the service gives, so nothing fires it until its owner resumes it. */

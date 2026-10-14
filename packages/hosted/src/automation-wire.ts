@@ -172,6 +172,8 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
 export const AUTOMATION_PAUSE = {
   /** Its last runs failed one after another, so the service stopped firing it. */
   FAILURES: "failures",
+  /** Its plan was archived, which puts the plan's automations away with it until its owner turns one back on. */
+  PLAN_ARCHIVED: "plan-archived",
 } as const;
 
 export type AutomationPause = (typeof AUTOMATION_PAUSE)[keyof typeof AUTOMATION_PAUSE];
