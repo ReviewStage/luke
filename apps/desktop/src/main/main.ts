@@ -49,6 +49,12 @@ app.on("open-url", (event, url) => {
   event.preventDefault();
   appLinks.arrive(url);
 });
+// A second launch hands its link here even before the windows stand to bring
+// this one forward, which they do once they listen.
+app.on("second-instance", (_event, argv) => {
+  const link = appLinkInArguments(argv);
+  if (link !== undefined) appLinks.arrive(link);
+});
 const launchedWith = appLinkInArguments(process.argv);
 if (launchedWith !== undefined) appLinks.arrive(launchedWith);
 

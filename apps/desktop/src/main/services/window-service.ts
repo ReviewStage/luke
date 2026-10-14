@@ -24,7 +24,7 @@ import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/
 import { APP_COMMAND } from "#shared/shortcuts";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
-import { APP_LINK_SCHEME, type AppLinkPlace, appLinkInArguments } from "../window/app-links";
+import { APP_LINK_SCHEME, type AppLinkPlace } from "../window/app-links";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -372,13 +372,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     afterDelay(DISPLAY_SETTLE_MS, () => panels.reconcile());
   }
 
-  const handleSecondInstance = (_event: Electron.Event, argv: readonly string[]): void => {
+  // A second launch's Luke link is heard by main itself, from before the windows stand (`../main.ts`).
+  const handleSecondInstance = (): void => {
     if (!launchStanding()) return;
     panels.reconcile();
     panels.focusExpanded();
-    // A second launch handed a Luke link, as one elsewhere than macOS is, opens it here.
-    const link = appLinkInArguments(argv);
-    if (link !== undefined) config.appLinks.arrive(link);
   };
   // A Luke link's plan opens in the panels, scrolled to its section, the window brought forward.
   const openAppLink = (place: AppLinkPlace): void => {

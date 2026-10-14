@@ -48,6 +48,7 @@ import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
+import { useLinkOpener } from "./planning/held-link";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { PLANS_PAGE } from "./planning/planning-model";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
@@ -270,20 +271,21 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
-  // A Luke link the system handed the app: the Plans tab, on its plan, scrolled to its section.
-  const showMention = useRef(plans.onShowMention);
-  showMention.current = plans.onShowMention;
+  // A Luke link the system handed the app: the Plans tab, on its plan, scrolled to its section, once sign-in no longer stands in the way.
+  const openLink = useLinkOpener(accountGated, (mention) => {
+    changeTab(PANEL_TAB.PLANS);
+    plans.onShowMention(mention);
+  });
   useEffect(
     () =>
-      window.luke.onShowLink(({ planId, anchor }) => {
-        changeTab(PANEL_TAB.PLANS);
-        showMention.current(
+      window.luke.onShowLink(({ planId, anchor }) =>
+        openLink(
           anchor === undefined
             ? { kind: MENTION_KIND.PLAN, planId }
             : { kind: MENTION_KIND.SECTION, planId, anchor },
-        );
-      }),
-    [changeTab],
+        ),
+      ),
+    [openLink],
   );
   // The call card's way back: the Plans tab, on the call's plan's document,
   // opening it where another plan, or none, is open.
