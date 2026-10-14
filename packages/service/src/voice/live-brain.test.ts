@@ -23,7 +23,7 @@ import {
 } from "@luke/voice/live-session";
 import { arrival } from "@luke/voice/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Deferred, Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Option, Queue, Redacted, Scope, Stream } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
@@ -38,6 +38,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
+  type EveStreamEvent,
   eveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { PLANNER_DELEGATE_TOOL } from "../agents/brain-host/planning.js";
@@ -172,6 +173,7 @@ function fakeEve(): FakeEve {
     reset() {
       return Effect.die(new Error("this suite retires no session"));
     },
+    stream: () => Stream.empty,
   };
   return eve;
 }
@@ -411,6 +413,49 @@ it.live(
       assert.ok(after?.endToldAt);
       assert.ok((after?.toldSeq ?? 0) > 0);
       assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "with the poll a minute away, a turn's sentences and end reach the service the moment eve's stream of the session tells an event, and the stream's deltas wake nothing",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() =>
+        stand(target, { ...QUICK, POLL: Duration.minutes(1), SETTLE: Duration.minutes(1) }),
+      );
+      const told = yield* Queue.unbounded<EveStreamEvent>();
+      const listened: string[] = [];
+      f.eve.stream = (sessionId) => {
+        listened.push(sessionId);
+        return Stream.fromQueue(told);
+      };
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+      // The follow attaches to the session's stream and makes its first read of a turn not yet begun.
+      for (let look = 0; look < 200 && listened.length === 0; look += 1)
+        yield* Effect.sleep(POLL_MS);
+      yield* Effect.sleep(50);
+      assert.equal(f.events.length, 0);
+      const standing: RelayStanding = {
+        sessionId,
+        target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW), standing));
+      // The record now holds the whole turn, and the poll is a minute away: a delta wakes nothing.
+      yield* Queue.offer(told, { type: "message.appended", turnId: "turn_0" });
+      yield* Effect.sleep(50);
+      assert.equal(f.events.length, 0);
+      yield* Queue.offer(told, { type: "turn.completed", turnId: "turn_0" });
+      yield* f.arrived(5);
+      assert.deepEqual(listened, [sessionId]);
+      assert.equal(f.events.at(-1)?.kind, LIVE_BRAIN_RUN_EVENT.ENDED);
       yield* Effect.promise(() => f.stop());
     }),
 );

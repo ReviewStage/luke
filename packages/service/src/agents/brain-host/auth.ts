@@ -137,10 +137,15 @@ export interface DeploymentActor {
   readonly presents: DeploymentPresence;
 }
 
-/** The routes a deployment actor may reach: a message opening a session or following one up, and a cancel of a turn in a session; no other. */
+/**
+ * The routes a deployment actor may reach: a message opening a session or
+ * following one up, a cancel of a turn in a session, and, for an actor that
+ * presents itself, a read of a session's event stream; no other.
+ */
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
 const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
+const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
 
 /**
  * The route authenticator for the deployment acting for an account, minted
@@ -149,9 +154,13 @@ const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message or a cancel, or is a message naming a kind of turn the table does
+ * message, a cancel, or a stream read, or is a message naming a kind of turn the table does
  * not admit for what it does is refused here, before any later authenticator could admit it
- * as something else. An actor that presents the account mints the account's
+ * as something else. The stream read is the voice function hearing a spoken
+ * ask's turn as eve writes it rather than reading the record on a timer, so
+ * it is admitted to the actor that presents itself (the planning channel's)
+ * and no other, and the door's ownership check still holds it to a session
+ * the named account reaches. An actor that presents the account mints the account's
  * own principal instead, the deployment named as its carrier, so the
  * ownership check reads the same account either way.
  */
@@ -174,7 +183,11 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
       isBrainHostTurn(turn) &&
       actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
-    if (!message && !cancel) {
+    const stream =
+      actor.presents === DEPLOYMENT_PRESENCE.DEPLOYMENT &&
+      request.method === "GET" &&
+      STREAM_ROUTE.test(pathname);
+    if (!message && !cancel && !stream) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     if (actor.presents === DEPLOYMENT_PRESENCE.ACCOUNT) {

@@ -43,7 +43,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Clock, Effect, Layer, Option, Result, type Schema, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import {
@@ -118,6 +118,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
       cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
       reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+      stream: () => Stream.empty,
     };
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),

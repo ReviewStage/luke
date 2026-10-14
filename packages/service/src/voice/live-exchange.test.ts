@@ -26,7 +26,7 @@ import {
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import type { LanguageModel } from "ai";
-import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
+import { Deferred, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
@@ -162,6 +162,9 @@ function fakeEve(): FakeEve {
     },
     reset() {
       return Effect.die(new Error("this suite retires no session"));
+    },
+    stream() {
+      return Stream.empty;
     },
   };
   return eve;
