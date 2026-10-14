@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import {
   type CodingAgent,
   type CodingAgentBriefText,
+  type CodingAgentPlace,
   type CodingAgentStarted,
   createCodingAgent,
   listCodingAgents,
@@ -62,7 +63,7 @@ const PLAN_BRIEF: CodingAgentBriefText = {
 
 function start(
   planId: string,
-  overrides: Partial<Omit<NewCodingAgent, keyof CodingAgentBriefText>> = {},
+  overrides: Partial<Omit<NewCodingAgent, keyof CodingAgentPlace>> = {},
   brief: CodingAgentBriefText = PLAN_BRIEF,
 ): NewCodingAgent {
   return {

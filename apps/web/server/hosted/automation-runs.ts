@@ -306,6 +306,7 @@ const startClaimed = Effect.fnUntraced(function* (
       choice: automation.action.choice,
       task: automationTask(automation, run),
       rememberChoice: false,
+      automationId: automation.id,
     }),
   );
   if (Result.isSuccess(start)) {

@@ -5,15 +5,18 @@ import {
 } from "@luke/database/models/account-store";
 import {
   type CodingAgent,
+  type CodingAgentPlace,
   createCodingAgent,
   discardCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
+import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import type { Plan } from "@luke/features/plan-wire";
 import { failureKind } from "@luke/runtime/effect";
 import {
   HOSTED_REFUSAL,
@@ -41,7 +44,7 @@ import { workspaceRepository } from "../workspace-repository.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**
- * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.
+ * start.ts -- an agent started on a plan, or in a workspace with no plan: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
  *
  * The model, effort, and context window are the ask's own where it names a
  * model, the account's stored default otherwise, either checked against the
@@ -56,7 +59,10 @@ import { anthropicFastAccess } from "./account-keys.js";
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the plan's document as the Markdown Copy
  * would put on the clipboard, or with the ask's task in the plan's place
- * and the files attached to it, which only a task carries.
+ * and the files attached to it, which only a task carries. An agent
+ * started with no plan is handed a task in a workspace the account is a
+ * member of, on a repository named by the ask and read through that
+ * workspace's installation as a plan's is.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
@@ -66,17 +72,27 @@ import { anthropicFastAccess } from "./account-keys.js";
  * (`coder-host/channel.ts`).
  */
 
-/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, the task where the agent is handed one in the plan's place, with the files attached to it, and the MCP servers its draft switched off. */
-export interface StartAsk {
-  readonly planId: string;
+/** Where a Start puts the agent: on a plan, handed the plan or a task in its place, or in a workspace with no plan, on a repository, handed a task. */
+export type StartPlace =
+  | { readonly planId: string; readonly task: string | undefined }
+  | {
+      readonly planId: null;
+      readonly organizationId: string;
+      readonly repository: string;
+      readonly task: string;
+    };
+
+/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a task, the MCP servers its draft switched off, and the automation whose run asks. */
+export type StartAsk = StartPlace & {
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
-  readonly task: string | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
   /** Whether a named choice becomes the account's default, as a developer's own Start makes it; an automation's run keeps the default as it stands. */
   readonly rememberChoice?: boolean;
-}
+  /** The automation whose run starts the agent; none for a Start by hand. */
+  readonly automationId?: string | undefined;
+};
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
 export interface CodingAgentStart {
@@ -117,35 +133,71 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** Starts the account's agent on the plan, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
+/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the plan where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
+interface StartLanding {
+  readonly workspaceId: string;
+  readonly repository: string;
+  readonly plan: Plan | undefined;
+  readonly mover: string | undefined;
+  readonly place: CodingAgentPlace;
+}
+
+/** The plan read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a plan the agent is handed its document or the task; in a workspace, the task. */
+const landingOf = Effect.fnUntraced(function* (
+  userId: string,
+  place: StartPlace,
+): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
+  if (place.planId === null) {
+    const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
+    if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return {
+      workspaceId: place.organizationId,
+      repository: place.repository,
+      plan: undefined,
+      mover: undefined,
+      place: {
+        planId: null,
+        organizationId: place.organizationId,
+        planSnapshot: null,
+        task: place.task,
+      },
+    };
+  }
+  const read = yield* hostedStoreOrUnavailable(readPlan(userId, place.planId));
+  if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { plan, ownerId } = read.value;
+  if (plan.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  return {
+    workspaceId: plan.workspaceId,
+    repository: plan.repository,
+    plan,
+    mover: ownerId === userId ? userId : undefined,
+    place:
+      place.task === undefined
+        ? { planId: place.planId, planSnapshot: planMarkdown(plan), task: null }
+        : { planId: place.planId, planSnapshot: null, task: place.task },
+  };
+});
+
+/** Starts the account's agent on the plan or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
   const choice = yield* acceptedAgentChoice(userId, ask.choice);
-  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, ask.planId));
-  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const repository = plan.value.plan.repository;
-  if (repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-  yield* workspaceRepository(
-    plan.value.plan.workspaceId,
-    repository,
-    plan.value.ownerId === userId ? userId : undefined,
-  );
-  const brief =
-    ask.task === undefined
-      ? { planSnapshot: planMarkdown(plan.value.plan), task: null }
-      : { planSnapshot: null, task: ask.task };
+  const landing = yield* landingOf(userId, ask);
+  yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
+  const brief = landing.place;
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
-      planId: ask.planId,
+      ...brief,
+      automationId: ask.automationId,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
       contextWindow: choice.contextWindow,
-      ...brief,
-      repository,
+      repository: landing.repository,
       disabledServers: ask.disabledServers,
     }),
   );
@@ -165,7 +217,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           : eveContent(
               brief.task,
               ask.attachments ?? [],
-              mentionedContext(brief.task, plan.value.plan),
+              landing.plan === undefined ? undefined : mentionedContext(brief.task, landing.plan),
             ),
     })
     .pipe(
