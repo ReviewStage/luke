@@ -157,11 +157,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * the moment it was named: an account that must sign in with GitHub again, and
  * a repository the App reaches no installation of for the account, are each
  * refused by name, with nothing written. A plan in the workspace of a GitHub
- * App installation may name only a repository of that installation; a
- * personal workspace's plan may name any the account reaches.
+ * App installation may name only a repository of that installation, and a
+ * plan in a workspace with nothing connected names none.
  *
  * A plan starts in the workspace the request names, which the account must be
- * a member of, or in the account's personal workspace where it names none;
+ * a member of, or in the account's first workspace where it names none;
  * either way the plan belongs to that workspace from then on, and its row in
  * the list names it.
  *
@@ -263,7 +263,7 @@ const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE
 
 export interface PlansAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
-  /** The plugin's write that makes an account's personal workspace, the first time a start needs it. */
+  /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
 }
 
@@ -333,10 +333,10 @@ const planWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The workspace a start lands in: the one the request named, where the
- * account is a member of it, or the account's personal workspace, made the
+ * account is a member of it, or the account's first workspace, made the
  * first time it is needed, where it named none. A workspace the account is
  * not in answers as one that names nothing. The plugin refusing to make the
- * personal workspace is the service unable to start the plan, written down
+ * first workspace is the service unable to start the plan, written down
  * without the plugin's message, which may quote what it refused.
  */
 const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -349,19 +349,19 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return workspaceId;
   }
-  const personal = yield* hostedStoreOrUnavailable(
+  const first = yield* hostedStoreOrUnavailable(
     ensurePersonalWorkspace(userId, seams.workspaces).pipe(
       Effect.catchTag("UnknownError", () =>
         Effect.as(
-          Effect.logWarning("Personal workspace not made: the plugin refused"),
+          Effect.logWarning("First workspace not made: the plugin refused"),
           Option.none<string>(),
         ),
       ),
     ),
   );
   // Note that an account gone between its bearer and here has no workspace to start in.
-  if (Option.isNone(personal)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return personal.value;
+  if (Option.isNone(first)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return first.value;
 });
 
 /** Whether a list read asks for the archived plans too; a build from before archiving never does. */

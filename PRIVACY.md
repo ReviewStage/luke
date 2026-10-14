@@ -99,8 +99,8 @@ yours), and start a new one; what it read and sent is kept with the plan's
 planning conversation. A fixture or evidence run keeps no conversation at all.
 
 **Feature plans.** When you start a named plan, our service stores it in a
-workspace: your personal workspace unless you start it in another workspace
-you are a member of, and the plan records which. Every member of that
+workspace: the first workspace made for your account unless you start it in
+another workspace you are a member of, and the plan records which. Every member of that
 workspace can read, change, and delete the plan, its board, its pages, and
 its history, read what was said on its calls, yours included, and read,
 message, rename, and stop the coding agents any member started on it. It stores
@@ -409,13 +409,15 @@ last active, and your daily counts, on an admin page of our site that only an
 account we have marked as an administrator can open; nothing you type, say,
 or run appears on it.
 
-Every account also has a personal workspace on our service, a record named
-with your name and holding you as its owner; it goes when you delete your
-account. A workspace you create is a record
+Every account also gets a first workspace on our service when it signs in, a
+record named with your name and holding you as its owner, which is otherwise
+like any workspace you create: you can invite people to it, and it stays when
+you delete your account, as every workspace you own does, with only your
+membership removed. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
-other than a personal one sees every other member's name, email address, and
+sees every other member's name, email address, and
 role in it, and an owner or admin of it can remove a member. When an owner
-or admin connects GitHub to a workspace, a personal one included, the
+or admin connects GitHub to a workspace, the
 service keeps beside the workspace GitHub's ids for that installation and the
 account it is on, its login, whether it is a user or an organization, and
 whether the installation is active, suspended, or removed. To confirm the

@@ -18,8 +18,8 @@ import type { StoreFailure } from "./store-failure.js";
  * github-installations.ts -- the GitHub App installation connected to a workspace.
  *
  * A workspace's repositories come from the one installation of the Luke
- * GitHub App connected to it and from nothing else, a personal workspace
- * like any other; an owner or admin connects it, tied to it by a
+ * GitHub App connected to it and from nothing else; an owner or admin
+ * connects it, tied to it by a
  * `github_installation` row keyed on GitHub's own ids. One installation, and
  * so one GitHub account, stands for one workspace. A connect is an intent
  * first: a random state bound to the account and the workspace, stored only

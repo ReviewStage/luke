@@ -111,9 +111,10 @@ inside `client.withTransaction`: Better Auth writes over its own pool, outside
 the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
 member through the plugin over PGlite.
 
-Every account has a personal workspace, named for the account, slugged
-`personal-<user id>`, with `{"personal":true}` as its metadata text, and named
-the account's own by a `personal_workspace` row
+Every account gets a first workspace made for it, named for the account,
+slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
+(stored only; nothing reads it to behave differently), and named the
+account's by a `personal_workspace` row
 (`packages/database/src/schemas/personal-workspace.ts`; its generated migration
 is followed by a custom one that backfills one for every account lacking it in
 one data-modifying statement). `packages/database/src/models/workspace-store.ts`'s
@@ -123,21 +124,19 @@ one data-modifying statement). `packages/database/src/models/workspace-store.ts`
 the plugin's own; no transaction encloses it, so two Macs ensuring at once
 settle on the unique slug and the row's primary key, and the one the plugin
 refuses adopts the workspace under the slug. `listWorkspaces` answers every
-workspace the account is a member of, its personal one first and the rest by
-name. `tests/workspace-store.test.ts` holds the three. The workspace names the
-account rather than being named by it, so the user row's cascade would take
-only the `personal_workspace` row and leave the organization, with the
-account's name and id, standing: `account-store.ts`'s `deleteAccount` deletes
-it first (`deletePersonalWorkspace`), in the same transaction as the user row.
-That is a direct delete from the plugin's table, because Better Auth documents
-no deletion without a session: `deleteOrganization` requires session cookies
-and is off under `disableOrganizationDeletion`, and `user.deleteUser` wants a
-fresh session.
+workspace the account is a member of, its first one first and the rest by
+name. `tests/workspace-store.test.ts` holds the three. That row is only how a
+plan start or a repository listing that names no workspace finds the
+account's default; the workspace is otherwise one like any other: it takes
+invitations, its members are read, removed, and left, and it connects GitHub,
+on the same rules as every workspace. The user row's cascade takes the
+`personal_workspace` row and the account's `member` rows and leaves the
+organization standing, as it leaves every workspace the account owned.
 
 Every plan belongs to one workspace: `plan.organization_id`, not null and
 cascading with the organization (`20261013231728_plan_organization` adds the
 column nullable, the custom `20261013231735_plan_organization_backfill` after
-it moves every plan standing into its starter's personal workspace, and
+it moves every plan standing into its starter's first workspace, and
 `20261013231809_plan_organization_not_null` then sets the column not null). A plan's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
 statement joins into its own where clause. A plan is read and written by
@@ -183,8 +182,8 @@ request's headers, which carry the Mac's own Better Auth session as a signed
 bearer token that the bearer plugin reads as the session cookie. So these two
 paths take the session, not the OAuth token, and the plugin checks the
 caller's role and membership again behind Luke's own rules. A workspace the
-account is not in is `not-found`; a personal one, or a role that does not
-allow it, `not-permitted`; a session the service does not take,
+account is not in is `not-found`; a role that does not allow it,
+`not-permitted`; a session the service does not take,
 `invalid-token`, which is the Mac's cue to ask for a new one through the
 hand-off page (`desktop-session.html`). `tests/workspaces-app.test.ts` holds
 each over the plugin on PGlite, and `tests/member-seams.test.ts` the
@@ -267,8 +266,7 @@ from before the App, an expired refresh token, or a token that will not open
 under this deployment's secret. No repository read takes that token.
 
 A workspace's repositories are those of the one installation of the App
-connected to it (`hosted/github-installations.ts`), a personal workspace like
-any other, and nothing else: nobody's own GitHub account is asked what it
+connected to it (`hosted/github-installations.ts`), and nothing else: nobody's own GitHub account is asked what it
 reaches, so a member who never signed in with GitHub reads, plans, and starts
 agents on the workspace's repositories all the same, and a workspace with
 nothing connected has none. `workspaceRepositories(organizationId)` mints a
@@ -303,7 +301,7 @@ whether the workspace has an installation connected, `repositories` (owner,
 name, full name, default branch, private, and when GitHub last saw it
 change), and `installationUrl`. Nothing is stored. A `workspaceId` query
 names the workspace the listing is for, to a member of it; none named is the
-account's personal workspace. One the account is not in is `not-found`
+account's first workspace. One the account is not in is `not-found`
 (404), and the query given twice is `invalid-request`. A GitHub or a store
 the service could not reach is `unavailable`.
 `tests/github-repositories-app.test.ts` holds the route and
@@ -1383,7 +1381,7 @@ starts one with its name, the untouched
 template as its document, and the repository it is about where one is
 chosen, in the workspace its `workspaceId` names, which the account must be
 a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
-in the account's personal workspace, ensured first, where it names none,
+in the account's first workspace, ensured first, where it names none,
 `GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, or several at once, each pin and archive a
@@ -1424,26 +1422,26 @@ rewrite reads the next segment as a plan's id.
 (`packages/hosted/src/workspace-wire.ts`). Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
 repositories come only from the one Luke GitHub App installation an owner or
-admin connects to it, a personal workspace like any other. Every request resolves the bearer first and ensures the
-account's personal workspace.
+admin connects to it. Every request resolves the bearer first and ensures the
+account's first workspace.
 
 - `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
-  is a member of, personal first and the rest by name, each
-  `{ id, name, personal, role, github: { login, active } | null }`. It asks
+  is a member of, its first one first and the rest by name, each
+  `{ id, name, role, github: { login, active } | null }`. It asks
   GitHub nothing.
 - `POST /api/workspaces { name }` creates a workspace through the plugin's
   server-only `auth.api.createOrganization` (`body.userId`, no session
   headers; [docs](https://www.better-auth.com/docs/plugins/organization#create-an-organization)),
   so the caller is its owner, and answers `{ workspace }` (201). The slug is
-  spelled from the name and never takes a personal one; a slug the plugin
+  spelled from the name and never takes the `personal-` prefix a first
+  workspace is made under; a slug the plugin
   refuses as taken is never adopted (`createLinkedOrganization`), and the
   workspace takes it with a random suffix.
 - `POST /api/workspaces/github/connect { workspaceId }`, for an owner or admin,
   writes a `github_install_intent` row (the SHA-256 of a random state, the
   account, the workspace, an hour's expiry) and answers `{ url }`: the App's
   install address with that `state`. A member is `not-permitted` (403); a
-  workspace the account is not in is `not-found`. A personal workspace
-  connects like any other.
+  workspace the account is not in is `not-found`.
 - `POST /api/workspaces/github/disconnect { workspaceId }`, for an owner or
   admin, deletes the workspace's `github_installation` row and answers
   `{ workspace }`.

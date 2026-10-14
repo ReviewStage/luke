@@ -65,24 +65,23 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
- * member of, its personal one first and the rest by name, each with the
- * account's role and its connected GitHub account; the personal workspace is
- * ensured first, so an account's first read makes it. `POST` creates a
+ * member of, the one made for it first and the rest by name, each with the
+ * account's role and its connected GitHub account; that first workspace is
+ * ensured before the read, so an account's first read makes it, and it is
+ * then a workspace like any other. `POST` creates a
  * workspace with the name given through the organization plugin's
  * server-only create, the account its owner. `POST /api/workspaces/github/connect`
  * answers where the browser goes to connect GitHub: the Luke GitHub App's
  * install address with a single-use intent as its `state`, which the connect's
  * callback spends (`github-install-app.ts`); and `.../disconnect` removes the
  * workspace's connected installation; both take an owner or admin of the
- * workspace, a personal one like any other, and a workspace the account is
- * not in answers as none does. A workspace's repositories are its
- * installation's alone, so a personal workspace with nothing connected has
- * none.
+ * workspace, and a workspace the account is not in answers as none does. A
+ * workspace's repositories are its installation's alone, so one with nothing
+ * connected has none.
  * `GET /api/workspaces/members` answers a workspace's
  * members to a member of it, `POST /api/workspaces/members/remove` lets an
  * owner or admin remove a member who is not an owner, and
- * `POST /api/workspaces/leave` lets anyone but an owner leave. A personal
- * workspace, whose members nobody manages, is not permitted any of these.
+ * `POST /api/workspaces/leave` lets anyone but an owner leave.
  * The bearer is resolved before any row is touched.
  *
  * Removing and leaving are Better Auth's own `removeMember` and
@@ -93,7 +92,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * here takes the Mac's OAuth token. Luke's own rules stand in front of the
  * plugin's, which checks the caller's role and membership again itself.
  *
- * An owner or an admin of a team's workspace invites people from the Mac the
+ * An owner or an admin of a workspace invites people from the Mac the
  * same way, under the session: `GET /api/workspaces/invitations` answers the
  * pending invitations, each with its accept link, `POST` makes one through
  * the plugin's `createInvitation`
@@ -307,7 +306,7 @@ const answeredWorkspace = Effect.fn("web/answeredWorkspace")(function* (
   return workspace.value;
 });
 
-/** POST: where the browser goes to connect GitHub to the workspace, a personal one like any other. */
+/** POST: where the browser goes to connect GitHub to the workspace. */
 const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -345,7 +344,7 @@ const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(fu
   });
 });
 
-/** GET: a workspace's members, to a member of it; a personal one is not permitted. */
+/** GET: a workspace's members, to a member of it. */
 const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -361,19 +360,8 @@ const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const workspace = yield* answeredWorkspace(userId, asked.success);
-  if (workspace.personal) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const members = yield* hostedStoreOrUnavailable(listMembers(workspace.id));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
-});
-
-/** The workspace as a member of it sees it, where it is one whose members are managed; a personal one is not permitted. */
-const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
-  userId: string,
-  organizationId: string,
-): Effect.fn.Return<Workspace, HostedRefusal, DatabaseServices> {
-  const workspace = yield* answeredWorkspace(userId, organizationId);
-  if (workspace.personal) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  return workspace;
 });
 
 /** POST: an owner or admin removes a member who is not an owner, answered with those who remain. */
@@ -389,7 +377,7 @@ const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* 
   const asked = readEither(workspaceMemberRemovalSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId, userId: removed } = asked.success;
-  const workspace = yield* managedWorkspace(userId, workspaceId);
+  const workspace = yield* answeredWorkspace(userId, workspaceId);
   if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const target = yield* hostedStoreOrUnavailable(workspaceOf(removed, workspaceId));
   const memberId = yield* hostedStoreOrUnavailable(memberIdOf(removed, workspaceId));
@@ -419,7 +407,7 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   const asked = readEither(workspaceLeaveRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId } = asked.success;
-  const workspace = yield* managedWorkspace(userId, workspaceId);
+  const workspace = yield* answeredWorkspace(userId, workspaceId);
   if (workspace.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
@@ -429,12 +417,12 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 
-/** A team workspace the account is an owner or an admin of; the one whose invitations it manages. */
+/** A workspace the account is an owner or an admin of; the one whose invitations it manages. */
 const invitingWorkspace = Effect.fn("web/invitingWorkspace")(function* (
   userId: string,
   organizationId: string,
 ): Effect.fn.Return<Workspace, HostedRefusal, DatabaseServices> {
-  const workspace = yield* managedWorkspace(userId, organizationId);
+  const workspace = yield* answeredWorkspace(userId, organizationId);
   if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   return workspace;
 });

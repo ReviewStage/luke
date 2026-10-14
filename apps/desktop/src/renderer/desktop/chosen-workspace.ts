@@ -12,8 +12,8 @@ import { readKept, writeKept } from "./folded-groups";
  * it was left. The service names the workspace on every request, so nothing
  * but this file ever knows which one is chosen. A kept id the view does not
  * list, another account's or one the account has left, is answered with the
- * personal workspace, and is overwritten only by the next choice. A fixture
- * run starts on the personal workspace and keeps nothing, so its frames
+ * first workspace listed, and is overwritten only by the next choice. A
+ * fixture run starts on the first workspace and keeps nothing, so its frames
  * never wear a developer's choice.
  */
 
@@ -24,19 +24,15 @@ const STORAGE_KEY = "luke.chosenWorkspace";
 const storedChoice = Schema.fromJsonString(Schema.String);
 
 /**
- * The workspace `kept` names where the view lists it, else the personal one,
- * else the first listed; nothing while the view lists none, as before the
+ * The workspace `kept` names where the view lists it, else the first listed,
+ * which the service lists first because it was made for the account; nothing while the view lists none, as before the
  * first read lands, which the sidebar answers by filtering nothing.
  */
 function resolveChoice(
   workspaces: readonly Workspace[],
   kept: string | undefined,
 ): Workspace | undefined {
-  return (
-    workspaces.find((workspace) => workspace.id === kept) ??
-    workspaces.find((workspace) => workspace.personal) ??
-    workspaces[0]
-  );
+  return workspaces.find((workspace) => workspace.id === kept) ?? workspaces[0];
 }
 
 /** The chosen workspace, and the press that chooses another. */

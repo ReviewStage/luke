@@ -14,9 +14,6 @@
           "name": {
             "type": "string"
           },
-          "personal": {
-            "type": "boolean"
-          },
           "role": {
             "type": "string",
             "enum": [
@@ -52,7 +49,6 @@
         "required": [
           "id",
           "name",
-          "personal",
           "role",
           "github"
         ],

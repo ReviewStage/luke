@@ -21,14 +21,12 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Personal",
-  personal: true,
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
-  personal: false,
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };

@@ -6,12 +6,7 @@
  * worth asserting without one.
  */
 
-import {
-  isPersonalWorkspaceMetadata,
-  type StoredOrganizationMetadata,
-} from "@sidecar/database/models/workspace-seams";
 import { DESKTOP_SESSION_CLIENT_ID } from "@sidecar/hosted/desktop-session-wire";
-import { APIError } from "better-auth/api";
 
 /**
  * What a GitHub sign-in asks for. It is the Luke GitHub App's user
@@ -126,28 +121,6 @@ export const SESSION_BEARER = { requireSignature: true } as const;
  */
 export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
 
-/** Why the plugin refused an invitation on Luke's own terms, apart from its own refusals. */
-export const INVITATION_REFUSAL = {
-  PERSONAL_WORKSPACE: "PERSONAL_WORKSPACE_TAKES_NO_INVITATIONS",
-} as const;
-
-/**
- * Refuses an invitation into a personal workspace, which is its account's
- * alone. The plugin's `beforeCreateInvitation` hook is the documented place
- * to stop one (https://www.better-auth.com/docs/plugins/organization#organization-hooks),
- * and it is handed the organization, whose metadata only Luke's server
- * writes, since organization updates are shut.
- */
-async function refusePersonalInvitation(data: {
-  organization: { metadata?: StoredOrganizationMetadata };
-}) {
-  if (!isPersonalWorkspaceMetadata(data.organization.metadata)) return;
-  throw new APIError("FORBIDDEN", {
-    code: INVITATION_REFUSAL.PERSONAL_WORKSPACE,
-    message: "A personal workspace is yours alone, so it takes no invitations.",
-  });
-}
-
 /**
  * How Better Auth keeps workspaces, each an organization of its members. A
  * workspace is never deleted, so no plan is lost with one, and no signed-in
@@ -164,7 +137,6 @@ export const ORGANIZATION_OPTIONS = {
   allowUserToCreateOrganization: false,
   disableOrganizationDeletion: true,
   requireEmailVerificationOnInvitation: true,
-  organizationHooks: { beforeCreateInvitation: refusePersonalInvitation },
 } as const;
 
 export const JWT_KEY_STORAGE = {

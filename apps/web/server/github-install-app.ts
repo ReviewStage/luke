@@ -26,7 +26,7 @@
  * callback with a one-time code, and only there is the intent spent, which
  * names the account, the workspace, the installation, and the verifier, and
  * refuses a state unknown, used, or expired; the account must still be an
- * owner or admin of the workspace, a personal one like any other; and the
+ * owner or admin of the workspace; and the
  * installation must be among those the code's user access token reaches
  * (`GET /user/installations`), read once before the token is revoked
  * (`GitHubApp.authorizedInstallations`). Only then is it linked, and one

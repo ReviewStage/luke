@@ -7,14 +7,14 @@ import { useNewWorkspaceDialog } from "./new-workspace-dialog";
 /**
  * workspace-switcher.tsx -- the head of the sidebar's plans: which of the account's workspaces they are, and the menu that lists another.
  *
- * A workspace is the account's personal plans, or a team's shared plans,
- * and the sidebar lists one at a time. Its head names the workspace listed,
+ * A workspace is a team's shared plans, the first one made for the account
+ * among them, and the sidebar lists one at a time. Its head names the workspace listed,
  * and a press drops the menu of every workspace the account is a member of
  * from its left edge, the listed one checked, then New workspace, which asks
  * a name and lists the workspace made, and Workspace settings, which opens Settings on the
  * listed workspace's page, where its members and its GitHub repositories
  * are managed. Nothing else stands in the menu. The head
- * stands whenever an account is signed in, its personal workspace alone
+ * stands whenever an account is signed in, its first workspace alone
  * included, because its menu is where a workspace is made.
  */
 

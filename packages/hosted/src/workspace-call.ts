@@ -12,7 +12,7 @@ import type { PlanCallResult } from "./plan-client.js";
 export const WORKSPACE_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub or removing a member takes an owner or admin, an owner neither leaves nor is removed, and a personal workspace's members are read, removed, and left by nobody. */
+  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub or removing a member takes an owner or admin, and an owner neither leaves nor is removed. */
   NOT_PERMITTED: "not-permitted",
   /** The workspace is not one the account is a member of. */
   NOT_FOUND: "not-found",

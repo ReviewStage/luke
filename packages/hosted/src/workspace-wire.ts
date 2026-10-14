@@ -4,8 +4,9 @@ import { workspaceIdSchema } from "./plan-wire.js";
 /**
  * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
  *
- * A workspace is a team in Luke: the account's own personal one, or one a
- * member created, whose teammates join by invitation. Membership has nothing
+ * A workspace is a team in Luke: the first one, made for the account when it
+ * first signs in, or one a member created; either way teammates join by
+ * invitation. Membership has nothing
  * to do with GitHub. A workspace's repositories come from at most one
  * installation of the Luke GitHub App, which an owner or admin connects:
  * `POST /api/workspaces/github/connect` answers the App's install address
@@ -14,15 +15,14 @@ import { workspaceIdSchema } from "./plan-wire.js";
  * installation the account's own GitHub token can see to that workspace.
  * One installation, and so one GitHub account or organization, stands for
  * one workspace. `GET /api/workspaces` answers every workspace the account
- * is a member of, its personal one first and the rest by name, each with the
+ * is a member of, its first one first and the rest by name, each with the
  * account's role in it and its connected GitHub account, if any: its login,
  * and whether the installation is active, which a suspended or removed one
  * is not. A workspace's id is the one a plan's summary names, `plan-wire.ts`'s
  * `workspaceIdSchema`.
  *
  * A member of a workspace reads its members; an owner or an admin removes
- * one who is not an owner, and anyone but an owner leaves. A personal
- * workspace's members are read, removed, and left by nobody.
+ * one who is not an owner, and anyone but an owner leaves.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -54,8 +54,6 @@ export const workspaceGithubSchema = EffectSchema.Struct({
 export const workspaceSchema = EffectSchema.Struct({
   id: workspaceIdSchema,
   name: EffectSchema.String,
-  /** The account's own personal workspace, which no teammate's answer marks. */
-  personal: EffectSchema.Boolean,
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
   /** The GitHub account its connected installation is on, or null where none is connected. */
   github: EffectSchema.NullOr(workspaceGithubSchema),
@@ -63,7 +61,7 @@ export const workspaceSchema = EffectSchema.Struct({
 
 export type Workspace = typeof workspaceSchema.Type;
 
-/** The account's workspaces, its personal one first and the rest by name (GET). */
+/** The account's workspaces, its first one first and the rest by name (GET). */
 export const workspacesAnswerSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceSchema),
 });

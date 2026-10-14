@@ -17,18 +17,18 @@ import { openWorkspacePlugin } from "./support/workspace-plugin";
 import { fakeWorkspaceSeams, joinWorkspace, WORKSPACE_ROLE } from "./support/workspaces";
 
 /**
- * An account's workspaces over a real dialect: its personal one is made the
+ * An account's workspaces over a real dialect: its first one is made the
  * first time it is asked for and never again, a workspace a racing ensure
  * made and named the account's is adopted rather than doubled, one anyone
- * else made under the account's slug is never adopted, and a list
- * marks the account's own workspace and no teammate's as personal.
+ * else made under the account's slug is never adopted, and a list puts the
+ * account's own first workspace first and no teammate's.
  *
  * The plugin's write is a fake over the same tables (`support/workspaces.ts`),
  * refusing a slug that is taken as the plugin does, on both dialects, and Better Auth's own plugin
  * over PGlite in the last case. Synthetic accounts throughout.
  */
 
-/** The row naming the workspace the account's personal one, as a racing ensure writes it. */
+/** The row naming the workspace the account's first one, as a racing ensure writes it. */
 const insertPersonalRow = (userId: string, organizationId: string) =>
   Effect.gen(function* () {
     const createdAt = yield* DateTime.nowAsDate;
@@ -65,33 +65,30 @@ const openSharedWorkspace = (
   });
 
 it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) => {
-  it.effect(
-    "an account's first ensure makes its personal workspace and the second makes none",
-    () =>
-      Effect.gen(function* () {
-        const seams = yield* fakeWorkspaceSeams;
-        const userId = yield* openUser("Ada Lovelace");
-        assert.deepEqual(yield* personalWorkspaceOf(userId), Option.none());
+  it.effect("an account's first ensure makes its first workspace and the second makes none", () =>
+    Effect.gen(function* () {
+      const seams = yield* fakeWorkspaceSeams;
+      const userId = yield* openUser("Ada Lovelace");
+      assert.deepEqual(yield* personalWorkspaceOf(userId), Option.none());
 
-        const first = yield* ensurePersonalWorkspace(userId, seams);
-        const second = yield* ensurePersonalWorkspace(userId, seams);
+      const first = yield* ensurePersonalWorkspace(userId, seams);
+      const second = yield* ensurePersonalWorkspace(userId, seams);
 
-        assert.ok(Option.isSome(first));
-        assert.deepEqual(second, first);
-        assert.deepEqual(yield* personalWorkspaceOf(userId), first);
-        assert.deepEqual(yield* listWorkspaces(userId), [
-          {
-            id: first.value,
-            name: "Ada Lovelace",
-            personal: true,
-            role: WORKSPACE_ROLE.OWNER,
-            github: null,
-          },
-        ]);
-      }),
+      assert.ok(Option.isSome(first));
+      assert.deepEqual(second, first);
+      assert.deepEqual(yield* personalWorkspaceOf(userId), first);
+      assert.deepEqual(yield* listWorkspaces(userId), [
+        {
+          id: first.value,
+          name: "Ada Lovelace",
+          role: WORKSPACE_ROLE.OWNER,
+          github: null,
+        },
+      ]);
+    }),
   );
 
-  it.effect("a personal workspace a racing ensure made first is adopted, not doubled", () =>
+  it.effect("a first workspace a racing ensure made first is adopted, not doubled", () =>
     Effect.gen(function* () {
       const plugin = yield* fakeWorkspaceSeams;
       const database = yield* Database;
@@ -118,7 +115,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         {
           id: raced[0],
           name: "Grace Hopper",
-          personal: true,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
         },
@@ -127,7 +123,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
   );
 
   it.effect(
-    "a personal workspace a racing ensure made but has not yet named the account's is adopted, not doubled",
+    "a first workspace a racing ensure made but has not yet named the account's is adopted, not doubled",
     () =>
       Effect.gen(function* () {
         const plugin = yield* fakeWorkspaceSeams;
@@ -150,7 +146,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           {
             id: raced[0],
             name: "Katherine Johnson",
-            personal: true,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
@@ -159,7 +154,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
   );
 
   it.effect(
-    "an organization someone else made under the account's personal slug is never adopted",
+    "an organization someone else made under the account's first workspace's slug is never adopted",
     () =>
       Effect.gen(function* () {
         const seams = yield* fakeWorkspaceSeams;
@@ -180,7 +175,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           {
             id: ensured.value,
             name: "Grace Hopper",
-            personal: true,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
@@ -189,7 +183,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
   );
 
   it.effect(
-    "a list marks the account's own workspace personal, first, and the shared ones by name",
+    "a list puts the account's own first workspace first, and the shared ones by name",
     () =>
       Effect.gen(function* () {
         const seams = yield* fakeWorkspaceSeams;
@@ -205,28 +199,26 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           {
             id: ownerPersonal.value,
             name: "Owner",
-            personal: true,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
-          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER, github: null },
-          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.OWNER, github: null },
+          { id: acme, name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null },
+          { id: zeta, name: "Zeta", role: WORKSPACE_ROLE.OWNER, github: null },
         ]);
         assert.deepEqual(yield* listWorkspaces(teammate), [
           {
             id: teammatePersonal.value,
             name: "Teammate",
-            personal: true,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
-          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.OWNER, github: null },
-          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.MEMBER, github: null },
+          { id: acme, name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
+          { id: zeta, name: "Zeta", role: WORKSPACE_ROLE.MEMBER, github: null },
         ]);
       }),
   );
 
-  it.effect("an account gone has no personal workspace to make", () =>
+  it.effect("an account gone has no first workspace to make", () =>
     Effect.gen(function* () {
       const seams = yield* fakeWorkspaceSeams;
       const gone = `user-${randomUUID()}`;
@@ -240,7 +232,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
 const PERSONAL_COLUMNS = { slug: organization.slug, metadata: organization.metadata };
 
 it.effect(
-  "the plugin makes the personal workspace the account owns, and one squatting its slug is never adopted",
+  "the plugin makes the first workspace the account owns, and one squatting its slug is never adopted",
   () =>
     Effect.gen(function* () {
       const { seams, database } = yield* openWorkspacePlugin;
@@ -286,7 +278,6 @@ it.effect(
           {
             id: graces.value,
             name: "Grace Hopper",
-            personal: true,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },

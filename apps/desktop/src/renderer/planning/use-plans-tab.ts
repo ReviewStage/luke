@@ -197,13 +197,13 @@ export interface PlansControl {
   archived: PlanningView["plans"];
   /** The chosen workspace's share of `plans` and `archived`, which alone the sidebar lists; every plan while no workspace is chosen. */
   listed: { plans: PlanningView["plans"]; archived: PlanningView["plans"] };
-  /** The workspaces the account is a member of, its personal one first; none before the first read lands. */
+  /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
   /** The workspace the sidebar lists and New plan starts in; absent while none is listed, when every plan is listed. */
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new plan in it. */
   onChooseWorkspace: (workspaceId: string) => void;
-  /** Lists the personal workspace again where the workspace left is the one listed. */
+  /** Lists the first other workspace where the workspace left is the one listed. */
   onLeftWorkspace: (workspaceId: string) => void;
   /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
   onCreateWorkspace: (name: string) => Promise<string | undefined>;
@@ -1169,7 +1169,7 @@ export function usePlansTab(input: {
   // A started plan becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
-  // service starts it in the account's personal one. A start opens its
+  // service starts it in the account's first one. A start opens its
   // plan's call at once, except over a call standing about another plan,
   // which main leaves for this question to end or keep.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
@@ -1384,10 +1384,8 @@ export function usePlansTab(input: {
         ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
       }),
     onLeftWorkspace: (workspaceId) => {
-      const personal = viewed.workspaces.find((each) => each.personal);
-      if (personal !== undefined && listedWorkspace?.id === workspaceId) {
-        workspace.choose(personal.id);
-      }
+      const next = viewed.workspaces.find((each) => each.id !== workspaceId);
+      if (next !== undefined && listedWorkspace?.id === workspaceId) workspace.choose(next.id);
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),

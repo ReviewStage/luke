@@ -28,7 +28,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * doing and what they published (`planAgentsSummarySchema`), so the sidebar
  * can mark a plan at work or with a pull request without a read per row.
  * A plan belongs to one workspace, which its summary names; a start names
- * the workspace it starts in, or none for the account's personal one.
+ * the workspace it starts in, or none for the account's first one.
  * The starting account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
@@ -106,7 +106,7 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
 /**
  * Starting a plan (POST): its name, the repository it is about where one is
  * chosen, and the workspace it starts in where one is named, the account's
- * personal workspace where none is; the document starts as the untouched
+ * first workspace where none is; the document starts as the untouched
  * template.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({

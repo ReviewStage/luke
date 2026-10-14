@@ -139,19 +139,19 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
   the date), moved on each minute, the full moment on hover. Pinned and
   archived rows stay flat and name their `owner/repository` beneath.
-- A workspace is the account's personal plans or a team's shared plans. A
-  signed-in account sees the list headed by the workspace it lists, the
-  personal one until another is chosen. Its menu lists every workspace the
+- A workspace is a team's shared plans; the first one, made for the account
+  when it signs in, is one like any other. A signed-in account sees the list
+  headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
   account is a member of, the listed one checked, then "New workspace…",
   which asks a name and lists the workspace made, and "Workspace settings…",
   which opens Settings' Workspace page on the listed workspace; nothing else
   stands in it. That page (`settings/workspace-page.tsx`) has a picker of
   the account's workspaces, the workspace's name and the account's role,
-  and for a team's workspace its members: an owner or admin invites an
+  and its members: an owner or admin invites an
   address as a member or an admin and sees the invitations still pending,
   each with its accept link to copy and send and a Cancel, under the Mac's
   own Better Auth session; an owner or admin removes a member, and anyone but
-  an owner leaves. For a team's owner or admin it holds GitHub repositories: Connect, or the
+  an owner leaves. For an owner or admin it holds GitHub repositories: Connect, or the
   connected account's repositories with Disconnect and "Choose repositories
   on GitHub". Every way into Settings at a place takes one typed link,
   `SettingsLink` (`settings-views.ts`: a page, a section, a workspace),

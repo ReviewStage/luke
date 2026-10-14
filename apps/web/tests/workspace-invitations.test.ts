@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { PERSONAL_WORKSPACE_METADATA } from "@sidecar/database/models/workspace-seams";
 import { openMigratedPglite } from "@sidecar/database/testing";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
@@ -7,11 +6,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { Schema } from "effect";
 import { test } from "vitest";
 import { authDatabaseAdapter } from "../server/auth-database";
-import {
-  DISABLED_AUTH_PATHS,
-  INVITATION_REFUSAL,
-  ORGANIZATION_OPTIONS,
-} from "../server/auth-policy";
+import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "../server/auth-policy";
 
 /**
  * Workspace invitations on Luke's own organization policy over a migrated
@@ -96,14 +91,9 @@ async function verify(auth: Auth, userId: string): Promise<void> {
 }
 
 /** A workspace the server made for its owner, as Luke's own routes make one. */
-async function workspaceOf(auth: Auth, owner: Account, personal = false): Promise<string> {
+async function workspaceOf(auth: Auth, owner: Account): Promise<string> {
   const created = await auth.api.createOrganization({
-    body: {
-      name: personal ? "Owner" : "Acme",
-      slug: personal ? `personal-${owner.id}` : "acme",
-      userId: owner.id,
-      metadata: personal ? { ...PERSONAL_WORKSPACE_METADATA } : {},
-    },
+    body: { name: "Acme", slug: "acme", userId: owner.id },
   });
   assert.ok(created);
   return created.id;
@@ -241,20 +231,6 @@ test("a member invites no one and cancels nothing, and an invitation its owner c
       invitationId: id,
     });
     assert.deepEqual(await refusal(accepted), { status: 400, code: "INVITATION_NOT_FOUND" });
-  });
-});
-
-test("a personal workspace takes no invitation, even from its owner", async () => {
-  await withAuth(async (auth) => {
-    const owner = await signUp(auth, "owner");
-    const workspaceId = await workspaceOf(auth, owner, true);
-
-    assert.deepEqual(await refusal(await invite(auth, owner, workspaceId, "friend@example.com")), {
-      status: 403,
-      code: INVITATION_REFUSAL.PERSONAL_WORKSPACE,
-    });
-    const listed = await listInvitations(auth, owner, workspaceId);
-    assert.deepEqual(await listed.json(), []);
   });
 });
 

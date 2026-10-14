@@ -42,10 +42,10 @@ const openUser = Effect.gen(function* () {
 
 /**
  * An organization with its first member as owner, as the plugin writes one,
- * and, for a personal workspace, the row naming it the account's, as
- * `ensurePersonalWorkspace` writes it.
+ * and, for the account's first workspace, the row naming it the account's,
+ * as `ensurePersonalWorkspace` writes it.
  */
-const openWorkspace = (input: { name: string; slug: string; owner: string; personal: boolean }) =>
+const openWorkspace = (input: { name: string; slug: string; owner: string; first: boolean }) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
@@ -60,22 +60,13 @@ const openWorkspace = (input: { name: string; slug: string; owner: string; perso
       role: "owner",
       createdAt: now,
     });
-    if (input.personal) {
+    if (input.first) {
       yield* db
         .insert(personalWorkspace)
         .values({ userId: input.owner, organizationId: id, createdAt: now });
     }
     return id;
   });
-
-/** The organizations carrying the account's personal slug or its name. */
-const organizationsNaming = (userId: string, name: string) =>
-  Database.use((db) =>
-    db
-      .select({ id: organization.id })
-      .from(organization)
-      .where(or(eq(organization.slug, `personal-${userId}`), eq(organization.name, name))),
-  );
 
 /** The account's own rows in the table one owning column belongs to. */
 const rowsOwnedBy = (column: PgColumn, userId: string) =>
@@ -155,57 +146,48 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   );
 
   it.effect(
-    "the delete takes the account's personal workspace and leaves a shared one standing",
+    "the delete leaves the account's first workspace standing, as any it owns, and takes only its member rows",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        const erased = `user-${randomUUID()}`;
-        const erasedName = `Erased ${erased}`;
-        yield* db
-          .insert(user)
-          .values({ id: erased, name: erasedName, email: `${erased}@luke.test` });
+        const erased = yield* openUser;
         const kept = yield* openUser;
-        yield* openWorkspace({
-          name: erasedName,
+        const first = yield* openWorkspace({
+          name: "Test User",
           slug: `personal-${erased}`,
           owner: erased,
-          personal: true,
-        });
-        const keptPersonal = yield* openWorkspace({
-          name: "Test User",
-          slug: `personal-${kept}`,
-          owner: kept,
-          personal: true,
+          first: true,
         });
         const shared = yield* openWorkspace({
           name: "Acme",
           slug: `acme-${randomUUID()}`,
           owner: kept,
-          personal: false,
+          first: false,
         });
-        yield* db.insert(member).values({
-          id: randomUUID(),
-          organizationId: shared,
-          userId: erased,
-          role: "member",
-          createdAt: new Date("2099-01-01T00:00:00.000Z"),
-        });
+        for (const organizationId of [first, shared]) {
+          yield* db.insert(member).values({
+            id: randomUUID(),
+            organizationId,
+            userId: organizationId === first ? kept : erased,
+            role: "member",
+            createdAt: new Date("2099-01-01T00:00:00.000Z"),
+          });
+        }
 
         yield* deleteAccount(erased);
 
-        assert.deepEqual(yield* organizationsNaming(erased, erasedName), []);
         const standing = yield* db
           .select({ id: organization.id })
           .from(organization)
-          .where(or(eq(organization.id, keptPersonal), eq(organization.id, shared)));
+          .where(or(eq(organization.id, first), eq(organization.id, shared)));
         assert.equal(standing.length, 2);
-        assert.deepEqual(
-          yield* db
+        const membersOf = (organizationId: string) =>
+          db
             .select({ userId: member.userId })
             .from(member)
-            .where(eq(member.organizationId, shared)),
-          [{ userId: kept }],
-        );
+            .where(eq(member.organizationId, organizationId));
+        assert.deepEqual(yield* membersOf(first), [{ userId: kept }]);
+        assert.deepEqual(yield* membersOf(shared), [{ userId: kept }]);
       }),
   );
 });

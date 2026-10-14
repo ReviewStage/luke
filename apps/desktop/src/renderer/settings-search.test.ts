@@ -16,14 +16,12 @@ import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";
 const TEAM: Workspace = {
   id: "workspace-acme",
   name: "acme",
-  personal: false,
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
-const PERSONAL: Workspace = {
+const FIRST: Workspace = {
   id: "workspace-personal",
-  name: "Personal",
-  personal: true,
+  name: "Dana",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -42,14 +40,14 @@ function workspaceFound(query: string, workspace: Workspace): readonly string[] 
     .flatMap((group) => group.items.map((entry) => entry.id));
 }
 
-test("Invite people finds Members for a team workspace and nothing for the personal one", () => {
+test("Invite people finds Members for every workspace, the account's first one too", () => {
   assert.deepEqual(workspaceFound("Invite people", TEAM), [SETTINGS_SECTION.MEMBERS]);
-  assert.deepEqual(workspaceFound("Invite people", PERSONAL), []);
+  assert.deepEqual(workspaceFound("Invite people", FIRST), [SETTINGS_SECTION.MEMBERS]);
 });
 
-test("GitHub repositories is found for every workspace, a member's and the personal one's too", () => {
+test("GitHub repositories is found for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
-  assert.deepEqual(workspaceFound("GitHub repositories", PERSONAL), found);
+  assert.deepEqual(workspaceFound("GitHub repositories", FIRST), found);
   assert.deepEqual(workspaceFound("GitHub repositories", TEAM), found);
   assert.deepEqual(
     workspaceFound("GitHub repositories", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }),

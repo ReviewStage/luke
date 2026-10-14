@@ -454,8 +454,8 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 
 /**
  * What a workspace act whose role does not allow it is refused with, in place
- * of its kind's own sentence: a member removing someone, an owner removed or
- * leaving, or a personal workspace, which is managed and left by nobody.
+ * of its kind's own sentence: a member removing someone, or an owner removed
+ * or leaving.
  */
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
