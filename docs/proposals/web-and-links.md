@@ -33,9 +33,25 @@ the proposal, "What shipped" below says so.
   link needs no branch name and survives the default branch being renamed.
   A file's lines are pinned to a commit, `/blob/<commit>/<path>#L3-L5`.
 - **A GitHub page is read as a file or a folder only of the plan's own
-  repository**, which every reader is handed, and before anything else a
-  GitHub address might name, so a later kind that reads GitHub pages (a
-  pasted link's chip) never takes a file of the plan for a page.
+  repository, and only on `HEAD` or a commit**, which every reader is
+  handed, and before anything else a GitHub address might name, so a later
+  kind that reads GitHub pages (a pasted link's chip) never takes a file of
+  the plan for a page. A branch's page is left a plain link, since a
+  branch's name may hold a slash and leave no telling where the path begins.
+- **In the window (L3)**, a Luke link pressed in a transcript, an agent's
+  tab, or the Inbox opens its plan on the Plans tab at its section. No
+  heading carries its anchor as an `id`, because session replay records
+  attributes unmasked, and a plain link in a plan's own document stays
+  words, as the document drew every link before; a mention's chip opens.
+- **The "Open in Luke" page (L4)** is `apps/web/open.html`, served at
+  `/<workspace>/plan/<id>`. It is static, opens nothing by itself (a
+  browser with no app for the scheme answers an automatic hand-off with an
+  error of its own), and counts no visit, since its address names a
+  workspace and a plan.
+- **The scheme (L5)** is declared through electron-builder's `protocols`.
+  `open-url` is heard from module scope, and a link is held until a panel
+  has painted (its `notifyReady`), so the link that launched the app opens
+  once a window can open it.
 - **An MCP server or tool keeps `luke://mcp/<provider>[/<tool>]`**, an
   internal form: it has no page of its own on the web to link to, and nothing
   outside the app opens `luke:`, which is a different scheme from the

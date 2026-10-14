@@ -6,6 +6,7 @@ import { appMenuTemplate } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { initializeCrashReporting } from "./services/telemetry-service";
+import { appLinkInArguments, appLinkInbox } from "./window/app-links";
 import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
 
 /**
@@ -24,9 +25,10 @@ import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
  * scope here is only what has to be settled before Electron derives anything
  * from it — the name, the paths, and the crash reporter over them — and the
  * single-instance lock, which the losing copy must lose having touched
- * nothing, and the scheme a plan's pages are served on, which Electron reads
- * once before it is ready. Everything else is composed and then started, in
- * `main`.
+ * nothing, the scheme a plan's pages are served on, which Electron reads
+ * once before it is ready, and the Luke links macOS hands the app, the one
+ * that launched it arriving before it is ready. Everything else is composed
+ * and then started, in `main`.
  */
 
 /**
@@ -39,6 +41,23 @@ import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
  */
 const RUNTIME_CLOSE_WAIT_MS = 15_000;
 
+// A Luke link macOS hands the app (`tryluke://`) is heard from the first
+// moment, since the one that launched the app arrives before it is ready,
+// and held until a window can open it (`window/app-links.ts`).
+const appLinks = appLinkInbox();
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  appLinks.arrive(url);
+});
+// A second launch hands its link here even before the windows stand to bring
+// this one forward, which they do once they listen.
+app.on("second-instance", (_event, argv) => {
+  const link = appLinkInArguments(argv);
+  if (link !== undefined) appLinks.arrive(link);
+});
+const launchedWith = appLinkInArguments(process.argv);
+if (launchedWith !== undefined) appLinks.arrive(launchedWith);
+
 const config = bootstrapDesktop({
   app,
   argv: process.argv,
@@ -50,6 +69,7 @@ const config = bootstrapDesktop({
   showMenuBar: (update) =>
     Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(app.name, update))),
   initializeCrashReporting,
+  appLinks,
 });
 tolerateClosedStderr();
 // A plan's pages are served on a scheme of their own, which Electron must be

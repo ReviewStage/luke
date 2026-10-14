@@ -277,6 +277,22 @@ export const BRIDGE = {
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
+   * A Luke link the system handed the app: the panel is to open its plan,
+   * scrolled to its section where it names one. An event, as a click is,
+   * because it is an ask the window answers once.
+   */
+  onShowLink: entry({
+    kind: "subscribe",
+    channel: "app:show-link",
+    args: noArgs,
+    result: result<{ planId: string; anchor?: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.planId) &&
+        (value.anchor === undefined || isWireString(value.anchor)),
+    ),
+  }),
+  /**
    * A coding agent's turn ended while the window was focused: the panel says
    * so in its toast, whose View opens the plan on that agent's tab. An event,
    * as a click is, because it is said once and never bootstrapped from.

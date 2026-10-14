@@ -24,6 +24,7 @@ import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/
 import { APP_COMMAND } from "#shared/shortcuts";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
+import { APP_LINK_SCHEME, type AppLinkPlace } from "../window/app-links";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -86,6 +87,8 @@ export interface WindowService extends DesktopService {
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
   /** Asks the panels to open a plan on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
+  /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
+  panelReady: () => void;
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
   /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
@@ -369,10 +372,16 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     afterDelay(DISPLAY_SETTLE_MS, () => panels.reconcile());
   }
 
+  // A second launch's Luke link is heard by main itself, from before the windows stand (`../main.ts`).
   const handleSecondInstance = (): void => {
     if (!launchStanding()) return;
     panels.reconcile();
     panels.focusExpanded();
+  };
+  // A Luke link's plan opens in the panels, scrolled to its section, the window brought forward.
+  const openAppLink = (place: AppLinkPlace): void => {
+    panels.focusExpanded();
+    panels.broadcast(channels.onShowLink, place);
   };
   // The Dock tile pressed: the window comes back, whether it was closed or
   // only behind another app.
@@ -401,6 +410,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     windowFactsFor,
     sendToVoice,
     showAgent,
+    panelReady: () => config.appLinks.ready(openAppLink),
     showInbox,
     showSettings,
     toastInboxItem,
@@ -458,6 +468,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       raiseVoiceWindow();
       configurePermissions();
 
+      // The packaged bundle declares the app's own scheme; macOS is asked to send its links here rather than to another app claiming it.
+      if (config.packaged) app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
       app.on("browser-window-focus", panelFocused);
@@ -470,6 +482,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.on("user-did-become-active", wakeHandlers["user-did-become-active"]);
     },
     stop: async () => {
+      config.appLinks.close();
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
       app.removeListener("browser-window-focus", panelFocused);

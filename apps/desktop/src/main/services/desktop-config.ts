@@ -1,6 +1,7 @@
 import type { RunMode } from "@luke/host";
 import type { BuildCommit } from "@luke/settings/update";
 import type { UpdateMenu } from "../app-menu";
+import type { AppLinkInbox } from "../window/app-links";
 
 /**
  * What the launch's own arguments said, parsed once in `main` and never read
@@ -48,4 +49,6 @@ export interface DesktopConfig {
   readonly quit: () => void;
   /** Draws the menu bar again, holding the update item `update` describes, or none. */
   readonly showMenuBar: (update?: UpdateMenu) => void;
+  /** The Luke links the system hands the app, heard from before the launch (`../window/app-links.ts`). */
+  readonly appLinks: AppLinkInbox;
 }

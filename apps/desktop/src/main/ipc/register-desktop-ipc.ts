@@ -125,6 +125,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       void run(operator.host.recordAgentTrace(trace));
     },
     notifyReady: async (context) => {
+      windows.panelReady();
       if (!launch.captureOutput) return;
       const window = BrowserWindow.fromWebContents(context.sender);
       if (!window || window.isDestroyed()) return;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "vitest";
 import { type BootstrapApp, bootstrapDesktop } from "./bootstrap";
+import { appLinkInbox } from "./window/app-links";
 
 /** Every call the bootstrap makes of Electron's app, in the order it made them. */
 const recordingApp = (
@@ -33,6 +34,7 @@ test("the account override is read in a development run and never in a packaged 
     quit: () => undefined,
     showMenuBar: () => undefined,
     initializeCrashReporting: () => undefined,
+    appLinks: appLinkInbox(),
   });
   assert.equal(development.hostedServiceBaseUrl, "https://example.invalid");
   const packaged = bootstrapDesktop({
@@ -45,6 +47,7 @@ test("the account override is read in a development run and never in a packaged 
     quit: () => undefined,
     showMenuBar: () => undefined,
     initializeCrashReporting: () => undefined,
+    appLinks: appLinkInbox(),
   });
   assert.equal(packaged.hostedServiceBaseUrl, "https://tryluke.dev");
   assert.equal(packaged.runMode.sendsNetwork, true);
