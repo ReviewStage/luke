@@ -2,8 +2,9 @@
 
 Status: **approved by Dean on 2026-10-14** ("I agree with the @-mentions
 build… I agree with all your recommendations for @-mentions"), and being
-built as the PR order in §8 describes. The link format is the one thing
-still pending (see below).
+built as the PR order in §8 describes; what has shipped is listed there.
+The link format is approved too (below), and worker 273 is switching
+`mention-link.ts` to it.
 
 The design show lives at `docs/proposals/at-mentions/index.html`. It is
 one self-contained file, generated from the desktop renderer's real
@@ -50,46 +51,52 @@ message box.
     They bring that integration in for the turn, with the title and link and
     a one-line note. This supersedes the earlier decision 3's "nothing is
     switched on".
+14. **No per-integration search; a pasted link becomes a chip instead.**
+    Dean: "Let's skip the per-integration search." PR 7 is dropped. In its
+    place (§4.8):
+    - a page of an integration's (a Linear issue, a pull request, a Notion
+      page), pasted whole into the message box or the plan, becomes a chip
+      wearing the integration's mark;
+    - its name is the address's readable form (`LUKE-142/fix-the-thing`,
+      `relay/pull/123`), since nothing here asks the provider for a title;
+    - it follows decision 13's rule: the integration's server is handed to
+      the turn that takes the message on, with a note naming the page and
+      the connection;
+    - the only thing per integration is data: which web hosts are whose.
+15. **The link format is approved** (below): worker 273's canonical https
+    links.
 
-## Pending: the link format
+## The link format (approved)
 
-**What a mention stores is on hold.** Dean wants the pattern Linear,
-Notion, Slack and GitHub use: canonical https links that work on the web and
-hand off to the desktop app. He also wants the foundation laid for a future
-web version of Luke. Worker 273 (workspace `47fe7a4c`) is researching
-canonical links and the desktop handoff, and its Part 1 will settle what
-plan, section, file and folder mentions store.
+Dean approved worker 273's format (workspace `47fe7a4c`, web-and-links):
 
-Until then, every `luke://…` target in this document is a placeholder. That
-includes §4.3, §5.6 and the show's catalog. One example is files: they
-carried `luke://` only so that one codec covered every kind. A GitHub
-`blob/HEAD` URL is the more standard form, and Part 1 decides.
+- a plan and its sections: `https://tryluke.dev/<workspace>/plan/<id>#<github-style-slug>`,
+  a canonical web link that hands off to the desktop app;
+- the desktop app's own scheme: `tryluke://`;
+- files and folders: GitHub links into the plan's repository.
 
-So that the answer changes one module and nothing else:
+Worker 273's L1 changes `mention-link.ts`'s encode to these forms, and its
+decode keeps reading every provisional `luke://…` form, so every mention
+already written stays one. The rest of the code sees only `Mention`
+values, through `encodeMention` and `decodeMention`:
 
-- **PR 0 builds `mention-link`.** It is a single module in
-  `packages/features/src/` that turns a typed `Mention` into the text stored in
-  the words and back:
-  - `encodeMention(mention) → string`;
-  - `decodeMention(target) → Mention | undefined`;
-  - `mentionsIn(text)`.
-
-  `Mention` is a tagged union with no format in it:
+- `Mention` is a tagged union with no format in it:
   `{kind: file, path}`, `{kind: folder, path}`, `{kind: plan, planId}`,
-  `{kind: section, planId, heading}`, and later
-  `{kind: integration, provider, url, title}`.
-- **Nothing else knows the format.** The editor's `mention` node, the
-  composer, the plan's read view, the section opener, "Copy link to
-  section", and the server's `mentionedContext` see only `Mention` values,
-  through `encodeMention` and `decodeMention`.
-- **Changing it later is cheap.** When Part 1 lands, it changes this one
-  module and its tests, plus the prompt paragraph that tells agents how to
-  read the links. PRs 1 to 5 are unaffected.
+  `{kind: section, planId, heading}`, `{kind: server, provider}`,
+  `{kind: tool, provider, tool}`, and `{kind: link, provider, url}`.
+- The editor's `mention` node, the composer, the plan's read view, the
+  section opener, "Copy link to section", and the server's
+  `mentionedContext` all go through the two functions.
+- One order matters once files are GitHub links: a GitHub blob or tree
+  address of the plan's repository reads as a file or a folder first, and
+  any other GitHub page as a `link`.
+
+The `luke://…` targets elsewhere in this document are the provisional
+forms the first PRs shipped with.
 
 ## Still open
 
-Only the link format, pending worker 273's Part 1 (above).
-`mention-link.ts` stays abstract until it lands.
+Nothing.
 
 The design show holds a catalog of every kind considered, now and
 later. For each kind it gives the picker row, the chip, the hover card, the
@@ -734,6 +741,20 @@ placeholders:
 It slots in after PR 5 as **PR 6** (needs 2 and 5). The integration-object
 search moves to PR 7, which uses the same per-turn rule.
 
+**As built (#2643, #2653).** Two details settled while building:
+- **The note names the connection, not every tool.** Listing a server's
+  tools at send time would mean an MCP read with the account's token on
+  every message. The note instead tells the agent to find them with
+  `connection_search` on that connection, which hands it the same list. A
+  tool mention names its tool exactly.
+- **Where "this turn only" is kept.** eve resolves a turn's connections at
+  `turn.started` without the turn's message, so the servers a message
+  mentioned stand on the agent's row (`coding_agent.mentioned_servers`).
+  A steer writes them under the conversation's lock as eve hears the
+  message, and puts them back if eve refused it. The next turn to start
+  takes them, reading and clearing them under the row's lock. A worker
+  takes none.
+
 ### 4.7 The voice and the planning brain
 
 - **Voice:** not in v1. The brain resolves spoken references with its own
@@ -741,6 +762,30 @@ search moves to PR 7, which uses the same per-turn rule.
 - **Luke's notes in the plan:** because the plan now holds mention links,
   the notetaker must keep a `[@…](…)` link intact when it rewrites a
   section. That is one prompt line and one eval (§5.4).
+
+### 4.8 A pasted link becomes a chip (decision 14)
+
+Dean dropped the per-integration search ("Let's skip the per-integration
+search"). What stands in its place is generic:
+- **What counts.** An http(s) address pasted whole whose host is one of an
+  integration's: `linear.app`, `github.com`, `notion.so`, `sentry.io` and
+  any host under one of them, and so on. A small host table in
+  `integration-wire.ts` is the only per-integration data. Any other address
+  pastes as words, as does one pasted inside code.
+- **The chip.** The integration's mark and the address's readable form: the
+  last steps of its path, a kind's word kept with the step after it
+  (`LUKE-142/fix-the-thing`, `relay/pull/123`). There is no title, since
+  nothing here asks the provider for one. A press opens the page in the
+  browser, and the card says the address.
+- **The stored text.** `[@LUKE-142/fix-the-thing](https://linear.app/acme/issue/LUKE-142/fix-the-thing)`:
+  title and link, as decision 3 has it.
+- **The agent.** Decision 13's rule: the integration's server is handed to
+  the turn that takes the message on, even if switched off, and the note
+  says "The developer pointed you at <address>, a page of the Linear MCP
+  server (connection `linear`)… read it through that connection's tools
+  rather than the web."
+- **Both places.** The message box and the plan editor take it the same
+  way, and Luke's correction guard counts these links like any mention.
 
 ## 5. Mentions in the plan document
 
@@ -1078,15 +1123,28 @@ one after another. PR 1 is checked by hand on a Mac for IME, dictation and
 VoiceOver, since CI can't see the Mac.
 
 **After v1** (catalog status "Next"):
-- **7:** the `mention-search` endpoint over your own connections, plus the
-  integration kinds in the list (Linear, GitHub PRs, issues, commits and
-  branches, Sentry, Slack, PostHog, Notion, Granola), as title and link.
-  It applies PR 6's per-turn rule if Dean extends it to objects. Needs 6.
-  +500, 1.5 days.
-- **8:** a Skills group in the `@` list. +80.
+- **7:** ~~the `mention-search` endpoint over your own connections~~.
+  Dropped by Dean (decision 14) in favor of pasting a link.
+- **8:** a Skills group in the `@` list.
 - **9:** line ranges, including ⌥K in a File tab.
 - **10:** pull requests, Inbox items and pages.
-- **11:** pasting a known kind's URL gives its chip.
+- **11:** pasting an integration's page gives its chip (decision 14, §4.8).
+
+### What has shipped
+
+| # | PR | State |
+|---|---|---|
+| docs | This proposal and its show | merged, #2568 |
+| 0 | Section links, "Copy link to section", the gone state | merged, #2577 |
+| 1 | The composer on TipTap (worker 275) | merged, #2578 |
+| 2 | A coding agent's message mentions files, folders, and sections | merged, #2586 |
+| 4 | The plan draws mentions as chips; Luke keeps them | merged, #2593 |
+| 3 | `@` in the plan editor; a heading rename renames its mentions | merged, #2603 |
+| 5 | `@` in the agent's message box; a sent message's chips | merged, #2624 |
+| 6a | MCP server and tool mentions on the server: the note, and the turn-only hand-over | #2643 |
+| 6b | The MCP servers group in the `@` list | #2653 |
+| 8 | The Skills group in the `@` list | #2664 |
+| 11 | A pasted page of an integration's becomes a chip | #2668 |
 
 ## 9. Risks
 
@@ -1109,5 +1167,4 @@ VoiceOver, since CI can't see the Mac.
 ## 10. Decided
 
 Every question this proposal raised was answered on 2026-10-14 (the
-decisions at the top). The link format is the only thing left, pending
-worker 273's Part 1.
+decisions at the top), the link format included.
