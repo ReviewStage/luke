@@ -4,7 +4,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { PlanSummary, RolloutItem } from "@sidecar/hosted/plan-wire";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -14,6 +14,7 @@ import { AgentTabCard } from "../planning/agent-tab-card";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
+import { STACK_TAB_LABEL, StackGlyph, StackTab } from "../planning/stack-tab";
 import { agentEndMark, TAB_KIND, tabLook } from "../planning/tab-look";
 import {
   inPlanOrder,
@@ -51,7 +52,7 @@ import {
 import { TabStrip } from "./tab-strip";
 
 /**
- * main-tabs.tsx -- the plan's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the plan's column's tabs: the plan's own, its Stack's, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * Each part draws what `use-main-tabs.ts` holds and hands every press back
  * to it. The strip is the side panel's in every way but its first tab: the
@@ -66,6 +67,11 @@ import { TabStrip } from "./tab-strip";
  * renames the plan in place, as the ⋯ menu does. While it is the column's
  * only tab it is quiet, drawing no fill at rest, as a lone tab need not be
  * told from others; beside an agent's it is drawn as any tab is.
+ *
+ * The plan's Stack tab stands second while its rollout names more than one
+ * pull request, anchored as the plan's is: it never closes and never moves,
+ * Close others on it closes every tab after it, and it offers no rename,
+ * since its name is no one's to change.
  *
  * The plan's Inbox tab stands among the agents' while it is open: an item
  * the developer has not seen opens it after every tab, and it closes and
@@ -346,10 +352,11 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
 }
 
 /**
- * The column's strip across its toolbar: the plan's tab, the agents', the
- * draft's, and the Inbox's, then the "+", which stands apart from the strip so it is
- * never dragged nor dropped before. ⌘W closes the chosen tab while the
- * column holds the window's focus (`keys`), and nothing on the plan's.
+ * The column's strip across its toolbar: the plan's tab, its Stack's, the
+ * agents', the draft's, and the Inbox's, then the "+", which stands apart
+ * from the strip so it is never dragged nor dropped before. ⌘W closes the
+ * chosen tab while the column holds the window's focus (`keys`), and
+ * nothing on the plan's or the Stack's.
  */
 export function MainTabStrip({
   plan,
@@ -413,19 +420,34 @@ export function MainTabStrip({
     main.tabs,
     (entry) => entry.tab,
   );
+  const stackTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.STACK)
+    ? [
+        {
+          tab: MAIN_TAB.STACK,
+          look: {
+            icon: <StackGlyph />,
+            label: STACK_TAB_LABEL,
+            selected: main.tab === MAIN_TAB.STACK,
+            anchored: true,
+            onSelect: () => main.onChoose(MAIN_TAB.STACK),
+          },
+          close: undefined,
+        },
+      ]
+    : [];
   const planTab: DrawnTab = {
     tab: MAIN_TAB.PLAN,
     look: {
       ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
       selected: main.tab === MAIN_TAB.PLAN,
-      quiet: own.length === 0,
+      quiet: own.length === 0 && stackTab.length === 0,
       anchored: true,
       card: planCard,
       onSelect: () => main.onChoose(MAIN_TAB.PLAN),
     },
     close: undefined,
   };
-  const strip = [planTab, ...own];
+  const strip = [planTab, ...stackTab, ...own];
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
@@ -512,9 +534,10 @@ export function MainTabStrip({
   );
 }
 
-/** What an agent's or the draft's tab is called to a reader of the column. */
+/** What the Stack's, an agent's, or the draft's tab is called to a reader of the column. */
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (tab === MAIN_TAB.PLAN) return undefined;
+  if (tab === MAIN_TAB.STACK) return STACK_TAB_LABEL;
   if (tab === MAIN_TAB.INBOX) return tabLook({ kind: TAB_KIND.INBOX }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
@@ -522,8 +545,9 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
 }
 
 /**
- * What an agent's or the draft's tab shows in the column: the agent's
- * transcript and composer, or the draft's composer. A delegation's row in an
+ * What the Stack's, an agent's, or the draft's tab shows in the column: the
+ * rollout's stack, the agent's transcript and composer, or the draft's
+ * composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
  * `onOpenDelegation`, its Changes chip its pull request's changes,
  * through `onOpenChanges`, and a call about something drawn in a tab of its
@@ -533,15 +557,19 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
 export function MainTabContent({
   tab,
   agents,
+  stack,
   shown,
   views,
   onOpenDelegation,
   onOpenChanges,
   onOpenTarget,
   cards,
+  onChooseAgent,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
+  /** What the Stack tab lays out: the plan's rollout, and the agents working it as last read. */
+  stack: { rollout: readonly RolloutItem[]; agents: readonly CodingAgentSummary[] | undefined };
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
   views: TabViews;
@@ -557,7 +585,19 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
+  /** Chooses an agent's tab in the column, as a press of its card on the Stack tab asks. */
+  onChooseAgent: (agentId: string) => void;
 }): React.JSX.Element {
+  if (tab === MAIN_TAB.STACK)
+    return (
+      <StackTab
+        rollout={stack.rollout}
+        agents={stack.agents}
+        models={agents.models ?? []}
+        onChoose={onChooseAgent}
+        onReadAgain={agents.onRetryList}
+      />
+    );
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
     // column moves back to the plan, a render away.

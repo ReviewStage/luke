@@ -3,6 +3,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
   type ContextWindow,
+  codingAgentLastReportSchema,
   codingAgentPullRequestSchema,
   contextWindowSchema,
   ROLLOUT_ROLE,
@@ -35,6 +36,7 @@ import { Database, type DatabaseServices, type QueryError, queryBuilder } from "
 import {
   codingAgent,
   codingAgentDelegation,
+  type StoredAgentReport,
   type StoredAgentStep,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
@@ -161,6 +163,8 @@ export interface CodingAgent {
   readonly baseBranch: string | null;
   /** What the agent does for the plan's rollout; null for an agent started outside one. */
   readonly role: RolloutRole | null;
+  /** What the agent last reported of itself, with the turn it was made in; null before its first report. Whether it still stands is the newest turn's to say (`coder-host/status.ts`). */
+  readonly lastReport: StoredAgentReport | null;
   readonly createdAt: Date;
 }
 
@@ -224,6 +228,7 @@ const CODING_AGENT_COLUMNS = {
   position: codingAgent.rolloutPosition,
   baseBranch: codingAgent.baseBranch,
   role: codingAgent.rolloutRole,
+  lastReport: codingAgent.lastReport,
   createdAt: codingAgent.createdAt,
 };
 
@@ -250,6 +255,12 @@ function storedServers(
   return servers.length === 0 ? null : [...new Set(servers)];
 }
 
+/** The `last_report` column as the coder host writes it (`StoredAgentReport`). */
+const AgentReportColumnSchema = Schema.Struct({
+  report: codingAgentLastReportSchema,
+  turnId: Schema.String,
+});
+
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -268,6 +279,7 @@ const CodingAgentRowSchema = Schema.Struct({
   position: Schema.NullOr(Schema.Number),
   baseBranch: Schema.NullOr(Schema.String),
   role: Schema.NullOr(rolloutRoleSchema),
+  lastReport: Schema.NullOr(AgentReportColumnSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -509,6 +521,18 @@ const updateAgentStep = SqlSchema.void({
     ),
 });
 
+const updateAgentReport = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    lastReport: AgentReportColumnSchema,
+  }),
+  execute: ({ userId, agentId, lastReport }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ lastReport }).where(reachableAgent(userId, agentId)),
+    ),
+});
+
 const updateAgentCompaction = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, at: Schema.Date }),
   execute: ({ userId, agentId, at }) =>
@@ -546,11 +570,14 @@ const findAgentsOfPlan = SqlSchema.findAll({
     planId: Schema.String,
     includeArchived: Schema.Boolean,
   }),
-  Result: CodingAgentRowSchema,
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
   execute: ({ userId, planId, includeArchived }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
+        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
         .from(codingAgent)
         .innerJoin(plan, eq(plan.id, codingAgent.planId))
         .where(
@@ -869,7 +896,21 @@ export function listCodingAgents(
   planId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
-  return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+  return Effect.map(listPlanCodingAgentsPublished(userId, planId, options), (held) =>
+    held.map(({ agent }) => agent),
+  );
+}
+
+/** The agents `listCodingAgents` answers, in its order, each with the pull request it last published as GitHub last answered it, which the plan's list carries. */
+export function listPlanCodingAgentsPublished(
+  userId: string,
+  planId: string,
+  options: { readonly includeArchived?: boolean } = {},
+): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+  return Effect.map(
+    findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false }),
+    (rows) => rows.map(({ published, ...agent }) => ({ agent, published })),
+  );
 }
 
 /** The live worker at this position of the account's plan's rollout, newest started first: one not archived whose newest turn neither failed nor was stopped; nothing where none stands. */
@@ -1050,6 +1091,15 @@ export function recordCodingAgentStep(
   lastStep: StoredAgentStep,
 ): CodingAgentStoreEffect<void> {
   return updateAgentStep({ userId, agentId, lastStep });
+}
+
+/** What the agent just reported of itself, with the turn it was made in, which replaces the one before it; nothing written for an agent of a workspace the account is not in. */
+export function recordCodingAgentReport(
+  userId: string,
+  agentId: string,
+  lastReport: StoredAgentReport,
+): CodingAgentStoreEffect<void> {
+  return updateAgentReport({ userId, agentId, lastReport });
 }
 
 /** When eve compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */

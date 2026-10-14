@@ -63,6 +63,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentArchiveRequestSchema: codingAgentWire.codingAgentArchiveRequestSchema,
     disabledServersSchema: codingAgentWire.disabledServersSchema,
     codingAgentServersRequestSchema: codingAgentWire.codingAgentServersRequestSchema,
+    codingAgentLastReportSchema: codingAgentWire.codingAgentLastReportSchema,
     codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
     codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
     codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,

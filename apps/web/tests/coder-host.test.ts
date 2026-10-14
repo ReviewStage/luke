@@ -17,9 +17,11 @@ import { CODING_AGENT_STATUS, ROLLOUT_ROLE } from "@sidecar/hosted/coding-agent-
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planSections } from "@sidecar/hosted/plan-document";
 import { FAST_ACCESS } from "@sidecar/hosted/provider-key-wire";
+import type { WireBoundaryInput } from "@sidecar/wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import {
@@ -41,7 +43,7 @@ import type { ProviderKeys } from "../server/hosted/coder-host/model";
 import { PLAN_READ_REFUSAL } from "../server/hosted/coder-host/plan-read";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { REPORT_REFUSAL } from "../server/hosted/coder-host/report";
-import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
+import { codingAgentStatusOf, standingReportOf } from "../server/hosted/coder-host/status";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CURSOR_START, transcriptPast } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
@@ -67,6 +69,9 @@ import { startPlan } from "./support/workspaces";
  */
 
 const NOW = 1_800_000_000_000;
+
+/** The turn a report is made in, where the test reads nothing of which turn it was. */
+const REPORTING_TURN = "turn-reporting";
 
 const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
@@ -622,6 +627,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           answers.push(
             yield* host.report(admitted, {
               callId,
+              turnId: REPORTING_TURN,
               input: unparsedWire(input),
               sandbox: undefined,
             }),
@@ -705,6 +711,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           answers.push(
             yield* host.report(admitted, {
               callId,
+              turnId: REPORTING_TURN,
               input: unparsedWire(input),
               sandbox: undefined,
             }),
@@ -745,6 +752,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         });
         const call = {
           callId: "call_opened",
+          turnId: REPORTING_TURN,
           input: unparsedWire({ kind: "pr_opened", pullRequest: 7, text: "Open." }),
           sandbox: undefined,
         };
@@ -754,6 +762,87 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
 
         assert.deepEqual(again, first);
         assert.equal(eve.opened.length + eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a worker's question stands with the pull request it names and the answers it offered until its next turn starts, and no replay of a call, in the same millisecond or a later turn, or of a turn's start moves it",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore(undefined, fakeEve());
+        const { userId, agent, auth, sessionId, admitted } = yield* openAgent(
+          host,
+          undefined,
+          undefined,
+          undefined,
+          { position: 2 },
+        );
+        // What the agent's summary and the rollout's line read: the report, while it stands.
+        const standing = Effect.gen(function* () {
+          const row = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+          const newest = yield* latestTurnsOf(userId, [row.conversationId]);
+          return standingReportOf(row.lastReport, newest.get(row.conversationId));
+        });
+        // Each call is made in the session's first turn, and eve replays it under that turn.
+        const report = (callId: string, input: WireBoundaryInput) =>
+          host.report(admitted, {
+            callId,
+            turnId: hostTurnId(sessionId, "turn_0"),
+            input: unparsedWire(input),
+            sandbox: undefined,
+          });
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const relay = (events: readonly MessageStreamEvent[], turnId: string) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(
+              event,
+              admitted,
+              { id: sessionId, auth, turn: { id: turnId } } as never,
+              state,
+              { hash: prompt.hash },
+            ),
+          );
+        const question = {
+          kind: "question",
+          pullRequest: 415,
+          text: "Should an expired invite be resent or refused?",
+          options: ["Resend", "Refuse"],
+        };
+        const green = { kind: "ci_green", pullRequest: 415, text: "Green." };
+
+        // The question and then the green checks, all in one millisecond, inside a turn that starts before them.
+        const first = codingTurn("turn_0", "turn.completed");
+        yield* relay(first.slice(0, 1), "turn_0");
+        const at = yield* Clock.currentTimeMillis;
+        yield* report("call_question", question);
+        assert.deepEqual(yield* standing, { ...question, at });
+        yield* report("call_green", green);
+        yield* report("call_unreadable", { kind: "question", text: "  " });
+        const latest = { ...green, at };
+        assert.deepEqual(yield* standing, latest);
+
+        // eve replays the older call in the same millisecond: it is the report Luke already has.
+        yield* report("call_question", question);
+        assert.deepEqual(yield* standing, latest);
+
+        // The rest of the turn, the end the host reports for it, and a replay of its start leave it.
+        yield* relay(first.slice(1), "turn_0");
+        const end = first.at(-1);
+        assert.ok(end?.type === "turn.completed");
+        yield* host.reportEnd(admitted, sessionId, end);
+        yield* relay(first.slice(0, 1), "turn_0");
+        assert.deepEqual(yield* standing, latest);
+
+        // The next turn takes it away; neither a replay of the first turn's call nor one of its
+        // calls Luke first hears only now brings a report of that turn back.
+        yield* TestClock.adjust("1 second");
+        yield* relay(codingTurn("turn_1", "turn.completed").slice(0, 1), "turn_1");
+        assert.equal(yield* standing, null);
+        yield* report("call_question", question);
+        yield* report("call_late", question);
+        assert.equal(yield* standing, null);
       }),
   );
 
@@ -781,6 +870,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const opened = (callId: string, opensSandbox: boolean) =>
           host.report(admitted, {
             callId,
+            turnId: REPORTING_TURN,
             input: unparsedWire({ kind: "pr_opened", pullRequest: 9, text: "Open." }),
             sandbox: opensSandbox ? () => Promise.resolve(sandbox) : undefined,
           });
@@ -808,7 +898,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         });
         const asked = unparsedWire({ kind: "question", text: "Which table?" });
         const report = (admitted: AdmittedConversation, input: typeof asked) =>
-          host.report(admitted, { callId: `call_${minted}`, input, sandbox: undefined });
+          host.report(admitted, {
+            callId: `call_${minted}`,
+            turnId: REPORTING_TURN,
+            input,
+            sandbox: undefined,
+          });
 
         assert.deepEqual(yield* report(plain.admitted, asked), {
           status: ACTION_RESULT_STATUS.REJECTED,
@@ -864,6 +959,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         });
         const unanswered = yield* unreachable.report(elsewhere.admitted, {
           callId: "call_unreachable",
+          turnId: REPORTING_TURN,
           input: asked,
           sandbox: undefined,
         });

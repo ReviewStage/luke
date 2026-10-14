@@ -2574,6 +2574,14 @@ A Start's position implies a builder, names a pull request of the plan's
 rollout or is refused as `invalid-request`, and a builder needs one; a keeper's
 Start names no position or base and, until the keeper has a brief of its
 own, carries a task, or it is refused as `invalid-request`.
+A worker's own last report through its `report` tool is kept on its row
+(`coding_agent.last_report`, migration `20261014181816_coding_agent_last_report`) beside the report turn it opens
+on the plan's conversation, with the turn its call was made in. Only the call
+that handed the report to Luke writes it, so a call eve replays never moves it,
+and it stands only while that turn is the agent's newest, so the agent's summary and the `[rollout]` section, on a builder's line and the
+stack keeper's alike, read a standing question, block, or keeper's conflict
+off the row rather than off Luke's transcript; the ends the host reports
+for a worker are not kept there, so a question its turn ended on stands.
 
 The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
 the planning worker's shape (`eve/subagents/worker/`): read-only in the
@@ -2737,6 +2745,10 @@ agent still without a turn row five minutes after its Start
 (`CODER.STARTING_GRACE`) reading as failed rather than starting forever,
 and an agent with a message of the developer's still awaiting its turn
 (`awaitingLinesOf`) reading as running whatever its newest turn says.
+The list alone also carries `published`, the pull request the agent's row
+last kept from any read of what it published (`coder-host/published.ts`),
+absent where none was read, so the plan's Stack tab draws every worker's
+pull request from one list read and asks GitHub nothing.
 `GET /api/agents/{id}/messages?after=<seq>:<revision>` answers the
 conversation's rows past the cursor as `UIMessage`s, the cursor to read on
 from, the agent's status as the page was read, and, where that status is

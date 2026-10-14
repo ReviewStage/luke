@@ -6,6 +6,7 @@ import {
   type IntegrationProvider,
   integrationProviderFromWire,
 } from "./integration-wire.js";
+import { reportOptionsSchema, reportTextSchema, WORKER_REPORT_KIND } from "./report-vocabulary.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -413,6 +414,61 @@ export const CODING_AGENT_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
+/** Where a pull request stands on GitHub, as its pill is coloured. */
+export const PULL_REQUEST_STATE = {
+  OPEN: "open",
+  DRAFT: "draft",
+  MERGED: "merged",
+  CLOSED: "closed",
+} as const;
+
+export type PullRequestState = (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE];
+
+/** The checks on a pull request's head, read as one word: still running, every one passed, one failed, or none run at all. */
+export const CHECK_SUMMARY = {
+  PENDING: "pending",
+  PASSING: "passing",
+  FAILING: "failing",
+  NONE: "none",
+} as const;
+
+export type CheckSummary = (typeof CHECK_SUMMARY)[keyof typeof CHECK_SUMMARY];
+
+/** The pull request an agent opened, as GitHub holds it now: what its pill and its summary row say. */
+export const codingAgentPullRequestSchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  /** The pull request's own page on GitHub. */
+  url: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+  additions: countedNumber,
+  deletions: countedNumber,
+  changedFiles: countedNumber,
+});
+
+export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
+
+/**
+ * What a rollout agent last reported of itself in its newest turn: the
+ * kind, the pull request it names, where it names one, its own words, the
+ * answers a question offered, and the epoch milliseconds Luke took it. A
+ * question, a block, or a conflict stands here while the agent waits on
+ * Luke, and the answer, which reaches the agent as its next turn, takes it
+ * away.
+ */
+export const codingAgentLastReportSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(WORKER_REPORT_KIND)),
+  pullRequest: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  text: reportTextSchema,
+  options: EffectSchema.optionalKey(reportOptionsSchema),
+  at: countedNumber,
+});
+
+export type CodingAgentLastReport = typeof codingAgentLastReportSchema.Type;
+
 /** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, which turn that is, and when that run began. */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -466,6 +522,19 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   ),
   /** What the agent does for the plan's rollout; absent for an agent started outside one. */
   role: EffectSchema.optionalKey(rolloutRoleSchema),
+  /**
+   * What the agent last reported of itself in its newest turn. Absent before
+   * a report, once its next turn starts, for an agent outside a rollout, and
+   * from a service older than it.
+   */
+  lastReport: EffectSchema.optionalKey(codingAgentLastReportSchema),
+  /**
+   * The pull request the agent last published, as GitHub last answered it
+   * to any read of the agent's, carried by the plan's list alone so a view
+   * of every agent at once asks GitHub nothing. Absent where none was
+   * read, from any other answer, and from a service older than it.
+   */
+  published: EffectSchema.optionalKey(codingAgentPullRequestSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
@@ -477,41 +546,6 @@ export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentS
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(codingAgentSummarySchema),
 });
-
-/** Where a pull request stands on GitHub, as its pill is coloured. */
-export const PULL_REQUEST_STATE = {
-  OPEN: "open",
-  DRAFT: "draft",
-  MERGED: "merged",
-  CLOSED: "closed",
-} as const;
-
-export type PullRequestState = (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE];
-
-/** The checks on a pull request's head, read as one word: still running, every one passed, one failed, or none run at all. */
-export const CHECK_SUMMARY = {
-  PENDING: "pending",
-  PASSING: "passing",
-  FAILING: "failing",
-  NONE: "none",
-} as const;
-
-export type CheckSummary = (typeof CHECK_SUMMARY)[keyof typeof CHECK_SUMMARY];
-
-/** The pull request an agent opened, as GitHub holds it now: what its pill and its summary row say. */
-export const codingAgentPullRequestSchema = EffectSchema.Struct({
-  number: countedNumber,
-  title: EffectSchema.String,
-  /** The pull request's own page on GitHub. */
-  url: EffectSchema.String,
-  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
-  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
-  additions: countedNumber,
-  deletions: countedNumber,
-  changedFiles: countedNumber,
-});
-
-export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
 
 /**
  * What an agent published (GET): the repository it works in as `owner/name`,

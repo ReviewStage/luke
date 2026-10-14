@@ -511,6 +511,44 @@ panel.
 - **Privacy.** Every word is the agent's or the plan's, so the tab carries
   `ph-no-capture`, as the Transcript tab does.
 
+### Stack tab
+
+A plan whose rollout names more than one pull request has a Stack tab,
+second in the column after the plan's, anchored as the plan's is
+(`planning/stack-tab.tsx`, `planning/stack-model.ts`). It draws the rollout
+as one stack rather than a row of agent tabs: a column per depth from main,
+the pull requests on main first and each on an earlier one a column past
+its base, siblings on one base standing together. Each card says the
+position and its title (`#2 Invite and accept`), its base (`base: main` or
+`on #1`), and where it stands in the words of the planning model's own
+reading of the rollout: waiting on an earlier position whose pull request
+is not yet pushed, ready, working, waiting on you, blocked, open, green,
+checks failing, merged, closed, finished, failed, or stopped. A card with a
+worker wears the worker's glyph and model and the chip of the pull request
+it published, which opens it on GitHub, and under the card the question the
+worker asked, with the answers it offered, or the block it hit, until its
+next turn starts. A card's worker is the newest agent at its position still
+holding it, else the newest at all, so a failed worker reads failed until
+another starts there.
+
+Above the cards stands the rollout's keeper, the one coding agent at no
+position that links each chain as a GitHub stack, restacks it after a push
+or a merge below, and merges on the developer's word: its glyph, its model,
+and where it stands (working, waiting on you, blocked, idle, failed, or
+stopped), a press choosing its tab. With no keeper started nothing stands
+there, and the keeper is never a card. A press of a card with a worker
+chooses the worker's tab; a card with none offers no press. The tab acts on nothing itself: Stop is on the worker's
+tab, and merges and answers are said to Luke, who runs the rollout. The
+cards are the plan's agents list, which carries each agent's pull request
+as its row last kept it (`published`), so the tab asks GitHub nothing; it
+asks the list to be read again every fifteen seconds while a worker is at
+work, the pace an agent's tab rereads its pull request at, and once as any
+worker's or the keeper's status changes. Every word is the plan's or a worker's, so the tab
+carries `ph-no-capture`. `./scripts/evidence.sh` captures it
+(`app-smoke-planning-stack.png`, from `--profile planning-stack`) over the
+fixture plan's three-PR rollout: one open, one working, and one waiting on
+its worker's question, with its keeper at work.
+
 ### Settings › Coding agents
 
 The model and effort a click on Start runs an agent on are the account's
@@ -1374,8 +1412,9 @@ changes when a check is run, not when one is planned.
   `--profile planning-board`), on its transcript mid-call
   (`app-smoke-planning-transcript.png`, from
   `--profile planning-transcript`), on its Work tab mid-call
-  (`app-smoke-planning-work.png`, from `--profile planning-work`),
-  and over
+  (`app-smoke-planning-work.png`, from `--profile planning-work`), on its
+  Stack tab (`app-smoke-planning-stack.png`, from
+  `--profile planning-stack`), and over
   the synthetic plan list with none open (`app-smoke-expanded.png`, the
   window opening on Plans), but neither
   capture has been taken yet.

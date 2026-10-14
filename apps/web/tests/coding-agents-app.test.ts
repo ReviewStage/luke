@@ -9,6 +9,8 @@ import {
   createCodingAgent,
   listCodingAgents,
   readCodingAgent,
+  recordCodingAgentPublished,
+  recordCodingAgentReport,
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
@@ -20,11 +22,12 @@ import {
 } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
-import { conversations } from "@sidecar/database/schemas/storage";
+import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -33,6 +36,7 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  PULL_REQUEST_STATE,
   ROLLOUT_ROLE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -46,7 +50,8 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { ROLLOUT_BASE, type Rollout, type RolloutItem } from "@sidecar/hosted/plan-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { WORKER_REPORT_KIND } from "@sidecar/hosted/rollout-wire";
+import { TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
   Clock,
@@ -79,8 +84,10 @@ import {
   userMetadataOf,
 } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { LINK_OUTCOME, linkInstallation } from "../server/hosted/github-installations";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -513,6 +520,48 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             [1, ROLLOUT_ROLE.BUILDER],
             [undefined, undefined],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "the list carries the pull request each agent last published as its row kept it, and an agent that published none carries none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const plain = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        const published = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        const pullRequest = {
+          number: 412,
+          title: "Pending memberships",
+          url: "https://github.com/reviewstage/luke/pull/412",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 40,
+          deletions: 2,
+          changedFiles: 3,
+        } as const;
+        yield* recordCodingAgentPublished(owner, published.agent.id, pullRequest);
+
+        const listed = yield* ask(request(PLAN_AGENTS, owner, { method: "GET", id: plan.id }));
+        assert.deepEqual(
+          new Map(
+            readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).agents.map(
+              (each) => [each.id, each.published],
+            ),
+          ),
+          new Map([
+            [plain.agent.id, undefined],
+            [published.agent.id, pullRequest],
+          ]),
         );
       }),
   );
@@ -1449,6 +1498,60 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             }),
           ),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a worker's standing question reaches its summary in the list with the answers it offered, and an agent with no report carries none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const plain = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, plain);
+        const worker = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            planId: plan.id,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: RELAY_FULL_NAME,
+            planSnapshot: SNAPSHOT,
+            task: null,
+            position: 1,
+          }),
+        );
+        const question = {
+          kind: WORKER_REPORT_KIND.QUESTION,
+          text: "Should an expired invite be resent or refused?",
+          options: ["Resend", "Refuse"],
+          at: 1_800_000_000_000,
+        } as const;
+        // The report stands for the turn that made it, which is the worker's newest.
+        const [running] = yield* Database.use((db) =>
+          db
+            .insert(turns)
+            .values({
+              userId: owner,
+              conversationId: worker.agent.conversationId,
+              origin: TURN_ORIGIN.TYPED,
+              status: TURN_STATUS.RUNNING,
+              queuedAt: new Date(question.at),
+            })
+            .returning({ id: turns.id }),
+        );
+        assert.ok(running !== undefined);
+        yield* recordCodingAgentReport(owner, worker.agent.id, {
+          report: question,
+          turnId: running.id,
+        });
+
+        const listed = yield* ask(request(PLAN_AGENTS, owner, { method: "GET", id: plan.id }));
+        assert.deepEqual(
+          readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).agents.map(
+            (each) => each.lastReport,
+          ),
+          [question, undefined],
         );
       }),
   );
