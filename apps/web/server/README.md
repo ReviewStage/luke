@@ -952,8 +952,9 @@ Every agent Luke runs — the planning assistant, the coding agent, and each
 one's declared worker — can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists, the
 ones that write and the ones that answer a credential among them (`AGENTS.md`'s
-carve-out for integrations), and no approval step: GitHub
-(`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
+carve-out for integrations), and no approval step of Luke's: Executor
+(`https://mcp.executor.sh/mcp`, the apps the developer set up in Executor),
+GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
@@ -963,7 +964,14 @@ Supabase (`https://mcp.supabase.com/mcp`), Vercel (`https://mcp.vercel.com`),
 and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
 grant can do is still the provider's to bound: the scopes its connector asks
 for, and the boxes the developer leaves ticked on the provider's own consent
-page. A connection belongs to the account, so it reaches every plan and
+page. Executor bounds it further by its own policy on each app's tools: a
+call an app holds for approval, or that needs input, answers the agent with
+the question and a request id, at the plain `/mcp`, its default `model`
+elicitation mode, and the agent asks the developer and calls Executor's
+`resume` with their answer. Its `native` mode would ask over an MCP
+elicitation instead, which eve's client never answers, so Executor's
+connection stays on the plain URL, and the mode is fixed in the grant
+whatever URL a client later opens it at (https://executor.sh/docs/mcp). A connection belongs to the account, so it reaches every plan and
 project the account has. `server/hosted/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, the one naming
 the accounts it is offered to, its MCP server
@@ -1092,6 +1100,7 @@ project's directory:
 
 ```
 vercel link
+vercel connect create mcp.executor.sh --name executor          # Executor; corrected below
 vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
@@ -1157,6 +1166,28 @@ rm ~/neon-client.json ~/neon.json
 vercel connect attach <connector-uid> --yes
 ```
 
+**Executor's connector.** Executor's authorization server
+(`https://executor.sh/.well-known/oauth-authorization-server/api/auth`) has
+the issuer `https://executor.sh/api/auth` and its endpoints on
+`app.executor.sh`, publishes no client ID metadata document support, and
+lists `none` among its token endpoint auth methods. So, as for Granola, a
+public client is registered by hand at its registration endpoint and the
+connector is PATCHed to it, with the two scopes the server's challenge names
+(`mcp` and `offline_access`, the latter for a refresh token) and the RFC
+8707 resource its protected-resource document answers
+(`https://mcp.executor.sh/mcp`, the path included), pinned rather than left
+to what Connect derives from the host it was created by, as Y Combinator's
+is. Each grant belongs to the one Executor organization the developer picks
+on its consent page.
+
+```
+(umask 077; curl -s https://app.executor.sh/api/auth/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","scope":"mcp offline_access"}' > ~/executor-client.json)
+jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256",defaultResource:"https://mcp.executor.sh/mcp",userAuthorization:{enabled:true,scopes:["mcp","offline_access"]}}}' ~/executor-client.json > ~/executor-patch.json
+(umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/executor-before.json)   # the backup
+vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/executor-patch.json
+rm ~/executor-client.json ~/executor-patch.json
+```
+
 **Granola's, PostHog's, Supabase's, and Y Combinator's connectors.** Each
 is created as above and then corrected in place, its UID unchanged, because
 the client Connect registers for it fails at the provider:
@@ -1209,7 +1240,7 @@ organization to grant before it returns, and a sign-in that waited there
 came back to Connect as "Callback state not found or expired"; signing in
 again straight through connects.
 
-Then set the provider's variable (`GRANOLA_CONNECTOR_UID`,
+Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
@@ -1305,7 +1336,7 @@ connector it was made under.
 its own workspace alone, so production offers Slack only to the accounts
 that workspace's people sign in with. Each provider has an optional
 allowlist variable beside its connector's (`<PROVIDER>_ALLOWED_ACCOUNTS`:
-`GRANOLA_ALLOWED_ACCOUNTS`, `LINEAR_ALLOWED_ACCOUNTS`,
+`EXECUTOR_ALLOWED_ACCOUNTS`, `GRANOLA_ALLOWED_ACCOUNTS`, `LINEAR_ALLOWED_ACCOUNTS`,
 `MERCURY_ALLOWED_ACCOUNTS`, `NEON_ALLOWED_ACCOUNTS`,
 `NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`,
 `SENTRY_ALLOWED_ACCOUNTS`, `SLACK_ALLOWED_ACCOUNTS`,

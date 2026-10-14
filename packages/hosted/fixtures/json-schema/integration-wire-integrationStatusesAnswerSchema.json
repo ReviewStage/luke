@@ -4,6 +4,16 @@
     "integrations": {
       "type": "object",
       "properties": {
+        "executor": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
+        },
         "github": {
           "type": "string",
           "enum": [
@@ -126,6 +136,7 @@
         }
       },
       "required": [
+        "executor",
         "github",
         "granola",
         "linear",

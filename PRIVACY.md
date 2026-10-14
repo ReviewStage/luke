@@ -560,6 +560,29 @@ asks Vercel Connect to revoke the grant; what agents already changed there,
 and the record of it, stays, and a grant Vercel Connect could not revoke
 stays until you remove Luke in that service's own settings.
 
+**Executor, if you connect it.** Executor (executor.sh) is a gateway to the
+apps you set up in it: other services' MCP servers and APIs, skills, and
+automations. Connecting it signs you in to Executor in your browser through
+Vercel Connect, for the one Executor organization you pick there, and Vercel
+Connect stores its token for your account, encrypted, and renews it. Our
+service handles the token as it does Linear's, and keeps the same record of
+your connection. The credentials of the apps you set up in Executor stay in
+Executor, which attaches them to each call itself; Luke never receives them.
+While you are connected, the agents, as for Linear, can do whatever your
+Executor grant allows, without asking you first: read the apps' skills, search
+their tools, and call them or run a script over them, writes included. A call
+that Executor's own policy holds for your approval, or that needs your input,
+comes back to the agent as a question, which it puts to you, and the call goes
+on only with your answer. What an app answers, which can include a credential
+that app hands out, goes to the model that made the call, and each call, with
+its input and everything Executor answered, is written to the plan's
+conversation or the agent's transcript like any other tool call. Disconnecting
+and deleting your account work as they do for Linear: Luke stops using it from
+each agent's next step, removes the connection's record, and asks Vercel
+Connect to revoke the grant; what agents already changed through Executor, and
+the record of it, stays, and a grant Vercel Connect could not revoke stays
+until you revoke it in Executor's own settings.
+
 **GitHub, if you signed in with GitHub.** GitHub needs no connecting of its
 own: while your GitHub sign-in stands, Luke's planning model, its workers, and
 every coding agent and its workers, as for Linear, can do whatever the Luke
@@ -780,6 +803,10 @@ only when you press Send.
 - GitHub's MCP server, if you signed in with GitHub: our service sends each
   GitHub call, with its input and your Luke GitHub App token, to GitHub's MCP
   server, which keeps it under GitHub's own policy.
+- Vercel Connect and Executor, if you connect Executor: Vercel Connect keeps
+  Executor's token, and our service sends each Executor call, with its input,
+  to Executor's MCP server, which keeps it under Executor's own policy and
+  passes it on to the app it names.
 - Vercel Connect and Granola, Mercury, Neon, PostHog, Supabase, Vercel, or Y
   Combinator, for each you connect: Vercel Connect keeps its token, and our
   service sends each call, with its input, to that service's MCP server,
