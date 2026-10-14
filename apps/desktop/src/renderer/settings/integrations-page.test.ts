@@ -145,7 +145,9 @@ function answerOf(request: Act): ActOutcome {
             status: DONE,
             value: {
               integrations: serviceStatuses(),
-              ...(signInFailures.length > 0 ? { signInFailures: signInFailures.splice(0) } : {}),
+              ...(signInFailures.length > 0
+                ? { signInFailures: signInFailures.splice(0) }
+                : undefined),
             },
           };
     case ACT_KIND.INTEGRATIONS_CONNECT:
