@@ -9,7 +9,7 @@ import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { type InboxBoardView, NEEDS_YOU } from "../planning/inbox-model";
-import { sameTab } from "../planning/tab-strip-model";
+import { sameTab, TAB_WORDS } from "../planning/tab-strip-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -19,7 +19,7 @@ import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
 import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
-import { AGENTS_SECTION, agentEntries, INBOX_LABEL, INBOX_ROW, inboxEntry } from "./main-tabs";
+import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
   ADD_SECTION,
   type ChangesOffer,
@@ -299,7 +299,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="">
       <CardHead
-        name={INBOX_LABEL}
+        name={TAB_WORDS.INBOX}
         corner={
           waiting === 0
             ? NEEDS_YOU.NONE
@@ -416,9 +416,8 @@ function summarySections(
       files,
       changes,
       pages: plans.pages ?? [],
-      standing: true,
     }),
-    ...agentEntries(mainTabs, agents, true),
+    ...agentEntries(mainTabs, agents),
   ];
   const paths = files.map((ref) => ref.path);
   const entries = withCards(rows, { plans, inbox, held, workers, files: paths, changes });

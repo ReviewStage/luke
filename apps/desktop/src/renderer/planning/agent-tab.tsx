@@ -9,8 +9,8 @@ import {
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel, ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
-import { CodingAgentsIcon, DocumentIcon } from "@sidecar/panel";
+import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import { DocumentIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
@@ -28,10 +28,8 @@ import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
-import { HarnessMark } from "../harness-marks";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
-import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import type { AgentServersControl } from "./agent-servers";
@@ -41,7 +39,6 @@ import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
 import {
   AGENT_PART,
   type AgentPart,
-  agentGlyphState,
   agentLines,
   agentRows,
   agentStillWriting,
@@ -53,7 +50,6 @@ import {
   endLineReason,
   messageWords,
   newestTodos,
-  providerOf,
   settledPlanEdits,
   showsPublishedRow,
   WORKING_PHASE_WORDS,
@@ -562,60 +558,6 @@ export function AgentMessage({
       {words === "" || said ? null : <CopyMessageAction words={words} />}
     </Message>
   );
-}
-
-/**
- * A coding agent's mark at rest, wherever one is drawn: the mark of the
- * harness its model runs in, or the Coding agents glyph where Luke knows no
- * harness for it. A row that says where the agent stands wears it inside
- * `AgentGlyph`; one that leaves that to the agent's tab, as the "+" does,
- * or knows nothing of where it stands, as a revision's author, wears it bare.
- */
-export function AgentMark({ provider }: { provider: ModelProvider | undefined }) {
-  return provider === undefined ? <CodingAgentsIcon /> : <HarnessMark provider={provider} />;
-}
-
-/**
- * A subagent's mark: the mark of the harness its model runs in, as its row
- * in a transcript wears it, or the worker's robot where its model is not
- * known. Note that the harness is read from the model's id, as an agent's
- * is, so the mark stands before the catalog is read.
- */
-export function SubagentMark({ model }: { model: string | undefined }) {
-  const provider = model === undefined ? undefined : providerOf(model);
-  return provider === undefined ? <BotIcon /> : <HarnessMark provider={provider} />;
-}
-
-/**
- * An agent's glyph wearing where it stands: its mark (`AgentMark`) at its
- * full size, giving way to the working mark while the agent may still write
- * (`state-glyph.tsx`). A failed agent keeps its mark, and its row or tab
- * says the failure at its end (`agentEndMark`). An agent this window does
- * not list, one another Mac started, wears the mark of no known harness at
- * rest, so a row naming it keeps the glyph's column.
- */
-export function AgentGlyph({
-  agent,
-}: {
-  agent: Pick<CodingAgentSummary, "model" | "status"> | undefined;
-}) {
-  if (agent === undefined) {
-    return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
-  }
-  return (
-    <StateGlyph
-      glyph={<AgentMark provider={providerOf(agent.model)} />}
-      state={agentGlyphState(agent.status)}
-    />
-  );
-}
-
-/** The mark at the end of an agent's row or tab: the failed mark once its turn failed, nothing otherwise (`stateEndMark`). */
-export function agentEndMark(
-  agent: Pick<CodingAgentSummary, "status">,
-  hinted: boolean,
-): React.JSX.Element | undefined {
-  return stateEndMark(agentGlyphState(agent.status), hinted);
 }
 
 /** The transcript as the tab draws it: the messages, or what stands in their place. */

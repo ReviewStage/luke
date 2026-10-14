@@ -39,7 +39,7 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
 import { DesktopHome } from "./desktop-home";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
-import { PlanCard } from "./plan-card";
+import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { changesTabOf, planCards, SidePanel, useSidePanelDrawing } from "./side-panel";
@@ -197,16 +197,7 @@ function PlanInboxTab({
           agents={plans.agents}
           doors={{
             onOpenPlan,
-            planCard: (
-              <PlanCard
-                plan={plan}
-                models={plans.agents.models ?? []}
-                pictures={plans.repositories.pictures}
-                now={now}
-                onOpenGitHub={plans.repositories.openGitHub}
-                onShowAgent={onOpenAgent}
-              />
-            ),
+            planCard: planCardOf(plans, plan, now),
             onOpenAgent,
             openLink,
             code,
@@ -253,6 +244,8 @@ function PlanDocument({
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
   const summaryCard = useId();
+  // The clock the plan's tab's card counts its update back from.
+  const now = useMinute();
   // The column the pointer or the focus last went into holds the keys. Note
   // that it is heard on the plan's area as it bubbles, because the columns
   // are no controls of their own to hear it.
@@ -330,6 +323,8 @@ function PlanDocument({
   const { plan } = region;
   const { mainTabs, sidePanel, agents } = plans;
   const archived = plan.archivedAt !== undefined;
+  // The plan as the list names it, its agents and pull requests among it, which its card reads.
+  const listed = [...plans.plans, ...plans.archived].find((each) => each.id === plan.id) ?? plan;
   const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
@@ -415,6 +410,7 @@ function PlanDocument({
           heading={
             <MainTabStrip
               plan={plan}
+              planCard={planCardOf(plans, listed, now)}
               main={mainTabs}
               agents={agents}
               unread={plans.unreadTabs}
@@ -501,7 +497,7 @@ function PlanDocument({
             {tab === MAIN_TAB.INBOX ? (
               <PlanInboxTab
                 plans={plans}
-                plan={plans.plans.find((each) => each.id === plan.id) ?? plan}
+                plan={listed}
                 inbox={inbox}
                 onOpenPlan={() => mainTabs.onChoose(MAIN_TAB.PLAN)}
                 onOpenAgent={(agent) => mainTabs.onChoose({ agent })}

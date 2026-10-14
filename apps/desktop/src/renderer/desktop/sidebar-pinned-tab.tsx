@@ -5,9 +5,11 @@ import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { shownFiles } from "../planning/code-pane-model";
+import { TAB_KIND, type TabSubject, tabLook } from "../planning/tab-look";
 import { isAgentTab, isChangesTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
 import type { PullRequestReader } from "../planning/use-agent-pull-request";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { PinnedTab } from "../planning/use-side-panel";
 import { Tooltip } from "../tooltip";
@@ -15,7 +17,6 @@ import { useClipped } from "../use-clipped";
 import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { CardDetail, PullRequestLine, RepositoryDetail } from "./plan-card";
-import { pinnedTabIcon } from "./side-panel";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 
 /**
@@ -62,6 +63,23 @@ function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
   }
   if (!isFileTab(tab) || plans.shownCode === undefined) return false;
   return !shownFiles(plans.shownCode).some((ref) => ref.path === tab.file);
+}
+
+/**
+ * What a pin's glyph is drawn from, as its tab's look (`tab-look.tsx`): its
+ * kind, a file's path, or an agent's as its tab wears it, where it stands
+ * included, wherever the window last read the agent (`agent`), and
+ * otherwise at rest in the harness it ran in when it was pinned.
+ */
+function pinSubject(pin: PinnedTab, agent: PlanAgentLine | undefined): TabSubject {
+  const { tab } = pin;
+  if (isAgentTab(tab)) {
+    const pinned = pin.model === undefined ? undefined : { model: pin.model };
+    return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
+  }
+  if (tab === MAIN_TAB.INBOX) return { kind: TAB_KIND.INBOX };
+  if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES, agentName: undefined };
+  return isFileTab(tab) ? { kind: TAB_KIND.FILE, path: tab.file } : { kind: TAB_KIND.PANEL, tab };
 }
 
 /** The agent a pin of an agent's tab or of its Changes is of; none for any other pin. */
@@ -184,7 +202,7 @@ function PinnedTabCard({
   const { openGitHub, pictures } = plans.repositories;
   return (
     <HoverCard data-pinned-tab-card="">
-      <CardHead glyph={pinnedTabIcon(pin, agent)} name={pin.label} />
+      <CardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
       <div className="plan-card-rows">
         <CardDetail glyph={<DocumentIcon />} label={plan.name} onPress={onOpenPlan} />
         {repository === null ? null : (
@@ -276,7 +294,7 @@ export function SidebarPinnedTab({
           onContextMenu={showMenu}
         >
           <span className="sidebar-plan-line">
-            <span className="sidebar-pinned-tab-glyph">{pinnedTabIcon(pin, agent)}</span>
+            <span className="sidebar-pinned-tab-glyph">{tabLook(pinSubject(pin, agent)).icon}</span>
             <span ref={words} className="sidebar-pinned-tab-name" data-overflow={String(clipped)}>
               {pin.label}
             </span>

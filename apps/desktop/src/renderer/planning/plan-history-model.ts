@@ -7,6 +7,7 @@ import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
 import { type WordChange, wordChanges } from "./plan-diff";
 import { dayAndTimeText } from "./plan-time";
+import { TAB_WORDS } from "./tab-strip-model";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
@@ -111,7 +112,7 @@ export function revisionAuthorOf(
       const agent = agents.find((each) => each.id === line.agentId);
       return {
         kind: REVISION_AUTHOR.AGENT,
-        title: lastEdit.label ?? "A coding agent",
+        title: lastEdit.label ?? TAB_WORDS.CODING_AGENT,
         provider: agent === undefined ? undefined : providerOf(agent.model),
       };
     }

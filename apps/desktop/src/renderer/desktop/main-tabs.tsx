@@ -5,17 +5,16 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { DocumentIcon, PlusIcon } from "@sidecar/panel";
-import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { agentCardReading } from "../planning/agent-ref";
-import { AgentGlyph, AgentMark, AgentTab, agentEndMark } from "../planning/agent-tab";
+import { AgentTab } from "../planning/agent-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
-import { agentTabLabel, providerOf } from "../planning/coding-agent-model";
-import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
+import { agentTabLabel } from "../planning/coding-agent-model";
+import { DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
+import { agentEndMark, TAB_KIND, tabLook } from "../planning/tab-look";
 import {
   inPlanOrder,
   isDraftTab,
@@ -60,8 +59,9 @@ import { TabStrip } from "./tab-strip";
  * closed by ×, Delete, ⌘W, or the menu's Close and Close others, each tab's
  * menu on a right-click (`strip-tabs.tsx`).
  *
- * The plan's tab stands first, named for the plan, with its repository in
- * its hint. It is anchored there: it never closes, never moves, and Close
+ * The plan's tab stands first, named for the plan, and hangs the plan's
+ * card, as its sidebar row does (`plan-card.tsx`): its repository, its
+ * agents, and its pull requests. It is anchored there: it never closes, never moves, and Close
  * others on it closes every other tab. A press chooses it; its menu
  * renames the plan in place, as the ⋯ menu does. While it is the column's
  * only tab it is quiet, drawing no fill at rest, as a lone tab need not be
@@ -84,9 +84,10 @@ import { TabStrip } from "./tab-strip";
  * sidebar, Rename, which turns the tab into its name's field, and its
  * transcript's two copies. Closing it closes only the view: the agent goes
  * on as it was, and the "+" opens it again. A tab an agent ended on while no
- * one was looking at it reads in semibold until shown. The draft's tab
- * stands after the agents until its first message starts the agent, and
- * closing it lets the draft go.
+ * one was looking at it reads in semibold until shown. The draft's tab,
+ * named New coding agent as the "+" row that opens it is, stands after the
+ * agents until its first message starts the agent, and closing it lets the
+ * draft go. Every tab wears its kind's look (`tab-look.tsx`).
  *
  * The "+" after the last tab drops the shared searchable menu: New coding
  * agent, which opens a draft agent's tab, or chooses the plan's draft where
@@ -106,9 +107,6 @@ const NEW_AGENT_ROW = "new-coding-agent";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
-
-/** What the plan's Inbox tab is called. */
-export const INBOX_LABEL = "Inbox";
 
 /** The row that opens the plan's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
@@ -246,9 +244,8 @@ function agentTabs(input: {
       tab,
       agent,
       look: look(tab, {
-        icon: <AgentGlyph agent={agent} />,
+        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         endMark: agentEndMark(agent, false),
-        label,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -262,7 +259,7 @@ function agentTabs(input: {
       : [
           {
             tab: { draft },
-            look: look({ draft }, { icon: <PlusIcon />, label: DRAFT_TAB_LABEL }),
+            look: look({ draft }, tabLook({ kind: TAB_KIND.DRAFT })),
             close: () => {
               main.onClose({ draft });
               agents.onDiscardDraft(draft);
@@ -273,32 +270,21 @@ function agentTabs(input: {
 }
 
 /**
- * Each of the plan's agents in the order started, as the "+" menu offers it
- * and the plan's summary lists it (`plan-summary.tsx`), wearing the mark of
- * its harness. In the "+" the mark says nothing of where the agent stands,
- * which its tab does; the summary has no tab beside it to say it, so there
- * the mark wears where it stands, and a failure at its end, as its tab does
- * (`standing`).
- * Picking an agent whose tab is open chooses that tab rather than opening
- * another, as a browser's tab search does.
+ * Each of the plan's agents in the order started, as the "+" menu offers it,
+ * the plan's summary lists it (`plan-summary.tsx`), and ⌘K finds it, in its
+ * tab's look: its harness's mark wearing where it stands, and, where the
+ * row draws one, a failure at its end, as its tab does. Picking an agent
+ * whose tab is open chooses that tab rather than opening another, as a
+ * browser's tab search does.
  */
-export function agentEntries(
-  main: MainTabsControl,
-  agents: CodingAgentsControl,
-  standing: boolean,
-): AddEntry[] {
+export function agentEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   return (agents.agents ?? []).map((agent) => ({
     row: {
       id: agent.id,
-      label: agentTabLabel(agent, agents.models),
-      icon: standing ? (
-        <AgentGlyph agent={agent} />
-      ) : (
-        <AgentMark provider={providerOf(agent.model)} />
-      ),
+      ...tabLook({ kind: TAB_KIND.AGENT, name: agentTabLabel(agent, agents.models), agent }),
       section: AGENTS_SECTION,
     },
-    endMark: standing ? agentEndMark(agent, true) : undefined,
+    endMark: agentEndMark(agent, true),
     onPick: () => main.onChoose({ agent: agent.id }),
     agent,
   }));
@@ -311,7 +297,7 @@ export function agentEntries(
  * panel's kinds.
  */
 export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
-  const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon /> };
+  const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
   const endMark =
     waiting === 0 ? undefined : (
       <span className="inbox-row-count">
@@ -348,15 +334,14 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
   const newAgent: AddEntry = {
     row: {
       id: NEW_AGENT_ROW,
-      label: "New coding agent",
-      icon: <PlusIcon />,
+      ...tabLook({ kind: TAB_KIND.DRAFT }),
       // Start's reason stands exactly while Start could not run on the open plan.
       disabled: start.busy ? NEW_AGENT_STARTING : start.reason,
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
-  const agentRows = agentEntries(main, agents, false);
+  const agentRows = agentEntries(main, agents);
   return [...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 
@@ -368,6 +353,7 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
  */
 export function MainTabStrip({
   plan,
+  planCard,
   main,
   agents,
   unread,
@@ -379,6 +365,8 @@ export function MainTabStrip({
   inbox,
 }: {
   plan: PlanSummary;
+  /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
+  planCard: React.ReactNode;
   main: MainTabsControl;
   agents: CodingAgentsControl;
   /** The agents that ended while no one was looking, each in semibold until shown. */
@@ -409,8 +397,7 @@ export function MainTabStrip({
         {
           tab: MAIN_TAB.INBOX,
           look: {
-            icon: <InboxIcon />,
-            label: INBOX_LABEL,
+            ...tabLook({ kind: TAB_KIND.INBOX }),
             detail: inbox === 0 ? undefined : String(inbox),
             selected: main.tab === MAIN_TAB.INBOX,
             onSelect: () => main.onChoose(MAIN_TAB.INBOX),
@@ -429,12 +416,11 @@ export function MainTabStrip({
   const planTab: DrawnTab = {
     tab: MAIN_TAB.PLAN,
     look: {
-      icon: <DocumentIcon />,
-      label: plan.name,
+      ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
       selected: main.tab === MAIN_TAB.PLAN,
       quiet: own.length === 0,
       anchored: true,
-      tooltip: plan.repository ?? undefined,
+      card: planCard,
       onSelect: () => main.onChoose(MAIN_TAB.PLAN),
     },
     close: undefined,
@@ -529,8 +515,8 @@ export function MainTabStrip({
 /** What an agent's or the draft's tab is called to a reader of the column. */
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (tab === MAIN_TAB.PLAN) return undefined;
-  if (tab === MAIN_TAB.INBOX) return INBOX_LABEL;
-  if (isDraftTab(tab)) return DRAFT_TAB_LABEL;
+  if (tab === MAIN_TAB.INBOX) return tabLook({ kind: TAB_KIND.INBOX }).label;
+  if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
 }

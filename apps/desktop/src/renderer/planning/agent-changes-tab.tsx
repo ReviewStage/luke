@@ -20,13 +20,10 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
-import { AgentGlyph } from "./agent-tab";
 import {
-  CHANGES_LABEL,
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
-  changesLabelOf,
   DIFF_ROW,
   fileNotice,
   filePatch,
@@ -37,12 +34,13 @@ import {
 } from "./changes-model";
 import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
 import { fileName } from "./code-pane-model";
-import { agentStillWriting, agentTabLabel, pullRequestNumberLabel } from "./coding-agent-model";
+import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, useTreeSlide } from "./file-view";
 import { PullRequestMark } from "./pull-request-mark";
+import { AgentGlyph } from "./tab-look";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
@@ -256,12 +254,6 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
       )}
     </section>
   );
-}
-
-/** The Changes tab's name: its agent's own, after the word for what it shows. */
-export function changesTabLabel(agentId: string, control: CodingAgentsControl): string {
-  const agent = control.agents?.find((each) => each.id === agentId);
-  return agent === undefined ? CHANGES_LABEL : changesLabelOf(agentTabLabel(agent, control.models));
 }
 
 /**

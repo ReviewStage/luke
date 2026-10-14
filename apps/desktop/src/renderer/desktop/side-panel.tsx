@@ -10,15 +10,7 @@ import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PageLine } from "@sidecar/hosted/page-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/hosted/planning-view";
-import {
-  BoardIcon,
-  CallIcon,
-  CodeIcon,
-  CollapseIcon,
-  ExpandIcon,
-  SidePanelIcon,
-} from "@sidecar/panel";
-import { AppWindowIcon, FileDiffIcon, InboxIcon } from "lucide-react";
+import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -26,15 +18,9 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
-import { AgentChangesTab, ChangesCard, changesTabLabel } from "../planning/agent-changes-tab";
+import { AgentChangesTab, ChangesCard } from "../planning/agent-changes-tab";
 import { AgentCard, agentSubject } from "../planning/agent-ref";
-import {
-  AgentGlyph,
-  AgentMark,
-  AgentSubagentTab,
-  SubagentMark,
-  type TranscriptCards,
-} from "../planning/agent-tab";
+import { AgentSubagentTab, type TranscriptCards } from "../planning/agent-tab";
 import {
   AgentTabCard,
   type CardReading,
@@ -44,24 +30,22 @@ import {
   lastFinished,
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
-import { fileName, type ShownFile, shownFiles } from "../planning/code-pane-model";
+import { type ShownFile, shownFiles } from "../planning/code-pane-model";
 import {
   agentGlyphState,
   agentStateWords,
   agentTabLabel,
-  providerOf,
   pullRequestNumberLabel,
 } from "../planning/coding-agent-model";
 import { snippetOf } from "../planning/file-tab-model";
-import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
 import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
+import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
 import {
   type ChangesStripTab,
   inPlanOrder,
-  isAgentTab,
   isChangesTab,
   isFileTab,
   isPageTab,
@@ -81,7 +65,6 @@ import {
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { TranscriptReader } from "../planning/use-agent-transcript";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
-import { MAIN_TAB } from "../planning/use-main-tabs";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -90,9 +73,7 @@ import {
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
-  type PinnedTab,
   SIDE_PANEL_TAB,
-  SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
@@ -111,13 +92,7 @@ import {
 } from "../planning/work-model";
 import type { MenuRow } from "../searchable-menu";
 import { SpinnerRegion } from "../spinner";
-import {
-  GLYPH_STATE,
-  type GlyphState,
-  glyphStateWords,
-  StateGlyph,
-  stateEndMark,
-} from "../state-glyph";
+import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import { type MenuAction, MenuItem } from "./action-menu";
 import { paneTiming } from "./pane-motion";
@@ -198,12 +173,6 @@ function documentReserve(area: HTMLElement): number {
   return Number.isFinite(declared) ? declared : SIDE_PANEL_WIDTH.MIN;
 }
 
-/** Each kind's glyph, leading its tab, its row in the "+" menu, its pin in the sidebar (`pinnedTabIcon`), and its row in ⌘K. */
-export const TAB_ICON = {
-  [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
-  [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
-  [SIDE_PANEL_TAB.CALL]: <CallIcon />,
-} as const satisfies Record<FixedSidePanelTab, React.JSX.Element>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {
   NONE: "none",
@@ -312,39 +281,30 @@ function kindAction(
   tab: FixedSidePanelTab,
   onChoose: (tab: FixedSidePanelTab) => void,
 ): MenuAction {
-  return {
-    label: SIDE_PANEL_TAB_KIND[tab].label,
-    icon: TAB_ICON[tab],
-    onSelect: () => onChoose(tab),
-  };
+  return { ...tabLook({ kind: TAB_KIND.PANEL, tab }), onSelect: () => onChoose(tab) };
 }
 
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open. */
 function kindRow(tab: FixedSidePanelTab): MenuRow {
-  return {
-    id: tab,
-    label: SIDE_PANEL_TAB_KIND[tab].label,
-    icon: TAB_ICON[tab],
-  };
+  return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab }) };
 }
 
 /**
- * What the panel may open, as its "+" menu offers it and the plan's summary
- * lists it (`plan-summary.tsx`): the fixed kinds given, every one for the
- * "+" and those the plan has used for the summary; then, under Subagents,
- * each subagent the plan's work holds; then, under Files, each file Luke
- * showed on the plan, by name with its folder beside it. A subagent's row
- * wears its model's mark (`SubagentMark`), and where the worker stands only where
- * `standing` asks: the "+" leaves that to its tab, beside it, and the
- * summary has no tab beside it to say it. A file's row wears its type's
- * coloured icon, as the file tree draws it (`file-type-icon.tsx`), in the
- * "+" and the summary alike. Picking a row whose tab is open
- * chooses that tab rather than opening another, as a browser's tab search
- * does, so no row says it is open; a file not open opens on the newest
- * snippet of it. Then, under Changes, each agent's pull request
- * (`changesOffers`), by the agent's name with the pull request's number
- * beside it, which opens the agent's Changes tab. The plan's coding agents
- * are opened from the plan's column's own "+" (`main-tabs.tsx`).
+ * What the panel may open, as its "+" menu offers it, the plan's summary
+ * lists it (`plan-summary.tsx`), and ⌘K finds it: the fixed kinds given,
+ * every one for the "+" and those the plan has used for the summary; then,
+ * under Subagents, each subagent the plan's work holds; then, under Files,
+ * each file Luke showed on the plan, by name with its folder beside it.
+ * Each row wears its tab's own look (`tab-look.tsx`): a subagent its
+ * model's mark wearing where the worker stands, and a file its type's
+ * coloured icon, as the file tree draws it. Picking a row whose tab is
+ * open chooses that tab rather than opening another, as a browser's tab
+ * search does, so no row says it is open; a file not open opens on the
+ * newest snippet of it. Then, under Changes, each agent's pull request
+ * (`changesOffers`), named as its Changes tab is, with the pull request's
+ * number beside it, found by its title and number too, which opens the
+ * agent's Changes tab. The plan's coding agents are opened from the plan's
+ * column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
   panel: SidePanelControl;
@@ -355,9 +315,8 @@ export function panelEntries(input: {
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
   pages?: readonly PageLine[];
-  standing: boolean;
 }): AddEntry[] {
-  const { panel, workers, files, changes = [], pages = [], standing } = input;
+  const { panel, workers, files, changes = [], pages = [] } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind),
     onPick: () => panel.onChoose(kind),
@@ -365,15 +324,12 @@ export function panelEntries(input: {
   const subagentRows = workers.map((worker) => ({
     row: {
       id: worker.call.id,
-      label: worker.session?.title ?? workerJob(worker.call),
-      icon: standing ? (
-        <StateGlyph
-          glyph={<SubagentMark model={workerChoice(worker)?.model} />}
-          state={workerStanding(worker).state}
-        />
-      ) : (
-        <SubagentMark model={workerChoice(worker)?.model} />
-      ),
+      ...tabLook({
+        kind: TAB_KIND.SUBAGENT,
+        name: worker.session?.title ?? workerJob(worker.call),
+        model: workerChoice(worker)?.model,
+        state: workerStanding(worker).state,
+      }),
       section: ADD_SECTION.SUBAGENTS,
     },
     onPick: () => panel.onChoose({ subagent: worker.call.id }),
@@ -381,14 +337,13 @@ export function panelEntries(input: {
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
   const fileRows = files.map((ref, at) => {
-    const name = fileName(ref.path);
+    const look = tabLook({ kind: TAB_KIND.FILE, path: ref.path });
     const open = panel.files.some((file) => file.path === ref.path);
     return {
       row: {
         id: String(at),
-        label: name,
-        icon: <FileTypeIcon name={name} />,
-        detail: ref.path.slice(0, -name.length - 1) || undefined,
+        ...look,
+        detail: ref.path.slice(0, -look.label.length - 1) || undefined,
         terms: [ref.path],
         section: ADD_SECTION.FILES,
       },
@@ -397,22 +352,24 @@ export function panelEntries(input: {
   });
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the plan's summary.
-  const changesRows = changes.map(({ agentId, label, pullRequest }) => ({
-    row: {
-      id: pullRequest.url,
-      label,
-      icon: <FileDiffIcon />,
-      detail: pullRequestNumberLabel(pullRequest),
-      terms: [label, pullRequest.title, pullRequestNumberLabel(pullRequest)],
-      section: ADD_SECTION.CHANGES,
-    },
-    onPick: () => panel.onChoose({ changes: agentId }),
-  }));
+  const changesRows = changes.map(({ agentId, label, pullRequest }) => {
+    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label });
+    const number = pullRequestNumberLabel(pullRequest);
+    return {
+      row: {
+        id: pullRequest.url,
+        ...look,
+        detail: number,
+        terms: [look.label, pullRequest.title, number],
+        section: ADD_SECTION.CHANGES,
+      },
+      onPick: () => panel.onChoose({ changes: agentId }),
+    };
+  });
   const pageRows = pages.map((page) => ({
     row: {
       id: page.id,
-      label: page.title,
-      icon: <AppWindowIcon />,
+      ...tabLook({ kind: TAB_KIND.PAGE, title: page.title }),
       section: ADD_SECTION.PAGES,
     },
     onPick: () => panel.onChoose({ page: page.id }),
@@ -428,24 +385,11 @@ export function planWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/**
- * The glyph a tab's pin wears in the sidebar: its kind's, a file's, a
- * Changes tab's diff, the Inbox's tray, or an agent's as its tab wears it, where it stands included, wherever the
- * window last read the agent (`agent`), and otherwise the mark of the
- * harness it ran in when it was pinned.
- */
-export function pinnedTabIcon(
-  pin: PinnedTab,
-  agent: Pick<CodingAgentSummary, "model" | "status"> | undefined,
-): React.JSX.Element {
-  const { tab } = pin;
-  if (isAgentTab(tab)) {
-    if (agent !== undefined) return <AgentGlyph agent={agent} />;
-    return <AgentMark provider={pin.model === undefined ? undefined : providerOf(pin.model)} />;
-  }
-  if (tab === MAIN_TAB.INBOX) return <InboxIcon />;
-  if (isChangesTab(tab)) return <FileDiffIcon />;
-  return isFileTab(tab) ? <FileTypeIcon name={fileName(tab.file)} /> : TAB_ICON[tab];
+/** An agent's Changes tab's look, named for the agent as the plan's agents last read it. */
+function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
+  const agent = agents.agents?.find((each) => each.id === agentId);
+  const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return tabLook({ kind: TAB_KIND.CHANGES, agentName });
 }
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
@@ -491,10 +435,7 @@ function stripTabs(input: {
   });
   const fixed = panel.tabs.map((tab) => ({
     tab,
-    look: look(tab, {
-      icon: TAB_ICON[tab],
-      label: SIDE_PANEL_TAB_KIND[tab].label,
-    }),
+    look: look(tab, tabLook({ kind: TAB_KIND.PANEL, tab })),
     close: () => panel.onClose(tab),
   }));
   const subagentTabs = subagents.map((drawn) => {
@@ -522,9 +463,8 @@ function stripTabs(input: {
     return {
       tab,
       look: look(tab, {
-        icon: <StateGlyph glyph={<SubagentMark model={model} />} state={state} />,
+        ...tabLook({ kind: TAB_KIND.SUBAGENT, name: label, model, state }),
         endMark: stateEndMark(state, false),
-        label,
         card: <AgentTabCard name={label} untitled={untitled} models={models} read={readCard} />,
       }),
       close: () => panel.onClose(tab),
@@ -533,10 +473,7 @@ function stripTabs(input: {
   });
   const fileTabs = files.map(({ path }) => ({
     tab: { file: path },
-    look: look(
-      { file: path },
-      { icon: <FileTypeIcon name={fileName(path)} />, label: fileName(path), tooltip: path },
-    ),
+    look: look({ file: path }, { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path }),
     close: () => panel.onClose({ file: path }),
   }));
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
@@ -553,17 +490,13 @@ function stripTabs(input: {
       );
     return {
       tab,
-      look: look(tab, {
-        icon: <FileDiffIcon />,
-        label: changesTabLabel(tab.changes, agents),
-        card,
-      }),
+      look: look(tab, { ...changesLook(tab.changes, agents), card }),
       close: () => panel.onClose(tab),
     };
   });
   const pageTabs = pages.map(({ tab, line }) => ({
     tab,
-    look: look(tab, { icon: <AppWindowIcon />, label: line.title }),
+    look: look(tab, tabLook({ kind: TAB_KIND.PAGE, title: line.title })),
     close: () => panel.onClose(tab),
   }));
   return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs];
@@ -698,7 +631,6 @@ function PanelTabs({
           files: shownFiles,
           changes: changesOffers(agents, changes),
           pages: offeredPages,
-          standing: false,
         })}
         onOpen={undefined}
         asked={panel.newTabAsked}
@@ -1178,7 +1110,9 @@ function TabContent({
       );
     case SIDE_PANEL_TAB.CODE:
       return shownCode === undefined || shownCode.length === 0 ? (
-        <EmptyState icon={TAB_ICON[SIDE_PANEL_TAB.CODE]}>{NO_CODE_LINE}</EmptyState>
+        <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
+          {NO_CODE_LINE}
+        </EmptyState>
       ) : (
         <CodePane
           shown={shownCode}
@@ -1496,10 +1430,10 @@ export function SidePanel({
         : isFileTab(tab)
           ? tab.file
           : isChangesTab(tab)
-            ? changesTabLabel(tab.changes, agents)
+            ? changesLook(tab.changes, agents).label
             : isPageTab(tab)
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
-              : SIDE_PANEL_TAB_KIND[tab].label;
+              : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],

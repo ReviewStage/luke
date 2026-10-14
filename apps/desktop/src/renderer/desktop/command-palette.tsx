@@ -45,7 +45,7 @@
 
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/hosted/plan-wire";
 import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
-import { ArchiveIcon, DocumentIcon, GearIcon, SearchIcon } from "@sidecar/panel";
+import { GearIcon, SearchIcon } from "@sidecar/panel";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -63,13 +63,13 @@ import {
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
-import { changesLabelOf } from "../planning/changes-model";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
 import { DOCUMENT_REGION } from "../planning/planning-model";
+import { TAB_KIND, tabLook } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../planning/use-side-panel";
+import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
@@ -84,7 +84,7 @@ import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
-import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
+import { changesOffers, panelEntries, planWorkers } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -361,11 +361,10 @@ function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
-/** Every plan, the sidebar's first in its order, then the archived ones. */
+/** Every plan, the sidebar's first in its order, then the archived ones, each in its tab's look, an archived one saying so in its detail. */
 function planRows(plans: PlansControl, open: (planId: string) => void): readonly PaletteRow[] {
   const row = (plan: PlanSummary, archived: boolean): PaletteRow => ({
-    icon: archived ? <ArchiveIcon /> : <DocumentIcon />,
-    label: plan.name,
+    ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
     detail: planDetail(plan, archived),
     terms: plan.repository === null ? [plan.name] : [plan.name, plan.repository],
     onChoose: () => open(plan.id),
@@ -385,12 +384,11 @@ function shownOverHistory(plans: PlansControl, show: () => void): void {
 /**
  * The open plan's Inbox and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
- * lists them, each beside the plan's name; none while no plan is open. A
- * Changes row is named as its tab is, since no heading here says what the
- * agent's name stands for. An agent opens as its notification's click
- * opens it, the Inbox the same way, and a subagent's or a Changes tab as
- * the "+" opens it, the version history giving way to each, so none opens
- * behind what covers it.
+ * lists them, each in its row's look and words, found by its row's words,
+ * and beside the plan's name; none while no plan is open. An agent opens as
+ * its notification's click opens it, the Inbox the same way, and a
+ * subagent's or a Changes tab as the "+" opens it, the version history
+ * giving way to each, so none opens behind what covers it.
  */
 function agentRows(plans: PlansControl, show: (pick: () => void) => void): readonly PaletteRow[] {
   const planId = plans.activePlanId;
@@ -398,7 +396,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
   const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
   const workers = planWorkers(workRowsOf(plans.work.conversation, plans.work.callLive));
   const inbox = inboxEntries(plans.agents, () => plans.onShowInbox(planId));
-  const agents = agentEntries(plans.mainTabs, plans.agents, true).map((entry) => ({
+  const agents = agentEntries(plans.mainTabs, plans.agents).map((entry) => ({
     ...entry,
     onPick: () => plans.onShowAgent(planId, entry.row.id),
   }));
@@ -408,20 +406,12 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     workers,
     files: [],
     changes: changesOffers(plans.agents, plans.sidePanel.changes),
-    standing: true,
-  }).map((entry) => ({
-    ...entry,
-    row:
-      entry.row.section === ADD_SECTION.CHANGES
-        ? { ...entry.row, label: changesLabelOf(entry.row.label) }
-        : entry.row,
-    onPick: () => shownOverHistory(plans, entry.onPick),
-  }));
+  }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }));
   const entries = [...inbox, ...agents, ...subagents];
   return entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
-    detail: planName,
+    detail: [row.detail, planName].filter((word) => word !== undefined).join(" · ") || undefined,
     endMark,
     card:
       agent === undefined ? undefined : (
@@ -430,7 +420,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
           models={plans.agents.models}
         />
       ),
-    terms: planName === undefined ? [row.label] : [row.label, planName],
+    terms: [...(row.terms ?? [row.label]), ...(planName === undefined ? [] : [planName])],
     onChoose: () => show(onPick),
   }));
 }
@@ -449,9 +439,11 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 
 /**
  * The side panel's kinds, listed with the commands as Show board and the
- * rest, each wearing its kind's glyph as its tab does and showing the panel on its tab as the panel's "+" does, over
- * the version history; none while the plan is not drawn, since there is
- * no panel to show. No chord reaches them.
+ * rest, a command's verb before the name its tab wears, each wearing its
+ * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
+ * its tab as the panel's "+" does, over the version history; none while
+ * the plan is not drawn, since there is no panel to show. No chord reaches
+ * them.
  */
 function panelTabRows(
   plans: PlansControl,
@@ -459,9 +451,10 @@ function panelTabRows(
 ): readonly PaletteRow[] {
   if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
   return SIDE_PANEL_TABS.map((tab) => {
-    const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
+    const look = tabLook({ kind: TAB_KIND.PANEL, tab });
+    const label = `Show ${look.label.toLowerCase()}`;
     const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
-    return { icon: TAB_ICON[tab], label, terms: [label], onChoose: () => show(pick) };
+    return { icon: look.icon, label, terms: [label], onChoose: () => show(pick) };
   });
 }
 

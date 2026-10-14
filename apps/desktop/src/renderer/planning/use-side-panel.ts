@@ -1,11 +1,12 @@
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import { BoardIcon, CallIcon, CodeIcon } from "@sidecar/panel";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CHANGES_LABEL, changesLabelOf } from "./changes-model";
 import { fileName } from "./code-pane-model";
 import {
   type AgentStripTab,
   type ChangesStripTab,
+  changesLabelOf,
   type FileStripTab,
   inPlanOrder,
   isAgentTab,
@@ -20,6 +21,7 @@ import {
   type StripTab,
   type SubagentStripTab,
   sameTab,
+  TAB_WORDS,
   viewedLast,
 } from "./tab-strip-model";
 import { MAIN_TAB } from "./use-main-tabs";
@@ -199,18 +201,20 @@ export const FILE_HISTORY_STEP = {
 export type FileHistoryStep = (typeof FILE_HISTORY_STEP)[keyof typeof FILE_HISTORY_STEP];
 
 /**
- * What the panel knows of a kind of tab. Note that the open tabs are kept
- * as their kinds, so at most one tab of a kind stands, and opening one
- * already open chooses it.
+ * What the panel knows of a kind of tab: its name and its glyph, which its
+ * tab, its pin, its "+" row, and its ⌘K row all wear (`tab-look.tsx`).
+ * Note that the open tabs are kept as their kinds, so at most one tab of a
+ * kind stands, and opening one already open chooses it.
  */
-export interface SidePanelTabKind {
+interface SidePanelTabKind {
   label: string;
+  icon: () => React.JSX.Element;
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.BOARD]: { label: "Board" },
-  [SIDE_PANEL_TAB.CODE]: { label: "Code" },
-  [SIDE_PANEL_TAB.CALL]: { label: "Call" },
+  [SIDE_PANEL_TAB.BOARD]: { label: "Board", icon: BoardIcon },
+  [SIDE_PANEL_TAB.CODE]: { label: "Code", icon: CodeIcon },
+  [SIDE_PANEL_TAB.CALL]: { label: "Call", icon: CallIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order the "+" offers them and a plan whose order holds none of them stands them in. */
@@ -1084,9 +1088,9 @@ function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
 /** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, any Changes tab's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
-  if (isChangesTab(tab)) return CHANGES_LABEL;
-  if (tab === MAIN_TAB.INBOX) return "Inbox";
-  return isAgentTab(tab) ? "Coding agent" : SIDE_PANEL_TAB_KIND[tab].label;
+  if (isChangesTab(tab)) return TAB_WORDS.CHANGES;
+  if (tab === MAIN_TAB.INBOX) return TAB_WORDS.INBOX;
+  return isAgentTab(tab) ? TAB_WORDS.CODING_AGENT : SIDE_PANEL_TAB_KIND[tab].label;
 }
 
 /** The state with the note of `callId` folded, or opened, on the File tab of `path`; as it was where no such tab stands. */

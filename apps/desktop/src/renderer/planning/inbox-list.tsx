@@ -15,7 +15,6 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { Tooltip } from "../tooltip";
 import { AgentRef, lineSubject } from "./agent-ref";
-import { AgentGlyph } from "./agent-tab";
 import {
   INBOX_GROUPING,
   type InboxGrouping,
@@ -25,6 +24,7 @@ import {
 } from "./inbox-model";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
+import { AgentGlyph } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 
 /**

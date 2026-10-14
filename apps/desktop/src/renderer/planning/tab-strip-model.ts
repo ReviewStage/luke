@@ -20,6 +20,25 @@
  * (`replacementOf`), as a browser's tabs do.
  */
 
+/**
+ * What each kind of tab whose name is not its subject's is called, wherever
+ * it is named (`tab-look.tsx`): the plan's Inbox, a draft agent's tab and
+ * the "+" row that opens one, an agent the window holds nothing of, and an
+ * agent's Changes before its agent is read. The side panel's fixed kinds
+ * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
+ */
+export const TAB_WORDS = {
+  INBOX: "Inbox",
+  NEW_AGENT: "New coding agent",
+  CODING_AGENT: "Coding agent",
+  CHANGES: "Changes",
+} as const;
+
+/** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
+export function changesLabelOf(agentLabel: string): string {
+  return `${TAB_WORDS.CHANGES}: ${agentLabel}`;
+}
+
 /** One coding agent's tab, named by the agent it shows. */
 export interface AgentStripTab {
   readonly agent: string;
