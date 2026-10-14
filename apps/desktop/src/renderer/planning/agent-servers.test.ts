@@ -132,7 +132,7 @@ async function opened() {
 /** Each section's heading and its rows' names, as drawn. */
 function sections(container: HTMLElement) {
   return [...container.querySelectorAll('.agent-servers-menu [role="group"]')].map((group) => [
-    group.querySelector(".plan-compose-menu-section")?.textContent,
+    group.querySelector(".menu-heading")?.textContent,
     [...group.querySelectorAll(".agent-servers-row .plan-compose-menu-name")].map(
       (name) => name.textContent,
     ),

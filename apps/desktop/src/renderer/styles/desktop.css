@@ -493,7 +493,9 @@ body,
   margin-top: var(--section-gap);
 }
 
-.sidebar-heading {
+/* A section's name over its rows, in the headings' voice: the sidebar's
+   settings search and the plan's summary alike. */
+.section-heading {
   margin: 0 0 var(--space-4);
   padding: 0 var(--row-inset);
   color: var(--text-secondary);
@@ -2478,16 +2480,20 @@ body:has(.app-stage[data-capture="true"])
   margin-left: 0;
 }
 
-/* The heading over a section's rows: quiet, inset as a row's words are,
-   and a little apart from the section above it. */
-.plan-compose-menu-section {
+/* The heading over a menu section's rows, a searchable menu's and ⌘K's
+   alike: quiet, inset as a row's words are, and a little apart from the
+   section above it. cmdk draws the palette's heading itself, so it is
+   reached by its attribute rather than given the class. */
+.menu-heading,
+.command-palette [cmdk-group-heading] {
   padding: var(--space-8) var(--row-inset) var(--space-4);
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-weight: 500;
 }
 
-[role="group"]:first-child > .plan-compose-menu-section {
+[role="group"]:first-child > .menu-heading,
+.command-palette [cmdk-group]:first-child [cmdk-group-heading] {
   padding-top: var(--space-2);
 }
 
@@ -3453,8 +3459,8 @@ body:has(.app-stage[data-capture="true"])
   opacity: 1;
 }
 
-.plan-summary[data-mode="column"] > .plan-summary-section:first-of-type > .plan-summary-heading,
-.plan-summary-card > .plan-summary-section:first-of-type > .plan-summary-heading {
+.plan-summary[data-mode="column"] > .plan-summary-section:first-of-type > .section-heading,
+.plan-summary-card > .plan-summary-section:first-of-type > .section-heading {
   display: flex;
   min-height: var(--control-height);
   align-items: center;
@@ -3473,14 +3479,6 @@ body:has(.app-stage[data-capture="true"])
   from {
     transform: scale(0.97);
   }
-}
-
-.plan-summary-heading {
-  margin: 0 0 var(--space-4);
-  padding: 0 var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .plan-summary-empty {
@@ -3575,72 +3573,12 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The archived agents, folded under Archived at the foot of Coding agents
-   (`agent-archive.tsx`) as the sidebar folds its archived plans: an archive
-   box that gives way to the fold's chevron while hovered or reached from the
-   keyboard, the count after its name while folded, and each archived agent
-   muted, its Unarchive at its end in the sidebar rows' Pin and Archive
-   style, shown while the row is hovered or reached from the keyboard. */
+   (`agent-archive.tsx`) behind the sidebar's own group header, and each
+   archived agent muted, its Unarchive at its end in the sidebar rows' Pin
+   and Archive style, shown while the row is hovered or reached from the
+   keyboard. */
 .plan-summary-archived {
-  display: flex;
-  flex-direction: column;
-  gap: var(--list-gap);
   margin-top: var(--list-gap);
-}
-
-.plan-summary-archived-toggle {
-  color: var(--text-secondary);
-}
-
-.plan-summary-fold {
-  display: grid;
-  width: var(--control-glyph);
-  height: var(--control-glyph);
-  place-items: center;
-}
-
-.plan-summary-fold > * {
-  grid-area: 1 / 1;
-  transition:
-    opacity var(--duration-hover) ease,
-    transform var(--duration-hover) ease;
-}
-
-.plan-summary-fold > .settings-chevron {
-  width: 12px;
-  height: 12px;
-  opacity: 0;
-}
-
-.plan-summary-archived-toggle[aria-expanded="true"] .settings-chevron {
-  transform: rotate(90deg);
-}
-
-.plan-summary-archived-toggle:is(:hover, :focus-visible)
-  .plan-summary-fold
-  > :not(.settings-chevron) {
-  opacity: 0;
-}
-
-.plan-summary-archived-toggle:is(:hover, :focus-visible) .plan-summary-fold > .settings-chevron {
-  opacity: 1;
-}
-
-.plan-summary-archived-toggle > .plan-summary-label {
-  flex: none;
-}
-
-.plan-summary-count {
-  flex: none;
-  margin-left: calc(var(--space-6) - var(--glyph-gap));
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.plan-summary-archived-toggle:is(:hover, :focus-visible) .plan-summary-count {
-  opacity: 1;
 }
 
 .plan-summary-archived-agent {
@@ -4576,17 +4514,6 @@ body:has(.app-stage[data-capture="true"])
 
 .command-palette-list:focus-visible {
   outline: none; /* no ring: the highlighted row marks it */
-}
-
-.command-palette [cmdk-group-heading] {
-  padding: var(--space-8) var(--row-inset) var(--space-4);
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.command-palette [cmdk-group]:first-child [cmdk-group-heading] {
-  padding-top: var(--space-2);
 }
 
 /* A row is one fixed height, as the searchable menu's is. */

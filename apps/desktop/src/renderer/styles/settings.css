@@ -89,27 +89,6 @@
   border-top: 0;
 }
 
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 13px 15px;
-  border: 1px solid var(--hairline);
-  border-radius: 16px;
-  background: var(--section-fill);
-}
-
-/* A section names itself in sentence case, as the sidebar's own heading does. */
-.settings-section h2 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 /* Sized to the heading it labels rather than to a grid: the glyph is a letter
    in the line, not an element beside it. */
 .settings-icon {

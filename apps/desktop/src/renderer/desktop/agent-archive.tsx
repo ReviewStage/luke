@@ -1,5 +1,5 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import { ArchiveIcon, ChevronRightIcon, UnarchiveIcon } from "@sidecar/panel";
+import { ArchiveIcon, UnarchiveIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useRef, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
@@ -10,8 +10,8 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { disclosureMotion, useDisclosure } from "../use-disclosure";
 import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
+import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 
 /**
  * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the plan's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
@@ -28,10 +28,11 @@ import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-
  * (`use-coding-agents.ts`).
  *
  * The archived agents are kept the way the sidebar keeps archived plans
- * (`ArchivedPlans`): folded away behind a row of their own, an archive box
- * that gives way to the fold's chevron while hovered or reached from the
- * keyboard, and folded, the count after its name. Unfolded, each archived
- * agent is a muted row in the summary's own shape, a failed one's mark at
+ * (`ArchivedPlans`): folded away behind the same header
+ * (`sidebar-group-header.tsx`), an archive box that gives way to the fold's
+ * chevron while hovered or reached from the keyboard, and folded, the count
+ * after its name, the fold landing at once as the sidebar's does.
+ * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, in the sidebar
  * rows' Pin and Archive style, and whose right-click offers the same. The
@@ -43,6 +44,9 @@ import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-
 
 /** What the archived agents' fold says, as the sidebar's archived plans' does. */
 const ARCHIVED_LABEL = "Archived";
+
+/** What the fold's count is read as while folded. */
+const ARCHIVED_NOUN: CountNoun = { one: "archived agent", many: "archived agents" };
 
 /** What an archived agent's one action says, in an archived plan's words. */
 const UNARCHIVE_LABEL = "Unarchive";
@@ -185,42 +189,20 @@ export function ArchivedAgents({
   shown: boolean;
 }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
-  const fold = useDisclosure(unfolded);
   const archived = agents.archived ?? [];
   if (archived.length === 0) return null;
   return (
-    // Note that the group starts folded, so every open is a press's, and unrolls.
-    <div
-      className="plan-summary-archived"
-      data-disclosure={disclosureMotion(unfolded, fold.leaving)}
-    >
-      <button
-        type="button"
-        className="plan-summary-row plan-summary-archived-toggle"
-        aria-expanded={unfolded}
-        onClick={() => setUnfolded((was) => !was)}
-      >
-        <span className="plan-summary-glyph plan-summary-fold">
-          <ArchiveIcon />
-          <ChevronRightIcon />
-        </span>
-        <span className="plan-summary-label">{ARCHIVED_LABEL}</span>
-        {unfolded ? null : (
-          <span className="plan-summary-count">
-            {archived.length}
-            <span className="visually-hidden">
-              {archived.length === 1 ? " archived agent" : " archived agents"}
-            </span>
-          </span>
-        )}
-      </button>
-      {fold.mounted ? (
-        <ul
-          ref={fold.ref}
-          className="plan-summary-rows disclosure-body"
-          inert={fold.leaving}
-          aria-label="Archived agents"
-        >
+    <div className="plan-summary-archived">
+      <SidebarGroupHeader
+        glyph={<ArchiveIcon />}
+        name={ARCHIVED_LABEL}
+        folded={!unfolded}
+        count={archived.length}
+        noun={ARCHIVED_NOUN}
+        onToggle={() => setUnfolded((was) => !was)}
+      />
+      {unfolded ? (
+        <ul className="plan-summary-rows" aria-label="Archived agents">
           {archived.map((agent) => (
             <ArchivedAgentRow key={agent.id} agent={agent} agents={agents} shown={shown} />
           ))}

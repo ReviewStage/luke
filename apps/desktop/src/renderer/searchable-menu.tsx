@@ -548,7 +548,7 @@ export function SearchableMenu(props: {
           ) : (
             // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
             <div key={first} role="group" aria-label={section.heading}>
-              <div className="plan-compose-menu-section" aria-hidden="true">
+              <div className="menu-heading" aria-hidden="true">
                 {section.heading}
               </div>
               {options}

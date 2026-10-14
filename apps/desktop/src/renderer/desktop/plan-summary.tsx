@@ -548,7 +548,7 @@ function SummaryList({
     <>
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="plan-summary-section">
-          <p className="plan-summary-heading">{heading}</p>
+          <p className="section-heading">{heading}</p>
           <ul
             className="plan-summary-rows"
             aria-label={heading}

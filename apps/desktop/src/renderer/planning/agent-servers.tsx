@@ -546,7 +546,7 @@ function ServersPopover({
           // biome-ignore lint/a11y/useSemanticElements: a menu's section of rows, as the searchable menu's are, which a <fieldset> of form controls is not.
           <div key={group.heading ?? "unread"} role="group" aria-label={group.heading}>
             {group.heading !== undefined ? (
-              <div className="plan-compose-menu-section">{group.heading}</div>
+              <div className="menu-heading">{group.heading}</div>
             ) : null}
             {group.rows.map(serverRow)}
           </div>
@@ -554,7 +554,7 @@ function ServersPopover({
         {found.tools.length > 0 ? (
           // biome-ignore lint/a11y/useSemanticElements: a menu's section of rows, as the searchable menu's are, which a <fieldset> of form controls is not.
           <div role="group" aria-label={SEARCH.TOOLS}>
-            <div className="plan-compose-menu-section">{SEARCH.TOOLS}</div>
+            <div className="menu-heading">{SEARCH.TOOLS}</div>
             {found.tools.map(toolRow)}
           </div>
         ) : null}
@@ -602,7 +602,7 @@ function ServersPopover({
             <div key={run.prefix ?? "rest"}>
               {runs.length > 1 ? (
                 <div
-                  className="plan-compose-menu-section agent-servers-run"
+                  className="menu-heading agent-servers-run"
                   data-prefix={run.prefix !== undefined ? "true" : undefined}
                 >
                   {run.prefix !== undefined ? `${run.prefix}*` : PAGE.OTHER}
