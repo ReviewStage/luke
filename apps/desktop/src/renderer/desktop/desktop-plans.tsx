@@ -618,6 +618,9 @@ export function DesktopPlans({
     // With no plan open the column says so and offers New plan, whose
     // dialog stands over it as it stands over a plan.
     case PLANS_PAGE.HOME:
+      // A launch reopening the plan last open draws the window's ground
+      // alone until it opens, so the home page never flashes before it.
+      if (plans.restoring) return <div className="desktop-drag-strip" />;
       return (
         <>
           <div className="desktop-drag-strip" />

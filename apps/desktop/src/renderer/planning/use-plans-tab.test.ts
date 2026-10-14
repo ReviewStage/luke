@@ -88,6 +88,8 @@ interface Standing {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** Whether an account is signed in to the window. */
   signedIn: boolean;
+  /** The signed-in account's email. */
+  account: string;
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
@@ -123,6 +125,7 @@ function mount(
     inboxWaiting: [],
     inboxPlans: [],
     signedIn: true,
+    account: "dev@example.com",
     ...initial,
   };
   function Probe() {
@@ -158,6 +161,7 @@ function mount(
       planning: held.planning,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
       signedIn: held.signedIn,
+      account: held.signedIn ? held.account : undefined,
       voiceAvailable: true,
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
@@ -966,4 +970,104 @@ test("a fixture run lists its personal workspace's plans under the switcher, and
   );
   assert.equal(fixture.control().workspaces.length, 2);
   assert.equal(window.localStorage.length, 0);
+});
+
+/** The plan as the list names it, archived where `archivedAt` is given. */
+function listed(archivedAt?: number): PlanningView["plans"][number] {
+  const { document: _document, ...summary } = PLAN;
+  return archivedAt === undefined ? summary : { ...summary, archivedAt };
+}
+
+/** The view a launch starts on: nothing open, and the list not yet read. */
+const LAUNCHING: PlanningView = { ...IDLE_PLANNING_VIEW, listStatus: PLANNING_READ.READING };
+
+/** The view once the list is read with nothing open, holding `plans`. */
+function listRead(plans: PlanningView["plans"]): PlanningView {
+  return { ...IDLE_PLANNING_VIEW, listStatus: PLANNING_READ.READY, plans };
+}
+
+/** A select's payload, read back as the act's own schema admits it. */
+const readSelect = Schema.decodeUnknownOption(Schema.Struct({ planId: Schema.String }));
+
+/** The plans the launch asked the host to open, in order. */
+function selected(tab: ReturnType<typeof mount>): string[] {
+  return tab.payloads
+    .filter((each) => each.kind === ACT_KIND.PLANNING_SELECT)
+    .flatMap((each) => Option.toArray(readSelect(each.payload)).map((read) => read.planId));
+}
+
+/** A run that had the plan open when it quit. */
+function quitWithPlanOpen(account = "dev@example.com") {
+  mount({ shown: true, account, planning: { ...OPEN, plans: [listed()] } });
+}
+
+test("a launch opens the plan the account had open at quit, drawing no home page until the host has it open", () => {
+  quitWithPlanOpen();
+  const tab = mount(
+    { shown: true, planning: LAUNCHING },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  assert.equal(tab.control().page, PLANS_PAGE.HOME);
+  assert.equal(tab.control().restoring, true, "the list is still being read");
+
+  tab.stand({ planning: listRead([listed()]) });
+  assert.deepEqual(selected(tab), [PLAN.id]);
+  assert.equal(tab.control().restoring, true, "the host has not opened it yet");
+
+  tab.stand({ planning: { ...OPEN, plans: [listed()] } });
+  assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
+  assert.equal(tab.control().restoring, false);
+});
+
+test("a plan archived or deleted since the quit, or kept by another account, leaves the launch on the home page", () => {
+  for (const [why, account, plans] of [
+    ["archived", "dev@example.com", [listed(3)]],
+    ["deleted", "dev@example.com", []],
+    ["another account", "other@example.com", [listed()]],
+  ] as const) {
+    quitWithPlanOpen();
+    const tab = mount({ shown: true, account, planning: LAUNCHING });
+    tab.stand({ planning: listRead(plans) });
+    assert.deepEqual(selected(tab), [], why);
+    assert.equal(tab.control().restoring, false, why);
+    document.body.innerHTML = "";
+    window.localStorage.clear();
+  }
+});
+
+test("a plan the list no longer holds is let go, so it is not opened when it comes back", () => {
+  quitWithPlanOpen();
+  mount({ shown: true, planning: LAUNCHING }).stand({ planning: listRead([]) });
+  const tab = mount({ shown: true, planning: LAUNCHING });
+  tab.stand({ planning: listRead([listed()]) });
+  assert.deepEqual(selected(tab), []);
+});
+
+test("leaving the plan for the home page lets it go, so the next launch rests on the home page", () => {
+  const before = mount({ shown: true, planning: { ...OPEN, plans: [listed()] } });
+  before.stand({ planning: listRead([listed()]) });
+
+  const tab = mount({ shown: true, planning: LAUNCHING });
+  assert.equal(tab.control().restoring, false);
+  tab.stand({ planning: listRead([listed()]) });
+  assert.deepEqual(selected(tab), []);
+});
+
+test("a window reloaded over a plan the host still holds asks for nothing", () => {
+  quitWithPlanOpen();
+  const tab = mount({ shown: true, planning: { ...OPEN, plans: [listed()] } });
+  assert.deepEqual(selected(tab), []);
+  assert.equal(tab.control().restoring, false);
+});
+
+test("a refused reopen takes its ask back and rests on the home page", async () => {
+  quitWithPlanOpen();
+  const tab = mount(
+    { shown: true, planning: LAUNCHING },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+  );
+  tab.stand({ planning: listRead([listed()]) });
+  await act(settle);
+  assert.deepEqual(selected(tab), [PLAN.id]);
+  assert.equal(tab.control().restoring, false);
 });

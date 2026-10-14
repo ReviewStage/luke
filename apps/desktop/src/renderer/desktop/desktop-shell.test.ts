@@ -97,7 +97,7 @@ afterEach(() => {
  * open over it or not, New plan opening its dialog and Cancel putting it
  * away as the tab does.
  */
-function mount(inboxOpen: boolean): HTMLElement {
+function mount(inboxOpen: boolean, restoring = false): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -115,6 +115,7 @@ function mount(inboxOpen: boolean): HTMLElement {
       onTabChange: ignore,
       plans: plansControl({
         page: PLANS_PAGE.HOME,
+        restoring,
         inboxView: {
           open: inboxOpen,
           chosen: undefined,
@@ -177,4 +178,9 @@ test("the home page says no plan is open, and its New plan raises the dialog ove
   );
   act(() => cancel?.click());
   assert.equal(document.querySelector('[role="dialog"][aria-modal="true"]'), null);
+});
+
+test("while a launch reopens the plan last open, the column draws no home page to flash before it", () => {
+  const page = mount(false, true);
+  assert.equal(page.querySelector('section[aria-label="No plan open"]'), null);
 });

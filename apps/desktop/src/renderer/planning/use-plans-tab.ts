@@ -101,6 +101,7 @@ import {
 } from "./transcript-model";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
+import { useLastPlan } from "./use-last-plan";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
@@ -184,6 +185,8 @@ interface InboxViewControl {
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
   page: PlansPage;
+  /** Whether a launch is still opening the plan last open, while the home page waits rather than flash before it (`use-last-plan.ts`). */
+  restoring: boolean;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
@@ -466,6 +469,8 @@ export function usePlansTab(input: {
   planning: PlanningView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
   signedIn: boolean;
+  /** The signed-in account's email, which the plan last open is kept under; none while signed out. */
+  account: string | undefined;
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   /** Whether the tab is on screen: the panel open, on this tab. */
@@ -960,6 +965,15 @@ export function usePlansTab(input: {
   // opens, through the tab as it stands then rather than as it stood.
   const markNow = useRef(markPlan);
   markNow.current = markPlan;
+  const restoring = useLastPlan({
+    staged: fixture !== undefined,
+    account: input.account,
+    plans: planning.plans,
+    listStatus: planning.listStatus,
+    openPlanId,
+    boundFor,
+    select,
+  });
   const selectNow = useRef(select);
   selectNow.current = select;
 
@@ -1349,6 +1363,7 @@ export function usePlansTab(input: {
 
   return {
     page,
+    restoring,
     shown,
     signedIn,
     plans: [...sidebar.pinned, ...sidebar.rest],
