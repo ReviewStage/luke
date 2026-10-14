@@ -143,3 +143,9 @@ test("a message is read for at most twenty mentions", () => {
 
   assert.equal(mentionsIn(words).length, 20);
 });
+
+test("a fence's line carrying an info string inside the fence closes nothing, so a link after it is still code", () => {
+  const words = ["```md", "an example:", "```ts", "[@a](luke://file/a.ts)", "```"].join("\n");
+
+  assert.deepEqual(mentionsIn(words), []);
+});

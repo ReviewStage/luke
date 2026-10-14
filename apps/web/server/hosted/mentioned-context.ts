@@ -34,12 +34,18 @@ export const MENTIONED_BOUNDS = {
   PART_CHARS: 24_000,
 } as const;
 
+/** How much of the text is kept when it is cut on a line to the bound: all of it where it fits. */
+function keptLength(text: string, bound: number): number {
+  if (text.length <= bound) return text.length;
+  const lineEnd = text.lastIndexOf("\n", bound);
+  return text.slice(0, lineEnd > 0 ? lineEnd : bound).trimEnd().length;
+}
+
 /** The text cut on a line to the bound, saying how much was left out; whole where it fits. */
 function cutOnLine(text: string, bound: number): string {
-  if (text.length <= bound) return text;
-  const lineEnd = text.lastIndexOf("\n", bound);
-  const kept = text.slice(0, lineEnd > 0 ? lineEnd : bound).trimEnd();
-  return `${kept}\n… (${text.length - kept.length} more characters)`;
+  const kept = keptLength(text, bound);
+  if (kept === text.length) return text;
+  return `${text.slice(0, kept)}\n… (${text.length - kept} more characters)`;
 }
 
 /** What a mention of the plan or one of its sections is handed as. */
@@ -47,12 +53,15 @@ function excerptOf(mention: PlanMention, plan: Plan): string {
   if (mention.kind === MENTION_KIND.PLAN) {
     const whole = planMarkdown(plan);
     if (whole.length <= MENTIONED_BOUNDS.PLAN_CHARS) return `The whole plan:\n\n${whole.trimEnd()}`;
-    const shown = cutOnLine(whole, MENTIONED_BOUNDS.PLAN_CHARS);
+    // Note that a section is left out by where it starts, past the cut, never by its heading's words, which earlier text may quote.
+    const bodyKept =
+      keptLength(whole, MENTIONED_BOUNDS.PLAN_CHARS) -
+      (whole.length - plan.document.body.trimEnd().length - 1);
     const headings = planSections(plan.document.body)
-      .filter((section) => section.heading !== "" && !shown.includes(section.heading))
+      .filter((section) => section.heading !== "" && section.from >= bodyKept)
       .map((section) => section.heading);
     const rest = headings.length === 0 ? "" : `\n\nIts other sections: ${headings.join("; ")}.`;
-    return `The whole plan, cut short:\n\n${shown}${rest}`;
+    return `The whole plan, cut short:\n\n${cutOnLine(whole, MENTIONED_BOUNDS.PLAN_CHARS)}${rest}`;
   }
   const section = planSections(plan.document.body).find((each) => each.heading === mention.heading);
   if (section === undefined) {
@@ -83,13 +92,17 @@ export function mentionedContext(words: string, plan: Plan): string | undefined 
   }
   if (named.length === 0) return undefined;
   let part = MENTIONED_HEADING;
-  for (const mention of named) {
-    const excerpt = excerptOf(mention, plan);
-    const room = MENTIONED_BOUNDS.PART_CHARS - part.length - 2;
-    part +=
-      excerpt.length <= room
-        ? `\n\n${excerpt}`
-        : `\n\n${mention.kind === MENTION_KIND.PLAN ? "The whole plan" : `The section "${mention.heading}"`}: left out, since this part is full; ask for it if you need it.`;
+  for (const [at, mention] of named.entries()) {
+    const excerpt = `\n\n${excerptOf(mention, plan)}`;
+    if (part.length + excerpt.length <= MENTIONED_BOUNDS.PART_CHARS) {
+      part += excerpt;
+      continue;
+    }
+    // What the part has no room left for is said once, in as few words as name it.
+    const left = named.length - at;
+    const note = `\n\n${left} more mention${left === 1 ? "" : "s"} of the plan left out, since this part is full; ask for what you need.`;
+    if (part.length + note.length <= MENTIONED_BOUNDS.PART_CHARS) part += note;
+    break;
   }
   return part;
 }

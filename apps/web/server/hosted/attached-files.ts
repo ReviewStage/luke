@@ -117,11 +117,13 @@ export function receivedMessage(received: {
   const texts: string[] = [];
   const words: string[] = [];
   const files: FileUIPart[] = [];
-  for (const part of received.parts) {
+  for (const [index, part] of received.parts.entries()) {
     if (part.type === "text") {
       texts.push(part.text);
-      // The part a line's mentions were handed in matches the line, and is no words of its own.
-      if (isMentionedText(part.text)) continue;
+      // The part a line's mentions were handed in matches the line, and is no
+      // words of its own. Note that it always follows the words that named
+      // them, so a first part spelled like it is the developer's words still.
+      if (index > 0 && isMentionedText(part.text)) continue;
       const inlined = inlinedFileOf(part.text);
       if (inlined === undefined) words.push(part.text);
       else files.push(inlined);

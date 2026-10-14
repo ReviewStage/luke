@@ -99,7 +99,7 @@ test("a long section is cut on a line, saying how much was left out, and a full 
 
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
   assert.match(part, /… \(\d+ more characters\)/u);
-  assert.match(part, /The section "Seven": left out, since this part is full/u);
+  assert.match(part, /\d+ more mentions? of the plan left out, since this part is full/u);
 });
 
 test("a line carrying what it mentioned is matched by eve's receipt of it, and reads back as its words alone", () => {
@@ -122,4 +122,48 @@ test("a line carrying what it mentioned is matched by eve's receipt of it, and r
 
 test("words that mention nothing of the plan go to eve as the words alone, as every message did before", () => {
   assert.equal(eveContent("Use the helper.", [], undefined), "Use the helper.");
+});
+
+test("however long the headings of what is left out, the part stays inside its bound", () => {
+  const long = "x".repeat(3_900);
+  const headings = Array.from({ length: 12 }, (_, at) => `${"Heading ".repeat(100)}${at}`);
+  const plan: Plan = {
+    ...PLAN,
+    document: {
+      body: headings.map((heading) => `## ${heading}\n\n${long}`).join("\n\n"),
+      assumptions: [],
+    },
+  };
+
+  const part = mentionedContext(headings.map(section).join(" "), plan) ?? "";
+
+  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
+});
+
+test("a plan cut short names every section past the cut, one whose heading earlier words quote included", () => {
+  const filler = Array.from({ length: 700 }, (_, at) => `- line ${at} of the context`).join("\n");
+  const plan: Plan = {
+    ...PLAN,
+    document: {
+      body: `## Context\n\nSee Rollout below.\n\n${filler}\n\n## Rollout\n\nStore first.`,
+      assumptions: [],
+    },
+  };
+
+  const part =
+    mentionedContext(
+      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name),
+      plan,
+    ) ?? "";
+
+  assert.match(part, /The whole plan, cut short/u);
+  assert.match(part, /Its other sections: Rollout\./u);
+});
+
+test("a message whose words happen to open as the mentioned part does still reads back as its words", () => {
+  const words = `${MENTIONED_HEADING} is how the part opens.`;
+
+  const receipt = receivedMessage({ message: words, parts: [{ type: "text", text: words }] });
+
+  assert.equal(receipt.words, words);
 });

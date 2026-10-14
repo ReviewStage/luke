@@ -64,8 +64,11 @@ const LABEL_ESCAPE = /\\([[\]\\])/gu;
 /** The characters `encodeURIComponent` leaves that would end or break a markdown link's target. */
 const TARGET_SPECIAL = /[()!'*]/gu;
 
-/** A line that opens or closes a fenced block: up to three spaces, then three or more backticks or tildes. */
+/** A line that opens a fenced block: up to three spaces, then three or more backticks or tildes, and perhaps an info string. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
+
+/** A line that closes a fenced block: its run alone, as CommonMark has it, with no info string after it. */
+const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
 
 /** A run of backticks, which opens a code span the next run of the same length on its line closes. */
 const TICKS = /`+/gu;
@@ -175,10 +178,11 @@ function insideFence(text: string, at: number): boolean {
     const end = start + line.length;
     const fence = FENCE_LINE.exec(line)?.[1];
     if (at >= start && at <= end) return open !== undefined || fence !== undefined;
-    // A fence closes on a run of its own character at least as long as the one that opened it.
-    if (fence !== undefined && open === undefined) open = fence;
-    else if (fence !== undefined && open !== undefined && open[0] === fence[0]) {
-      if (fence.length >= open.length) open = undefined;
+    // A fence closes on a bare run of its own character at least as long as the one that opened it.
+    const closing = CLOSING_FENCE_LINE.exec(line)?.[1];
+    if (open === undefined) open = fence;
+    else if (closing !== undefined && closing[0] === open[0] && closing.length >= open.length) {
+      open = undefined;
     }
     start = end + 1;
   }
