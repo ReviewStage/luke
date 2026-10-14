@@ -230,6 +230,103 @@ it.effect(
     }),
 );
 
+it.effect("a tool's arguments are gathered through `allOf` and the schema's own references", () =>
+  Effect.gen(function* () {
+    const tools = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(
+        listingServer([
+          {
+            name: "search",
+            description: "Searches.",
+            inputSchema: {
+              type: "object",
+              allOf: [
+                { $ref: "#/$defs/Scope" },
+                { properties: { query: { type: "string" } }, required: ["query"] },
+              ],
+              $defs: {
+                Scope: {
+                  type: "object",
+                  properties: { team: { $ref: "#/$defs/Team", description: "Which team." } },
+                  required: ["team"],
+                },
+                Team: { type: "string", enum: ["core", "web"], default: "core" },
+              },
+            },
+          },
+        ]),
+      ),
+    );
+
+    assert.deepEqual(tools[0]?.parameters, [
+      {
+        name: "team",
+        type: "enum",
+        required: true,
+        description: "Which team.",
+        values: ["core", "web"],
+        default: "core",
+      },
+      { name: "query", type: "string", required: true },
+    ]);
+  }),
+);
+
+it.effect(
+  "a schema that is no object's, offers alternatives at its root, or points elsewhere says nothing of its arguments",
+  () =>
+    Effect.gen(function* () {
+      const unreadable = [
+        { type: "string" },
+        { type: ["array", "null"] },
+        { anyOf: [{ type: "object", properties: {} }, { type: "null" }] },
+        { $ref: "https://schemas.example.test/search.json" },
+        { type: "object", allOf: [{ $ref: "#/$defs/Missing" }] },
+      ];
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer(
+            unreadable.map((inputSchema, index) => ({
+              name: `tool_${index}`,
+              description: "A tool.",
+              inputSchema,
+            })),
+          ),
+        ),
+      );
+
+      assert.deepEqual(
+        tools.map((tool) => tool.parameters),
+        unreadable.map(() => undefined),
+      );
+    }),
+);
+
+it.effect(
+  "an argument's values and default are kept as the server wrote them, edge spaces included",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            {
+              name: "join",
+              description: "Joins.",
+              inputSchema: {
+                type: "object",
+                properties: { separator: { type: "string", enum: [" ", "", ", "], default: " " } },
+              },
+            },
+          ]),
+        ),
+      );
+
+      assert.deepEqual(tools[0]?.parameters, [
+        { name: "separator", type: "enum", required: false, values: [" ", "", ", "], default: " " },
+      ]);
+    }),
+);
+
 it.effect("a tool keeps a bounded number of arguments, each bounded", () =>
   Effect.gen(function* () {
     const properties = Object.fromEntries(

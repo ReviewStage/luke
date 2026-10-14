@@ -1053,9 +1053,11 @@ that table.
   Connect. A title is the tool's own, else its annotations', the spec's
   order; a description is kept whole up to 8,000 characters; the hints are
   kept as the server spelled them; and the parameters are the input
-  schema's top-level arguments, each its name, its type in a few words,
+  schema's top-level arguments, gathered through `allOf` and its own
+  `$defs` references, each its name, its type in a few words,
   whether it is required, and its description, values, and default where
-  the schema gives them, 64 at most (`server/hosted/mcp-tool-parameters.ts`).
+  the schema gives them, 64 at most, and none at all where the schema
+  cannot be read as an object's (`server/hosted/mcp-tool-parameters.ts`).
   None of it is what a model is handed. It is held in the instance's memory
   for five minutes per account and provider. A provider the account has not
   connected is refused as unavailable before any token is read.
