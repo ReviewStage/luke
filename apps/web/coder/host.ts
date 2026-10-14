@@ -1,6 +1,7 @@
+import { hostTurnId } from "@sidecar/database/models/ids";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
 import {
@@ -54,6 +55,22 @@ export const seams: CoderHostSeams = Effect.runSync(
 
 export const host: CoderHost = coderHost(seams);
 
+/** What a model resolver reads of eve's `step.started`, which eve hands it unparsed: eve's id for the turn the step is of. */
+const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.String }) });
+
+/**
+ * eve's `step.started` read as a model resolver reads it. Note that an event
+ * without eve's turn id throws, because eve names one on every step it
+ * starts, and a step whose turn cannot be named has nowhere to mark what it
+ * ran at.
+ */
+export const readStepStarted = Schema.decodeUnknownSync(StepStartedSchema);
+
+/** The store's id for the turn a `step.started` opens a step of in the session. */
+export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.Type): string {
+  return hostTurnId(sessionId, started.data.turnId);
+}
+
 /**
  * The doors this project's authored files open onto the agent runtime
  * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner. A
@@ -98,18 +115,19 @@ export function makeDelegation(
   );
 }
 
-/** The model one step of a worker runs on: the pair its delegation recorded, or the fixture's own under the scripted model; a step no delegation stands for is failed by name. */
+/** The model one step of a worker's turn runs on, the turn named by its store id (`stepTurnId`): the pair its delegation recorded, or the fixture's own under the scripted model; a step no delegation stands for is failed by name. */
 export async function selectDelegatedModel(
   auth: SessionAuth,
   sessionId: string,
   parentCallId: string,
+  turnId: string,
 ): Promise<CoderModelSelection> {
   const scripted = seams.scriptedModel() ? { model: scriptedModel() } : undefined;
   const selected = await runWeb(
     Effect.gen(function* () {
       const admitted = yield* host.admitDelegated(auth, sessionId);
       if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
-      return yield* host.delegatedModel(admitted.success, parentCallId, scripted);
+      return yield* host.delegatedModel(admitted.success, parentCallId, scripted, turnId);
     }),
   );
   if (Result.isFailure(selected)) throw new Error(selected.failure);

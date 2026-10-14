@@ -91,6 +91,7 @@ export const CODER_REFUSAL = {
     "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
   FAST_ON_OWN_KEY:
     "Not run: Fast isn't available on your own API key; Luke runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
+  /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",
   ACCOUNT_KEY_UNREADABLE:

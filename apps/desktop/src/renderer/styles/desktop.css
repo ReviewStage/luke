@@ -5313,6 +5313,12 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   font-variant-numeric: tabular-nums;
 }
 
+.turn-card-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
 .turn-card-tokens {
   display: flex;
   flex-direction: column;

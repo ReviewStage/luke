@@ -1,0 +1,1 @@
+ALTER TABLE "turns" ADD COLUMN "fast_refused" boolean DEFAULT false NOT NULL;

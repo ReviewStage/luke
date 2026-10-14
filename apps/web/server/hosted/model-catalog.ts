@@ -396,7 +396,7 @@ export function offeredToAccount(
   for (const model of offered) {
     const fast = providerModelOf(model.id)?.fast ?? false;
     if (fast && ownKeyProviders.has(model.provider)) {
-      withheld.add(model.id.slice(0, -FAST_SLUG_SUFFIX.length));
+      withheld.add(standardModelIdOf(model.id));
     } else {
       kept.push(model);
     }
@@ -442,6 +442,13 @@ export function acceptedModelChoice(
       Effect.mapError((reason) => new ModelChoiceRefused({ reason })),
     );
   });
+}
+
+/** The catalog id of the model a fast slug is the fast version of, which runs at standard speed; any other id as it is. */
+export function standardModelIdOf(catalogId: string): string {
+  return providerModelOf(catalogId)?.fast === true
+    ? catalogId.slice(0, -FAST_SLUG_SUFFIX.length)
+    : catalogId;
 }
 
 /**

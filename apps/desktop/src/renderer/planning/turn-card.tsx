@@ -22,7 +22,9 @@ import { spanText } from "./plan-time";
  * agent's turn, Luke's own on the Call tab, and a call's card
  * (`call-card.tsx`) all wear it alike; and at its right how the turn ended
  * where it did not simply answer. Under it, when the turn began and ended,
- * in full. Then, under a hairline, its tokens: the input the model read
+ * in full, and a quiet line where Anthropic refused a fast step of the turn,
+ * which then ran at standard speed, as Claude Code says when it falls back
+ * from fast mode. Then, under a hairline, its tokens: the input the model read
  * fresh, the output it wrote, the input its prefix cache answered, and,
  * where the provider said it, the input written to that cache, each label
  * muted at the start and its count at the end in tabular figures. Only what the turn's row recorded is said: a turn from before
@@ -37,6 +39,9 @@ const ENDING_WORD = {
   [TURN_ENDING.FAILED]: "Failed",
   [TURN_ENDING.ABANDONED]: "Abandoned",
 } as const satisfies Record<TurnEnding, string>;
+
+/** The line a turn says where a fast step of it ran at standard speed instead. */
+const FAST_REFUSED_NOTE = "Fast wasn't available, so this ran at standard speed";
 
 /** The token rows, in the order the card lists them. */
 const TOKEN_ROW = {
@@ -113,7 +118,7 @@ export function TurnCard({
   /** The catalog as last read, which names the model; empty before the first read lands. */
   models: readonly CatalogModel[];
 }): React.JSX.Element {
-  const { model, effort, tokens, ending } = record;
+  const { model, effort, tokens, ending, fastRefused } = record;
   return (
     <div className="turn-card" data-turn-card="">
       {model === undefined && ending === undefined ? null : (
@@ -131,6 +136,7 @@ export function TurnCard({
       <p className="turn-card-when">
         <time dateTime={new Date(startedAt).toISOString()}>{spanText(startedAt, endedAt)}</time>
       </p>
+      {fastRefused === true ? <p className="turn-card-note">{FAST_REFUSED_NOTE}</p> : null}
       {tokens === undefined ? null : (
         <dl className="turn-card-tokens" aria-label="Tokens">
           {tokenRows(tokens).map(([label, count]) => (

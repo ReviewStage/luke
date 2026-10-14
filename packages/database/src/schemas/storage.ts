@@ -202,6 +202,8 @@ export const turns = pgTable(
     /** What the failure was, at whatever length it came; `failure` is the word, this is the detail. */
     failureDetail: text("failure_detail"),
     cancelRequestedAt: timestamptz("cancel_requested_at"),
+    /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
+    fastRefused: boolean("fast_refused").notNull().default(false),
   },
   (table) => [
     index("turns_by_user").on(table.userId),

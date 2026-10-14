@@ -35,7 +35,7 @@ import {
   type StoredAgentStep,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
-import { conversations } from "../schemas/storage.js";
+import { conversations, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
@@ -376,6 +376,17 @@ const updateAgentBranch = SqlSchema.void({
   execute: ({ userId, agentId, branch }) =>
     Database.use((db) =>
       db.update(codingAgent).set({ branch }).where(reachableAgent(userId, agentId)),
+    ),
+});
+
+const markTurnFastRefused = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, turnId: Schema.String }),
+  execute: ({ userId, turnId }) =>
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ fastRefused: true })
+        .where(and(eq(turns.userId, userId), eq(turns.id, turnId))),
     ),
 });
 
@@ -786,6 +797,14 @@ export function updateCodingAgentBranch(
   branch: string | null,
 ): CodingAgentStoreEffect<void> {
   return updateAgentBranch({ userId, agentId, branch });
+}
+
+/** The account's turn marked as one a step of ran at standard speed because Anthropic refused it Fast; nothing written for a turn the account does not own. */
+export function recordTurnFastRefused(
+  userId: string,
+  turnId: string,
+): CodingAgentStoreEffect<void> {
+  return markTurnFastRefused({ userId, turnId });
 }
 
 /** The agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent of a workspace the account is not in. */

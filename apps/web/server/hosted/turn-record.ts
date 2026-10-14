@@ -3,7 +3,8 @@
  *
  * Every turn row names the model eve resolved it to and the effort it ran
  * at where its session named one, and once it settles, the tokens its steps
- * summed and how it ended. A tab draws those on the card its "Worked for"
+ * summed and how it ended; and whether Anthropic refused a fast step of it,
+ * which then ran at standard speed. A tab draws those on the card its "Worked for"
  * line hangs, so the reads that answer a tab's turns carry them beside the
  * turn's span: the Work tab's planning turns and its workers' sessions, and
  * a coding agent's journals. A leaf over the row alone, so it reads nothing.
@@ -25,7 +26,7 @@ import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
 /** The row's fields a record is read from. */
 export type RecordedTurn = Pick<
   StoredTurnRecord,
-  "status" | "model" | "reasoningEffort" | "usage" | "failure"
+  "status" | "model" | "reasoningEffort" | "usage" | "failure" | "fastRefused"
 >;
 
 const decodeUsage = Schema.decodeUnknownOption(TurnUsageColumnSchema);
@@ -73,5 +74,6 @@ export function turnRecordOf(turn: RecordedTurn): TurnRecord {
     ...(effort === undefined ? undefined : { effort }),
     ...(tokens === undefined ? undefined : { tokens }),
     ...(ending === undefined ? undefined : { ending }),
+    ...(turn.fastRefused ? { fastRefused: true } : undefined),
   };
 }
