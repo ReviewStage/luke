@@ -2364,8 +2364,8 @@ body,
 
 /* A popover hung from its own button (`anchored-popover.tsx`): the layer
    stands a small gap above the box that holds the button, or below it
-   where only there is room, at the left and width it was measured to, and
-   the popover inside stands in the layer's place. */
+   where only there is room, its asked edge at the inset and width it was
+   measured to, and the popover inside stands in the layer's place. */
 .anchored-popover {
   position: absolute;
   z-index: 2;
