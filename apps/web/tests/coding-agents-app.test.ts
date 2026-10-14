@@ -5,9 +5,11 @@ import { Database } from "@sidecar/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import {
+  archiveCodingAgent,
   createCodingAgent,
   listCodingAgents,
   readCodingAgent,
+  updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
@@ -42,7 +44,7 @@ import {
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { ROLLOUT_BASE, type Rollout } from "@sidecar/hosted/plan-wire";
+import { ROLLOUT_BASE, type Rollout, type RolloutItem } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
@@ -145,6 +147,22 @@ const TWO_PULL_REQUESTS: Rollout = [
 
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
+
+/** A rollout of two pull requests, the second on the first. */
+const ROLLOUT: readonly RolloutItem[] = [
+  {
+    title: "Invitation table",
+    scope: "Add the `invitation` table and its store.",
+    base: ROLLOUT_BASE.MAIN,
+    acceptance: null,
+  },
+  {
+    title: "Invite route",
+    scope: "POST /api/invitations over the store.",
+    base: 1,
+    acceptance: "A teammate invited by email gets the mail.",
+  },
+];
 
 /** The saved plan as Copy writes it, its name as a title over its text and its rollout after, which is what an agent started on the plan is handed. */
 const SNAPSHOT = `# Teammate invitations
@@ -693,12 +711,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a rollout's keeper starts on a task at no position and no base, a second while it stands is refused as keeper-taken and opens nothing, though its own retry still answers it; once its turn fails, a keeper starts again",
+    "a rollout's keeper starts with no task at no position and no base, handed the keeper's brief; a second while it stands is refused as keeper-taken and opens nothing, though its own retry still answers it; once its turn fails, a keeper starts again",
     () =>
       Effect.gen(function* () {
         const { owner, plan, eve, ask } = yield* openPlan({ rollout: TWO_PULL_REQUESTS });
         const key = randomUUID();
-        const asKeeper = { role: ROLLOUT_ROLE.KEEPER, task: "Keep the rollout's stack." };
+        const asKeeper = { role: ROLLOUT_ROLE.KEEPER };
         const keeper = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -706,6 +724,17 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         ).agent;
         assert.equal(keeper.role, ROLLOUT_ROLE.KEEPER);
         assert.equal(keeper.position, undefined);
+        assert.equal(keeper.brief, CODING_AGENT_BRIEF.STACK_KEEPER);
+        const stored = yield* readCodingAgent(owner, keeper.id);
+        assert.ok(Option.isSome(stored));
+        assert.equal(stored.value.task, null);
+        const brief = stored.value.planSnapshot;
+        assert.ok(brief !== null);
+        assert.ok(brief.startsWith("# Stack keeper: 2 pull requests in 1 stack\n"));
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [brief],
+        );
 
         assert.deepEqual(
           yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), ...asKeeper })),
@@ -718,9 +747,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         assert.equal(again.agent.id, keeper.id);
         assert.equal(eve.opened.length, 1);
-        // A keeper with no task, at a position, or on a base, and a builder at none, name no agent.
+        // A keeper handed a task, at a position, or on a base, and a builder at none, name no agent.
         for (const body of [
-          { role: ROLLOUT_ROLE.KEEPER },
+          { ...asKeeper, task: "Keep the rollout's stack." },
           { ...asKeeper, position: 1 },
           { ...asKeeper, baseBranch: "luke/invitations/1-schema" },
           { role: ROLLOUT_ROLE.BUILDER },
@@ -740,6 +769,155 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         ).agent;
         assert.notEqual(restarted.id, keeper.id);
         assert.equal(restarted.role, ROLLOUT_ROLE.KEEPER);
+      }),
+  );
+
+  it.effect(
+    "a Start at a rollout position with no task hands the worker its pull request's brief on the base it names, keeps the brief as its snapshot, and reads as a pull request; a position the rollout does not name is refused and opens nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: ROLLOUT });
+        const base = "luke/invitations/1-schema";
+
+        const started = yield* ask(
+          startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 2, baseBranch: base }),
+        );
+
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.brief, CODING_AGENT_BRIEF.PULL_REQUEST);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const brief = stored.value.planSnapshot;
+        assert.ok(brief !== null);
+        assert.ok(brief.startsWith("# Pull request 2 of 2: Invite route\n"));
+        assert.ok(brief.includes("POST /api/invitations over the store."));
+        assert.ok(brief.includes("Done when: A teammate invited by email gets the mail."));
+        assert.ok(brief.includes(`#1 Invitation table on \`${base}\``));
+        assert.ok(brief.includes("## Out of scope"));
+        assert.ok(!brief.includes("Invites expire after 7 days."));
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [brief],
+        );
+
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 3 })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(eve.opened.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a worker's brief names the branch of a pull request below its base though that pull request's worker was archived",
+    () =>
+      Effect.gen(function* () {
+        const chain: readonly RolloutItem[] = [
+          ...ROLLOUT,
+          {
+            title: "Accept flow",
+            scope: "Accept an invitation from its link.",
+            base: 2,
+            acceptance: null,
+          },
+        ];
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: chain });
+        const lowest = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+        ).agent;
+        yield* updateCodingAgentBranch(owner, lowest.id, "luke/invitations/1-schema");
+        yield* archiveCodingAgent(owner, lowest.id, true);
+
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              position: 3,
+              baseBranch: "luke/invitations/2-route",
+            }),
+          ),
+        );
+
+        const brief = String(eve.opened.at(-1)?.message.message);
+        assert.ok(
+          brief.includes(
+            "  - #1 Invitation table on `luke/invitations/1-schema`\n    - #2 Invite route on `luke/invitations/2-route`\n      - #3 Accept flow (yours)",
+          ),
+        );
+      }),
+  );
+
+  it.effect(
+    "the keeper's brief names no branch for a position whose newest builder has recorded none, though the archived builder it replaced recorded one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: TWO_PULL_REQUESTS });
+        const replaced = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 2 })),
+        ).agent;
+        yield* updateCodingAgentBranch(owner, replaced.id, "luke/invitations/2-old");
+        yield* archiveCodingAgent(owner, replaced.id, true);
+        // The replacement starts later, so it is the newest worker at its position.
+        yield* TestClock.adjust("1 second");
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 2 })),
+        );
+
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, { idempotencyKey: randomUUID(), role: ROLLOUT_ROLE.KEEPER }),
+          ),
+        );
+
+        const brief = String(eve.opened.at(-1)?.message.message);
+        assert.ok(brief.includes("- #2 Invite by email · base: #1 · no branch yet\n"));
+        assert.ok(!brief.includes("luke/invitations/2-old"));
+      }),
+  );
+
+  it.effect(
+    "a worker of a plan that is one document is handed its Context and Goal sections verbatim, and none of the rest of its text",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const context = "## Context\n\nAdmins add every teammate by hand.";
+        const goal = "## Goal\n\nInvite a teammate by email.";
+        yield* savePlanText(
+          owner,
+          plan.id,
+          `${context}\n\n${goal}\n\n## Approach\n\nA table and a route.\n`,
+          {
+            rollout: ROLLOUT,
+          },
+        );
+
+        const { agent } = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+        );
+
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const brief = stored.value.planSnapshot;
+        assert.ok(brief !== null);
+        assert.ok(brief.startsWith("# Pull request 1 of 2: Invitation table\n"));
+        assert.ok(brief.includes(`${context}\n\n${goal}\n`));
+        assert.ok(!brief.includes("A table and a route."));
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [brief],
+        );
       }),
   );
 

@@ -20,8 +20,12 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  *
  * The plan is the session's first message, or where the developer started
  * the agent on words of their own, their task is, and the agent never sees
- * the plan; these are the standing rules around it, worded for whichever it
- * was handed. Note that publishing is the agent's own judgment, as the plan
+ * the plan, or where it is a builder of the plan's rollout, the brief for its
+ * one pull request is, or for the rollout's stack keeper, the keeper's brief
+ * (`brief.ts`); these are the standing rules around it, worded for whichever
+ * it was handed. A builder pushes its own branch alone, and the keeper, which
+ * writes no code and opens no pull request, does every rebase, retarget, and
+ * merge, so each is told what the other does. Note that publishing is the agent's own judgment, as the plan
  * decided: it may open a pull request, a draft one, or none, and says
  * which; and that the branch rule is an instruction, enforced by nothing,
  * which the plan also decided. The repository's name and the checkout's
@@ -40,31 +44,77 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * (`brain-host/planning.ts`).
  */
 
-/** The words the instructions say of what the agent was handed, a plan or a task, where the two differ. */
+/** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
+const DECIDED_WORDS = ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`;
+
+/** How an agent handed the plan, or a pull request cut from it, records what it learned in the plan. */
+const UPDATING_WORDS = `
+
+## Updating the plan
+
+\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under one of the plan's headings, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
+
+/** Steps 5 to 7 for an agent that writes code: its change, its checks, and whether it publishes, worded for what it was handed. */
+function buildingSteps(words: { whole: string; none: string; describe: string }): string {
+  return `5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
+6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
+7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}.`;
+}
+
+/** What an agent that writes code decides beside the work itself. */
+const PUBLISHING_AIM = ", and to decide whether the result is worth publishing as a pull request";
+
+/** The words the instructions say of what the agent was handed, a plan, a task, one pull request of the plan's rollout, or the rollout's stacks, where they differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
     reread:
       "Reread the code the plan names before you change it. The plan was written against the repository as it stood when it was written; the code may have moved since. Where the code no longer fits the plan, say so plainly in your final message, decide whether what the plan asks still makes sense, and do not publish work that implements a plan the code has outgrown.",
-    whole: "implements the plan whole",
-    none: "the plan could not be implemented",
-    describe: "name the plan in its description",
-    /** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
-    updating: `
-
-## Updating the plan
-
-\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under one of the plan's headings, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`,
+    aim: PUBLISHING_AIM,
+    work: buildingSteps({
+      whole: "implements the plan whole",
+      none: "the plan could not be implemented",
+      describe: "name the plan in its description",
+    }),
+    decided: DECIDED_WORDS,
+    updating: UPDATING_WORDS,
   },
   [CODING_AGENT_BRIEF.TASK]: {
     job: "carry out the task the developer gave as the first message of this conversation",
     reread:
       "Read the code the task touches before you change it. Where the task is unclear or the code does not fit what it asks, say so plainly in your final message rather than guessing at a larger change.",
-    whole: "does the task whole",
-    none: "the task could not be done",
-    describe: "say in its description what the task asked",
+    aim: PUBLISHING_AIM,
+    work: buildingSteps({
+      whole: "does the task whole",
+      none: "the task could not be done",
+      describe: "say in its description what the task asked",
+    }),
     /** An agent handed a task never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
+    decided: "",
+    updating: "",
+  },
+  [CODING_AGENT_BRIEF.PULL_REQUEST]: {
+    job: "build the one pull request of the plan's rollout given as the first message of this conversation, and no other",
+    reread:
+      "Reread the code the brief names before you change it. The brief was cut from the plan as it stood when the rollout started; the code, and the pull requests below yours, may have moved since. Where the code no longer fits the brief, say so plainly in your final message, decide whether what it asks still makes sense, and do not publish work the code has outgrown. Build nothing the brief lists as out of scope, even where it would help: another builder writes it.",
+    aim: PUBLISHING_AIM,
+    work: buildingSteps({
+      whole: "builds the pull request whole, to its acceptance where the brief sets one",
+      none: "the pull request could not be built",
+      describe: "name the plan and the pull request's position in its rollout in its description",
+    }),
+    decided: DECIDED_WORDS,
+    updating: UPDATING_WORDS,
+  },
+  [CODING_AGENT_BRIEF.STACK_KEEPER]: {
+    job: "keep the stacks of the plan's rollout that the first message of this conversation lays out: you own the rollout's git structure, and its builders write its code",
+    aim: "",
+    reread:
+      "Read the rollout's pull requests and their branches with `gh pr list` and `gh pr view` before you touch a stack, and fetch before every restack: builders push their own branches while you work.",
+    work: `5. Change no code but what a mechanical conflict needs, keeping both sides whole. A conflict that needs a judgment of how the code should work is the pull request's builder's: abort the rebase and report it.
+6. Never open a pull request of your own; every pull request of the rollout is a builder's. Push only branches you rewrote, each with \`--force-with-lease\`.
+7. Report what you did with your report tool as each restack, merge, or conflict happens, so Luke tells the builders it touched.`,
+    /** The keeper writes nothing of the plan's: a decision about the code is a builder's to take into it. */
     decided: "",
     updating: "",
   },
@@ -72,10 +122,9 @@ const BRIEF_WORDS = {
   CodingAgentBrief,
   {
     job: string;
+    aim: string;
     reread: string;
-    whole: string;
-    none: string;
-    describe: string;
+    work: string;
     decided: string;
     updating: string;
   }
@@ -93,30 +142,39 @@ const CHECKS_WORDS = {
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
 
+/** What a builder of the rollout is told beside its branch: the keeper owns the stack, so its own branch is all it pushes. */
+const BUILDER_STACK_RULE =
+  " Push your own branch and nothing else: never run `gh stack`, never rebase onto a base that moved, never retarget your pull request, and never merge; the rollout's stack keeper does all of that. Push every commit as you make it. When told to resync, run `git fetch origin <your branch> && git reset --hard origin/<your branch>` before any more work, unless you hold edits or commits not yet pushed: then reset nothing, and say so.";
+
 /**
  * Where the checkout stands and what the agent's branch is cut from: the
  * default branch, or the base its row names, a builder's branch named under
- * its plan's rollout prefix with its position. The keeper is told only where
- * it stands, the default branch with the rollout's branches beside it; what
- * it does with them is its brief's to say.
+ * its plan's rollout prefix with its position. The keeper, whatever it was
+ * handed, stands on the default branch with the rollout's branches beside it
+ * and cuts no branch of its own.
  */
 function branchWords(agent: Pick<CodingAgent, "planId" | "position" | "baseBranch" | "role">) {
   const base = agent.baseBranch;
-  const defaultRule = `Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, cut from the default branch. Never commit to or push the default branch.`;
   if (agent.role === ROLLOUT_ROLE.KEEPER) {
     return {
       checkout: `at its current default branch, with every branch of this plan's rollout, \`${rolloutBranchPrefix(agent.planId)}*\`, fetched beside it as origin's`,
-      rule: defaultRule,
+      rule: "Cut no branch of your own: the branches you push are the rollout's builders', rewritten by a restack. Never commit to or push the default branch.",
     };
   }
-  if (base === null) return { checkout: "at its current default branch", rule: defaultRule };
+  const stack = agent.position === null ? "" : BUILDER_STACK_RULE;
+  if (base === null) {
+    return {
+      checkout: "at its current default branch",
+      rule: `Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, cut from the default branch. Never commit to or push the default branch.${stack}`,
+    };
+  }
   const name =
     agent.position === null
       ? `${CODER.BRANCH_PREFIX}<slug>`
       : `${rolloutBranchPrefix(agent.planId)}${agent.position}-<slug>`;
   return {
     checkout: `at the branch \`${base}\`, which your work builds on, with the default branch fetched beside it as origin's`,
-    rule: `Work on a branch named \`${name}\`, cut from \`${base}\`, which is already pushed, and open your pull request onto it with \`gh pr create --base ${base}\`. Never commit to or push \`${base}\` or the default branch.`,
+    rule: `Work on a branch named \`${name}\`, cut from \`${base}\`, which is already pushed, and open your pull request onto it with \`gh pr create --base ${base}\`. Never commit to or push \`${base}\` or the default branch.${stack}`,
   };
 }
 
@@ -129,7 +187,7 @@ export function coderInstructions(
   const words = BRIEF_WORDS[brief];
   const branch = branchWords(agent);
   const repository = agent.repository;
-  return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
+  return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`${words.aim}.
 
 ## The checkout
 
@@ -141,9 +199,7 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}.
 2. ${words.reread}
 3. ${branch.rule}
 4. Your commits are the Luke GitHub App's: the checkout's git identity is already set to its bot, so never change \`user.name\` or \`user.email\`, pass \`--author\`, add a \`Co-authored-by\` trailer, or rewrite who a commit is by.
-5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
-6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
-7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}.
+${words.work}
 8. ${ciReadable ? CHECKS_WORDS.readable : CHECKS_WORDS.unreadable}
 
 For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.

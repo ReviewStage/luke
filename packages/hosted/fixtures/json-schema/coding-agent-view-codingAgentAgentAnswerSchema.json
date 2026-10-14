@@ -73,7 +73,9 @@
               "type": "string",
               "enum": [
                 "plan",
-                "task"
+                "task",
+                "pull_request",
+                "stack_keeper"
               ]
             },
             "archivedAt": {

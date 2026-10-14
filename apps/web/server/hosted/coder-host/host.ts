@@ -9,7 +9,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { promptHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
-import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
@@ -43,6 +43,7 @@ import type { RepositorySandbox } from "../repository-shell.js";
 import { logStoreFailure } from "../store-failure.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import { briefOf } from "./brief.js";
 import {
   agentCiReadable,
   agentRepositoryToken,
@@ -333,8 +334,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
   /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
   const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
-    const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
-    const text = coderInstructions(agent, brief, ciReadable);
+    const text = coderInstructions(agent, briefOf(agent), ciReadable);
     return { text, hash: promptHashOf(text), ciReadable };
   };
 

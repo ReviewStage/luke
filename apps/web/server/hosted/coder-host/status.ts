@@ -3,7 +3,6 @@ import type {
   CodingAgentLatestTurn,
 } from "@sidecar/database/models/coding-agent-store";
 import {
-  CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
@@ -15,6 +14,7 @@ import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
+import { briefOf } from "./brief.js";
 
 /**
  * status.ts -- where a coding agent stands, read from its newest turn.
@@ -168,7 +168,7 @@ export function codingAgentSummary(
       lineAwaits: standing.lineAwaits,
     }),
     turnId: standing.turn?.id ?? null,
-    brief: agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK,
+    brief: briefOf(agent),
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
     ...(agent.disabledServers.length === 0
       ? undefined
