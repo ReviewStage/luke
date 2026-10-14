@@ -2799,8 +2799,12 @@ a claim that still read it at its old instant records nothing past the
 unique key. A schedule due more than an hour ago, the cron down or a
 deploy between, is moved on without a run, so a backlog is never replayed.
 
-A queued run is acted on by `hosted/automation-runs.ts`. Its guards come
-first: a run past the daily cap (runs started in the last twenty-four
+A queued run is acted on by `hosted/automation-runs.ts`, one automation's
+runs one after another so each run's guards read what the one before
+settled; a run still queued an hour after it fired is settled as `missed`.
+Its guards come first: a run whose automation was paused after it was
+queued is skipped as `paused` (the owner's own "Run now" still runs), and
+a run past the daily cap (runs started in the last twenty-four
 hours) or past the concurrency guard (agents its runs started still
 starting or running, read as each agent's tab reads it) is skipped, never
 queued. Then it is a Start with a task, on the one path a Start takes
