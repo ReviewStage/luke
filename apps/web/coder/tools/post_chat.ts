@@ -17,7 +17,10 @@ import { chatPostsMade } from "../session-prompt.js";
  * key, so a call eve replays posts once. The turn's count of posts is the
  * session's own state, pinned before anything awaits, and reserved before
  * the post goes out, as `edit_plan` reserves its notes, because calls one
- * step makes run at once and each must see the other's reservation.
+ * step makes run at once and each must see the other's reservation. An
+ * image block's picture is read from the session's sandbox through the
+ * same door eve hands every file tool, opened on first use, so a post with
+ * no image opens none.
  */
 export default defineTool({
   description: CHAT_TOOLS.POST.description,
@@ -33,6 +36,7 @@ export default defineTool({
       input: unparsedWire(input as WireBoundaryInput),
       clientKey: ctx.callId,
       postsInTurn: before,
+      sandbox: () => ctx.getSandbox(),
     });
     const posted = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? 1 : 0;
     made.update((held) => settleNotes(held, turnId, 1, posted));

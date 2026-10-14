@@ -48,6 +48,7 @@ const ID_KIND = {
   REASONING: "reasoning",
   SENT: "sent",
   CHAT_NOTICE: "chat-notice",
+  CHAT_ATTACHMENT: "chat-attachment",
 } as const;
 
 /**
@@ -107,5 +108,13 @@ export function chatNoticeKey(messageId: string, revision: number, memberId: str
   return nameBasedUuid(
     BRAIN_HOST_ID_NAMESPACE,
     coordinate([ID_KIND.CHAT_NOTICE, messageId, String(revision), memberId]),
+  );
+}
+
+/** The id a picture a post read from the poster's sandbox is kept under: one per post and path, so a post sent again keeps the picture it kept. */
+export function chatAttachmentId(clientKey: string, path: string): string {
+  return nameBasedUuid(
+    BRAIN_HOST_ID_NAMESPACE,
+    coordinate([ID_KIND.CHAT_ATTACHMENT, clientKey, path]),
   );
 }

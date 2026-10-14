@@ -57,6 +57,7 @@ import {
   chatRejected,
   postAsAgent,
   readAsAgent,
+  resolveAsAgent,
 } from "./chat.js";
 import { HELD_DOORS } from "./chat-notify.js";
 import {
@@ -305,15 +306,17 @@ export type InboxCall =
       readonly input: UnparsedWireValue;
     };
 
-/** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, and how many posts its turn has made. */
+/** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
 export type ChatCall =
   | {
       readonly tool: typeof CHAT_TOOL.POST;
       readonly input: UnparsedWireValue;
       readonly clientKey: string;
       readonly postsInTurn: number;
+      readonly sandbox: InboxSandboxDoor;
     }
-  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue };
+  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
+  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -597,9 +600,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
-        const { id: agentId, planId } = found.success;
+        const { id: agentId, planId, repository } = found.success;
         const reader = { userId: admitted.target.userId, agentId, planId };
         if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
+        if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
         // A notice reaches the receiving agent's session as the deployment acting for that agent's
         // starter, whose principal its turn runs under, as the planning model's message to an
         // agent does: no bearer stands here.
@@ -612,12 +616,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const eveFor = (starter: string) =>
           compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
         const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
-        return yield* postAsAgent(
-          { ...reader, telling },
-          call.input,
-          call.clientKey,
-          call.postsInTurn,
-        );
+        const { clientKey, postsInTurn, sandbox } = call;
+        return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
+          clientKey,
+          postsInTurn,
+          sandbox,
+        });
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
