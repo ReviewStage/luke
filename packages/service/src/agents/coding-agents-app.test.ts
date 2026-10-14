@@ -5177,7 +5177,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
     });
 
   it.effect(
-    "a person's DM to an agent steers it once as a chat line, the receipt naming it told, and the post repeated under its key tells no one again",
+    "a person's DM to an agent steers it once as a chat line, the receipt naming it told, and the post repeated under its key steers nothing more",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -5227,7 +5227,8 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const again = yield* chat.wrote(send);
         assert.ok("posted" in again);
         assert.equal(again.posted.id, sent.posted.id);
-        assert.deepEqual(again.receipt, { told: [], held: [], left: [], unresolved: [] });
+        // Told again, the repeat finds the first notice still outstanding and steers nothing more.
+        assert.deepEqual(again.receipt, { told: [], held: ["agent-1"], left: [], unresolved: [] });
         assert.equal(eve.sent.length, 1);
         // A teammate's DM reaches the agent as the member who started it, whoever posts.
         yield* joinWorkspace(chat.workspace, chat.other);

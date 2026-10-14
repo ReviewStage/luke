@@ -598,8 +598,8 @@ export const chatReceiptSchema = EffectSchema.Struct({
 
 /**
  * What a write to the chat answers, one key for each kind of write: a post,
- * the message and who it came to, a repeat under its key telling no one
- * again; an answer, the ask as it then stands and whether the answer was
+ * the message and who it came to, a repeat under its key finishing a
+ * telling the first left undone and steering no one twice; an answer, the ask as it then stands and whether the answer was
  * taken, which it is not at a revision its poster has moved past or on an
  * ask no longer open; a resolve, the ask resolved; and a read, where the
  * person's cursor then stands.
