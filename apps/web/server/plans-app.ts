@@ -12,7 +12,7 @@ import {
   readPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
-import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
+import { standingSessionsNamed } from "@sidecar/database/models/recorded-session";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
 import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
 import {
@@ -450,7 +450,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
       // agent started meanwhile refuses retires nothing.
       beforeDelete: (conversationIds) =>
-        Effect.flatMap(standingSessionsOf(userId, conversationIds), (sessions) =>
+        Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
           retireSessions((mount) => eveFor(seams, request, mount), sessions),
         ),
     }).pipe(Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined))),
