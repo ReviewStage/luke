@@ -739,6 +739,14 @@ export function listCodingAgentsOnBranches(
   );
 }
 
+/** The account's agent a Start made under its key, or nothing where no Start under it made one. */
+export function readCodingAgentByKey(
+  userId: string,
+  idempotencyKey: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return findAgentByKey({ userId, idempotencyKey });
+}
+
 /** The agent under this id, or nothing for an agent of a workspace the account is not in. */
 export function readCodingAgent(
   userId: string,

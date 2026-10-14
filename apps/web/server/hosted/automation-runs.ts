@@ -12,6 +12,7 @@ import {
 import {
   awaitingLinesOfReached,
   latestTurnsOfReached,
+  readCodingAgentByKey,
 } from "@sidecar/database/models/coding-agent-store";
 import {
   AUTOMATION_FIRING,
@@ -173,6 +174,14 @@ const outcomeOf = Effect.fnUntraced(function* (
   automation: Automation,
   run: AutomationRun,
 ) {
+  // A run whose agent a start already made, its settling lost after, is that start's, whatever the guards read now.
+  const started = yield* readCodingAgentByKey(automation.userId, run.id);
+  if (Option.isSome(started)) {
+    return {
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      codingAgentId: started.value.id,
+    } satisfies AutomationRunOutcome;
+  }
   // A run queued before its automation was paused starts nothing; the owner's own "Run now" still runs.
   if (!automation.enabled && run.firing.kind !== AUTOMATION_FIRING.MANUAL) {
     return {

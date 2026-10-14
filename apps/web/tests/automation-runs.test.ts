@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import {
   type Automation,
@@ -12,6 +13,7 @@ import {
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { automationRun } from "@sidecar/database/schemas/automation";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -24,6 +26,7 @@ import {
   type AutomationGuards,
 } from "@sidecar/hosted/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { executeAutomationRun } from "../server/hosted/automation-runs";
 import { sweepAutomations } from "../server/hosted/automation-sweep";
@@ -347,5 +350,31 @@ it.layer(getTestDB())("an automation's runs", (it) => {
       const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
       assert.equal(standing.enabled, true, "one failed start after two missed runs pauses nothing");
     }),
+  );
+
+  it.effect(
+    "a run whose agent started but whose settling was lost settles as that start on its next try, whatever the guards read",
+    () =>
+      Effect.gen(function* () {
+        const { automation } = yield* openAutomation({
+          guards: { maxConcurrentRuns: 1, dailyRunCap: 1 },
+        });
+        const eve = fakeEve();
+        const run = yield* runNow(automation);
+        const first = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        // The settling lost: the run stands queued again, its agent still running.
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ status: AUTOMATION_RUN_STATUS.QUEUED, codingAgentId: null, settledAt: null })
+            .where(eq(automationRun.id, run.id)),
+        );
+
+        const again = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+
+        assert.equal(first?.status, AUTOMATION_RUN_STATUS.STARTED);
+        assert.deepEqual(again, first, "the same agent, not a skip");
+        assert.equal(eve.opened.filter((each) => each.account === automation.userId).length, 1);
+      }),
   );
 });
