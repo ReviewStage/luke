@@ -33,7 +33,7 @@ import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
-import { RetryButton } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Shortcut } from "../shortcut";
 import { Skeleton } from "../skeleton";
@@ -181,9 +181,8 @@ function PlanInboxTab({
           inbox.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : inbox.failed && items.length === 0 ? (
-            <div className="sidebar-note flex items-center gap-2" role="alert">
-              <span>The inbox could not be read.</span>
-              <RetryButton onRetry={inbox.onRetry} />
+            <div className="sidebar-note">
+              <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
           ) : null
         }
@@ -313,12 +312,15 @@ function PlanDocument({
         <section className="desktop-empty">
           {region.kind === DOCUMENT_REGION.READING ? (
             <Spinner label="Loading plan" size={SPINNER_SIZE.REGION} />
+          ) : region.kind === DOCUMENT_REGION.FAILED ? (
+            <ReadFailure
+              line={line}
+              onRetry={plans.onRetryDocument}
+              place={READ_FAILURE_PLACE.CENTRED}
+            />
           ) : (
             <p role="alert">{line}</p>
           )}
-          {region.kind === DOCUMENT_REGION.FAILED ? (
-            <RetryButton onRetry={plans.onRetryDocument} />
-          ) : null}
           {/* A plan that cannot be drawn offers no menu, so its way back to
               the home page is said here. */}
           {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
@@ -435,12 +437,12 @@ function PlanDocument({
           }
         >
           {rename.note !== undefined ? (
-            <p className="desktop-toolbar-note" role="alert">
+            <p className="error-message" role="alert">
               {rename.note}
             </p>
           ) : null}
           {repositoryNote !== undefined ? (
-            <p className="desktop-toolbar-note" role="alert">
+            <p className="error-message" role="alert">
               {repositoryNote}
             </p>
           ) : null}

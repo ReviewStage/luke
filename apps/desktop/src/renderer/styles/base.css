@@ -710,6 +710,16 @@ body,
   height: 100%;
 }
 
+/* A fault's words, in the danger text colour: a refusal under the row or
+   the dialog it answers, a press that did not land, and a read that did not
+   (`read-failure.tsx`). The one class for them, so a failure reads alike
+   wherever it is said. */
+.error-message {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
 /* The mark an agent at work wears (`working-mark.tsx`): two pixels and their
    fainter tails lapping a faint track, in the ink around it. Its size is
    fixed and set past a slot's own `svg` rule (`.tab-icon svg`), by the

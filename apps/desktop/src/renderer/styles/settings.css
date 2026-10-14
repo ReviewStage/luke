@@ -495,12 +495,6 @@
   gap: 7px;
 }
 
-.error-message {
-  margin: 0;
-  color: var(--danger-text);
-  font-size: 12px;
-}
-
 /* A row's words that say something failed, in the failure's red over the
    muted ink every other detail wears. */
 .settings-copy .error-message {

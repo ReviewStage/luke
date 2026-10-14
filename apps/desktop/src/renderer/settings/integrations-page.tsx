@@ -23,11 +23,10 @@ import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
-import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
-import { SettingsGroup } from "./settings-group";
+import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
@@ -313,12 +312,9 @@ function IntegrationRows(): React.JSX.Element {
   return (
     <>
       {statuses.readFailed ? (
-        <>
-          <p className="error-message" role="alert">
-            {PAGE_LINE.READ_FAILED}
-          </p>
-          <RetryButton onRetry={() => void statuses.read()} />
-        </>
+        <SettingsGroup>
+          <ReadFailed line={PAGE_LINE.READ_FAILED} onRetry={() => void statuses.read()} />
+        </SettingsGroup>
       ) : null}
       {offered.length === 0 ? (
         <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p>

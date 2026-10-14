@@ -425,7 +425,7 @@ export function AgentComposer({
       {note !== undefined ? (
         <FailureNote
           failure={note}
-          className="agent-note agent-composer-note"
+          className="error-message agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
           onRemedy={lapsed === undefined ? undefined : () => reconnect(lapsed)}
         />

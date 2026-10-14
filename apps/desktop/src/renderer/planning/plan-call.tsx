@@ -15,7 +15,8 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { EmptyState } from "../empty-state";
-import { RetryButton, RetryRowLabel } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallEnded } from "./call-card";
@@ -444,9 +445,8 @@ export function PlanCall({
           <ConversationContent className="pt-0">
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
-              <div className="flex items-center gap-2 pt-(--section-gap)">
-                <TranscriptNote role="alert">{TRANSCRIPT_FAILED_LINE}</TranscriptNote>
-                <RetryButton onRetry={onRetry} />
+              <div className="pt-(--section-gap)">
+                <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} />
               </div>
             ) : null}
             {region.kind === TRANSCRIPT_REGION.READY && region.earlierOmitted ? (
@@ -469,10 +469,11 @@ export function PlanCall({
         </ConversationEmptyState>
       ) : region.kind === TRANSCRIPT_REGION.FAILED ? (
         <ConversationEmptyState>
-          <p className="m-0" role="alert">
-            {TRANSCRIPT_FAILED_LINE}
-          </p>
-          <RetryButton onRetry={onRetry} />
+          <ReadFailure
+            line={TRANSCRIPT_FAILED_LINE}
+            onRetry={onRetry}
+            place={READ_FAILURE_PLACE.CENTRED}
+          />
         </ConversationEmptyState>
       ) : (
         <EmptyState icon={<CallIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>

@@ -14,14 +14,13 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { RetryButton } from "../retry-button";
 import { SETTINGS_SECTION } from "../settings-views";
 import { SpinnerRegion } from "../spinner";
 import { managesWorkspace } from "../workspace-role";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
 import { SelectRow } from "./select-row";
-import { SettingsGroup } from "./settings-group";
+import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: one workspace the account is in, its members, and its GitHub repositories.
@@ -79,18 +78,6 @@ function Reading({ label }: { label: string }): React.JSX.Element {
   return (
     <div className="settings-card-line settings-reading">
       <SpinnerRegion label={label} />
-    </div>
-  );
-}
-
-/** A read that failed: its refusal in red, and Retry. */
-function ReadFailed({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
-  return (
-    <div className="settings-card-line">
-      <p className="error-message" role="alert">
-        {line}
-      </p>
-      <RetryButton onRetry={onRetry} />
     </div>
   );
 }
@@ -553,7 +540,7 @@ export function WorkspacePage({
     return (
       <SettingsGroup>
         {control.listFailed ? (
-          <ReadFailed line="Luke could not read your workspaces." onRetry={control.onRetryList} />
+          <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
         ) : (
           <Reading label="Loading your workspaces" />
         )}

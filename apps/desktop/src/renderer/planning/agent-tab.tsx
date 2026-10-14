@@ -29,7 +29,7 @@ import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
 import { HarnessMark } from "../provider-marks";
-import { RetryButton } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
@@ -174,6 +174,9 @@ export const AGENT_LEAD: TranscriptLead = {
   startingLine: "The agent is starting. Its transcript appears here.",
   grouped: true,
 };
+
+/** What the tab says where its transcript could not be read. */
+const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
 
 /** A worker's transcript: the task it was handed, and the worker starting. */
 const WORKER_LEAD: TranscriptLead = {
@@ -701,12 +704,7 @@ function AgentTranscriptView({
             </p>
           )}
           {footer}
-          {failed ? (
-            <div className="agent-note agent-failure" role="alert">
-              <p className="m-0">The transcript could not be read.</p>
-              <RetryButton onRetry={onRetry} />
-            </div>
-          ) : null}
+          {failed ? <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} /> : null}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -715,12 +713,11 @@ function AgentTranscriptView({
   return (
     <ConversationEmptyState>
       {failed ? (
-        <>
-          <p className="m-0" role="alert">
-            The transcript could not be read.
-          </p>
-          <RetryButton onRetry={onRetry} />
-        </>
+        <ReadFailure
+          line={TRANSCRIPT_FAILED_LINE}
+          onRetry={onRetry}
+          place={READ_FAILURE_PLACE.CENTRED}
+        />
       ) : reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (

@@ -119,7 +119,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
         // A Start a GitHub connect mended is pressed again by itself.
         <FailureNote
           failure={start.note}
-          className="desktop-toolbar-note"
+          className="error-message"
           onRetry={start.note.reason === FAILURE_REASON.OTHER ? undefined : () => press()}
         />
       ) : null}

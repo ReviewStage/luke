@@ -3,7 +3,8 @@ import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFindOpen } from "../find-in-tab";
 import { CONNECTED_ACCOUNTS_LINK, OpenSettingsButton } from "../open-settings";
-import { RetryButton, RetryRowLabel } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure, type ReadFailurePlace } from "../read-failure";
+import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
@@ -210,28 +211,37 @@ function FileLinesView({
   );
 }
 
-/** Why a file read is not drawn, and the offer to read again where the reason may pass. */
+/**
+ * Why a file read is not drawn: a read that did not land, or a refusal that
+ * may pass, as a read failure with Retry; any other refusal in the notice's
+ * own ink, with Open Settings where signing in is what it waits on.
+ */
 function ReadNotice({
   read,
   commit,
   onRetry,
+  place,
 }: {
   read: Exclude<FileRead, { kind: typeof FILE_READ.READY | typeof FILE_READ.READING }>;
   /** The commit the file was read at, where one pinned it. */
   commit: string | undefined;
   onRetry: () => void;
+  place: ReadFailurePlace;
 }): React.JSX.Element {
+  if (read.kind === FILE_READ.FAILED || refusalPasses(read.refusal)) {
+    const line =
+      read.kind === FILE_READ.FAILED
+        ? "The file could not be read."
+        : refusalLine(read.refusal, read.branch, commit);
+    return <ReadFailure line={line} onRetry={onRetry} place={place} />;
+  }
   return (
     <>
-      <p className="m-0">
-        {read.kind === FILE_READ.REFUSED
-          ? refusalLine(read.refusal, read.branch, commit)
-          : "The file could not be read."}
+      <p className="m-0" role="alert">
+        {refusalLine(read.refusal, read.branch, commit)}
       </p>
-      {read.kind === FILE_READ.REFUSED && read.refusal === PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED ? (
+      {read.refusal === PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED ? (
         <OpenSettingsButton link={CONNECTED_ACCOUNTS_LINK} />
-      ) : read.kind === FILE_READ.FAILED || refusalPasses(read.refusal) ? (
-        <RetryButton onRetry={onRetry} />
       ) : null}
     </>
   );
@@ -351,13 +361,23 @@ export function FileTab({
       ) : read.kind === FILE_READ.READING ? (
         <SpinnerRegion label="Loading file" />
       ) : snippet === undefined ? (
-        <div className="side-panel-empty" role="alert">
-          <ReadNotice read={read} commit={file.commit} onRetry={readLit} />
+        <div className="side-panel-empty">
+          <ReadNotice
+            read={read}
+            commit={file.commit}
+            onRetry={readLit}
+            place={READ_FAILURE_PLACE.CENTRED}
+          />
         </div>
       ) : (
         <>
-          <div className="file-tab-notice" role="alert">
-            <ReadNotice read={read} commit={file.commit} onRetry={readLit} />
+          <div className="file-tab-notice">
+            <ReadNotice
+              read={read}
+              commit={file.commit}
+              onRetry={readLit}
+              place={READ_FAILURE_PLACE.INLINE}
+            />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
           <div className="code-lines file-tab-lines" {...look}>

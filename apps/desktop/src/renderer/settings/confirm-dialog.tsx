@@ -217,7 +217,7 @@ export function ConfirmDialog({
         </p>
         {children}
         {rejection !== undefined && !acting ? (
-          <p className="confirm-dialog-error" role="alert">
+          <p className="error-message" role="alert">
             {rejection}
           </p>
         ) : null}
