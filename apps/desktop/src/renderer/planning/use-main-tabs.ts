@@ -25,6 +25,14 @@ import {
  * agent's, opened from the column's "+", after them while the open plan
  * holds the draft.
  *
+ * A plan whose rollout names more than one pull request has a Stack tab,
+ * standing second, after the plan's, which draws the rollout's workers as
+ * one stack rather than a row of tabs. It is anchored as the plan's is: it
+ * never closes and never moves, and it stands exactly while the rollout
+ * holds more than one item, so a rollout cut back to one takes it away and
+ * the column falls back to the tab viewed before it, the plan's where none
+ * stands.
+ *
  * An agent's tab closes as an editor's does, which closes the view and
  * leaves the agent running, and the "+" opens it again; the agents whose
  * tabs were closed are kept, so a closed tab stays closed across a launch,
@@ -78,16 +86,21 @@ import {
 
 /**
  * The column's own tabs, each one word beside the agents' and the draft's
- * objects: the plan's, and its Inbox, which stands while open on a plan
+ * objects: the plan's, its Stack, which stands while its rollout names more
+ * than one pull request, and its Inbox, which stands while open on a plan
  * with an agent, since only an agent posts.
  */
 export const MAIN_TAB = {
   PLAN: "plan",
+  STACK: "stack",
   INBOX: "inbox",
 } as const;
 
-/** The plan's own tab, or its Inbox. */
+/** The plan's own tab, its Stack, or its Inbox. */
 type OwnMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
+
+/** How many pull requests a rollout names before the plan has a Stack tab. */
+const STACK_FROM = 2;
 
 /** A tab of the plan's column: the plan's own, its Inbox, one agent's, or the draft agent's. */
 export type MainTab = OwnMainTab | AgentStripTab | DraftStripTab;
@@ -119,7 +132,7 @@ const RECENT_KEPT = 20;
  */
 const PLANS_KEPT = 500;
 
-/** A tab as it is kept across a launch: the plan's, or an agent's; a draft's is kept nowhere. */
+/** A tab as it is kept across a launch: the plan's, its Stack, its Inbox, or an agent's; a draft's is kept nowhere. */
 const keptTabSchema = Schema.Union([
   Schema.Literals(Object.values(MAIN_TAB)),
   Schema.Struct({ agent: Schema.String }),
@@ -207,11 +220,11 @@ export interface MainTabsControl {
   onChoose: (tab: MainTab) => void;
   /** Shows the tab on the plan given, as `onChoose` does on the open plan: what a pin, a notification, or the call card asks, the plan opened beside it. */
   onShow: (planId: string, tab: MainTab) => void;
-  /** Closes the tab, and only the view: an agent goes on as it was, and the Inbox keeps its items. The plan's tab never closes. */
+  /** Closes the tab, and only the view: an agent goes on as it was, and the Inbox keeps its items. The plan's tab and its Stack never close. */
   onClose: (tab: MainTab) => void;
   /** Hears what a read of the plan's inbox found waiting, by id, opening and choosing its Inbox where an item did not wait at the last read. */
   onInboxRead: (planId: string, waiting: readonly string[]) => void;
-  /** Moves a tab other than the plan's to the place `to` among them, after the plan's, leaving the chosen one chosen. */
+  /** Moves a tab other than the plan's or its Stack to the place `to` among them, after those two, leaving the chosen one chosen. */
   onMove: (tab: MainTab, to: number) => void;
   /** Asks the column's "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -219,12 +232,14 @@ export interface MainTabsControl {
   onNewTabAnswered: () => void;
 }
 
-/** What the open plan holds for the tabs: its id, its agents, or nothing while unread, its draft's key, and whether an inbox item waits on it. */
+/** What the open plan holds for the tabs: its id, its agents, or nothing while unread, its draft's key, whether an inbox item waits on it, and whether it has a Stack. */
 interface DrawnTabs {
   planId: string | undefined;
   agents: readonly string[] | undefined;
   draft: string | undefined;
   waiting: boolean;
+  /** Whether the plan's rollout names enough pull requests for its Stack tab. */
+  stacked: boolean;
   /** Whether the plan holds an agent, an archived one included, whose Inbox items still stand. */
   holds: boolean;
 }
@@ -262,9 +277,9 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
 }
 
 /**
- * The strip in its order: the plan's tab, then the open agents', the
- * draft's, and the Inbox where open on a plan with an agent, an archived
- * one included, in the plan's order.
+ * The strip in its order: the plan's tab, its Stack where it has one, then
+ * the open agents', the draft's, and the Inbox where open on a plan with an
+ * agent, an archived one included, in the plan's order.
  */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.planId);
@@ -274,8 +289,14 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const order = choices.order ?? NO_TABS;
   return [
     MAIN_TAB.PLAN,
+    ...(drawn.stacked ? [MAIN_TAB.STACK] : []),
     ...inPlanOrder([...agents, ...draft, ...(inbox ? [MAIN_TAB.INBOX] : [])], order, (tab) => tab),
   ];
+}
+
+/** Whether the tab is anchored at the strip's start, never closing nor moving: the plan's or its Stack. */
+function anchored(tab: MainTab): boolean {
+  return tab === MAIN_TAB.PLAN || tab === MAIN_TAB.STACK;
 }
 
 /** Whether the tab stands in the plan's strip now. */
@@ -313,8 +334,7 @@ function inboxLast(held: HeldState, drawn: DrawnTabs, was: readonly MainTab[]): 
   const others = was.filter((tab) => tab !== MAIN_TAB.INBOX);
   if (drawn.agents === undefined) return others;
   const unplaced = stripOf(held, drawn).filter(
-    (tab) =>
-      tab !== MAIN_TAB.PLAN && tab !== MAIN_TAB.INBOX && !was.some((other) => sameTab(other, tab)),
+    (tab) => !anchored(tab) && tab !== MAIN_TAB.INBOX && !was.some((other) => sameTab(other, tab)),
   );
   return [...others, ...unplaced, MAIN_TAB.INBOX];
 }
@@ -349,7 +369,14 @@ function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
 
 /** What a plan other than the open one holds for the tabs, which is unread. */
 function unreadPlan(planId: string): DrawnTabs {
-  return { planId, agents: undefined, draft: undefined, waiting: false, holds: false };
+  return {
+    planId,
+    agents: undefined,
+    draft: undefined,
+    waiting: false,
+    stacked: false,
+    holds: false,
+  };
 }
 
 /**
@@ -390,7 +417,7 @@ function withInboxRead(
  * closing the Inbox keeps what it has seen, so only a newer item opens it.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
-  if (tab === MAIN_TAB.PLAN) return held;
+  if (anchored(tab)) return held;
   const closed = isAgentTab(tab)
     ? { ...held, closedAgents: [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT) }
     : held;
@@ -406,9 +433,9 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
   return withViewed(forgotten, drawn.planId, [replacement]);
 }
 
-/** The state with the tab moved to `to` among the tabs after the plan's, kept as the plan's order (`movedOrder`). */
+/** The state with the tab moved to `to` among the tabs after the plan's and its Stack, kept as the plan's order (`movedOrder`). */
 function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs): HeldState {
-  const movable = stripOf(held, drawn).filter((each) => each !== MAIN_TAB.PLAN);
+  const movable = stripOf(held, drawn).filter((each) => !anchored(each));
   const was = choicesOn(held, drawn.planId).order ?? NO_TABS;
   const order = movedOrder(was, movable, tab, to);
   return order === undefined
@@ -416,7 +443,7 @@ function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs):
     : withChoices(held, drawn.planId, (choices) => ({ ...choices, order }));
 }
 
-/** Whether a tab is kept across a launch: the plan's or an agent's, the kinds that stand again after it. */
+/** Whether a tab is kept across a launch: any but a draft's, the kinds that stand again after it. */
 function keptTab(tab: MainTab): tab is Exclude<MainTab, DraftStripTab> {
   return !isDraftTab(tab);
 }
@@ -485,7 +512,8 @@ function readStored(): HeldState {
  * The column's tabs over the open plan: `planId`, none while no plan is
  * open, `agents` its agents by id in the order started, or nothing while
  * unread, `draft` its draft agent's key, if it holds one, `waiting`
- * whether an inbox item waits on it, and `held` every agent it holds, an
+ * whether an inbox item waits on it, `rollout` how many pull requests its
+ * rollout names, and `held` every agent it holds, an
  * archived one among them, which its Inbox stands on too, the standing
  * ones where unsaid. A fixture run's column keeps nothing,
  * and starts from nothing.
@@ -496,6 +524,7 @@ export function useMainTabs(
   agents: readonly string[] | undefined,
   draft: string | undefined,
   waiting: boolean,
+  rollout: number,
   held: readonly string[] | undefined = agents,
 ): MainTabsControl {
   // Note that a fixture run's column is a state of its own rather than the
@@ -510,9 +539,10 @@ export function useMainTabs(
     [fixture],
   );
   const holds = (held?.length ?? 0) > 0;
+  const stacked = rollout >= STACK_FROM;
   const drawn = useMemo(
-    () => ({ planId, agents, draft, waiting, holds }),
-    [planId, agents, draft, waiting, holds],
+    () => ({ planId, agents, draft, waiting, stacked, holds }),
+    [planId, agents, draft, waiting, stacked, holds],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
