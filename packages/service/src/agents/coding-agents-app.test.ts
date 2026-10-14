@@ -201,6 +201,7 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
+import { chatApp } from "./chat-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
@@ -217,7 +218,6 @@ import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
-import { chatApp } from "./chat-app.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 
 /**

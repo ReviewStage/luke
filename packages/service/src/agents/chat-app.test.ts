@@ -26,12 +26,12 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Queue, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { chatApp } from "./chat-app.js";
-import { CODER } from "./coder-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import { githubReaching } from "../testing/github-app-fake.js";
+import { chatApp } from "./chat-app.js";
+import { CODER } from "./coder-host/bounds.js";
 
 /**
  * The window's read of a workspace's chat, answered by the group the way a
