@@ -444,6 +444,8 @@ const standing = (
         ),
       eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
+      // The deployment acting for an agent's starter, which the fake writes down as the starter's bearer.
+      eveAs: (starter: string) => eve.eve(`Bearer ${starter}`),
       workspaces: yield* fakeWorkspaceSeams,
     };
     const agents = HttpRouter.toWebHandler(
@@ -5138,8 +5140,8 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
       const write = (body: WireBoundaryInput, bearer: string | undefined = opened.owner) =>
         opened.ask(at(bearer, "POST", body));
       /** A write read as the wire declares its answer. */
-      const wrote = (body: WireBoundaryInput) =>
-        Effect.map(write(body), (answered) =>
+      const wrote = (body: WireBoundaryInput, bearer: string = opened.owner) =>
+        Effect.map(write(body, bearer), (answered) =>
           readAnswer(chatWriteAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
       /** The chat as the owner reads it from the start. */
@@ -5227,11 +5229,24 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.equal(again.posted.id, sent.posted.id);
         assert.deepEqual(again.receipt, { told: [], held: [], left: [], unresolved: [] });
         assert.equal(eve.sent.length, 1);
+        // A teammate's DM reaches the agent as the member who started it, whoever posts.
+        yield* joinWorkspace(chat.workspace, chat.other);
+        yield* unreadFor(chat.owner, chat.workspace, chat.agent.id);
+        const fromTeammate = yield* chat.wrote(
+          { text: "Use the new table.", to: "@agent-1", clientKey: randomUUID() },
+          chat.other,
+        );
+        assert.ok("posted" in fromTeammate);
+        assert.deepEqual(fromTeammate.receipt.told, ["agent-1"]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.authorization),
+          [`Bearer ${chat.owner}`, `Bearer ${chat.owner}`],
+        );
         // A plain post in a channel tells nobody.
         const plain = yield* chat.wrote({ text: "Morning, all.", clientKey: randomUUID() });
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
-        assert.equal(eve.sent.length, 1);
+        assert.equal(eve.sent.length, 2);
       }),
   );
 

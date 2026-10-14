@@ -28,6 +28,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { chatApp } from "./chat-app.js";
 import { CODER } from "./coder-host/bounds.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import { githubReaching } from "../testing/github-app-fake.js";
@@ -44,6 +45,20 @@ import { githubReaching } from "../testing/github-app-fake.js";
 
 const ORIGIN = "https://luke.test";
 const CHAT = "/api/workspaces/chat";
+
+/** The deployment's environment with no key of its own: nothing here reaches eve. */
+const NO_KEYS: HostedEnvironmentValues = {
+  openAiKey: undefined,
+  anthropicKey: undefined,
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: undefined,
+};
 
 interface Answer {
   readonly status: number;
@@ -84,6 +99,7 @@ const openRoom = Effect.gen(function* () {
     Layer.succeed(Database, yield* Database),
     Layer.succeed(Clock.Clock, clock),
     githubReaching([]).layer,
+    Layer.succeed(HostedEnvironment, NO_KEYS),
   );
   const handler = HttpRouter.toWebHandler(
     chatApp({

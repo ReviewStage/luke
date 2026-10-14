@@ -40,6 +40,11 @@ import {
 } from "effect/http";
 import type { GitHubApp } from "../github/github-app.js";
 import {
+  EVE_MOUNT,
+  type EveSessions,
+  eveSessionsComposer,
+} from "./brain-host/eve-sessions.js";
+import {
   type ChatTelling,
   HELD_DOORS,
   HOSTED_OF_CHAT_REFUSAL,
@@ -47,8 +52,8 @@ import {
   tellMessage,
 } from "./coder-host/chat-notify.js";
 import { messageOnWire, workspaceChatPast } from "./coder-host/chat-page.js";
-import { type EveReach, eveFor } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { HostedEnvironment } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -80,8 +85,10 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * ask of the person's own; and how far the person has read. The workspace
  * is named in the query as the members read names it. The bearer is
  * resolved before any row is touched, a workspace the account is not in
- * answers as one that names nothing, and eve is reached under the
- * person's own bearer, as a message to an agent is.
+ * answers as one that names nothing, and a notice reaches an agent through
+ * eve as the deployment acting for whoever started the agent, as the
+ * planner's message to an agent does, since a person may tell an agent a
+ * teammate started.
  */
 
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
@@ -93,12 +100,20 @@ const seqCursorSchema = chatCursorSchema.check(Schema.isPattern(/^(0|[1-9][0-9]{
 const MAXIMUM_WRITE_BODY_BYTES =
   6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS + 4_096;
 
-export interface ChatAppSeams extends EveReach {
+export interface ChatAppSeams {
   resolveUserId: UserIdResolver;
+  /** The origin eve answers on; nothing where the deployment names none, which refuses every post and answer as unavailable. */
+  eveOrigin: () => string | undefined;
+  /** eve as the deployment reaches it for the account an agent was started by; a test hands a fake, and the deployment composes eve's client under its own secret. */
+  eveAs?: (starterUserId: string) => EveSessions;
 }
 
 /** What the routes may require of the function that stands them. */
-export type ChatAppServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
+export type ChatAppServices =
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | HostedEnvironment;
 
 type ChatServices = ChatAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -163,14 +178,36 @@ const readChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page.value);
 });
 
-/** What a door needs to tell the members a person's message addresses, eve reached under the person's own bearer. */
+/**
+ * eve as the deployment acting for the account an agent was started by,
+ * under the deployment's own secret, since a notice steers the agent's turn
+ * as its starter whoever posted and the request carries only the poster's
+ * bearer; unavailable where the deployment names no secret or no origin.
+ */
+const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: ChatAppSeams,
+): Effect.fn.Return<
+  (starterUserId: string) => EveSessions,
+  HostedRefusal,
+  HttpClient.HttpClient | HostedEnvironment
+> {
+  if (seams.eveAs !== undefined) return seams.eveAs;
+  const secret = (yield* HostedEnvironment).cronSecret;
+  const origin = seams.eveOrigin();
+  if (secret === undefined || origin === undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  const compose = yield* eveSessionsComposer;
+  return (account) => compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
+});
+
+/** What a door needs to tell the members a person's message addresses. */
 const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatAppSeams,
-  request: Request,
   writer: Writer,
-): Effect.fn.Return<ChatTelling, HostedRefusal, HttpClient.HttpClient> {
+): Effect.fn.Return<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment> {
   return {
-    eve: yield* eveFor(seams, request),
+    eveFor: yield* eveAsStarter(seams),
     writer: storeWriter({ tools: CODER_TOOL_SET }),
     userId: writer.userId,
     organizationId: writer.organizationId,
@@ -214,7 +251,7 @@ function mentionsOf(blocks: readonly ChatBlock[]): readonly string[] {
 
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient>,
+  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
   writer: Writer,
   post: {
     readonly text?: string;
@@ -249,7 +286,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
  * ask no longer open, is answered with the ask as it stands, not taken.
  */
 const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
-  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient>,
+  telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
   writer: Writer,
   asked: {
     readonly answer: { readonly seq: number; readonly revision: number; readonly reply: ChatReply };
@@ -334,7 +371,7 @@ const writeChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const writer = { userId, organizationId, self: self.value };
-  const telling = tellingOf(seams, request, writer);
+  const telling = tellingOf(seams, writer);
   const write = asked.success;
   if ("readTo" in write) return yield* readToAsPerson(writer, write.readTo);
   if ("resolve" in write) {
