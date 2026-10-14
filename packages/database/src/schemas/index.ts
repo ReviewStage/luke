@@ -2,6 +2,7 @@
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./account-provider-key.js";
 export * from "./auth.js";
+export * from "./automation.js";
 export * from "./coding-agent.js";
 export * from "./favorite.js";
 export * from "./github-connect-intent.js";

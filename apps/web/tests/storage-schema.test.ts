@@ -45,6 +45,8 @@ const DECLARED_TABLES = [
   "account_provider_key",
   "admin_favorite",
   "asks",
+  "automation",
+  "automation_run",
   "coding_agent",
   "coding_agent_delegation",
   "conversations",
