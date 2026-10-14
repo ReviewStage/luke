@@ -80,7 +80,12 @@ export interface CallAvatar {
   readonly request: (frame: AvatarRequestFrame) => void;
   /** The device hung up: what stands closes as the call's end, and nothing starts after. */
   readonly hangUp: () => void;
-  /** Closes every avatar row still open on the call, once its voice row is closed. */
+  /**
+   * Closes every avatar row still open on the call, once its voice row is
+   * closed, whether or not this instance can mint one: a call re-attached
+   * here may show an avatar another instance put up. A close that fails here
+   * is repaired by the sweep, which closes the rows of every closed call.
+   */
   readonly callClosed: Effect.Effect<void, never, DatabaseServices>;
 }
 
@@ -104,6 +109,8 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
   /** The row this connection's latest start opened, with that start's request id. */
   let held: { readonly requestId: string; readonly rowId: string } | undefined;
   let hungUp = false;
+  /** When this connection began, which bounds what a stop it holds no row for may close. */
+  const connectedAt = yield* currentInstant;
   const failed = Effect.sync(() => log({ event: LOG_EVENT.SESSION_FAILED }));
   const queue = yield* serialQueue<DatabaseServices>({
     onDefect: () => failed,
@@ -116,9 +123,9 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       options.send({ type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE, requestId, reason }),
     );
 
-  const closeOpen = (id: string, reason: AvatarEndReason) =>
+  const closeOpen = (id: string, reason: AvatarEndReason, startedBefore?: Date) =>
     Effect.flatMap(currentInstant, (endedAt) =>
-      closeOpenAvatarSessionsOf({ voiceSessionId: id, endedAt, reason }),
+      closeOpenAvatarSessionsOf({ voiceSessionId: id, endedAt, reason, startedBefore }),
     );
 
   // Note that whatever the call already shows is closed before Keyframe is
@@ -132,6 +139,9 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
         const { failure, status } = minted.failure;
         return yield* unavailable(requestId, UNAVAILABLE_REASON_OF_FAILURE[failure], status);
       }
+      // The device may have hung up while Keyframe minted: no grant reaches
+      // a caller who asked to end the call, and no row opens for it.
+      if (hungUp) return yield* unavailable(requestId, AVATAR_UNAVAILABLE_REASON.ERROR);
       const frame = startedFrame({
         type: VOICE_SERVICE_FRAME.AVATAR_STARTED,
         requestId,
@@ -173,14 +183,15 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
    * The stop of the row the request opened. A stop for an earlier request
    * than the one this connection holds is late and closes nothing; one this
    * connection holds none for is about an avatar an earlier connection put
-   * up, and closes whatever the call still shows.
+   * up, and closes what the call shows that started before this connection,
+   * so a newer connection's avatar is never closed by a stop that is not its.
    */
   const answerStop = (frame: AvatarStopFrame) =>
     Effect.gen(function* () {
       if (voiceSessionId === undefined) return;
       const reason = END_REASON_OF_STOP[frame.reason];
       if (held === undefined) {
-        yield* closeOpen(voiceSessionId, reason);
+        yield* closeOpen(voiceSessionId, reason, connectedAt);
         return;
       }
       if (held.requestId !== frame.requestId) return;
@@ -203,7 +214,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
     },
     hangUp: () => {
       hungUp = true;
-      if (provider === undefined || voiceSessionId === undefined) return;
+      if (voiceSessionId === undefined) return;
       const call = voiceSessionId;
       queue.offerUnsafe(
         written(
@@ -217,7 +228,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       );
     },
     callClosed:
-      provider === undefined || voiceSessionId === undefined
+      voiceSessionId === undefined
         ? Effect.void
         : written(closeOpen(voiceSessionId, AVATAR_END_REASON.CALL_ENDED)),
   };

@@ -5,7 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import { openAvatarSession } from "@sidecar/database/models/voice-avatar-sessions";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { voiceAvatarSessions } from "@sidecar/database/schemas/voice";
-import { AVATAR_END_REASON } from "@sidecar/database/voice-vocabulary";
+import { AVATAR_END_REASON, VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
 import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
@@ -20,7 +20,8 @@ import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { asc, eq } from "drizzle-orm";
 import { Effect, Exit, Layer, Option, Scope } from "effect";
 import { afterAll } from "vitest";
-import { LIVE_SERVER_EVENT, LIVE_VOICE } from "../server/live";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_VOICE } from "../server/live";
+import { callAvatar } from "../server/voice/avatar";
 import {
   type AvatarGrant,
   KEYFRAME_FAILURE,
@@ -340,8 +341,93 @@ it.effect("the hang-up closes the avatar the call still shows as the call's end"
   }),
 );
 
+it.effect("a hang-up while Keyframe mints sends no grant and opens no row", () =>
+  Effect.promise(async () => {
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const keyframe = scriptedKeyframe([
+      Effect.as(
+        Effect.promise(() => gate),
+        GRANT,
+      ),
+    ]);
+    const context = await stand(keyframe.layer);
+    const session = await openSession(context);
+    await askStart(session.desktop, "request-1");
+    await until(() => keyframe.minted.count === 1, "the mint to begin");
+
+    // The relay reads the hang-up before it asks OpenAI for the close, so the close arriving means the service heard it.
+    await hangUpDevice(session.desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
+    const closing = record(await session.upstream.next());
+    assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+    release();
+    await until(
+      () =>
+        context.log.some(
+          (entry) =>
+            entry.event === LOG_EVENT.AVATAR_UNAVAILABLE ||
+            entry.event === LOG_EVENT.AVATAR_STARTED,
+        ),
+      "the start to be answered",
+    );
+
+    assert.equal(
+      context.log.some((entry) => entry.event === LOG_EVENT.AVATAR_STARTED),
+      false,
+    );
+    assert.deepEqual(await avatarRows(session.voiceSessionId), []);
+    await context.stop();
+  }),
+);
+
 it.effect(
-  "the orphan sweep closes an orphan's open avatar rows as orphaned behind its voice row",
+  "an instance with no Keyframe key still closes, at the call's close, the avatar another instance put up",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
+      const record = voiceSessionRecord();
+      const voiceSessionId = await database.run(
+        record.register({
+          userId,
+          sessionId: `live_reattached_${userId}`,
+          planId: plan.id,
+          attachId: "attach-1",
+          model: LIVE_DEFAULTS.MODEL,
+        }),
+      );
+      assert.ok(voiceSessionId);
+      const opened = await database.run(
+        openAvatarSession({ userId, voiceSessionId, personaId: PERSONA_ID, startedAt: new Date() }),
+      );
+      assert.ok(Option.isSome(opened));
+
+      await database.run(
+        Effect.scoped(
+          Effect.flatMap(
+            callAvatar({
+              provider: undefined,
+              userId,
+              voiceSessionId,
+              deviceOpen: Effect.succeed(true),
+              send: () => Effect.void,
+              log: () => undefined,
+            }),
+            (avatar) => avatar.callClosed,
+          ),
+        ),
+      );
+      assert.deepEqual(
+        (await avatarRows(voiceSessionId)).map((row) => row.endReason),
+        [AVATAR_END_REASON.CALL_ENDED],
+      );
+    }),
+);
+
+it.effect(
+  "the orphan sweep closes an orphan's open avatar rows as orphaned behind its voice row, and an avatar left open on a closed call as the call's end",
   () =>
     Effect.promise(async () => {
       const startedAt = 1_800_000_000_000;
@@ -369,6 +455,34 @@ it.effect(
         }),
       );
       assert.ok(Option.isSome(opened));
+      // A call whose own close landed and whose avatar's close behind it did not.
+      const strandedSessionId = `live_stranded_${userId}`;
+      const strandedCall = await database.run(
+        record.register({
+          userId,
+          sessionId: strandedSessionId,
+          planId: plan.id,
+          attachId: "attach-2",
+          model: LIVE_DEFAULTS.MODEL,
+        }),
+      );
+      assert.ok(strandedCall);
+      const stranded = await database.run(
+        openAvatarSession({
+          userId,
+          voiceSessionId: strandedCall,
+          personaId: PERSONA_ID,
+          startedAt: new Date(startedAt),
+        }),
+      );
+      assert.ok(Option.isSome(stranded));
+      await database.run(
+        record.close({
+          sessionId: strandedSessionId,
+          seconds: 30,
+          reason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
+        }),
+      );
 
       // OpenAI answers the attach for the session as gone, so the sweep closes it as lost.
       const openAi = await startFakeOpenAi();
@@ -387,6 +501,10 @@ it.effect(
       assert.deepEqual(
         (await avatarRows(voiceSessionId)).map((row) => row.endReason),
         [AVATAR_END_REASON.ORPHANED],
+      );
+      assert.deepEqual(
+        (await avatarRows(strandedCall)).map((row) => row.endReason),
+        [AVATAR_END_REASON.CALL_ENDED],
       );
     }),
 );

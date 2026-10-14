@@ -10,6 +10,7 @@ import { getTestDB } from "../../testing/index.js";
 import { AVATAR_END_REASON, VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
 import {
   closeAvatarSession,
+  closeAvatarSessionsOfEndedCalls,
   closeOpenAvatarSessionsOf,
   openAvatarSession,
   openAvatarSessionsOf,
@@ -118,6 +119,55 @@ it.layer(getTestDB())("the voice avatar sessions", (it) => {
       assert.deepEqual(yield* openAvatarSessionsOf(call), []);
       assert.equal((yield* openAvatarSessionsOf(neighbour)).length, 1, "another call is untouched");
     }),
+  );
+
+  it.effect("a close bounded by an instant leaves the sessions started after it open", () =>
+    Effect.gen(function* () {
+      const call = yield* openCall;
+      const earlier = yield* openOn(call);
+      const later = yield* openOn(call, after(30_000));
+
+      const closed = yield* closeOpenAvatarSessionsOf({
+        voiceSessionId: call.voiceSessionId,
+        endedAt: after(40_000),
+        reason: AVATAR_END_REASON.USER,
+        startedBefore: after(20_000),
+      });
+
+      assert.equal(closed, 1);
+      assert.deepEqual(
+        (yield* openAvatarSessionsOf(call)).map((session) => session.id),
+        [later],
+        `only ${earlier}, started before the bound, is closed`,
+      );
+    }),
+  );
+
+  it.effect(
+    "a session left open on a call that has closed is closed as of the call's own close",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const ended = yield* openCall;
+        const standing = yield* openCall;
+        const stranded = yield* openOn(ended);
+        yield* openOn(standing);
+        yield* db
+          .update(voiceSessions)
+          .set({ closedAt: after(45_200) })
+          .where(eq(voiceSessions.id, ended.voiceSessionId));
+
+        const closed = yield* closeAvatarSessionsOfEndedCalls();
+        const seconds = yield* closeAvatarSession({
+          id: stranded,
+          endedAt: after(900_000),
+          reason: AVATAR_END_REASON.USER,
+        });
+
+        assert.equal(closed, 1, "a session on a call still standing stays open");
+        assert.deepEqual(seconds, Option.some(46), "its seconds run to the call's close");
+        assert.equal((yield* openAvatarSessionsOf(standing)).length, 1);
+      }),
   );
 
   it.effect("a call that has closed opens no avatar session", () =>

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@sidecar/database/core/query";
-import { closeOpenAvatarSessionsOf } from "@sidecar/database/models/voice-avatar-sessions";
+import {
+  closeAvatarSessionsOfEndedCalls,
+  closeOpenAvatarSessionsOf,
+} from "@sidecar/database/models/voice-avatar-sessions";
 import type {
   DetachedVoiceSession,
   VoiceSessionRecord,
@@ -39,7 +42,10 @@ import type { LiveUpstream } from "./openai.js";
  * OpenAI's own duration limit, which has ended whatever it answers, is
  * closed as expired instead. Whichever way a voice row is closed here, the
  * avatar rows still open on it close behind it as orphaned, the voice row
- * first so no avatar opens on it after.
+ * first so no avatar opens on it after. Every sweep then closes whatever
+ * avatar row is still open on a call already closed, as of that call's own
+ * close: the repair for a close that landed on the voice row and not behind
+ * it, here or in the service.
  *
  * Each sweep takes at most `MAX_SESSIONS` of the oldest, `CONCURRENCY` at a
  * time, each bounded by the attach's own wait and the close's, so the sweep
@@ -208,6 +214,8 @@ export const sweepVoiceOrphans = /* @__PURE__ */ Effect.fn("web/sweepVoiceOrphan
     (orphan) => Effect.exit(Effect.scoped(endOrphan(seams, orphan, options.now))),
     { concurrency: VOICE_ORPHAN_SWEEP.CONCURRENCY },
   );
+  // A repair that fails is the next sweep's to make again, never this one's outcome.
+  yield* Effect.ignore(closeAvatarSessionsOfEndedCalls());
   const outcome = { ...NOTHING_ORPHANED };
   for (const ending of endings) {
     if (Exit.isFailure(ending)) outcome.failed += 1;
