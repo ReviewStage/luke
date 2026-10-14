@@ -26,6 +26,7 @@ export function MenuRow({
   label,
   actions,
   anchor,
+  highlighted = false,
   children,
 }: {
   /** What the menu is named: "Linear actions". */
@@ -33,6 +34,8 @@ export function MenuRow({
   actions: readonly MenuAction[];
   /** The id a pressed search result lands on. */
   anchor?: string;
+  /** The row holds the highlight a page's own search moves with the arrows. */
+  highlighted?: boolean;
   /** The row's words, and any control standing before the ⋯. */
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -46,6 +49,7 @@ export function MenuRow({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
       <div
         className="settings-row menu-row"
+        data-highlighted={highlighted ? "true" : undefined}
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         onContextMenu={(event) => {
           if (!acting) return;

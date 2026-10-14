@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { IntegrationTool } from "../integration-health";
-import { TOOL_BADGE, toolBadge, toolGroups } from "./server-tools-model";
+import type { IntegrationTool } from "./integration-health";
+import { TOOL_BADGE, toolBadge, toolGroups } from "./integration-tool-groups";
 
 /**
  * How a server's page lists its tools: runs under the prefixes the names

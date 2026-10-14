@@ -18,8 +18,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
+import type { IntegrationTool } from "../integration-health";
 import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "../integration-sign-in";
 import { OpenSettingsProvider } from "../open-settings";
 import { rendererRuntime } from "../renderer-runtime";
@@ -34,7 +37,9 @@ import { IntegrationsSection } from "./integrations-page";
  * that fails still offers to read again. GitHub, which the account's own
  * GitHub grants, is connected in place through the account's GitHub connect.
  * A Connect stands its provider pending at the service until the bridge
- * settles it, as the browser would, or a Cancel ends it.
+ * settles it, as the browser would, or a Cancel ends it. A connected
+ * provider's server lists the tools the bridge holds for it, which its row
+ * opens onto in place, and which the page's search finds.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
@@ -53,6 +58,8 @@ let githubConnects = 0;
 let reopenedDuringCancel = false;
 /** Where the service stands a provider a Connect or a Cancel has touched, over where it would otherwise. */
 const touched = new Map<IntegrationProvider, IntegrationStatus>();
+/** The tools each provider's server lists; one absent here is never answered. */
+const listed = new Map<IntegrationProvider, readonly IntegrationTool[]>();
 
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
@@ -83,6 +90,7 @@ beforeEach(() => {
   links = [];
   githubConnects = 0;
   touched.clear();
+  listed.clear();
   reopenedDuringCancel = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -120,6 +128,13 @@ function answerOf(request: Act): ActOutcome {
         touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
       }
       return { status: DONE, value: { status: serviceStatuses()[provider] } };
+    }
+    // A server whose tools the test holds none of is one the service never asked, as before tools were drawn.
+    case ACT_KIND.INTEGRATIONS_TOOLS: {
+      const tools = listed.get(request.payload.provider);
+      return tools === undefined
+        ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
+        : { status: DONE, value: { tools } };
     }
     default:
       return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
@@ -450,3 +465,134 @@ it.effect(
       });
     }),
 );
+
+/** Vercel and Linear connected, their servers listing these tools, Vercel's annotated as a server may. */
+function connectVercelAndLinear(): void {
+  touched.set(INTEGRATION_PROVIDER.VERCEL, INTEGRATION_STATUS.CONNECTED);
+  touched.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    { name: "list_projects", description: "Lists projects.", annotations: { readOnlyHint: true } },
+    {
+      name: "delete_project",
+      description: "Deletes a project.",
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    { name: "get_deployment", description: "Reads one deployment." },
+  ]);
+  listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
+}
+
+/** The row named `name`, as the page draws it. */
+function rowNamed(page: HTMLElement, name: string): Element {
+  return (
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === name,
+    ) ?? assert.fail(`${name} has a row`)
+  );
+}
+
+/** Each tool the page shows opened: its name and its badge, where it wears one. */
+function shownTools(page: HTMLElement) {
+  return [...page.querySelectorAll(".integration-tools-panel .integration-tool")].map((tool) => [
+    tool.querySelector(".integration-tool-id")?.textContent,
+    tool.querySelector(".integration-tool-badge")?.textContent ?? undefined,
+  ]);
+}
+
+/** The page's search field. */
+function searchField(page: HTMLElement): HTMLInputElement {
+  return (
+    page.querySelector<HTMLInputElement>('input[aria-label="Search integrations and tools"]') ??
+    assert.fail("the page has its search field")
+  );
+}
+
+/** Types `text` into the page's search, as a keystroke would land. */
+function search(page: HTMLElement, text: string): void {
+  act(() => {
+    const field = searchField(page);
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** A key pressed in the page's search. */
+function keyInSearch(page: HTMLElement, key: string): void {
+  act(() => {
+    searchField(page).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+test("a connected integration opens in place onto its tools, alphabetical, each badged only as its server annotated it", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+
+  assert.deepEqual(shownTools(page), []);
+  act(() =>
+    (
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
+        'button[aria-label="Show Vercel tools"]',
+      ) ?? assert.fail("Vercel's row opens onto its tools")
+    ).click(),
+  );
+
+  assert.deepEqual(shownTools(page), [
+    ["delete_project", "Destructive"],
+    ["get_deployment", undefined],
+    ["list_projects", "Read-only"],
+  ]);
+  assert.equal(rowNamed(page, "Granola").querySelector(".integration-tools-toggle"), null);
+});
+
+test("the search keeps integrations by name and by their tools, opening the latter onto just the tools it found", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+
+  search(page, "deploy");
+  assert.deepEqual(rowNames(page), ["Vercel"]);
+  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
+  assert.equal(page.querySelector(".integration-tools-found")?.textContent, "1 of 3 tools match");
+  assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
+
+  search(page, "lin");
+  assert.deepEqual(rowNames(page), ["Linear"]);
+  assert.deepEqual(shownTools(page), []);
+
+  search(page, "nothing like it");
+  assert.deepEqual(rowNames(page), []);
+  assert.equal(
+    page.querySelector(".settings-note")?.textContent,
+    "No integrations or tools match.",
+  );
+});
+
+test("Command-F lands in the page's search, the arrows move its highlight, and Return opens the highlighted row", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  assert.equal(document.activeElement, searchField(page));
+
+  search(page, "projects");
+  assert.equal(
+    page.querySelector('.menu-row[data-highlighted="true"] strong')?.textContent,
+    "Vercel",
+  );
+  keyInSearch(page, "Enter");
+  assert.deepEqual(shownTools(page), []);
+  keyInSearch(page, "Enter");
+  assert.deepEqual(shownTools(page), [["list_projects", "Read-only"]]);
+
+  search(page, "");
+  keyInSearch(page, "ArrowDown");
+  keyInSearch(page, "ArrowDown");
+  keyInSearch(page, "ArrowDown");
+  assert.equal(
+    page.querySelector('.menu-row[data-highlighted="true"] strong')?.textContent,
+    "Linear",
+  );
+  keyInSearch(page, "Enter");
+  assert.deepEqual(shownTools(page), [["list_issues", undefined]]);
+});

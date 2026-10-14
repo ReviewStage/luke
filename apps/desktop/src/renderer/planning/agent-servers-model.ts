@@ -11,8 +11,8 @@ import {
   type IntegrationTool,
 } from "../integration-health";
 import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
+import { byName } from "../integration-tool-groups";
 import { matchesTokens, searchTokens } from "../search-tokens";
-import { byName } from "./server-tools-model";
 
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.

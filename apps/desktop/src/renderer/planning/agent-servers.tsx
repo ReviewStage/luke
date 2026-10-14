@@ -11,6 +11,7 @@ import { connectionHealth, type IntegrationTool, toolsCount } from "../integrati
 import { IntegrationMark } from "../integration-marks";
 import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
+import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
@@ -29,7 +30,6 @@ import {
   switchedServers,
   type ToolHit,
 } from "./agent-servers-model";
-import { TOOL_BADGE, toolBadge, toolGroups } from "./server-tools-model";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
@@ -51,7 +51,7 @@ import { TOOL_BADGE, toolBadge, toolGroups } from "./server-tools-model";
  * its page, in place: back, its name, its switch, a filter, and its tools,
  * each its name, the badge its server's annotations earn it, and what it
  * does, run by name prefix where the names share clear ones
- * (`server-tools-model.ts`). What is typed in the home's field finds
+ * (`../integration-tool-list.tsx`). What is typed in the home's field finds
  * servers by name and every tool by name or description, and a tool found
  * opens its server's page filtered to the search. Focus stays in the field
  * throughout, as the searchable menu keeps it: the arrows move one
@@ -91,11 +91,10 @@ const SEARCH = {
   TOOLS: "Tools",
 } as const;
 
-/** What a server's page says where its filter matches nothing, and heads the tools no prefix runs. */
+/** What a server's page says where its filter matches nothing, and how its back button is named. */
 const PAGE = {
   NONE: "No tools match",
   BACK: "Back to MCP servers",
-  OTHER: "Other",
 } as const;
 
 /** How far the arrows scroll a server's page, about one tool. */
@@ -162,42 +161,6 @@ function SearchRow({
         onKeyDown={onKeyDown}
       />
     </div>
-  );
-}
-
-/** One of a server's tools on its page: its name, its badge, and what it does. */
-function ToolItem({
-  tool,
-  tokens,
-  server,
-}: {
-  tool: IntegrationTool;
-  tokens: readonly string[];
-  server: string;
-}): React.JSX.Element {
-  const badge = toolBadge(tool.annotations);
-  return (
-    <li className="agent-servers-tool" title={tool.description || undefined}>
-      <span className="agent-servers-tool-name">
-        <span className="agent-servers-tool-id">
-          <Highlighted text={tool.name} tokens={tokens} />
-        </span>
-        {badge !== undefined ? (
-          <span
-            className="agent-servers-badge"
-            data-destructive={badge === TOOL_BADGE.DESTRUCTIVE ? "true" : undefined}
-            title={`${server}'s server marks this tool ${badge.toLowerCase()}`}
-          >
-            {badge}
-          </span>
-        ) : null}
-      </span>
-      {tool.description !== "" ? (
-        <span className="agent-servers-tool-description">
-          <Highlighted text={tool.description} tokens={tokens} />
-        </span>
-      ) : null}
-    </li>
   );
 }
 
@@ -511,7 +474,7 @@ function ServersPopover({
         onClick={() => open(row, query)}
       >
         <IntegrationMark provider={row.provider} />
-        <span className="plan-compose-menu-name agent-servers-tool-id">
+        <span className="plan-compose-menu-name integration-tool-id">
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
         </span>
         <span className="agent-servers-count">{row.name}</span>
@@ -561,7 +524,6 @@ function ServersPopover({
     const tools = (row.tools ?? []).filter((tool) =>
       matchesTokens([tool.name, tool.description], tokens),
     );
-    const runs = toolGroups(tools);
     return (
       <>
         <div className="agent-servers-page-head">
@@ -592,23 +554,7 @@ function ServersPopover({
         />
         <div ref={list} className="plan-compose-menu-list agent-servers-list">
           {tools.length === 0 ? <p className="plan-compose-menu-note">{PAGE.NONE}</p> : null}
-          {runs.map((run) => (
-            <div key={run.prefix ?? "rest"}>
-              {runs.length > 1 ? (
-                <div
-                  className="menu-heading agent-servers-run"
-                  data-prefix={run.prefix !== undefined ? "true" : undefined}
-                >
-                  {run.prefix !== undefined ? `${run.prefix}*` : PAGE.OTHER}
-                </div>
-              ) : null}
-              <ul aria-label={run.prefix !== undefined ? `${run.prefix}*` : `${row.name} tools`}>
-                {run.tools.map((tool) => (
-                  <ToolItem key={tool.name} tool={tool} tokens={tokens} server={row.name} />
-                ))}
-              </ul>
-            </div>
-          ))}
+          <IntegrationToolList server={row.name} tools={tools} tokens={tokens} />
         </div>
       </>
     );

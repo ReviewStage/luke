@@ -141,9 +141,9 @@ function sections(container: HTMLElement) {
 
 /** Each tool on a server's page: its name and its badge, where it wears one. */
 function tools(container: HTMLElement) {
-  return [...container.querySelectorAll(".agent-servers-tool")].map((tool) => [
-    tool.querySelector(".agent-servers-tool-id")?.textContent,
-    tool.querySelector(".agent-servers-badge")?.textContent,
+  return [...container.querySelectorAll(".integration-tool")].map((tool) => [
+    tool.querySelector(".integration-tool-id")?.textContent,
+    tool.querySelector(".integration-tool-badge")?.textContent,
   ]);
 }
 
@@ -182,7 +182,7 @@ test("a search finds a tool, Enter opens its server's page filtered to it, and E
 
   type("deploy");
   assert.deepEqual(
-    [...container.querySelectorAll(".agent-servers-hit .agent-servers-tool-id")].map(
+    [...container.querySelectorAll(".agent-servers-hit .integration-tool-id")].map(
       (hit) => hit.textContent,
     ),
     ["get_deployment"],

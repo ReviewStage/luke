@@ -58,6 +58,20 @@ import { commandKeyshortcuts } from "./tooltip";
 /** How the search field is found by the seek that lands Command-F's caret in it. */
 const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
+/** What a search field is: its id, which Command-F's seek finds it by, its name, and what it shows while empty. */
+export interface SearchFieldIdentity {
+  readonly id: string;
+  readonly label: string;
+  readonly placeholder: string;
+}
+
+/** The settings sidebar's own field. */
+const SETTINGS_SEARCH_FIELD: SearchFieldIdentity = {
+  id: SETTINGS_SEARCH_INPUT_ID,
+  label: "Search settings",
+  placeholder: "Search",
+};
+
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
   /**
@@ -413,20 +427,28 @@ export function landOnSettingsRow(id: string): () => void {
  * window: a held query is cleared first, and only an empty field lets go of
  * the caret — both stopped here, so neither press falls through and turns the
  * page or the tab behind the field. Return opens the first result, so a
- * query someone is sure of needs no pointer.
+ * query someone is sure of needs no pointer. A page that searches its own
+ * rows draws the same field under its own name (Settings › Integrations):
+ * Command-F lands in the field drawn last, so on that page it lands there,
+ * and the arrows, where the page asks for them, move through its rows.
  */
 export function SettingsSearchField({
   query,
   onQueryChange,
   onSubmit,
+  onMove,
+  identity = SETTINGS_SEARCH_FIELD,
 }: {
   query: string;
   onQueryChange: (query: string) => void;
   /** Return pressed in the field: the first result is the answer. */
   onSubmit: () => void;
+  /** Down or Up pressed in the field, where its owner moves a highlight through what it found. */
+  onMove?: (step: 1 | -1) => void;
+  identity?: SearchFieldIdentity;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
-  useAppCommand(APP_COMMAND.FIND, () => focusSearchField(SETTINGS_SEARCH_INPUT_ID));
+  useAppCommand(APP_COMMAND.FIND, () => focusSearchField(identity.id));
   return (
     <search className="settings-search">
       {/* The label is the whole well, so a press on the magnifier or the
@@ -435,11 +457,11 @@ export function SettingsSearchField({
         <SearchIcon />
         <input
           ref={field}
-          id={SETTINGS_SEARCH_INPUT_ID}
+          id={identity.id}
           className="settings-search-input"
-          aria-label="Search settings"
+          aria-label={identity.label}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FIND)}
-          placeholder="Search"
+          placeholder={identity.placeholder}
           autoComplete="off"
           spellCheck={false}
           value={query}
@@ -455,6 +477,11 @@ export function SettingsSearchField({
             // the window's own Escape would turn the page behind the field.
             if (event.key === "Escape") event.stopPropagation();
             if (event.nativeEvent.isComposing) return;
+            if (onMove !== undefined && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+              event.preventDefault();
+              onMove(event.key === "ArrowDown" ? 1 : -1);
+              return;
+            }
             if (event.key === "Enter") {
               onSubmit();
               return;

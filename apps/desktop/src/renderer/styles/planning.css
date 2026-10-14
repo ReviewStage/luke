@@ -2101,7 +2101,7 @@ button.agent-ref:hover .agent-ref-name {
 
 /* A tool a search found: its name in the code face at the row's size, and
    its server's name after it as the count is drawn. */
-.agent-servers-hit .agent-servers-tool-id {
+.agent-servers-hit .integration-tool-id {
   font-size: 12px;
 }
 
@@ -2140,83 +2140,6 @@ button.agent-ref:hover .agent-ref-name {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* A run's heading is the prefix its tools' names share, drawn in the code
-   face as the pattern it is, and stays at the list's top while its run
-   scrolls under it. */
-.agent-servers-run {
-  position: sticky;
-  z-index: 1;
-  top: calc(var(--menu-inset) * -1);
-  background: var(--surface-popover);
-}
-
-.agent-servers-run[data-prefix="true"] {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.agent-servers-list ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A tool: its name in the code face with its badge after it, and what it
-   does under it in the muted type, two lines at most; the whole line is
-   the tool's title. */
-.agent-servers-tool {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-  padding: var(--space-4) var(--row-inset);
-  border-radius: var(--menu-row-radius);
-}
-
-.agent-servers-tool-name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.agent-servers-tool-id {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-servers-tool-description {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-/* The badge a server's own annotations earn a tool: quiet for Read-only,
-   the danger tint for Destructive. */
-.agent-servers-badge {
-  flex: none;
-  padding: 0 var(--space-4);
-  border-radius: 4px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 560;
-  line-height: 16px;
-}
-
-.agent-servers-badge[data-destructive="true"] {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  color: var(--danger-text);
 }
 
 /* Manage in Settings, pinned under the list: a quiet row, its gear a glyph's size. */
