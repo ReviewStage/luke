@@ -5,13 +5,13 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-sidecar_require_macos
-sidecar_require_node
-sidecar_require_command sips
-sidecar_require_command plutil
-sidecar_ensure_dependencies
+luke_require_macos
+luke_require_node
+luke_require_command sips
+luke_require_command plutil
+luke_ensure_dependencies
 
-cd "$SIDECAR_REPO_ROOT"
+cd "$LUKE_REPO_ROOT"
 pnpm package:dir
 PACKAGED_APP=$(node -e "import('./apps/desktop/scripts/package-layout.mjs').then((layout) => process.stdout.write(layout.packagedAppPath(process.cwd())))")
 APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Luke"
@@ -34,53 +34,53 @@ if [[ ! -f "$PACKAGED_ICON" ]]; then
     printf 'error: packaged app is missing its declared icon: %s\n' "$PACKAGED_ICON" >&2
     exit 1
 fi
-if ! cmp -s "$PACKAGED_ICON" "$SIDECAR_DESKTOP_APP_ROOT/.build/Luke.icns"; then
+if ! cmp -s "$PACKAGED_ICON" "$LUKE_DESKTOP_APP_ROOT/.build/Luke.icns"; then
     printf 'error: packaged app icon does not match the generated Luke icon\n' >&2
     exit 1
 fi
 
-mkdir -p "$SIDECAR_EVIDENCE_ROOT"
-rm -f -- "$SIDECAR_EVIDENCE_ROOT"/app-smoke-*.png
+mkdir -p "$LUKE_EVIDENCE_ROOT"
+rm -f -- "$LUKE_EVIDENCE_ROOT"/app-smoke-*.png
 
 capture_evidence() {
     local name=$1
     shift
     local profile
-    profile=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-${name}.XXXXXX")
+    profile=$(mktemp -d "$LUKE_BUILD_ROOT/evidence-${name}.XXXXXX")
     "$APP_EXECUTABLE" \
         --user-data-dir="$profile" \
-        --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+        --fixture "$LUKE_FIXTURE_SCENARIO" \
         "$@"
 }
 
 # The window opens on Plans: the fixture's synthetic plan list, with no plan
 # open.
-capture_evidence expanded --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
+capture_evidence expanded --capture-evidence "$LUKE_EXPANDED_EVIDENCE_PATH"
 # Luke speaking: his meter beside his talking face in the sidebar, and his
 # words captioned over the work column.
-capture_evidence speaking --profile speaking --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+capture_evidence speaking --profile speaking --capture-evidence "$LUKE_SPEAKING_EVIDENCE_PATH"
 # The speaking run with the Mac's output off: the captions are forced on and
 # the volume hint stands in its own band below the caption block with its Got
 # it button. The state is the profile's own — a capture run reads no system
 # volume — so the frame is deterministic like every other.
-capture_evidence muted --profile muted --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
+capture_evidence muted --profile muted --capture-evidence "$LUKE_MUTED_EVIDENCE_PATH"
 # Both speakers heard at once, the full-duplex frame, both drawn from the
 # profile's staged levels.
-capture_evidence duplex --profile duplex --capture-evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH"
+capture_evidence duplex --profile duplex --capture-evidence "$LUKE_DUPLEX_EVIDENCE_PATH"
 # The panel's Plans tab over the fixture's synthetic plan: the open plan's
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
-capture_evidence planning --profile planning --capture-evidence "$SIDECAR_PLANNING_EVIDENCE_PATH"
+capture_evidence planning --profile planning --capture-evidence "$LUKE_PLANNING_EVIDENCE_PATH"
 # The same plan on its whiteboard: Excalidraw's own bundle loaded over the
 # fixture's board, drawn in the bundled hand-drawn font with nothing fetched
 # from the network.
-capture_evidence planning-board --profile planning-board --capture-evidence "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH"
+capture_evidence planning-board --profile planning-board --capture-evidence "$LUKE_PLANNING_BOARD_EVIDENCE_PATH"
 # The same plan mid-call on its transcript: the earlier call from the record,
 # and the call standing now growing under it.
-capture_evidence planning-transcript --profile planning-transcript --capture-evidence "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
+capture_evidence planning-transcript --profile planning-transcript --capture-evidence "$LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
 # The same plan mid-call on its work: an earlier turn folded to its answer,
 # and the turn standing now with the worker running beside its reads.
-capture_evidence planning-work --profile planning-work --capture-evidence "$SIDECAR_PLANNING_WORK_EVIDENCE_PATH"
+capture_evidence planning-work --profile planning-work --capture-evidence "$LUKE_PLANNING_WORK_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -120,22 +120,22 @@ validate_evidence() {
 # Every capture is Luke's one app window at the size it opens at
 # (DESKTOP_WINDOW in apps/desktop/src/main/window/panel-manager.ts).
 for evidence_path in \
-    "$SIDECAR_EXPANDED_EVIDENCE_PATH" \
-    "$SIDECAR_SPEAKING_EVIDENCE_PATH" \
-    "$SIDECAR_MUTED_EVIDENCE_PATH" \
-    "$SIDECAR_DUPLEX_EVIDENCE_PATH" \
-    "$SIDECAR_PLANNING_EVIDENCE_PATH" \
-    "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH" \
-    "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH" \
-    "$SIDECAR_PLANNING_WORK_EVIDENCE_PATH"; do
+    "$LUKE_EXPANDED_EVIDENCE_PATH" \
+    "$LUKE_SPEAKING_EVIDENCE_PATH" \
+    "$LUKE_MUTED_EVIDENCE_PATH" \
+    "$LUKE_DUPLEX_EVIDENCE_PATH" \
+    "$LUKE_PLANNING_EVIDENCE_PATH" \
+    "$LUKE_PLANNING_BOARD_EVIDENCE_PATH" \
+    "$LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH" \
+    "$LUKE_PLANNING_WORK_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
 done
 
-printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
-printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
-printf 'Muted visual evidence: %s\n' "$SIDECAR_MUTED_EVIDENCE_PATH"
-printf 'Duplex visual evidence: %s\n' "$SIDECAR_DUPLEX_EVIDENCE_PATH"
-printf 'Planning visual evidence: %s\n' "$SIDECAR_PLANNING_EVIDENCE_PATH"
-printf 'Planning board visual evidence: %s\n' "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH"
-printf 'Planning transcript visual evidence: %s\n' "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
-printf 'Planning work visual evidence: %s\n' "$SIDECAR_PLANNING_WORK_EVIDENCE_PATH"
+printf 'Expanded visual evidence: %s\n' "$LUKE_EXPANDED_EVIDENCE_PATH"
+printf 'Speaking visual evidence: %s\n' "$LUKE_SPEAKING_EVIDENCE_PATH"
+printf 'Muted visual evidence: %s\n' "$LUKE_MUTED_EVIDENCE_PATH"
+printf 'Duplex visual evidence: %s\n' "$LUKE_DUPLEX_EVIDENCE_PATH"
+printf 'Planning visual evidence: %s\n' "$LUKE_PLANNING_EVIDENCE_PATH"
+printf 'Planning board visual evidence: %s\n' "$LUKE_PLANNING_BOARD_EVIDENCE_PATH"
+printf 'Planning transcript visual evidence: %s\n' "$LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
+printf 'Planning work visual evidence: %s\n' "$LUKE_PLANNING_WORK_EVIDENCE_PATH"

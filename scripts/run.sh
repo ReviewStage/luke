@@ -5,9 +5,9 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-sidecar_require_macos
-sidecar_require_node
-sidecar_ensure_dependencies
+luke_require_macos
+luke_require_node
+luke_ensure_dependencies
 
 # Running this script means "launch the build I just made", so an already-running
 # instance is replaced rather than left in place. `--keep-running` opts out: the
@@ -51,9 +51,9 @@ done
 # cron tick runs on a preview.
 if [[ $use_preview == true ]]; then
     if [[ -z $preview_address ]]; then
-        sidecar_require_command gh
-        sidecar_require_command curl
-        sidecar_require_command jq
+        luke_require_command gh
+        luke_require_command curl
+        luke_require_command jq
         preview_address=$("$SCRIPT_DIRECTORY/preview-address.sh")
     fi
     export LUKE_ACCOUNT_BASE_URL="${preview_address%/}/api/auth"
@@ -67,14 +67,14 @@ fi
 # the last word: only an unpackaged live run honours the variable at all, so
 # fixture runs and packaged builds record nothing whatever this exports.
 if [[ $capture_trace == true && -z ${LUKE_TRACE_DIR:-} ]]; then
-    export LUKE_TRACE_DIR="$SIDECAR_REPO_ROOT/.build/traces"
+    export LUKE_TRACE_DIR="$LUKE_REPO_ROOT/.build/traces"
 fi
 
 if [[ $replace_running_app == true ]]; then
-    sidecar_stop_running_app
+    luke_stop_running_app
 fi
 
 # Live sessions are the default. Pass `--fixture smoke` for deterministic data;
 # the app honours it on its own, so nothing needs injecting here.
-cd "$SIDECAR_REPO_ROOT"
+cd "$LUKE_REPO_ROOT"
 exec pnpm start -- "$@"
