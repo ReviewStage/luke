@@ -476,7 +476,10 @@ function stripTabs(input: {
     const card = <FileCard path={path} note={note} />;
     return {
       tab: { file: path },
-      look: look({ file: path }, { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path, card }),
+      look: look(
+        { file: path },
+        { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path, card },
+      ),
       close: () => panel.onClose({ file: path }),
     };
   });
