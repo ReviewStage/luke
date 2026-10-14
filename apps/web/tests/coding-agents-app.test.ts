@@ -4,7 +4,11 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
+import {
+  openPlanConversation,
+  savePlanText,
+  updatePlan,
+} from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
@@ -82,7 +86,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
-import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
+import { fakeWorkspaceSeams, joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -407,6 +411,26 @@ const openPlan = (
   });
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
+  it.effect(
+    "a member deleting a plan a teammate planned on retires the teammate's eve session before the plan goes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, eve, ask } = yield* openPlan();
+        const conversationId = Option.getOrThrow(yield* openPlanConversation(owner, plan.id));
+        const sessionId = `wrun_${randomUUID()}`;
+        assert.equal(
+          yield* claimRuntimeSession({ userId: owner, conversationId }, sessionId, new Date()),
+          true,
+        );
+        yield* joinWorkspace(plan.workspaceId, other);
+
+        const deleted = yield* ask(request(PLAN, other, { method: "DELETE", id: plan.id }));
+
+        assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(eve.reset, [sessionId]);
+      }),
+  );
+
   it.effect(
     "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session as the developer with the snapshot first",
     () =>

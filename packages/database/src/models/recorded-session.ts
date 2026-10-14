@@ -102,7 +102,8 @@ const StandingSessionRowSchema = Schema.Struct({
 
 const findStandingSessions = SqlSchema.findAll({
   Request: Schema.Struct({
-    userId: Schema.String,
+    /** The account whose conversations are read; null for conversations a caller's gate already read. */
+    userId: Schema.NullOr(Schema.String),
     conversationIds: Schema.optionalKey(Schema.Array(Schema.String)),
   }),
   Result: StandingSessionRowSchema,
@@ -116,7 +117,7 @@ const findStandingSessions = SqlSchema.findAll({
         .from(conversations)
         .where(
           and(
-            eq(conversations.userId, userId),
+            userId === null ? undefined : eq(conversations.userId, userId),
             isNull(conversations.deletedAt),
             isNotNull(conversations.runtimeSessionId),
             conversationIds === undefined ? undefined : inArray(conversations.id, conversationIds),
@@ -147,6 +148,18 @@ export function standingSessionsOf(
     userId,
     ...(conversationIds === undefined ? undefined : { conversationIds }),
   });
+}
+
+/**
+ * The eve sessions the standing conversations named run in, whichever
+ * member opened each: only for ids a gate already read, such as a shared
+ * plan's conversations as its delete gathers them.
+ */
+export function standingSessionsNamed(
+  conversationIds: readonly string[],
+): Effect.Effect<readonly StandingSession[], QueryError | Schema.SchemaError, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.succeed([]);
+  return findStandingSessions({ userId: null, conversationIds });
 }
 
 /** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
