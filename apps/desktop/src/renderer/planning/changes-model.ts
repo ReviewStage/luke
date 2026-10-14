@@ -81,6 +81,14 @@ export const CHANGES_WORDS = {
   UNREADABLE: "This file's diff could not be read.",
 } as const;
 
+/** What a Changes tab, or its pin, is called with no agent to name. */
+export const CHANGES_LABEL = "Changes";
+
+/** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
+export function changesLabelOf(agentLabel: string): string {
+  return `${CHANGES_LABEL}: ${agentLabel}`;
+}
+
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
 export const STATUS_LETTER = {
   [CHANGED_FILE_STATUS.ADDED]: "A",

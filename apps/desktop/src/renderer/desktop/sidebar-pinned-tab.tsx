@@ -4,7 +4,7 @@ import { CopyIcon, DocumentIcon, UnpinIcon } from "@sidecar/panel";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { shownFiles } from "../planning/code-pane-model";
-import { isAgentTab, isFileTab } from "../planning/tab-strip-model";
+import { isAgentTab, isChangesTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
 import type { PullRequestReader } from "../planning/use-agent-pull-request";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -20,15 +20,15 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 /**
  * sidebar-pinned-tab.tsx -- a tab of the plan's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
  *
- * A fixed tab or a file's pinned from its menu in the side panel, or an
+ * A fixed tab, a file's, or an agent's Changes pinned from its menu in the side panel, or an
  * agent's from its menu in the plan's column, stands under Pinned beside
  * the pinned plans, as a row in the plan rows' own shape: the tab's glyph,
  * an agent's its harness's mark wearing where it stands as its tab does,
  * and its name on one line, cut short with a fade as a tab is. Its hover card
  * is a plan card (`plan-card.tsx`), drawn from its rows: the tab's whole
  * name after its glyph, then the plan it is of, which opens the plan, and
- * the plan's repository, which opens on GitHub, and for an agent's pin the
- * pull request it opened, which opens on GitHub too, once the one read of
+ * the plan's repository, which opens on GitHub, and for an agent's pin or
+ * its Changes' the pull request it opened, which opens on GitHub too, once the one read of
  * it the card makes as it opens lands. A press opens the plan, where it is not the open one, and the tab
  * in its column: an agent's in the plan's column, any other in the side
  * panel, opening either where it is closed. The row it opened from is
@@ -41,7 +41,7 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  * transcript while its plan is open.
  *
  * A pin outlives what it opens only on the open plan's word: an agent the
- * plan's agents no longer hold, or a file no longer among those Luke showed
+ * plan's agents no longer hold, its Changes too, or a file no longer among those Luke showed
  * on it, leaves the row dimmed, opening nothing, with a quiet note on its
  * card, until it is unpinned. Another plan's pins are drawn as they were kept, since
  * nothing of that plan is read.
@@ -50,16 +50,23 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 /** What a pin's card says once its plan no longer holds what it opens. */
 const GONE_NOTE = "No longer on this plan";
 
-/** Whether the open plan has said the pin's agent or file is gone from it; another plan's pins and a fixed tab's never are. */
+/** Whether the open plan has said the pin's agent, the agent of its Changes, or its file is gone from it; another plan's pins and a fixed tab's never are. */
 function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
   const { tab } = pin;
   if (pin.plan !== plans.activePlanId) return false;
-  if (isAgentTab(tab)) {
+  const agentId = pinAgentId(pin);
+  if (agentId !== undefined) {
     const { agents } = plans.agents;
-    return agents !== undefined && !agents.some((agent) => agent.id === tab.agent);
+    return agents !== undefined && !agents.some((agent) => agent.id === agentId);
   }
   if (!isFileTab(tab) || plans.shownCode === undefined) return false;
   return !shownFiles(plans.shownCode).some((ref) => ref.path === tab.file);
+}
+
+/** The agent a pin of an agent's tab or of its Changes is of; none for any other pin. */
+function pinAgentId({ tab }: PinnedTab): string | undefined {
+  if (isAgentTab(tab)) return tab.agent;
+  return isChangesTab(tab) ? tab.changes : undefined;
 }
 
 /**
@@ -121,17 +128,16 @@ function pinAgent(
 }
 
 /**
- * The pull request an agent's pin's agent opened, read once from the service
- * as the card opens, which keeps its own answer a short while: nothing for
- * any other pin, before the answer lands, where it did not, or where the
- * agent opened none.
+ * The pull request the agent of an agent's pin or of a Changes pin opened,
+ * read once from the service as the card opens, which keeps its own answer a
+ * short while: nothing for any other pin, before the answer lands, where it
+ * did not, or where the agent opened none.
  */
 function usePinPullRequest(
   pin: PinnedTab,
   read: PullRequestReader,
 ): CodingAgentPullRequest | undefined {
-  const { tab } = pin;
-  const agentId = isAgentTab(tab) ? tab.agent : undefined;
+  const agentId = pinAgentId(pin);
   const [held, setHeld] = useState<CodingAgentPullRequest | undefined>(undefined);
   const reader = useRef(read);
   reader.current = read;
