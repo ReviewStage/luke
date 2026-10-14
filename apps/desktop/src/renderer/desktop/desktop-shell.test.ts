@@ -23,6 +23,7 @@ import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { fixtureChat } from "../planning/chat-fixture";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -381,4 +382,32 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   assert.ok(row);
   act(() => row.click());
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
+});
+
+/** The sidebar's Chat row, where one stands. */
+function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
+  return [...page.querySelectorAll<HTMLButtonElement>("button.sidebar-inbox")].find((button) =>
+    button.textContent?.startsWith("Chat"),
+  );
+}
+
+test("the sidebar's Chat row stands only where a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", () => {
+  assert.equal(chatRow(mount(false)), undefined);
+  act(() => root?.unmount());
+
+  let opened = 0;
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...plansControl().chatView, chat, onOpen: () => (opened += 1) };
+  const page = mount(false, false, { chatView: view });
+  const row = chatRow(page);
+  assert.equal(row?.textContent, "Chat4 waiting on you");
+  assert.equal(row?.getAttribute("aria-current"), null);
+  act(() => row?.click());
+  assert.equal(opened, 1);
+  act(() => root?.unmount());
+
+  const open = mount(false, false, { chatView: { ...view, open: true } });
+  assert.equal(chatRow(open)?.getAttribute("aria-current"), "page");
+  assert.equal(homeRow(open).getAttribute("aria-current"), null);
+  assert.ok(open.querySelector(".desktop-main > .chat-view"), "Chat stands in the plan's place");
 });

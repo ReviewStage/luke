@@ -17,13 +17,14 @@ import {
 } from "@luke/ui";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { FactoryIcon, HouseIcon, InboxIcon } from "lucide-react";
+import { FactoryIcon, HouseIcon, InboxIcon, MessagesSquareIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { forYou } from "../planning/chat-model";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import {
@@ -546,6 +547,46 @@ function SidebarInboxRow({
   );
 }
 
+/** How many messages wait on the developer in Chat: what For you lists. */
+function waitingMessages(plans: PlansControl): number {
+  const read = plans.chatView.chat;
+  return read === undefined ? 0 : forYou(read.answer).length;
+}
+
+/**
+ * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
+ * how many messages wait on the developer in For you at its end, in the
+ * Inbox's muted figures, nothing at none. A press opens the window's Chat
+ * (`desktop-chat.tsx`), and the row is the place shown while it stands.
+ */
+function SidebarChatRow({
+  waiting,
+  current,
+  onOpen,
+}: {
+  waiting: number;
+  current: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-inbox"
+      aria-current={current ? "page" : undefined}
+      onClick={onOpen}
+    >
+      <MessagesSquareIcon />
+      Chat
+      {waiting === 0 ? null : (
+        <span className="sidebar-inbox-waiting">
+          {waiting}
+          <span className="visually-hidden"> waiting on you</span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 /** The layers that answer their own Escape before a floating sidebar is put away. */
 const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
 
@@ -681,7 +722,8 @@ function SidebarFactoryRow({
  * Inbox's, and Factory's follow Search above the rule: Home's goes to the
  * home page, the Inbox's counts what waits on the developer and opens the
  * window's Inbox, and Factory's, while its experiment is on, opens the
- * window's Factory. The pinned plans, and the side panel tabs
+ * window's Factory; Chat's, where a chat is read, counts what waits on the
+ * developer in Chat and opens it. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -733,10 +775,12 @@ export function DesktopSidebar({
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, and Factory stand in the plan's place, so while one does no plan is the place shown.
+  // The window's Inbox, an agent's page, Factory, and Chat stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
   const inFactory = onPlans && plans.factoryView.open;
-  const standingIn = inInbox || inFactory || (onPlans && plans.agentView.agentId !== undefined);
+  const inChat = onPlans && plans.chatView.open;
+  const standingIn =
+    inInbox || inFactory || inChat || (onPlans && plans.agentView.agentId !== undefined);
   // Factory is an experiment: its row stands only while the account has it on.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   // A press in the list is always about plans, so it brings the Plans tab
@@ -760,6 +804,10 @@ export function DesktopSidebar({
   const openFactory = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.factoryView.onOpen();
+  };
+  const openChat = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.chatView.onOpen();
   };
   const goHome = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
@@ -904,6 +952,14 @@ export function DesktopSidebar({
         disabled={!plans.signedIn}
         onOpen={chosen(openInbox)}
       />
+      {/* Chat's row stands only where a chat is read, which only a fixture run stages yet. */}
+      {plans.signedIn && plans.chatView.chat !== undefined ? (
+        <SidebarChatRow
+          waiting={waitingMessages(plans)}
+          current={inChat}
+          onOpen={chosen(openChat)}
+        />
+      ) : null}
       {factoryOn ? (
         <SidebarFactoryRow
           current={inFactory}

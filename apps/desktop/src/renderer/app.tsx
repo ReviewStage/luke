@@ -323,7 +323,7 @@ export function App(): React.JSX.Element {
     plansTab: tab === PANEL_TAB.PLANS,
     documentPage: plans.page === PLANS_PAGE.DOCUMENT,
     historyOpen: plans.history.open,
-    inboxOpen: plans.inboxView.open,
+    inboxOpen: plans.inboxView.open || plans.chatView.open,
     agentPageOpen: plans.agentView.agentId !== undefined,
     sidePanelFullScreen: plans.sidePanel.fullScreen,
     activePlanId: state?.planning.activePlanId,

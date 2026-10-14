@@ -5,6 +5,7 @@ import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { AppInboxWaitingItem } from "#shared/messages/app-state";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
+import { FOR_YOU } from "../renderer/planning/chat-model";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
@@ -253,6 +254,14 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
     callPlanId: undefined,
+    chatView: {
+      open: false,
+      chat: undefined,
+      place: FOR_YOU,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+    },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,

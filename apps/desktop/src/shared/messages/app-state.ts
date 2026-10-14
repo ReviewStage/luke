@@ -37,6 +37,8 @@ export const RUN_PROFILE = {
   PLANNING_TRANSCRIPT: "planning-transcript",
   /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
   PLANNING_WORK: "planning-work",
+  /** The plans' list, opened at launch on the window's Chat over a synthetic chat. */
+  CHAT: "chat",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

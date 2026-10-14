@@ -47,6 +47,7 @@ const PLACE_KIND = {
   INBOX: "inbox",
   AGENT: "agent",
   FACTORY: "factory",
+  CHAT: "chat",
   SETTINGS: "settings",
 } as const;
 
@@ -62,6 +63,7 @@ type Place =
   | { readonly kind: typeof PLACE_KIND.INBOX }
   | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
+  | { readonly kind: typeof PLACE_KIND.CHAT }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -236,6 +238,7 @@ export function useWindowHistory(input: {
     | "inboxView"
     | "agentView"
     | "factoryView"
+    | "chatView"
     | "restoring"
   >;
 }): WindowHistory {
@@ -247,6 +250,7 @@ export function useWindowHistory(input: {
   const pageAgent = plans.agentView.agentId;
   const factoryOpen = plans.factoryView.open;
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const chatOpen = plans.chatView.open;
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
@@ -259,11 +263,23 @@ export function useWindowHistory(input: {
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
+    if (chatOpen) return { kind: PLACE_KIND.CHAT };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [known, tab, settingsView, boundFor, historyOpen, spot, inboxOpen, pageAgent, factoryOpen]);
+  }, [
+    known,
+    tab,
+    settingsView,
+    boundFor,
+    historyOpen,
+    spot,
+    inboxOpen,
+    pageAgent,
+    factoryOpen,
+    chatOpen,
+  ]);
   const reachable = (to: Place) => {
     // Factory is an experiment, so back and forward pass over it while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
@@ -294,10 +310,15 @@ export function useWindowHistory(input: {
       plans.factoryView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's page, and Factory stand over.
+    if (to.kind === PLACE_KIND.CHAT) {
+      plans.chatView.onOpen();
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's page, Factory, and Chat stand over.
     if (inboxOpen) plans.inboxView.onClose();
     if (pageAgent !== undefined) plans.agentView.onClose();
     if (factoryOpen) plans.factoryView.onClose();
+    if (chatOpen) plans.chatView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

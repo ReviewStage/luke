@@ -38,7 +38,11 @@ import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
+import {
+  type AppInboxPlan,
+  type AppInboxPlanHolding,
+  RUN_PROFILE,
+} from "#shared/messages/app-state";
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
@@ -51,6 +55,8 @@ import {
 } from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useStateWithRef } from "../use-state-with-ref";
+import type { FixtureChat } from "./chat-fixture";
+import { type ChatPlace, FOR_YOU } from "./chat-model";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -205,19 +211,40 @@ const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
   FACTORY: "factory",
+  CHAT: "chat",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, or Factory. */
+/** The window's Inbox with the item chosen in it, one agent's page, Factory, or Chat with the place shown in it. */
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
-  | { readonly kind: typeof STAND_IN.FACTORY };
+  | { readonly kind: typeof STAND_IN.FACTORY }
+  | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace };
 
 /** The window's Factory: whether it stands in the plan's place, and the presses that open and leave it. */
 interface FactoryViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
+}
+
+/**
+ * The window's Chat, standing in the plan's place beside the sidebar as the
+ * Inbox does and on the same terms: the workspace's channels in a rail of
+ * their own, and For you or the channel chosen beside it. It gives way to
+ * the Inbox, an agent's page, and Factory, and they to it. The chat is the
+ * one read, which a fixture run stages and nothing else reads yet, so its
+ * sidebar row is drawn only where there is one.
+ */
+interface ChatViewControl {
+  readonly open: boolean;
+  /** The chat as last read, with the agent lines that name its agents; none where nothing reads one. */
+  readonly chat: FixtureChat | undefined;
+  /** For you or the channel shown, For you until another is chosen. */
+  readonly place: ChatPlace;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+  readonly onChoose: (place: ChatPlace) => void;
 }
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -348,6 +375,8 @@ export interface PlansControl {
   factoryView: FactoryViewControl;
   /** The plan the call in progress on this Mac is about, or none: what Factory marks as being planned. */
   callPlanId: string | undefined;
+  /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
+  chatView: ChatViewControl;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -588,9 +617,31 @@ export function usePlansTab(input: {
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the plan's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
-  const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
+  // The chat profile opens Chat at launch over its fixture.
+  const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
+    input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
+      ? { kind: STAND_IN.CHAT, place: FOR_YOU }
+      : undefined,
+  );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
+  /**
+   * The chat a fixture run stages, stamped once at the moment it lands.
+   * Note that its module is imported only by a fixture run, because its
+   * synthetic chat must never ship in the bundle every launch parses.
+   */
+  const [chat, setChat] = useState<FixtureChat | undefined>(undefined);
+  const { fixtureMode } = input.run;
+  useEffect(() => {
+    if (!fixtureMode) return;
+    let live = true;
+    import("./chat-fixture").then((loaded) => {
+      if (live) setChat(loaded.fixtureChat({ fixtureMode }, Date.now()));
+    });
+    return () => {
+      live = false;
+    };
+  }, [fixtureMode]);
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly planId: string; readonly ref: CodeRef; readonly commit: string } | undefined
@@ -1629,6 +1680,23 @@ export function usePlansTab(input: {
           held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
         ),
     },
+    // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
+    chatView: {
+      open: standIn?.kind === STAND_IN.CHAT,
+      chat,
+      place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
+      onOpen: () => {
+        setHistoryFor(undefined);
+        setStandIn((held) =>
+          held?.kind === STAND_IN.CHAT ? held : { kind: STAND_IN.CHAT, place: FOR_YOU },
+        );
+      },
+      onClose: () => setStandIn(undefined),
+      onChoose: (place) =>
+        setStandIn((held) =>
+          held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
+        ),
+    },
     // An agent's page stands over the plan's place as the Inbox does, so a version history there gives way.
     agentView: {
       agentId: agentView?.agentId,
@@ -1735,7 +1803,7 @@ export function usePlansTab(input: {
     },
     onLeavePlan: leavePlan,
     // Home is the page with no plan open, so where none is, only the Inbox, an
-    // agent's page, or Factory standing over it is put away, and the host is asked nothing.
+    // agent's page, Factory, or Chat standing over it is put away, and the host is asked nothing.
     onGoHome: () => (boundFor === undefined ? setStandIn(undefined) : leavePlan()),
     onRenamePlan: renamePlan,
     onDraftName: draftName,
