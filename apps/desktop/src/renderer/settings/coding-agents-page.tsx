@@ -39,7 +39,7 @@ import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 import { SwitchRow } from "./switch-row";
-import { useSettingWrite } from "./use-setting-write";
+import { actionRejection } from "./use-setting-write";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
@@ -126,8 +126,22 @@ function DefaultRows({
   /** Asks the service to keep `choice`, answering whether it did. */
   onChange: (choice: ModelChoice) => Promise<ActionResult>;
 }): React.JSX.Element {
-  // Fast's switch words its own refusal under its row; the picker's and the segments' is worded under them all.
-  const { rejection, run } = useSettingWrite(onChange);
+  // Fast's switch words its own refusal under its row, and the picker's and the segments' is worded under them all.
+  const [rejection, setRejection] = useState<string>();
+  // Note that every row writes the one stored choice, so a save that lands clears the other rows'
+  // refusal too: Fast's by standing its row afresh, which only a row pressed elsewhere does.
+  const [othersSaved, setOthersSaved] = useState(0);
+  const run = (next: ModelChoice) => {
+    void onChange(next).then((result) => {
+      setRejection(actionRejection(result));
+      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setOthersSaved((count) => count + 1);
+    });
+  };
+  const runFast = (next: ModelChoice) =>
+    onChange(next).then((result) => {
+      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setRejection(undefined);
+      return result;
+    });
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
   const note = modelRowNote(listed?.provider, ownKey);
@@ -191,6 +205,7 @@ function DefaultRows({
         }}
       />
       <SwitchRow
+        key={othersSaved}
         label={FAST_WORD}
         detail={fastNote === undefined ? undefined : `${fastNote}.`}
         checked={read.fast}
@@ -199,7 +214,7 @@ function DefaultRows({
         onChange={(fast) =>
           base === undefined
             ? Promise.resolve(WRITE_ACCEPTED)
-            : onChange(choiceAt(choiceModelId(base, fast)))
+            : runFast(choiceAt(choiceModelId(base, fast)))
         }
       />
       {/* The segments wrap under the label where the row is narrow rather than clipping. */}

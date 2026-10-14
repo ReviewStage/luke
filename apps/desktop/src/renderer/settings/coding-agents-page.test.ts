@@ -172,3 +172,31 @@ test("Effort and Context are each a radio group, the stored value checked and th
     { model: OPUS.id, effort: "medium", contextWindow: CONTEXT_WINDOW.STANDARD },
   ]);
 });
+
+test("a refusal goes once any row's save lands, Fast's after an effort is kept and the effort's after Fast is, since every row writes the one default", async () => {
+  const page = await mount();
+  const alerts = () => [...page.querySelectorAll('[role="alert"]')].map((each) => each.textContent);
+
+  refuseWrite = true;
+  act(() => fastSwitch(page).click());
+  await settle();
+  const fastRefused = alerts();
+  refuseWrite = false;
+  act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
+  await settle();
+  const afterEffort = alerts();
+
+  refuseWrite = true;
+  act(() => segment(segmentedGroup(page, "Effort"), "Medium").click());
+  await settle();
+  const effortRefused = alerts();
+  refuseWrite = false;
+  act(() => fastSwitch(page).click());
+  await settle();
+
+  assert.deepEqual(fastRefused, ["The default could not be saved. Try again."]);
+  assert.deepEqual(afterEffort, []);
+  assert.deepEqual(effortRefused, ["The default could not be saved. Try again."]);
+  assert.deepEqual(alerts(), []);
+  assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
+});
