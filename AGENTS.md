@@ -20,6 +20,22 @@ CI runs the portable check on Linux alone. The release rehearsal
 is the only Mac gate, so a green PR says nothing about the Mac and there is no
 macOS check to wait for.
 
+## Layout
+
+Application logic lives in `packages/`. An app holds what is specific to
+its platform or deployment and nothing else: Electron's main and preload
+processes, the window and page roots, the Vercel function routes under
+`apps/web/server/routes/`, the deployment shell beside them, the two eve
+service roots, and build and release scripts. A React component, hook, or
+DOM-free view model lives in `packages/ui` when more than one app can
+mount it, the hosted service's logic in `packages/service`, its contract
+and clients in `packages/features`, and a wire value in `packages/wire`. A
+`.ts` module whose imports name no module of its app and no platform
+library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
+`@vercel/*`) is logic and belongs in a package;
+`scripts/repository-checks.sh` refuses one under `apps/` once stack C
+lands. A component is placed by review under the same rule.
+
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the
