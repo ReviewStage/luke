@@ -8,6 +8,7 @@ import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { NewPlanDialog } from "./new-plan-dialog";
+import type { RepositoryChooser } from "./repository-chip";
 
 /**
  * New plan as the developer meets it: a card over the window holding the
@@ -45,10 +46,18 @@ async function settle(): Promise<void> {
  * start's name and repository written down; `preset` is the repository the
  * press that opened it chose, as a repository group's + does.
  */
-async function mount(answer: string | undefined = undefined, preset?: string) {
+async function mount(
+  answer: string | undefined = undefined,
+  preset?: string,
+  chooser: Partial<RepositoryChooser> = {},
+) {
   const starts: [string, string | null][] = [];
   const control = plansControl();
-  const repositories = { ...control.repositories, recent: ["acme/web", "acme/api"] };
+  let repositories: RepositoryChooser = {
+    ...control.repositories,
+    recent: ["acme/web", "acme/api"],
+    ...chooser,
+  };
   function Owner() {
     const [open, setOpen] = useState(true);
     return createElement(NewPlanDialog, {
@@ -106,6 +115,12 @@ async function mount(answer: string | undefined = undefined, preset?: string) {
       });
     },
     press,
+    /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
+    rechoose: async (next: Partial<RepositoryChooser>) => {
+      repositories = { ...repositories, ...next };
+      act(() => root.render(createElement(Owner)));
+      await settle();
+    },
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
     /** The card's controls in order, as a reader meets them. */
     controls: () =>
@@ -186,4 +201,30 @@ test("a refusal keeps the dialog and the name, says why under the field, and Cre
   assert.equal(card.note(), "Luke can't reach acme/web.");
   assert.equal(card.field().value, "Dark mode toggle");
   assert.equal(card.button("Create plan").disabled, false);
+});
+
+test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
+  const dialog = await mount(undefined, "alice/private", {
+    scope: "workspace-personal",
+    recent: ["alice/notes"],
+  });
+  dialog.type("Dark mode");
+
+  await dialog.rechoose({ scope: "workspace-acme", recent: ["acme/relay"] });
+  await dialog.press("Enter", dialog.field());
+
+  assert.deepEqual(dialog.starts, [["Dark mode", "acme/relay"]]);
+});
+
+test("the workspace first resolving keeps a repository picked before the workspaces were read", async () => {
+  const dialog = await mount(undefined, "alice/private", {
+    scope: undefined,
+    recent: ["alice/notes"],
+  });
+  dialog.type("Dark mode");
+
+  await dialog.rechoose({ scope: "workspace-personal" });
+  await dialog.press("Enter", dialog.field());
+
+  assert.deepEqual(dialog.starts, [["Dark mode", "alice/private"]]);
 });

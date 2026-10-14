@@ -60,3 +60,30 @@ it.effect("a setting's value travels as the method's value field", () =>
     });
   }),
 );
+
+it.effect(
+  "a plan's start carries the workspace it was started in to the host, and a start naming none carries no workspace field",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+
+      yield* operator.planningStart({
+        name: "Billing export",
+        repository: "acme/ledger",
+        workspaceId: "workspace-acme",
+      });
+      yield* operator.planningStart({ name: "Teammate invitations" });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [
+            GATEWAY_METHOD.PLANNING_START,
+            { name: "Billing export", repository: "acme/ledger", workspaceId: "workspace-acme" },
+          ],
+          [GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" }],
+        ],
+      );
+    }),
+);

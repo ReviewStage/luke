@@ -105,8 +105,9 @@ test("the Settings filter lists every Settings page by the sidebar's names, ahea
   openPalette();
   chooseFilter("Settings");
 
-  assert.deepEqual(rows().slice(0, 7), [
+  assert.deepEqual(rows().slice(0, 8), [
     "General",
+    "Workspace",
     "Voice",
     "Appearance",
     "Keyboard shortcuts",
@@ -124,8 +125,9 @@ test("a page is found by its name, above every setting the query finds", () => {
 
   // Note that the Settings shortcut's own row scores higher on the word than
   // any page does, and the pages still come first.
-  assert.deepEqual(rows().slice(0, 8), [
+  assert.deepEqual(rows().slice(0, 9), [
     "General",
+    "Workspace",
     "Voice",
     "Appearance",
     "Keyboard shortcuts",
