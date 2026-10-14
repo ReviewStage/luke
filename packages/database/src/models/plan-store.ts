@@ -23,6 +23,7 @@ import { conversations } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
+import { movePlanChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -719,7 +720,8 @@ const followingAutomations = SqlSchema.void({
 });
 
 /**
- * The plan's agents and inbox moved along with it to another workspace, so
+ * The plan's agents and inbox moved along with it to another workspace, its
+ * chat after them (`chat-store.ts`'s `movePlanChat`), so
  * no row of the plan's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it.
  */
@@ -801,6 +803,7 @@ export function updatePlan<E = never, R = never>(
         }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(planId, row.organizationId);
+          yield* movePlanChat(planId, row.organizationId);
         }
         return Option.some(yield* planOf(row));
       }),

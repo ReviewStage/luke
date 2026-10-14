@@ -1362,3 +1362,85 @@ it.layer(getTestDB())("the chat store's reads for telling a message", (it) => {
       }),
   );
 });
+
+it.layer(getTestDB())("a plan's chat moving with the plan", (it) => {
+  it.effect(
+    "a plan moved to another workspace takes its channel, messages, thread, and ask there at the end of that workspace's sequence, its agents minted again, while a DM elsewhere stays and the old workspace reads none of the plan's chat",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const root = yield* room.posted(room.first, "@agent-2 who owns the invite table?");
+        const reply = yield* room.posted(room.ada, "agent-2 does.", { replyTo: root.seq });
+        const asked = Result.getOrThrow(
+          yield* postAsk(room.owner, room.workspace, {
+            authorMemberId: room.first.id,
+            to: { channelId: room.channel.id },
+            blocks: words("Which expiry?"),
+            mentions: [],
+            clientKey: randomUUID(),
+            key: "expiry",
+            ask: EXPIRY,
+          }),
+        );
+        yield* answerAsk(room.owner, room.workspace, {
+          answererMemberId: room.ada.id,
+          seq: asked.message.seq,
+          revision: 1,
+          reply: { reply: CHAT_REPLY.CHOSE, choices: ["Seven days"] },
+          clientKey: randomUUID(),
+        });
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.second.id),
+        );
+        const stays = yield* room.posted(room.first, "Between us.", { channelId: dm.id });
+        const destination = yield* openWorkspace(room.owner);
+
+        yield* updatePlan(room.owner, room.plan, { organizationId: destination });
+
+        const there = Option.getOrThrow(
+          yield* ensureMember(room.owner, destination, {
+            kind: MEMBER_KIND.HUMAN,
+            userId: room.owner,
+          }),
+        );
+        const read = Option.getOrThrow(yield* chatPast(room.owner, destination, there.id, 0));
+        const moved = read.messages.toSorted((a, b) => a.seq - b.seq);
+        assert.deepEqual(
+          moved.map((message) => message.seq),
+          [1, 2, 3, 4],
+        );
+        assert.ok(moved.every((message) => message.channelId === room.channel.id));
+        assert.equal(moved[1]?.parentId, root.id);
+        assert.equal(moved[1]?.id, reply.id);
+        const members = new Map(
+          (yield* roster(room.owner, destination)).map((row) => [row.id, row]),
+        );
+        assert.equal(members.get(moved[0]?.authorMemberId ?? "")?.agentId, room.first.agentId);
+        assert.deepEqual(
+          (moved[0]?.mentions ?? []).map((id) => members.get(id)?.agentId),
+          [room.second.agentId],
+        );
+        const ask = moved.find((message) => message.id === asked.message.id);
+        assert.equal(ask?.answeredByMemberId, there.id);
+        assert.ok((ask?.touchedSeq ?? 0) > 4);
+        assert.ok(
+          (yield* channelsOf(room.owner, destination)).some((row) => row.id === room.channel.id),
+        );
+
+        const left = Option.getOrThrow(yield* chatPast(room.owner, room.workspace, room.ada.id, 0));
+        assert.deepEqual(
+          left.messages.map((message) => message.id),
+          [stays.id],
+        );
+        assert.ok(
+          !(yield* channelsOf(room.owner, room.workspace)).some(
+            (row) => row.id === room.channel.id,
+          ),
+        );
+        const behind = (yield* roster(room.owner, room.workspace)).filter(
+          (row) => row.kind === MEMBER_KIND.AGENT,
+        );
+        assert.ok(behind.every((row) => row.agentId === null && row.leftAt !== null));
+      }),
+  );
+});
