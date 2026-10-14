@@ -8,13 +8,14 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
+import { matchIntegration, shownTools } from "../integration-search";
 import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { ProviderMark } from "../provider-marks";
 import { Highlighted } from "../search-field";
-import { matchesTokens, searchTokens } from "../search-tokens";
+import { searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
@@ -252,12 +253,18 @@ function ServersPopover({
     setFilter("");
   };
 
-  /** What a pick does when chosen: a server opens or connects, and a tool opens its server's page, filtered to the search. */
+  /**
+   * What a pick does when chosen: a server opens or connects, and a tool
+   * opens its server's page, filtered to the search, as does a server the
+   * search found tools of, as Settings › Integrations opens its row onto them.
+   */
   const choose = (pick: Pick | undefined) => {
     if (pick === undefined) return;
     const { row } = pick;
     if (pick.tool !== undefined) return open(row, query);
-    if (opensTools(row)) return open(row);
+    if (opensTools(row)) {
+      return open(row, found.tools.some((hit) => hit.row === row) ? query : "");
+    }
     // Note that Enter on a sign-in under way reopens it, its first press, as Try again begins it again.
     if (
       row.kind === SERVER_ROW.CONNECT ||
@@ -520,10 +527,12 @@ function ServersPopover({
   );
 
   const serverPage = (row: ServerRow) => {
+    // Note that the page's filter reads as the home's search does, so a query
+    // handed down that found a tool by its server's name ("vercel get") still
+    // finds it here.
     const tokens = searchTokens(filter);
-    const tools = (row.tools ?? []).filter((tool) =>
-      matchesTokens([tool.name, tool.description], tokens),
-    );
+    const all = row.tools ?? [];
+    const tools = shownTools(matchIntegration(row.provider, all, tokens), all);
     return (
       <>
         <div className="agent-servers-page-head">

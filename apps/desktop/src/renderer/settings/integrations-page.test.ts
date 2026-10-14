@@ -24,14 +24,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
-import type { IntegrationTool, IntegrationToolIndex } from "../integration-health";
+import type { IntegrationTool } from "../integration-health";
 import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "../integration-sign-in";
 import { OpenSettingsProvider } from "../open-settings";
 import { rendererRuntime } from "../renderer-runtime";
 import type { SettingsLink } from "../settings-views";
-import { type IntegrationsSearch, IntegrationsSection } from "./integrations-page";
+import { IntegrationsSection } from "./integrations-page";
 
 /**
  * Settings › Integrations over a bridge answering where every provider
@@ -48,7 +50,9 @@ import { type IntegrationsSearch, IntegrationsSection } from "./integrations-pag
  * provider pending at the service until the bridge settles it, as the
  * browser would, or a Cancel ends it. A connected
  * provider's server lists the tools the bridge holds for it, which its row
- * opens onto in place, and which the page's search finds.
+ * opens onto in place. The page's own search keeps the rows it finds under
+ * Connected and Not connected, opens a row onto the tools it found, says
+ * when it finds nothing, takes Command-F, and gives way to Escape.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
@@ -187,10 +191,7 @@ async function settle(): Promise<void> {
  * atoms under `registry` where one is given, as the window's root provides
  * its own.
  */
-async function mount(
-  registry?: AtomRegistry.AtomRegistry,
-  search?: IntegrationsSearch,
-): Promise<HTMLElement> {
+async function mount(registry?: AtomRegistry.AtomRegistry): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -214,7 +215,7 @@ async function mount(
           },
         },
       },
-      createElement(IntegrationsSection, { signedIn: true, search }),
+      createElement(IntegrationsSection, { signedIn: true }),
     ),
   );
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
@@ -718,30 +719,132 @@ function shownTools(page: HTMLElement) {
   ]);
 }
 
-test("while Settings' search holds a query, a row with tools it found opens onto just those, marked, and every row stays drawn", async () => {
+/** The page's search field. */
+function searchField(page: HTMLElement): HTMLInputElement {
+  return (
+    page.querySelector<HTMLInputElement>('input[aria-label="Search integrations and tools"]') ??
+    assert.fail("the page draws its search field")
+  );
+}
+
+/** Types `query` over whatever the page's search field holds, as the developer would. */
+async function searchFor(page: HTMLElement, query: string): Promise<void> {
+  const field = searchField(page);
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, query);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+}
+
+/** The sections the page draws, each its heading and the names of its rows. */
+function sections(page: HTMLElement) {
+  return [...page.querySelectorAll(".settings-group")].map((group) => [
+    group.querySelector(".settings-group-title")?.textContent,
+    [...group.querySelectorAll(".settings-copy strong")].map((name) => name.textContent),
+  ]);
+}
+
+test("the rows stand under Connected and Not connected, each section in the order of their names", async () => {
   connectVercelAndLinear();
-  const handed: IntegrationToolIndex[] = [];
-  const page = await mount(undefined, { query: "deploy", onTools: (tools) => handed.push(tools) });
+  const offered: readonly IntegrationProvider[] = [
+    INTEGRATION_PROVIDER.VERCEL,
+    INTEGRATION_PROVIDER.MERCURY,
+    INTEGRATION_PROVIDER.LINEAR,
+    GRANOLA,
+  ];
+  withheld = INTEGRATION_PROVIDER_LIST.filter((provider) => !offered.includes(provider));
+  const page = await mount();
+
+  assert.deepEqual(sections(page), [
+    ["Connected", ["Linear", "Vercel"]],
+    ["Not connected", ["Granola", "Mercury"]],
+  ]);
+});
+
+test("a query keeps only the rows it found, opening one onto the tools it found, marked and counted", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+
+  await searchFor(page, "deploy");
+
+  assert.deepEqual(sections(page), [["Connected", ["Vercel"]]]);
+  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
+  assert.equal(
+    rowNamed(page, "Vercel").querySelector(".integration-tools-toggle")?.textContent,
+    "1 of 3 tools match",
+  );
+  assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
+});
+
+test("a query finds an integration by what it is for, keeping its section", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+
+  await searchFor(page, "database");
+
+  assert.deepEqual(sections(page), [["Not connected", ["Neon", "Notion", "Supabase"]]]);
+});
+
+test("a query that finds nothing says so, and clearing it brings every row back", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+
+  await searchFor(page, "frobnicate");
+
+  assert.deepEqual(sections(page), []);
+  assert.equal(
+    page.querySelector('[role="status"]')?.textContent,
+    "No integrations or tools match “frobnicate”",
+  );
+
+  const clear =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]') ??
+    assert.fail("a query offers to clear it");
+  act(() => clear.click());
+  await settle();
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
-  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
-  assert.equal(page.querySelector(".integration-tools-found")?.textContent, "1 of 3 tools match");
-  assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
-  assert.deepEqual(
-    [...(handed.at(-1) ?? new Map()).entries()].map(([provider, tools]) => [
-      provider,
-      tools.length,
-    ]),
-    [
-      [INTEGRATION_PROVIDER.LINEAR, 1],
-      [INTEGRATION_PROVIDER.VERCEL, 3],
-    ],
-  );
+  assert.equal(document.activeElement, searchField(page));
+});
+
+test("Command-F lands in the page's search, and Escape clears it, then lets go of the caret, never reaching the window", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+  const reachedWindow: string[] = [];
+  const listen = (event: KeyboardEvent) => reachedWindow.push(event.key);
+  window.addEventListener("keydown", listen);
+  const pressEscape = () =>
+    act(() => {
+      searchField(page).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.FIND);
+  });
+  assert.equal(offered, true);
+  assert.equal(document.activeElement, searchField(page));
+
+  await searchFor(page, "deploy");
+  pressEscape();
+  await settle();
+  assert.equal(searchField(page).value, "");
+  assert.equal(document.activeElement, searchField(page));
+  assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
+
+  pressEscape();
+  assert.notEqual(document.activeElement, searchField(page));
+  window.removeEventListener("keydown", listen);
+  assert.deepEqual(reachedWindow, []);
 });
 
 test("a query that finds an integration by its own name opens nothing by itself, and opened, keeps every tool", async () => {
   connectVercelAndLinear();
-  const page = await mount(undefined, { query: "vercel", onTools: () => undefined });
+  const page = await mount();
+  await searchFor(page, "vercel");
 
   assert.deepEqual(shownTools(page), []);
   act(() =>
@@ -753,51 +856,24 @@ test("a query that finds an integration by its own name opens nothing by itself,
   assert.equal(shownTools(page).length, 3);
 });
 
-test("leaving the page takes its tools out of Settings' search, so a connection changed elsewhere leaves none behind", async () => {
-  connectVercelAndLinear();
-  const handed: IntegrationToolIndex[] = [];
-  await mount(undefined, { query: "", onTools: (tools) => handed.push(tools) });
-  assert.ok((handed.at(-1)?.size ?? 0) > 0);
-
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  assert.equal(handed.at(-1)?.size, 0);
-});
-
 test("a row closed under one query opens again when that query comes back after another", async () => {
   connectVercelAndLinear();
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  // Settings' query as the sidebar would change it, the page drawn under it each time.
-  const searchFor = (query: string) =>
-    act(() =>
-      root.render(
-        createElement(IntegrationsSection, {
-          signedIn: true,
-          search: { query, onTools: () => undefined },
-        }),
-      ),
-    );
-  searchFor("deploy");
-  await settle();
-  assert.deepEqual(shownTools(container), [["get_deployment", undefined]]);
+  const page = await mount();
+  await searchFor(page, "deploy");
+  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
 
   act(() =>
     (
-      rowNamed(container, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
       assert.fail("Vercel's row closes")
     ).click(),
   );
-  assert.deepEqual(shownTools(container), []);
+  assert.deepEqual(shownTools(page), []);
 
-  searchFor("logs");
-  await settle();
-  searchFor("deploy");
-  await settle();
+  await searchFor(page, "projects");
+  await searchFor(page, "deploy");
 
-  assert.deepEqual(shownTools(container), [["get_deployment", undefined]]);
+  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
 });
 
 test("a tool pressed in an opened row shows the whole of what it does, one tool at a time", async () => {
@@ -843,9 +919,10 @@ test("a tool pressed in an opened row shows the whole of what it does, one tool 
   );
 });
 
-test("a query naming the integration and a tool opens the row onto that tool, as Settings' search found it", async () => {
+test("a query naming the integration and a tool opens the row onto that tool", async () => {
   connectVercelAndLinear();
-  const page = await mount(undefined, { query: "vercel deploy", onTools: () => undefined });
+  const page = await mount();
+  await searchFor(page, "vercel deploy");
 
   assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
 });

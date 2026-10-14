@@ -177,7 +177,7 @@ test("pressing a connected server opens its tools in place, each badged only as 
   ]);
 });
 
-test("a search finds a tool, Enter opens its server's page filtered to it, and Escape goes back before it closes", async () => {
+test("a search finds a server and its tools, Enter opens its page filtered to them, and Escape goes back before it closes", async () => {
   const { container, key, type, field } = await opened();
 
   type("deploy");
@@ -196,6 +196,17 @@ test("a search finds a tool, Enter opens its server's page filtered to it, and E
   assert.equal(container.querySelector(".agent-servers-page-title"), null);
   key("Escape");
   assert.equal(container.querySelector(".agent-servers-menu"), null);
+});
+
+test("a tool found by its server's name and its own, Enter opens its server's page still showing it", async () => {
+  const { container, key, type, field } = await opened();
+
+  type("vercel get");
+  key("Enter");
+
+  assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");
+  assert.equal(field().value, "vercel get");
+  assert.deepEqual(tools(container), [["get_deployment", undefined]]);
 });
 
 test("the arrows move the highlight, and Space on an empty search flips the highlighted server's switch", async () => {

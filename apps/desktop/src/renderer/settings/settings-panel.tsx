@@ -14,7 +14,7 @@ import type {
   ShortcutControl,
   UpdateControl,
 } from "./controls";
-import { type IntegrationsSearch, IntegrationsSection } from "./integrations-page";
+import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
 import { WindowShortcutSections } from "./shortcuts-page";
@@ -113,10 +113,10 @@ export function SettingsPanel({
   settings,
   shortcuts,
   workspace,
-  integrationsSearch,
+  integrationsFilter,
 }: SettingsPanelProps & {
-  /** Settings' one search, which the Integrations page reads its query from and hands its tools to. */
-  integrationsSearch?: IntegrationsSearch | undefined;
+  /** The Integrations page's own search, its query held by Settings so Settings' search can hand one down. */
+  integrationsFilter?: IntegrationsFilter | undefined;
 }): React.JSX.Element {
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, microphone, account });
@@ -144,7 +144,7 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
-        <IntegrationsSection signedIn={signedIn} search={integrationsSearch} />
+        <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE ? (

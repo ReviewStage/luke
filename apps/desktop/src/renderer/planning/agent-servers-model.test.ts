@@ -149,7 +149,7 @@ test("servers whose standing is unread stand first under no heading", () => {
   assert.equal(groups[0]?.heading, undefined);
 });
 
-test("a search finds servers by name and any connected server's tools by name or description, alphabetically", () => {
+test("a search finds servers by name or what they are for and any connected server's tools by name or description, alphabetically", () => {
   const rows = rowsWhere(
     {
       [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
@@ -165,7 +165,10 @@ test("a search finds servers by name and any connected server's tools by name or
   );
 
   const byTool = searchServers(rows, "Issue");
-  assert.deepEqual(byTool.rows, []);
+  assert.deepEqual(
+    byTool.rows.map((row) => row.provider),
+    [INTEGRATION_PROVIDER.LINEAR],
+  );
   assert.deepEqual(
     byTool.tools.map((hit) => [hit.row.provider, hit.tool.name]),
     [
@@ -180,4 +183,28 @@ test("a search finds servers by name and any connected server's tools by name or
     [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NEON],
   );
   assert.deepEqual(searchServers(rows, "  ").tools, []);
+});
+
+test("a search finds a server by what it is for, and a word naming a server counts toward its tools, as Settings › Integrations' filter does", () => {
+  const rows = rowsWhere(
+    {
+      [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
+      [INTEGRATION_PROVIDER.NEON]: INTEGRATION_STATUS.DISCONNECTED,
+    },
+    {
+      tools: [
+        { name: "save_issue", description: "Creates or updates an issue." },
+        { name: "get_issue", description: "Gets one issue." },
+      ],
+    },
+  );
+
+  assert.deepEqual(
+    searchServers(rows, "postgres").rows.map((row) => row.provider),
+    [INTEGRATION_PROVIDER.NEON],
+  );
+  assert.deepEqual(
+    searchServers(rows, "linear get").tools.map((hit) => hit.tool.name),
+    ["get_issue"],
+  );
 });
