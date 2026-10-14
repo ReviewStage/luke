@@ -1,9 +1,12 @@
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
+  type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@sidecar/hosted/automation-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
@@ -11,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { GLYPH_STATE } from "../state-glyph";
 import {
   firingText,
+  nextRunText,
   RUN_TONE,
   reasonText,
   runGlyphState,
@@ -141,5 +145,28 @@ describe("an automation's words", () => {
     expect(runGlyphState(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) }))).toBe(
       GLYPH_STATE.REST,
     );
+  });
+
+  it("says when a schedule runs next by its weekday within the week, and by its date further off", () => {
+    const now = Date.parse("2026-10-14T12:00:00Z");
+    const next = (nextRunAt: number | null): AutomationSummary => ({
+      id: "40000000-0000-4000-8000-000000000001",
+      planId: "10000000-0000-4000-8000-000000000001",
+      planName: "Usage-based billing",
+      name: "Monthly audit",
+      enabled: true,
+      pausedReason: null,
+      trigger: schedule("0 9 3 * *"),
+      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Audit." },
+      guards: AUTOMATION_DEFAULT_GUARDS,
+      nextRunAt,
+      lastRun: null,
+      createdAt: 0,
+    });
+    const soon = nextRunText(next(Date.parse("2026-10-16T12:00:00Z")), now);
+    const later = nextRunText(next(Date.parse("2026-12-03T12:00:00Z")), now);
+    expect(soon).toMatch(/^Next Fri/u);
+    expect(later).toMatch(/^Next Dec 3/u);
+    expect(nextRunText(next(null), now)).toBe("On event");
   });
 });

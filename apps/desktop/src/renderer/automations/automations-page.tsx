@@ -50,6 +50,7 @@ import {
 } from "./automation-editor";
 import {
   firingText,
+  nextRunText,
   RUN_TONE,
   type RunTone,
   reasonText,
@@ -181,20 +182,6 @@ function AutomationSwitch({
   );
 }
 
-const NEXT_SHORT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-/** When the automation runs next, in the few words a list row ends with. */
-function nextText(automation: AutomationSummary): string {
-  if (automation.pausedReason !== null) return "Paused";
-  if (!automation.enabled) return "Off";
-  if (automation.nextRunAt !== null) return `Next ${NEXT_SHORT.format(automation.nextRunAt)}`;
-  return "On event";
-}
-
 /**
  * One automation's row: its trigger's glyph wearing where its newest run
  * stands, its name over what fires it, when it runs next, a failure's mark,
@@ -209,6 +196,7 @@ function AutomationRow({
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
+  const now = useMinute();
   const state = automation.lastRun === null ? GLYPH_STATE.REST : runGlyphState(automation.lastRun);
   return (
     // biome-ignore lint/a11y/useSemanticElements: the row holds its own switch, which a button may not.
@@ -230,7 +218,7 @@ function AutomationRow({
         <span className="automation-list-name">{automation.name}</span>
         <span className="automation-list-detail">{triggerText(automation.trigger)}</span>
       </span>
-      <span className="automation-list-when">{nextText(automation)}</span>
+      <span className="automation-list-when">{nextRunText(automation, now)}</span>
       {stateEndMark(state, true)}
       <AutomationSwitch automation={automation} onToggle={onToggle} />
     </div>

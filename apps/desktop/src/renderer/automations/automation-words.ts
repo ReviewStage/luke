@@ -7,6 +7,7 @@ import {
   type AutomationFiring,
   type AutomationRunReason,
   type AutomationRunSummary,
+  type AutomationSummary,
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
@@ -214,6 +215,35 @@ export function runGlyphState(run: AutomationRunSummary): GlyphState {
     default:
       return GLYPH_STATE.REST;
   }
+}
+
+/** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
+const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;
+
+const NEXT_THIS_WEEK = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const NEXT_LATER = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/**
+ * When the automation runs next, in the few words a list row ends with: a
+ * run within the week by its weekday, one further off by its date, so a
+ * monthly schedule never reads as due this week.
+ */
+export function nextRunText(automation: AutomationSummary, now: number): string {
+  if (automation.pausedReason !== null) return "Paused";
+  if (!automation.enabled) return "Off";
+  if (automation.nextRunAt === null) return "On event";
+  const format = automation.nextRunAt - now < WEEKDAY_REACH_MS ? NEXT_THIS_WEEK : NEXT_LATER;
+  return `Next ${format.format(automation.nextRunAt)}`;
 }
 
 /** Why a run did not start, in a sentence; nothing for a run that did or still may. */
