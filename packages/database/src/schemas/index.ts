@@ -8,6 +8,7 @@ export * from "./inbox.js";
 export * from "./inbox-attachment.js";
 export * from "./integration.js";
 export * from "./mac-command.js";
+export * from "./personal-workspace.js";
 export * from "./plan.js";
 export * from "./plan-page.js";
 export * from "./plan-revision.js";
