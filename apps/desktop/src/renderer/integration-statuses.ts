@@ -6,6 +6,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
+  type IntegrationSignInFailure,
   type IntegrationStatus,
 } from "@sidecar/hosted/integration-wire";
 import { Clock, Context, Duration, Effect } from "effect";
@@ -69,15 +70,27 @@ const signInWaitAtom = () =>
     ),
   );
 
-/** Every provider's sign-in as one read leaves it. */
+/** Every provider's sign-in as one read leaves it, with the sign-in failures it named. */
 function signInsAfterRead(
   signIns: SignIns,
   standing: Standing,
+  failures: readonly IntegrationSignInFailure[],
   read: { readonly mark: number; readonly at: number },
 ): SignIns {
   const next = new Map<IntegrationProvider, SignIn>();
   for (const provider of INTEGRATION_PROVIDER_LIST) {
-    const signIn = signInAfterRead(signIns.get(provider), { status: standing[provider], ...read });
+    const named = failures.find((failure) => failure.provider === provider);
+    const signIn = signInAfterRead(signIns.get(provider), {
+      status: standing[provider],
+      failure:
+        named === undefined
+          ? undefined
+          : {
+              reason: named.reason,
+              ...(named.message !== undefined ? { message: named.message } : undefined),
+            },
+      ...read,
+    });
     if (signIn !== undefined) next.set(provider, signIn);
   }
   return next;
@@ -125,7 +138,12 @@ export function useIntegrationStatuses(): IntegrationStatuses {
         }
         const at = now();
         setStatuses(answer.integrations);
-        setSignIns((standing) => signInsAfterRead(standing, answer.integrations, { mark, at }));
+        setSignIns((standing) =>
+          signInsAfterRead(standing, answer.integrations, answer.signInFailures ?? [], {
+            mark,
+            at,
+          }),
+        );
       },
       () => setReadFailed(true),
     );

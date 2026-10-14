@@ -1,6 +1,6 @@
 import { EXCESS_KEYS, HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -22,8 +22,10 @@ import {
   INTEGRATION_STATUS,
   type IntegrationConnectAnswer,
   type IntegrationProvider,
+  type IntegrationSignInFailure,
   type IntegrationStatus,
   integrationConnectAnswerSchema,
+  integrationSignInFailureSchema,
   integrationStatusAnswerSchema,
   integrationToolsAnswerSchema,
 } from "./integration-wire.js";
@@ -58,10 +60,12 @@ const UNANSWERED: Failed = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
 /**
  * Where every provider's connection stands, as a desktop reads the answer:
  * every status kept in words, because a service older than the desktop names
- * fewer providers and a newer one may name a status this build does not know.
+ * fewer providers and a newer one may name a status this build does not know,
+ * and each sign-in failure kept unread until it is read one at a time.
  */
 const integrationStatusesReadSchema = Schema.Struct({
   integrations: Schema.Record(Schema.String, Schema.String),
+  signInFailures: Schema.optionalKey(Schema.Array(Schema.Unknown)),
 });
 
 const STATUSES: ReadonlySet<string> = new Set(Object.values(INTEGRATION_STATUS));
@@ -86,6 +90,26 @@ function integrationStatusesFromRead(
   return Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [provider, statusOf(provider)]),
   ) as Record<IntegrationProvider, IntegrationStatus>;
+}
+
+/** The sign-in failures this build reads, each alone, so one it cannot read hides none of the others. */
+function signInFailuresFromRead(
+  read: typeof integrationStatusesReadSchema.Type,
+): readonly IntegrationSignInFailure[] {
+  return (read.signInFailures ?? []).flatMap((failure) =>
+    Option.toArray(Schema.decodeUnknownOption(integrationSignInFailureSchema)(failure)),
+  );
+}
+
+/** Where every provider stands, as the window hears it, with the sign-in failures the read found where it found any. */
+function integrationStatusesViewOf(
+  read: typeof integrationStatusesReadSchema.Type,
+): IntegrationStatusesView {
+  const signInFailures = signInFailuresFromRead(read);
+  return {
+    integrations: integrationStatusesFromRead(read),
+    ...(signInFailures.length > 0 ? { signInFailures } : undefined),
+  };
 }
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
@@ -130,7 +154,7 @@ export class HostedIntegrationsClient {
       this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS }),
       (answer) =>
         Effect.map(readAnswer(answer, integrationStatusesReadSchema), (read) =>
-          "failure" in read ? read : { integrations: integrationStatusesFromRead(read) },
+          "failure" in read ? read : integrationStatusesViewOf(read),
         ),
     );
   }
