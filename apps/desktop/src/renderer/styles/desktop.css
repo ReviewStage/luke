@@ -581,14 +581,21 @@ body,
 }
 
 /* A plan's name reads in the body's weight, the open one too, whose fill is
-   what marks it; a plan saved since the developer last looked at it on this
-   Mac takes the heavier weight until they do. */
+   what marks it. */
 .sidebar-plan-name {
   font-size: 13px;
 }
 
-.sidebar-plan[data-unread="true"] .sidebar-plan-name {
-  font-weight: 600;
+/* The one unread mark: what the developer has not seen, a plan saved since
+   they last looked at it on this Mac, a tab that something arrived on while
+   another was chosen, and an Inbox item that needs them, reads in the
+   heavier weight and the primary ink until they look, as a chat app's
+   channels do. Only what waits on them, the Inbox item, also wears the
+   blue dot (`.inbox-row-dot`). */
+.sidebar-plan[data-unread="true"] .sidebar-plan-name,
+.tab[data-unread="true"] .tab-label {
+  color: var(--text-primary);
+  font-weight: 680;
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
@@ -631,9 +638,16 @@ body,
 }
 
 /* A row's one mark leads its time, so it steps out with the time while the
-   row is hovered: a spinner, in the time's own ink, while an agent works on
-   the plan, else the pull request's mark, in its own colours
-   (`planning.css`). The card reuses the glyphs. */
+   row is hovered: the working mark, in the time's own ink and at the
+   glyph's size, while an agent works on the plan, else the pull request's
+   mark, in its own colours (`planning.css`). The card reuses the glyphs. */
+.sidebar-plan-time .state-glyph {
+  --state-glyph-size: 12px;
+
+  margin-right: var(--space-4);
+  vertical-align: -1.5px; /* off-scale */
+}
+
 .plan-mark-glyph {
   display: inline-block;
   width: 12px;
@@ -2559,9 +2573,11 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* An item that needs the developer wears a mail app's unread dot in the system
-   blue, beside its title's heavier weight; an answered one wears neither. The
-   dots stand in a column of their own past the times, kept on every row, so
-   the times line up whether a row wears one or not. */
+   blue, beside its title's unread weight; an answered one wears neither. The
+   dot is the window's one mark for what waits on the developer, as a plan or
+   a tab with something unseen on it is unread, not waiting. The dots stand
+   in a column of their own past the times, kept on every row, so the times
+   line up whether a row wears one or not. */
 .inbox-row {
   --inbox-dot: 7px;
 }
@@ -4308,17 +4324,6 @@ body:has(.app-stage[data-capture="true"])
   width: var(--control-glyph);
   height: var(--control-glyph);
   flex: 0 0 auto;
-}
-
-/* Something arrived on a tab while another was chosen: its label reads in
-   semibold, in the primary colour, until the tab is chosen, as a plan saved
-   unseen reads in the sidebar. */
-.tab[data-unread="true"] {
-  color: var(--text-primary);
-}
-
-.tab[data-unread="true"] .tab-label {
-  font-weight: 680;
 }
 
 /* What follows a tab's label, the Inbox's count, is muted as a model's

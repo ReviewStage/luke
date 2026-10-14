@@ -31,7 +31,7 @@ import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
-import { StateGlyph, stateEndMark } from "../state-glyph";
+import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import type { AgentServersControl } from "./agent-servers";
@@ -580,9 +580,18 @@ export function SubagentMark({ model }: { model: string | undefined }) {
  * An agent's glyph wearing where it stands: its mark (`AgentMark`) at its
  * full size, giving way to the working mark while the agent may still write
  * (`state-glyph.tsx`). A failed agent keeps its mark, and its row or tab
- * says the failure at its end (`agentEndMark`).
+ * says the failure at its end (`agentEndMark`). An agent this window does
+ * not list, one another Mac started, wears the mark of no known harness at
+ * rest, so a row naming it keeps the glyph's column.
  */
-export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" | "status"> }) {
+export function AgentGlyph({
+  agent,
+}: {
+  agent: Pick<CodingAgentSummary, "model" | "status"> | undefined;
+}) {
+  if (agent === undefined) {
+    return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
+  }
   return (
     <StateGlyph
       glyph={<AgentMark provider={providerOf(agent.model)} />}

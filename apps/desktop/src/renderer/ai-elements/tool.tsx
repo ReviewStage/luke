@@ -1,6 +1,5 @@
-import { XIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, useState } from "react";
-import { WorkingMark } from "../working-mark";
+import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { CodeBlock } from "./code-block";
 import {
   Fold,
@@ -19,9 +18,10 @@ import { cn } from "./utils";
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
  * to Luke's tokens and folded on `fold.tsx`. The row is one line, and
  * the whole of it opens the call: the tool's icon, what the call did in
- * a few words, and where it stands, the working mark while it runs and a
- * red mark if it failed, trailing the words so that only their cut moves
- * when the mark goes; a call that ended well keeps no seat for one. A
+ * a few words, and where it stands, trailing the words so that only their
+ * cut moves when the mark goes: the working mark while it runs and the
+ * failed mark if it failed, each as an agent's tab draws it
+ * (`state-glyph.tsx`); a call that ended well keeps no seat for one. A
  * subject the body says whole, as a command's input is the command, is
  * the closed row's preview, and the open row says its verb alone. The
  * verb is in the full ink and the icon and the subject in the muted one,
@@ -45,16 +45,6 @@ export const TOOL_STATE = {
 } as const;
 
 export type ToolState = (typeof TOOL_STATE)[keyof typeof TOOL_STATE];
-
-/** The states that draw a mark: every one but a call that ended well. */
-type MarkedToolState = Exclude<ToolState, typeof TOOL_STATE.OUTPUT_AVAILABLE>;
-
-/** What each drawn mark says to a reader who cannot see it. */
-const STATE_LABEL = {
-  [TOOL_STATE.INPUT_STREAMING]: "Running",
-  [TOOL_STATE.INPUT_AVAILABLE]: "Running",
-  [TOOL_STATE.OUTPUT_ERROR]: "Failed",
-} as const satisfies Record<MarkedToolState, string>;
 
 /** How a block of the body is drawn: a command behind its prompt, a patch with its lines coloured, words as they are, or JSON. */
 export const TOOL_BLOCK = {
@@ -125,30 +115,17 @@ export function Tool({ className, children, ...props }: ToolProps): ReactNode {
 }
 
 /**
- * Where the call stands, at 16px: the working mark while it runs or a red
- * mark if it failed, the two sharing one seat so a call that fails moves
- * nothing beside it. A call that ended well draws nothing, no empty seat
- * and no gap beside it, since that is every call's end and a mark on each
- * says nothing.
+ * Where the call stands: the working mark while it runs, in the line's
+ * muted ink, or the failed mark if it failed, each the one an agent's tab
+ * wears and named as it is. A call that ended well draws nothing, no empty
+ * seat and no gap beside it, since that is every call's end and a mark on
+ * each says nothing. Note that the failed mark gives no hint of its own,
+ * because a subagent's row already hangs one over the whole line.
  */
 export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
   if (state === TOOL_STATE.OUTPUT_AVAILABLE) return null;
-  return (
-    <span
-      className="flex size-4 shrink-0 items-center justify-center"
-      data-tool-state={state}
-      role="img"
-      aria-label={STATE_LABEL[state]}
-    >
-      {state === TOOL_STATE.OUTPUT_ERROR ? (
-        <XIcon className="size-4 text-danger" aria-hidden="true" />
-      ) : (
-        <span className="text-muted-foreground">
-          <WorkingMark />
-        </span>
-      )}
-    </span>
-  );
+  if (state === TOOL_STATE.OUTPUT_ERROR) return stateEndMark(GLYPH_STATE.FAILED, false);
+  return <StateGlyph state={GLYPH_STATE.WORKING} />;
 }
 
 export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {

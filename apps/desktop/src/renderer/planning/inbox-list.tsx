@@ -13,10 +13,9 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import { AgentRef, lineSubject } from "./agent-ref";
-import { AgentGlyph, AgentMark } from "./agent-tab";
+import { AgentGlyph } from "./agent-tab";
 import {
   INBOX_GROUPING,
   type InboxGrouping,
@@ -41,9 +40,12 @@ import { cardTitle } from "./tool-call-model";
  * while the pointer rests on it (`agent-ref.tsx`), where the plan's row
  * names the agent, and leaves the press to its row, whose pane opens the
  * agent. An item that needs the developer's answer reads as a mail app's
- * unread mail does, its title in the heavier weight and a blue dot past
- * its time, in either grouping and filtered or not; an answered one is
- * settled, in the body's weight with no dot. A folded plan
+ * unread mail does, a blue dot past its time beside its title in the
+ * weight every unread row and tab reads in, in either grouping and
+ * filtered or not; an answered one is settled, in the body's weight with
+ * no dot. Only an item waiting on the developer wears the dot: a plan or a
+ * tab with something unseen on it is unread, not waiting, and wears the
+ * weight alone. A folded plan
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
@@ -76,7 +78,7 @@ function drawnWidth(width: number): string {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent of no known harness. */
+/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent this window does not list. */
 function ItemGlyph({
   plan,
   agentId,
@@ -87,9 +89,7 @@ function ItemGlyph({
   models: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   const agent = plan.agents?.agents.find((each) => each.id === agentId);
-  if (agent === undefined) {
-    return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
-  }
+  if (agent === undefined) return <AgentGlyph agent={undefined} />;
   return (
     <AgentRef subject={lineSubject(agent, models)} models={models} onOpen={undefined}>
       <AgentGlyph agent={agent} />
@@ -97,7 +97,7 @@ function ItemGlyph({
   );
 }
 
-/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the heavier weight with a dot past its time. */
+/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the unread weight with a dot past its time. */
 function ItemRow({
   listed,
   chosen,
