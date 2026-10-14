@@ -138,6 +138,8 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_CONNECT: "integrations.connect",
   /** The tools one provider's server offers the account's agents, read from the service now. */
   INTEGRATIONS_TOOLS: "integrations.tools",
+  /** The account's sign-in to one provider under way ended on the service, revoking nothing; where it then stands. */
+  INTEGRATIONS_CANCEL: "integrations.cancel",
   /** The account's connection to one provider ended on the service; where it then stands. */
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */

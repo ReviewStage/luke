@@ -187,6 +187,7 @@ export const ACT_KIND = {
    */
   INTEGRATIONS_STATUS: "integrations.status",
   INTEGRATIONS_CONNECT: "integrations.connect",
+  INTEGRATIONS_CANCEL: "integrations.cancel",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** The tools one provider's server offers the account's agents, read from the service when a list of them is shown. */
   INTEGRATIONS_TOOLS: "integrations.tools",
@@ -857,6 +858,11 @@ export const ACT = {
     payload: actSchema(integrationProviderParamsSchema),
     result: wireResult<IntegrationToolsView>(isReadable(integrationToolsViewSchema)),
     refusal: "Could not read that integration's tools on this system.",
+  },
+  [ACT_KIND.INTEGRATIONS_CANCEL]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationStatusView>(isReadable(integrationStatusViewSchema)),
+    refusal: "Could not cancel connecting that integration on this system.",
   },
   [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
     payload: actSchema(integrationProviderParamsSchema),

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { INTEGRATION_CALL_FAILURE } from "@sidecar/hosted/integration-view";
 import {
   INTEGRATION_PROVIDER,
@@ -9,12 +10,19 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@sidecar/hosted/integration-wire";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { onRegistry } from "#testing/copy-feedback";
 import { GitHubConnectProvider } from "../github-connect";
+import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "../integration-sign-in";
 import { OpenSettingsProvider } from "../open-settings";
+import { rendererRuntime } from "../renderer-runtime";
 import type { SettingsLink } from "../settings-views";
 import { IntegrationsSection } from "./integrations-page";
 
@@ -25,6 +33,8 @@ import { IntegrationsSection } from "./integrations-page";
  * unavailable, has none; an account offered none is told so, and a read
  * that fails still offers to read again. GitHub, which the account's own
  * GitHub grants, is connected in place through the account's GitHub connect.
+ * A Connect stands its provider pending at the service until the bridge
+ * settles it, as the browser would, or a Cancel ends it.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
@@ -39,8 +49,15 @@ let sent: Act[] = [];
 let links: SettingsLink[] = [];
 /** How many times the account's GitHub connect was begun. */
 let githubConnects = 0;
+/** Whether another window begins the sign-in again while the next Cancel is out, so the Cancel finds it pending. */
+let reopenedDuringCancel = false;
+/** Where the service stands a provider a Connect or a Cancel has touched, over where it would otherwise. */
+const touched = new Map<IntegrationProvider, IntegrationStatus>();
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
+
+const GRANOLA = INTEGRATION_PROVIDER.GRANOLA;
 
 /** Where every provider stands at the service. */
 function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
@@ -48,11 +65,12 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
   return Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [
       provider,
-      withheld.includes(provider)
-        ? INTEGRATION_STATUS.UNAVAILABLE
-        : provider === INTEGRATION_PROVIDER.GITHUB && githubConnected
-          ? INTEGRATION_STATUS.CONNECTED
-          : INTEGRATION_STATUS.DISCONNECTED,
+      touched.get(provider) ??
+        (withheld.includes(provider)
+          ? INTEGRATION_STATUS.UNAVAILABLE
+          : provider === INTEGRATION_PROVIDER.GITHUB && githubConnected
+            ? INTEGRATION_STATUS.CONNECTED
+            : INTEGRATION_STATUS.DISCONNECTED),
     ]),
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
@@ -64,21 +82,14 @@ beforeEach(() => {
   sent = [];
   links = [];
   githubConnects = 0;
+  touched.clear();
+  reopenedDuringCancel = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {
         sent.push(request);
-        return Promise.resolve(
-          request.kind !== ACT_KIND.INTEGRATIONS_STATUS
-            ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
-            : refuseRead
-              ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
-                  value: { failure: INTEGRATION_CALL_FAILURE.UNANSWERED },
-                }
-              : { status: ACT_OUTCOME_STATUS.DONE, value: { integrations: serviceStatuses() } },
-        );
+        return Promise.resolve(answerOf(request));
       },
       recordSurfaceEvent: () => undefined,
     },
@@ -87,41 +98,126 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
-/** The signed-in page once where every provider stands has been read. */
-async function mount(): Promise<HTMLElement> {
+/** What the service answers an act the page sends, where the bridge answers it at all. */
+function answerOf(request: Act): ActOutcome {
+  const DONE = ACT_OUTCOME_STATUS.DONE;
+  switch (request.kind) {
+    case ACT_KIND.INTEGRATIONS_STATUS:
+      return refuseRead
+        ? { status: DONE, value: { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } }
+        : { status: DONE, value: { integrations: serviceStatuses() } };
+    case ACT_KIND.INTEGRATIONS_CONNECT:
+      touched.set(request.payload.provider, INTEGRATION_STATUS.PENDING);
+      return { status: DONE, value: { opened: true } };
+    // A Cancel ends a sign-in still pending; one that finished first stays connected.
+    case ACT_KIND.INTEGRATIONS_CANCEL: {
+      const provider = request.payload.provider;
+      if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
+        touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+      }
+      return { status: DONE, value: { status: serviceStatuses()[provider] } };
+    }
+    default:
+      return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
+  }
+}
+
+/** Lets every answer the bridge gave, and the redraws they cause, land. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/**
+ * The signed-in page once where every provider stands has been read, its
+ * atoms under `registry` where one is given, as the window's root provides
+ * its own.
+ */
+async function mount(registry?: AtomRegistry.AtomRegistry): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(
-        OpenSettingsProvider,
-        { value: (link: SettingsLink) => links.push(link) },
-        createElement(
-          GitHubConnectProvider,
-          {
-            value: {
-              connection: { connected: githubConnected, login: null },
-              connect: () => {
-                githubConnects += 1;
-                return Promise.resolve(true);
-              },
-            },
+  const page = createElement(
+    OpenSettingsProvider,
+    { value: (link: SettingsLink) => links.push(link) },
+    createElement(
+      GitHubConnectProvider,
+      {
+        value: {
+          connection: { connected: githubConnected, login: null },
+          connect: () => {
+            githubConnects += 1;
+            return Promise.resolve(true);
           },
-          createElement(IntegrationsSection, { signedIn: true }),
-        ),
-      ),
+        },
+      },
+      createElement(IntegrationsSection, { signedIn: true }),
     ),
   );
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
+  await settle();
   return container;
 }
+
+/** A registry whose atoms wait on this clock, as the window's would on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  const registry = AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+  registries.push(registry);
+  return registry;
+}
+
+/** Granola's row as the page draws it. */
+function granolaRowOf(page: HTMLElement): Element {
+  return (
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Granola",
+    ) ?? assert.fail("Granola has a row")
+  );
+}
+
+/** A row as the developer reads it: its line, and the labels of the buttons it offers. */
+interface RowRead {
+  readonly line: string | undefined;
+  readonly buttons: readonly string[];
+}
+
+/** Granola's row: its line, and the labels of the buttons it offers. */
+function granolaRow(page: HTMLElement): RowRead {
+  const row = granolaRowOf(page);
+  return {
+    line: row.querySelector(".settings-state")?.textContent ?? undefined,
+    buttons: [...row.querySelectorAll("button")].flatMap((button) =>
+      button.textContent === "" ? [] : [button.textContent ?? ""],
+    ),
+  };
+}
+
+/** Presses the button on Granola's row that says `label`. */
+async function pressOnGranola(page: HTMLElement, label: string): Promise<void> {
+  const button =
+    [...granolaRowOf(page).querySelectorAll("button")].find((each) => each.textContent === label) ??
+    assert.fail(`Granola's row offers ${label}`);
+  act(() => button.click());
+  await settle();
+}
+
+/** The developer back in the window, which reads where every provider stands again. */
+async function focusWindow(): Promise<void> {
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+}
+
+const WAITING = { line: "Waiting for Granola in your browser…", buttons: ["Reopen", "Cancel"] };
 
 /** The providers the page draws a row for, by name. */
 function rowNames(page: HTMLElement): (string | undefined)[] {
@@ -176,7 +272,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and stands pending", async () => {
+test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -186,14 +282,24 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
 
   const connect = buttonNamed("Connect GitHub") ?? assert.fail("Connect GitHub is offered");
   assert.equal(buttonNamed("Connect"), undefined);
-  await act(async () => {
-    connect.click();
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  act(() => connect.click());
+  await settle();
 
   assert.equal(githubConnects, 1);
   assert.deepEqual(links, [], "nothing leaves the page");
-  assert.match(page.textContent ?? "", /Finish signing in to GitHub in your browser\./u);
+  assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u);
+  await focusWindow();
+  assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u, "still waiting");
+
+  const cancel = buttonNamed("Cancel") ?? assert.fail("GitHub's wait offers Cancel");
+  act(() => cancel.click());
+  await settle();
+  assert.equal(
+    sent.some((request) => request.kind === ACT_KIND.INTEGRATIONS_CANCEL),
+    false,
+    "the service holds no GitHub sign-in to end",
+  );
+  assert.ok(buttonNamed("Connect GitHub"), "Connect GitHub is offered again");
 });
 
 test("GitHub connected stands connected with no Disconnect, whose way out is Settings › Connected accounts", async () => {
@@ -209,3 +315,138 @@ test("GitHub connected stands connected with no Disconnect, whose way out is Set
   );
   assert.equal(page.querySelector('[aria-label="GitHub actions"]'), null);
 });
+
+test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends the sign-in at the service and leaves Connect", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+
+  assert.deepEqual(granolaRow(page), WAITING);
+  await pressOnGranola(page, "Cancel");
+  assert.ok(
+    sent.some(
+      (request) =>
+        request.kind === ACT_KIND.INTEGRATIONS_CANCEL && request.payload.provider === GRANOLA,
+    ),
+    "the sign-in is ended at the service",
+  );
+  assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+  await focusWindow();
+  assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+});
+
+test("a Cancel that lands after the sign-in finished leaves the provider connected", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+  touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
+
+  await pressOnGranola(page, "Cancel");
+  assert.equal(granolaRow(page).line, "Connected");
+});
+
+test("a sign-in the browser came back from without a grant says it could not connect, and why, with Try again", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+  await focusWindow();
+  assert.deepEqual(granolaRow(page), WAITING, "still pending: still waiting");
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
+  await focusWindow();
+  assert.deepEqual(granolaRow(page), {
+    line: "Couldn't connect to Granola: the sign-in came back without access.",
+    buttons: ["Try again"],
+  });
+
+  await pressOnGranola(page, "Try again");
+  assert.deepEqual(granolaRow(page), WAITING);
+});
+
+it.effect(
+  "a sign-in still pending once its wait runs out says it did not finish, with Try again, and connects after all if the browser finishes it later",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const page = yield* Effect.promise(() => mount(registry));
+      yield* Effect.promise(() => pressOnGranola(page, "Connect"));
+
+      yield* TestClock.adjust(SIGN_IN_WAIT);
+      yield* Effect.promise(settle);
+      assert.deepEqual(granolaRow(page), {
+        line: "Sign-in didn't finish.",
+        buttons: ["Try again"],
+      });
+
+      touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
+      yield* Effect.promise(focusWindow);
+      assert.equal(granolaRow(page).line, "Connected");
+    }),
+);
+
+it.effect(
+  "a Cancel that a sign-in begun again elsewhere overtakes keeps waiting on that one, for its own whole wait",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const page = yield* Effect.promise(() => mount(registry));
+      yield* Effect.promise(() => pressOnGranola(page, "Connect"));
+      yield* TestClock.adjust("2 minutes");
+
+      reopenedDuringCancel = true;
+      yield* Effect.promise(() => pressOnGranola(page, "Cancel"));
+      yield* TestClock.adjust("2 minutes");
+      yield* Effect.promise(settle);
+      assert.deepEqual(
+        granolaRow(page),
+        WAITING,
+        "past the first sign-in's deadline, still waiting",
+      );
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.promise(settle);
+      assert.equal(granolaRow(page).line, "Sign-in didn't finish.");
+    }),
+);
+
+it.effect("a sign-in begun later does not put off the deadline of one begun before it", () =>
+  Effect.gen(function* () {
+    const registry = registryOn(yield* Clock.Clock);
+    const page = yield* Effect.promise(() => mount(registry));
+    yield* Effect.promise(() => pressOnGranola(page, "Connect"));
+    yield* TestClock.adjust("2 minutes");
+    const linear =
+      [...page.querySelectorAll(".settings-row")]
+        .find((row) => row.querySelector("strong")?.textContent === "Linear")
+        ?.querySelector("button") ?? assert.fail("Linear offers Connect");
+    act(() => linear.click());
+    yield* Effect.promise(settle);
+
+    yield* TestClock.adjust("1 minute");
+    yield* Effect.promise(settle);
+    assert.deepEqual(granolaRow(page), {
+      line: "Sign-in didn't finish.",
+      buttons: ["Try again"],
+    });
+    assert.ok(
+      page.textContent?.includes("Waiting for Linear in your browser…"),
+      "Linear still waits its own three minutes",
+    );
+  }),
+);
+
+it.effect(
+  "back in the window, a sign-in still pending is given a grace to land, and then said not to have finished",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const page = yield* Effect.promise(() => mount(registry));
+      yield* Effect.promise(() => pressOnGranola(page, "Connect"));
+      yield* Effect.promise(focusWindow);
+      assert.deepEqual(granolaRow(page), WAITING);
+
+      yield* TestClock.adjust(SIGN_IN_GRACE);
+      yield* Effect.promise(settle);
+      assert.deepEqual(granolaRow(page), {
+        line: "Sign-in didn't finish.",
+        buttons: ["Try again"],
+      });
+    }),
+);

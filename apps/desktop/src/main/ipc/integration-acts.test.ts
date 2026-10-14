@@ -49,6 +49,11 @@ function fixture() {
           asked.push(`tools ${provider}`);
           return { tools: [{ name: "list_issues", description: "List issues." }] };
         }),
+      integrationsCancel: ({ provider }) =>
+        Effect.sync(() => {
+          asked.push(`cancel ${provider}`);
+          return { status: INTEGRATION_STATUS.DISCONNECTED };
+        }),
       integrationsDisconnect: ({ provider }) =>
         Effect.sync(() => {
           asked.push(`disconnect ${provider}`);
@@ -73,6 +78,7 @@ it.effect(
         });
         for (const kind of [
           ACT_KIND.INTEGRATIONS_CONNECT,
+          ACT_KIND.INTEGRATIONS_CANCEL,
           ACT_KIND.INTEGRATIONS_DISCONNECT,
           ACT_KIND.INTEGRATIONS_TOOLS,
         ]) {

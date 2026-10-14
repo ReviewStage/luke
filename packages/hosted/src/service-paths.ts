@@ -169,6 +169,11 @@ export function integrationToolsPath(provider: IntegrationProvider): string {
   return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/tools`;
 }
 
+/** Ends the account's sign-in to one provider under way (POST), and nothing else: no grant is revoked. */
+export function integrationCancelPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/cancel`;
+}
+
 /** Ends the account's connection to one provider (POST); what agents already did there stands. */
 export function integrationDisconnectPath(provider: IntegrationProvider): string {
   return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;

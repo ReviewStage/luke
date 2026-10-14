@@ -290,6 +290,8 @@ export interface HostOperator {
   integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
   /** The tools one provider's server offers the account's agents; or why there is no answer. */
   integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
+  /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
+  integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
@@ -539,6 +541,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, { provider: params.provider }),
         integrationAnswer(integrationToolsViewSchema),
+      ),
+    integrationsCancel: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, { provider: params.provider }),
+        integrationAnswer(integrationStatusViewSchema),
       ),
     integrationsDisconnect: (params) =>
       Effect.map(

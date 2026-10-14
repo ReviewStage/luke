@@ -19,7 +19,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun, a connection ended.
+ * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or cancelled, a connection ended.
  *
  * Nothing is held here. A Connect asks the service to begin a sign-in to
  * one provider and opens the address it answered in the browser through the
@@ -34,7 +34,7 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the integrations, as this concern asks it. */
 export type IntegrationsClient = Pick<
   HostedIntegrationsClient,
-  "statuses" | "connect" | "disconnect" | "tools"
+  "statuses" | "connect" | "cancel" | "disconnect" | "tools"
 >;
 
 export interface IntegrationsDependencies {
@@ -97,6 +97,11 @@ function composed(dependencies: IntegrationsDependencies): IntegrationsComposer 
       Effect.gen(function* () {
         const provider = yield* providerOf(params);
         return carried<IntegrationToolsView>(yield* asked(client.tools(provider)));
+      }),
+    [GATEWAY_METHOD.INTEGRATIONS_CANCEL]: (params) =>
+      Effect.gen(function* () {
+        const provider = yield* providerOf(params);
+        return carried<IntegrationStatusView>(yield* asked(client.cancel(provider)));
       }),
     [GATEWAY_METHOD.INTEGRATIONS_DISCONNECT]: (params) =>
       Effect.gen(function* () {

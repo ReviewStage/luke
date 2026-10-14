@@ -22,10 +22,16 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
   deleteIntegrationConnection,
+  endIntegrationSignIn,
+  expireIntegrationConnection,
   readIntegrationConnections,
   readIntegrationSignIn,
 } from "../server/hosted/integration-store";
-import { integrationsApp, mintIntegrationState } from "../server/integrations-app";
+import {
+  type IntegrationsAppSeams,
+  integrationsApp,
+  mintIntegrationState,
+} from "../server/integrations-app";
 import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { GRANTING_SIGN_IN_URL, integrationConnectOver } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
@@ -37,7 +43,8 @@ import { noNetwork } from "./support/no-network";
  * it is offered to, and every other account is answered as though the
  * deployment never set the provider up. The store is the real one over the
  * migrations on PGlite; the connectors are the production read of the
- * test's variables, asking a Connect that grants everything. GitHub has no
+ * test's variables, asking a Connect that grants everything, or one that
+ * holds no grant, as a sign-in declined or never finished leaves it. GitHub has no
  * connector: it stands where the account's own GitHub sign-in does, read
  * through the real GitHub App over the account rows a sign-in leaves.
  */
@@ -80,12 +87,16 @@ function githubServer(listed: () => readonly string[]) {
 
 /**
  * The group over the test's database and a deployment with these variables
- * and this GitHub App, none unless given, each bearer the account it names.
+ * and this GitHub App, none unless given, each bearer the account it names,
+ * over a Connect that grants everything unless it `declines`, and over the
+ * real store unless `seams` stands in for part of it.
  */
 const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
   network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
+  connect: { readonly declines?: boolean } = {},
+  seams: Partial<IntegrationsAppSeams> = {},
 ) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
@@ -93,7 +104,7 @@ const standing = (
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, clock),
-      integrationConnectOver(variables),
+      integrationConnectOver(variables, connect),
       githubApp,
       network,
     );
@@ -107,10 +118,12 @@ const standing = (
         readSignIn: readIntegrationSignIn,
         beginSignIn: beginIntegrationSignIn,
         completeSignIn: completeIntegrationSignIn,
+        endSignIn: endIntegrationSignIn,
         deleteConnection: deleteIntegrationConnection,
         mintState: mintIntegrationState,
         // The test's own clock, which also stamps a sign-in begun.
         now: () => clock.currentTimeMillisUnsafe(),
+        ...seams,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -154,6 +167,13 @@ const standing = (
           ask(`/api/account/integrations/tools?provider=${GITHUB}`, { userId }),
           // SAFETY: a tools answer is a list of named tools.
           ({ body }) => (body as { tools: { name: string }[] }).tools.map((tool) => tool.name),
+        ),
+      /** A Cancel of the account's Slack sign-in, answering where Slack then stands. */
+      cancelSlack: (userId: string) =>
+        Effect.map(
+          ask(`/api/account/integrations/cancel?provider=${SLACK}`, { method: "POST", userId }),
+          // SAFETY: a cancel answers the one provider's word.
+          ({ body }) => (body as { status: string }).status,
         ),
       connectSlack: (userId: string) =>
         ask(`/api/account/integrations/connect?provider=${SLACK}`, { method: "POST", userId }),
@@ -216,6 +236,91 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.UNAVAILABLE),
         );
         assert.equal(yield* group.slackStatus(outsider), INTEGRATION_STATUS.UNAVAILABLE);
+      }),
+  );
+
+  it.effect(
+    "a browser back from a sign-in without a grant ends it: the provider stands disconnected rather than pending, and an expired one expired again",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, { declines: true });
+        const first = yield* openAccount("alex@declined.example");
+        const lapsed = yield* openAccount("jo@declined.example");
+        yield* beginIntegrationSignIn(lapsed, SLACK, "state-before");
+        yield* completeIntegrationSignIn(lapsed, SLACK, "state-before");
+        yield* expireIntegrationConnection(lapsed, SLACK);
+
+        assert.equal((yield* group.connectSlack(first)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* group.slackStatus(first), INTEGRATION_STATUS.PENDING);
+        assert.equal((yield* group.connectSlack(lapsed)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.PENDING);
+        for (const account of [first, lapsed]) {
+          assert.equal(
+            yield* group.slackLanding(account),
+            integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.NOT_COMPLETED),
+          );
+        }
+        assert.equal(yield* group.slackStatus(first), INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
+      }),
+  );
+
+  it.effect(
+    "a Cancel ends only a sign-in under way: a first one leaves Slack disconnected, one over an expired row leaves it expired, and one that completed just before leaves it connected",
+    () =>
+      Effect.gen(function* () {
+        const declining = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
+          declines: true,
+        });
+        const first = yield* openAccount("kai@cancelled.example");
+        const lapsed = yield* openAccount("lee@cancelled.example");
+        yield* beginIntegrationSignIn(lapsed, SLACK, "state-lapsed");
+        yield* completeIntegrationSignIn(lapsed, SLACK, "state-lapsed");
+        yield* expireIntegrationConnection(lapsed, SLACK);
+        for (const account of [first, lapsed]) {
+          assert.equal((yield* declining.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+        }
+
+        assert.equal(yield* declining.cancelSlack(first), INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(yield* declining.slackStatus(first), INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(yield* declining.cancelSlack(lapsed), INTEGRATION_STATUS.EXPIRED);
+        assert.equal(yield* declining.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
+
+        const granting = yield* standing(SLACK_CONNECTOR);
+        const finished = yield* openAccount("max@cancelled.example");
+        assert.equal((yield* granting.connectSlack(finished)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(
+          yield* granting.slackLanding(finished),
+          integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.CONNECTED),
+        );
+        assert.equal(yield* granting.cancelSlack(finished), INTEGRATION_STATUS.CONNECTED);
+        assert.equal(yield* granting.slackStatus(finished), INTEGRATION_STATUS.CONNECTED);
+      }),
+  );
+
+  it.effect(
+    "a Cancel that a sign-in begun again overtakes answers that sign-in pending, and leaves it to run",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(
+          SLACK_CONNECTOR,
+          undefined,
+          undefined,
+          { declines: true },
+          {
+            // A Reopen's Connect lands between the Cancel's read and its ending of the state it read.
+            endSignIn: (userId, provider, state) =>
+              Effect.andThen(
+                beginIntegrationSignIn(userId, provider, "state-reopened"),
+                endIntegrationSignIn(userId, provider, state),
+              ),
+          },
+        );
+        const account = yield* openAccount("sky@reopened.example");
+        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+
+        assert.equal(yield* group.cancelSlack(account), INTEGRATION_STATUS.PENDING);
+        assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.PENDING);
       }),
   );
 

@@ -43,6 +43,11 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "provider=$1",
   },
   {
+    src: "/api/account/integrations/([^/]+)/cancel",
+    route: "account/integrations/cancel",
+    query: "provider=$1",
+  },
+  {
     src: "/api/account/integrations/([^/]+)/disconnect",
     route: "account/integrations/disconnect",
     query: "provider=$1",

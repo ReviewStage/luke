@@ -661,3 +661,9 @@
 .settings-copy .settings-state[data-state="attention"] {
   color: var(--state-attention);
 }
+
+/* A sign-in waiting on the browser wears the window's ring, at the line's size. */
+.settings-state .spinner {
+  width: 12px;
+  height: 12px;
+}

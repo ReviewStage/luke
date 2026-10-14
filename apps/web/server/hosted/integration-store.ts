@@ -6,7 +6,8 @@
  * else or no row does not. A sign-in begins by writing its one-time state
  * beside whatever the row already said, so an account signing in again keeps
  * working while it does; the sign-in completes by setting the row connected
- * and clearing the state; a Disconnect deletes the row. Every function here
+ * and clearing the state, or ends without a grant by clearing the state alone
+ * (a first sign-in's row with it); a Disconnect deletes the row. Every function here
  * is an effect over the ambient `SqlClient`.
  */
 
@@ -275,4 +276,51 @@ export function deleteIntegrationConnection(
   provider: IntegrationProvider,
 ): IntegrationStoreEffect<void> {
   return deleteRow({ userId, provider });
+}
+
+const deleteUnfinished = SqlSchema.void({
+  Request: CompleteSchema,
+  execute: ({ state, ...account }) =>
+    Database.use((db) =>
+      db
+        .delete(integrationConnection)
+        .where(
+          and(
+            ofAccount(account),
+            eq(integrationConnection.state, state),
+            eq(integrationConnection.status, INTEGRATION_ROW_STATUS.PENDING),
+          ),
+        ),
+    ),
+});
+
+const clearState = SqlSchema.void({
+  Request: CompleteSchema,
+  execute: ({ at, state, ...account }) =>
+    Database.use((db) =>
+      db
+        .update(integrationConnection)
+        .set({ state: null, stateIssuedAt: null, updatedAt: at })
+        .where(and(ofAccount(account), eq(integrationConnection.state, state))),
+    ),
+});
+
+/**
+ * Ends the sign-in begun under `state` without a grant, as a browser that
+ * came back without one ends it: a first sign-in's row goes, so the provider
+ * stands disconnected, and a row that stood before it keeps its status and
+ * loses only the state. A sign-in begun again since carries another state,
+ * so it is left to run.
+ */
+export function endIntegrationSignIn(
+  userId: string,
+  provider: IntegrationProvider,
+  state: string,
+): IntegrationStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (at) =>
+    Effect.andThen(
+      deleteUnfinished({ userId, provider, state, at }),
+      clearState({ userId, provider, state, at }),
+    ),
+  );
 }
