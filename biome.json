@@ -14,7 +14,7 @@
       "!.claude/settings.json",
       "!apps/web/fixtures",
       "!packages/features/fixtures",
-      "!packages/session/fixtures"
+      "!packages/wire/fixtures"
     ]
   },
   "formatter": {

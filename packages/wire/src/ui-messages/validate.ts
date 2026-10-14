@@ -1,4 +1,14 @@
 import {
+  safeValidateUIMessages,
+  type ToolSet,
+  type UIDataTypes,
+  type UIMessage,
+  type UIMessagePart,
+  type UITools,
+} from "ai";
+import { Effect, Result } from "effect";
+import { readEither, SchemaRefusalError } from "../effect/index.js";
+import {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
   isRecord,
@@ -13,17 +23,7 @@ import {
   type UserMessageMetadata,
   unparsedWire,
   type WireBoundaryInput,
-} from "@sidecar/wire";
-import { readEither, SchemaRefusalError } from "@sidecar/wire/effect";
-import {
-  safeValidateUIMessages,
-  type ToolSet,
-  type UIDataTypes,
-  type UIMessage,
-  type UIMessagePart,
-  type UITools,
-} from "ai";
-import { Effect, Result } from "effect";
+} from "../index.js";
 import { isStoredToolPart, toolPartName } from "./tool-parts.js";
 
 /**

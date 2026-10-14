@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    name: "session",
+    name: "wire",
     include: ["src/**/*.test.ts"],
   },
 });

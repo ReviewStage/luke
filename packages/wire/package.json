@@ -6,19 +6,25 @@
   "exports": {
     ".": "./src/index.js",
     "./app-settings": "./src/app-settings/index.js",
+    "./conversation": "./src/conversation/conversation.js",
     "./effect": "./src/effect/index.js",
-    "./testing": "./src/testing/index.js"
+    "./provider-identity": "./src/provider-identity.js",
+    "./testing": "./src/testing/index.js",
+    "./ui-messages": "./src/ui-messages/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "ai": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "4.5.4"
   }
 }

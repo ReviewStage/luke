@@ -1,3 +1,6 @@
+import type { TextUIPart } from "ai";
+import { Result } from "effect";
+import { readEither } from "../effect/index.js";
 import {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
@@ -5,10 +8,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   unparsedWire,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import type { TextUIPart } from "ai";
-import { Result } from "effect";
+} from "../index.js";
 import type { StoredUIMessage } from "./validate.js";
 
 /**

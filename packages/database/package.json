@@ -86,7 +86,6 @@
     "@sidecar/features": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
-    "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "ai": "catalog:",

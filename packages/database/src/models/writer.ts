@@ -15,13 +15,6 @@ import {
 import { isWireUuid } from "@sidecar/features";
 import type { CodingAgentAttachment } from "@sidecar/features/coding-agent-wire";
 import {
-  isSettledToolPartState,
-  isStoredToolPart,
-  type StoredToolPart,
-  TOOL_PART_STATE,
-} from "@sidecar/session";
-import { readStoredUIMessages, type StoredUIMessage } from "@sidecar/session/ui-messages";
-import {
   type AssistantMessageMetadata,
   isWireString,
   jsonRoundTrip,
@@ -39,6 +32,14 @@ import {
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import {
+  isSettledToolPartState,
+  isStoredToolPart,
+  readStoredUIMessages,
+  type StoredToolPart,
+  type StoredUIMessage,
+  TOOL_PART_STATE,
+} from "@sidecar/wire/ui-messages";
 import {
   asSchema,
   type ReasoningUIPart,
