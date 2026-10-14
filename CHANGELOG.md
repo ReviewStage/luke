@@ -103,6 +103,8 @@ the Mac signs in once and holds a session of its own.
 [#2539](https://github.com/ReviewStage/luke/pull/2539),
 [#2566](https://github.com/ReviewStage/luke/pull/2566))
 
+![Settings › Workspace on acme: Dean is its owner, five members and a pending invite to sam@acme.dev with its link to copy, and acme's GitHub organization connected for its repositories.](apps/web/public/changelog/0.13.0/workspaces.png)
+
 ### Eight more integrations
 
 GitHub, Granola, Mercury, Neon, PostHog, Supabase, Vercel, and Y Combinator
@@ -117,6 +119,8 @@ own reason when it does not.
 [#2490](https://github.com/ReviewStage/luke/pull/2490),
 [#2532](https://github.com/ReviewStage/luke/pull/2532))
 
+![Settings › Integrations with all twelve integrations connected, from GitHub to Y Combinator, each saying how many tools its server offers.](apps/web/public/changelog/0.13.0/eight-more-integrations.png)
+
 ### The MCP popover
 
 The MCP button in a coding agent's message box searches servers and their
@@ -127,6 +131,8 @@ searches the same way, and a connected row opens onto its tools.
 [#2528](https://github.com/ReviewStage/luke/pull/2528),
 [#2542](https://github.com/ReviewStage/luke/pull/2542),
 [#2554](https://github.com/ReviewStage/luke/pull/2554))
+
+![The MCP popover open over a coding agent's message box: its servers under Connected with their tool counts and this agent's switches, PostHog's off, and Mercury and Y Combinator under Not connected with Connect.](apps/web/public/changelog/0.13.0/the-mcp-popover.png)
 
 ### Home
 
@@ -142,6 +148,8 @@ window with the plan's name and a repository chip.
 [#2550](https://github.com/ReviewStage/luke/pull/2550),
 [#2562](https://github.com/ReviewStage/luke/pull/2562))
 
+![The home page with no plan open: Welcome back, Dean, with New plan, five Inbox items waiting with their plans, and six recent plans with their repositories, beside the sidebar's acme workspace.](apps/web/public/changelog/0.13.0/home.png)
+
 ### The Inbox, one item at a time
 
 The Inbox reads one item at a time beside a list grouped by plan or newest
@@ -152,6 +160,8 @@ marked, and the list resizes.
 [#2465](https://github.com/ReviewStage/luke/pull/2465),
 [#2497](https://github.com/ReviewStage/luke/pull/2497),
 [#2551](https://github.com/ReviewStage/luke/pull/2551))
+
+![The Inbox with the sidebar folded: items grouped by plan, three needing you marked with a dot, and a settled decision read beside them with 7 days marked as your pick and your reply under it.](apps/web/public/changelog/0.13.0/the-inbox-one-item-at-a-time.png)
 
 ### Fast on your own key
 
