@@ -802,7 +802,13 @@ const swapWebhookSecret = SqlSchema.findAll({
       db
         .update(automation)
         .set({ webhookSecretHash: next, updatedAt: now })
-        .where(and(ownedAndReachable(userId, id), eq(automation.webhookSecretHash, previous)))
+        .where(
+          and(
+            ownedAndReachable(userId, id),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.WEBHOOK),
+            eq(automation.webhookSecretHash, previous),
+          ),
+        )
         .returning({ id: automation.id }),
     ),
 });
