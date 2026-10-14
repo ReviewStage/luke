@@ -50,7 +50,6 @@
       "required": [
         "id",
         "name",
-        "slug",
         "role",
         "github"
       ],

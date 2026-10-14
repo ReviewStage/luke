@@ -82,6 +82,17 @@ it.effect(
     }),
 );
 
+it.effect("reads a workspace from a service before slugs travelled, its slug left out", () =>
+  Effect.gen(function* () {
+    const { slug: _slug, ...older } = ACME;
+    const api = fakeCloudApi({
+      "GET /api/workspaces": { answer: () => ({ workspaces: [older] }) },
+    });
+
+    assert.deepEqual(yield* Effect.provide(client().list(), api.layer), { workspaces: [older] });
+  }),
+);
+
 it.effect("creates a workspace with its name trimmed, and a blank name never travels", () =>
   Effect.gen(function* () {
     const created = { ...ACME, role: WORKSPACE_ROLE.OWNER, github: null };

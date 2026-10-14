@@ -321,7 +321,7 @@ it.effect(
           },
         );
         assert.notEqual(again.id, acme.id);
-        assert.match(again.slug, /^acme-platform-[0-9a-f]{8}$/u);
+        assert.match(again.slug ?? "", /^acme-platform-[0-9a-f]{8}$/u);
         assert.deepEqual(
           (yield* workspacesOf(seams, github, ada)).map(({ name }) => name),
           ["Ada Lovelace", "Acme Platform", "Acme Platform"],

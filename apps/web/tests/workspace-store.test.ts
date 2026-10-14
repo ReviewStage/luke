@@ -171,7 +171,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.ok(Option.isSome(ensured));
         assert.notEqual(ensured.value, squatted.id);
         const [listed] = yield* listWorkspaces(victim);
-        assert.ok(listed?.slug.startsWith(`personal-${victim}-`));
+        assert.ok(listed?.slug?.startsWith(`personal-${victim}-`));
         assert.deepEqual(yield* listWorkspaces(victim), [
           {
             id: ensured.value,

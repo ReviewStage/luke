@@ -109,8 +109,12 @@ export const workspaceGithubSchema = EffectSchema.Struct({
 export const workspaceSchema = EffectSchema.Struct({
   id: workspaceIdSchema,
   name: EffectSchema.String,
-  /** The first step of the workspace's links' paths, unique among workspaces. */
-  slug: EffectSchema.String,
+  /**
+   * The first step of the workspace's links' paths, unique among workspaces;
+   * absent from a service before slugs travelled, which the desktop reads
+   * past, since a link is found by its plan's id alone.
+   */
+  slug: EffectSchema.optionalKey(EffectSchema.String),
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
   /** The GitHub account its connected installation is on, or null where none is connected. */
   github: EffectSchema.NullOr(workspaceGithubSchema),
