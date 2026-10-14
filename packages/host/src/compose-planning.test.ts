@@ -10,6 +10,7 @@ import {
   type GitHubRepositoriesAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
+  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted";
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
@@ -46,9 +47,14 @@ import {
   type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@sidecar/hosted/workspace-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Duration, Effect, Queue, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {
   composePlanning,
@@ -139,7 +145,60 @@ interface FakeService extends PlanningClient {
   pins: RepositoryPin[];
   /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
+  /** The workspaces the account is a member of, as the service lists them. */
+  memberships: Workspace[];
+  /** The Luke GitHub App install address a connection answers. */
+  installUrl: string;
+  /** Whether the workspaces list is refused, as a service that did not answer refuses it. */
+  workspacesFail: boolean;
+  /** Where a workspaces read waits after reading the table and before answering, so a test can hold one on the wire. */
+  workspacesGate: Effect.Effect<void>;
+  /** Each workspace's members, by its id. */
+  members: Record<string, WorkspaceMember[]>;
+  /** Whether a write is refused as the account's role not allowing it. */
+  notPermitted: boolean;
 }
+
+const PERSONAL: Workspace = {
+  id: "workspace-personal",
+  name: "Ada Lovelace",
+  personal: true,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+const ACME: Workspace = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.ADMIN,
+  github: { login: "acme", active: true },
+};
+const RELAY: Workspace = {
+  id: "workspace-relay",
+  name: "Relay Labs",
+  personal: false,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
+const ADA: WorkspaceMember = {
+  userId: "user-ada",
+  name: "Ada Lovelace",
+  email: "ada@luke.test",
+  role: WORKSPACE_ROLE.ADMIN,
+};
+const GRACE: WorkspaceMember = {
+  userId: "user-grace",
+  name: "Grace Hopper",
+  email: "grace@luke.test",
+  role: WORKSPACE_ROLE.MEMBER,
+};
+
+const UNANSWERED_WORKSPACE = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
+const NOT_PERMITTED_WORKSPACE = {
+  ok: false,
+  failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
+} as const;
 
 /** The instant the fake service stamps every edit's save with. */
 const EDITED_AT = 7_000;
@@ -197,6 +256,73 @@ function fakeService(plans: Plan[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    memberships: [PERSONAL],
+    installUrl: INSTALL_URL,
+    workspacesFail: false,
+    workspacesGate: Effect.void,
+    members: {},
+    notPermitted: false,
+    // The service's workspaces as a table the test edits, each write moving it as the store does.
+    workspaces: {
+      list: () =>
+        Effect.gen(function* () {
+          service.reads.push("workspaces");
+          const answer = service.workspacesFail ? undefined : { workspaces: service.memberships };
+          yield* service.workspacesGate;
+          return answer;
+        }),
+      create: (name) =>
+        Effect.sync(() => {
+          service.reads.push(`create:${name}`);
+          if (name !== RELAY.name) return UNANSWERED_WORKSPACE;
+          service.memberships = [...service.memberships, RELAY];
+          return { ok: true, answer: RELAY } as const;
+        }),
+      githubConnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`connect:${workspaceId}`);
+          return service.notPermitted
+            ? NOT_PERMITTED_WORKSPACE
+            : ({ ok: true, answer: service.installUrl } as const);
+        }),
+      githubDisconnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`disconnect:${workspaceId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const disconnected = service.memberships.find((each) => each.id === workspaceId);
+          if (disconnected === undefined) return UNANSWERED_WORKSPACE;
+          const now = { ...disconnected, github: null };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }),
+      members: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`members:${workspaceId}`);
+          const members = service.members[workspaceId];
+          return members === undefined
+            ? UNANSWERED_WORKSPACE
+            : ({ ok: true, answer: members } as const);
+        }),
+      removeMember: (workspaceId, userId) =>
+        Effect.sync(() => {
+          service.reads.push(`remove:${workspaceId}:${userId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const remaining = (service.members[workspaceId] ?? []).filter(
+            (member) => member.userId !== userId,
+          );
+          service.members[workspaceId] = remaining;
+          return { ok: true, answer: remaining } as const;
+        }),
+      leave: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`leave:${workspaceId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          service.memberships = service.memberships.filter((each) => each.id !== workspaceId);
+          return { ok: true, answer: workspaceId } as const;
+        }),
+    },
     repositoryPins: () => Effect.sync(() => (service.pinsFail ? undefined : service.pins)),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
@@ -271,9 +397,11 @@ function fakeService(plans: Plan[]): FakeService {
           : { ok: true, answer: found };
       }),
     create: () => Effect.sync(() => service.createAnswer),
-    repositories: () =>
+    repositories: (workspaceId) =>
       Effect.sync(() => {
-        service.reads.push("repositories");
+        service.reads.push(
+          workspaceId === undefined ? "repositories" : `repositories:${workspaceId}`,
+        );
         return service.repositoriesAnswer;
       }),
     // The service keeps the repository on the plan and answers the plan whole.
@@ -633,6 +761,7 @@ it.effect("a sign-out drops the view the window drew", () =>
     assert.deepEqual(last(), {
       plans: [],
       listStatus: PLANNING_READ.IDLE,
+      workspaces: [],
       document: { status: PLANNING_READ.IDLE },
     });
   }),
@@ -917,4 +1046,366 @@ it.effect(
         { callId: "call-tests", title: "Check the invite tests" },
       ]);
     }),
+);
+
+it.effect(
+  "the list read carries the account's workspaces with their GitHub organizations, and a sign-out clears them",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, planning } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+
+      yield* planning.reset;
+      assert.deepEqual(last()?.workspaces, []);
+    }),
+);
+
+it.effect("a workspaces read the service did not answer keeps the workspaces already read", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.memberships = [PERSONAL, ACME];
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+    service.workspacesFail = true;
+    service.plans = [];
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+    assert.deepEqual(last()?.plans, []);
+    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+  }),
+);
+
+it.effect(
+  "a workspace made reaches the service and the view then holds it, the plans not read again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const made = yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
+
+      assert.deepEqual(made, { workspace: RELAY });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
+      assert.deepEqual(service.reads.slice(before), [`create:${RELAY.name}`, "workspaces"]);
+    }),
+);
+
+it.effect(
+  "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const begun = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id });
+      const disconnected = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
+        workspaceId: ACME.id,
+      });
+
+      assert.deepEqual(begun, { url: INSTALL_URL });
+      assert.deepEqual(disconnected, { workspace: { ...ACME, github: null } });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, github: null }]);
+      assert.deepEqual(service.reads.slice(before), [
+        `connect:${ACME.id}`,
+        `disconnect:${ACME.id}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a connection or a disconnection the account's role does not allow answers not-permitted",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.notPermitted = true;
+      const { call } = yield* subject(service);
+      const refused = { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
+        refused,
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
+        refused,
+      );
+    }),
+);
+
+it.effect(
+  "a workspace's members are read on the service with nothing else, and a removal reads the workspaces again and not the plans",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [ADA, GRACE];
+      const { call } = yield* subject(service);
+
+      const members = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id });
+      const remaining = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+      });
+
+      assert.deepEqual(members, { members: [ADA, GRACE] });
+      assert.deepEqual(remaining, { members: [ADA] });
+      assert.deepEqual(service.reads, [
+        `members:${ACME.id}`,
+        `remove:${ACME.id}:${GRACE.userId}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect("the plan list is drawn ready while the workspaces read is still out", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const service = fakeService([invites]);
+    service.memberships = [PERSONAL, ACME];
+    const held = yield* Deferred.make<void>();
+    service.workspacesGate = Deferred.await(held);
+    const { call, last } = yield* subject(service);
+
+    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.PLANNING_REFRESH));
+    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+    assert.equal(last()?.listStatus, PLANNING_READ.READY);
+    assert.deepEqual(last()?.plans, [summary(invites)]);
+    assert.deepEqual(last()?.workspaces, []);
+
+    yield* Deferred.succeed(held, undefined);
+    yield* Fiber.join(refreshing);
+    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+  }),
+);
+
+it.effect("a stale workspaces read that answers after a workspace made does not draw over it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* TestClock.adjust(Duration.minutes(1));
+    const held = yield* Deferred.make<void>();
+    service.workspacesGate = Deferred.await(held);
+
+    const stale = yield* Effect.forkChild(call(GATEWAY_METHOD.WORKSPACES_REFRESH));
+    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+    service.workspacesGate = Effect.void;
+    yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
+    assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
+
+    yield* Deferred.succeed(held, undefined);
+    yield* Fiber.join(stale);
+    assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
+  }),
+);
+
+it.effect(
+  "the workspaces are read on the first refresh, again only once a minute has passed or after a sign-out, and never after a plan's own write",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning } = yield* subject(service);
+      const workspaceReads = () => service.reads.filter((read) => read === "workspaces").length;
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: INVITES });
+      assert.equal(workspaceReads(), 1);
+
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.equal(workspaceReads(), 2);
+
+      yield* planning.reset;
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.equal(workspaceReads(), 3);
+    }),
+);
+
+it.effect("behind a closed account gate the panel coming forward reads no workspaces", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call } = yield* subject(service, { signedIn: false });
+
+    yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+
+    assert.deepEqual(service.reads, []);
+  }),
+);
+
+it.effect("leaving a workspace reaches the service and the view then holds it no more", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [PERSONAL, ACME];
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+    const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+
+    assert.deepEqual(left, { left: true });
+    assert.deepEqual(last()?.workspaces, [PERSONAL]);
+  }),
+);
+
+it.effect(
+  "leaving the open plan's workspace ends the plan's call and closes the plan, and a refused leave keeps it open",
+  () =>
+    Effect.gen(function* () {
+      const acmePlan = {
+        ...plan(INVITES, "Teammate invitations", "# Draft", 10),
+        workspaceId: ACME.id,
+      };
+      const service = fakeService([acmePlan]);
+      service.memberships = [PERSONAL, ACME];
+      service.notPermitted = true;
+      const standing: StandingCall = { about: { planId: INVITES } };
+      const { call, last } = yield* subject(service, { call: standing });
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.equal(last()?.activePlanId, INVITES);
+      assert.equal(last()?.document.status, PLANNING_READ.READY);
+      assert.deepEqual(standing.about, { planId: INVITES });
+
+      service.notPermitted = false;
+      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+
+      assert.deepEqual(left, { left: true });
+      assert.equal(last()?.activePlanId, undefined);
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.IDLE });
+      assert.equal(standing.about, undefined);
+    }),
+);
+
+it.effect(
+  "leaving a workspace ends a call still standing about one of its plans that is no longer open, and keeps the open plan of another",
+  () =>
+    Effect.gen(function* () {
+      const acmePlan = {
+        ...plan(INVITES, "Teammate invitations", "# Draft", 10),
+        workspaceId: ACME.id,
+      };
+      const personalPlan = {
+        ...plan(BILLING, "Billing", "# Billing", 20),
+        workspaceId: PERSONAL.id,
+      };
+      const service = fakeService([acmePlan, personalPlan]);
+      service.memberships = [PERSONAL, ACME];
+      const standing: StandingCall = { about: { planId: INVITES } };
+      const { call, last } = yield* subject(service, { call: standing });
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+
+      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+
+      assert.deepEqual(left, { left: true });
+      assert.equal(standing.about, undefined);
+      assert.equal(last()?.activePlanId, BILLING);
+    }),
+);
+
+it.effect("leaving another workspace than the open plan's keeps the plan and its call", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.memberships = [PERSONAL, ACME];
+    const standing: StandingCall = { about: { planId: INVITES } };
+    const { call, last } = yield* subject(service, { call: standing });
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+
+    assert.equal(last()?.activePlanId, INVITES);
+    assert.deepEqual(standing.about, { planId: INVITES });
+  }),
+);
+
+it.effect(
+  "a removal or a leave the account's role does not allow answers not-permitted, and the view is read again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [ADA, GRACE];
+      service.notPermitted = true;
+      const { call, last } = yield* subject(service);
+
+      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+        workspaceId: ACME.id,
+        userId: ADA.userId,
+      });
+      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+
+      assert.deepEqual(removed, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(left, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.deepEqual(service.members[ACME.id], [ADA, GRACE]);
+    }),
+);
+
+it.effect("behind a closed account gate no workspace call reaches the service", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call } = yield* subject(service, { signedIn: false });
+    const unanswered = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
+
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+      }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id }),
+      unanswered,
+    );
+    assert.deepEqual(service.reads, []);
+  }),
+);
+
+it.effect("the repository chip's read names the workspace it is for to the service", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call } = yield* subject(service);
+
+    yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES, { workspaceId: ACME.id });
+    yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES);
+
+    assert.deepEqual(service.reads, [`repositories:${ACME.id}`, "repositories"]);
+  }),
 );

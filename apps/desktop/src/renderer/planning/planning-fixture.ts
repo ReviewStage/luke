@@ -17,6 +17,7 @@ import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
+import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { RUN_PROFILE } from "#shared/messages/app-state";
@@ -150,6 +151,15 @@ const FIXTURE_PLAN_LIST: PlanningView = {
     ...FIXTURE_OTHER_PLANS,
   ],
   listStatus: PLANNING_READ.READY,
+  workspaces: [
+    {
+      id: "workspace-personal",
+      name: "Personal",
+      personal: true,
+      role: WORKSPACE_ROLE.OWNER,
+      github: null,
+    },
+  ],
   document: { status: PLANNING_READ.IDLE },
 };
 
