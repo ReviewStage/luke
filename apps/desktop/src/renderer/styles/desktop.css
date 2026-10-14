@@ -424,6 +424,51 @@ body,
   display: inline-flex;
 }
 
+/* The workspace the plans are, drawn as a repository's header is, in the
+   headings' voice, with a chevron after its name for the menu it drops
+   (`workspace-switcher.tsx`). It stands over the scroller, a list's gap
+   above the first group. */
+.sidebar-workspace {
+  flex: 0 0 auto;
+  margin-bottom: var(--list-gap);
+}
+
+.sidebar-workspace-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-workspace-toggle:hover,
+.sidebar-workspace-toggle[aria-expanded="true"] {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.sidebar-workspace-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-workspace-toggle > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
 .sidebar-new-plan svg,
 .sidebar-search svg,
 .sidebar-item svg {
@@ -2914,13 +2959,6 @@ body:has(.app-stage[data-capture="true"])
   margin: 0 auto;
   overflow: visible;
   animation: none;
-}
-
-/* The list on the left is the way between pages and the page names itself,
-   so the panel's own index and page head are not drawn. */
-.settings-page-scroll .settings-index,
-.settings-page-scroll .settings-header {
-  display: none;
 }
 
 /* Version history ------------------------------------------------------------ */

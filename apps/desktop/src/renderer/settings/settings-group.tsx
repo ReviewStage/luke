@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "../settings-anchors";
 
 /**
  * settings-group.tsx -- one group of a Settings page: its name above a card of rows.
@@ -11,14 +12,21 @@ import { useId } from "react";
  */
 export function SettingsGroup({
   title,
+  anchor,
   children,
 }: {
   title?: string;
+  /** The id a Settings link or a search result lands on: worn by the whole group. */
+  anchor?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   const headingId = useId();
   return (
-    <section className="settings-group" aria-labelledby={title ? headingId : undefined}>
+    <section
+      className="settings-group"
+      aria-labelledby={title ? headingId : undefined}
+      {...(anchor === undefined ? undefined : { [SETTINGS_SEARCH_ANCHOR_ATTRIBUTE]: anchor })}
+    >
       {title ? (
         <h2 id={headingId} className="settings-group-title">
           {title}

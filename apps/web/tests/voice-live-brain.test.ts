@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import {
@@ -52,6 +52,7 @@ import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -568,7 +569,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),

@@ -4,7 +4,6 @@
 
 import assert from "node:assert/strict";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -21,6 +20,7 @@ import type { WebAgentRun } from "../server/runtime";
 import { NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A session over another account's conversation is handed nothing under
@@ -84,7 +84,7 @@ async function openAgent(host: CoderHost) {
   return database.run(
     Effect.gen(function* () {
       const userId = yield* openGithubUser();
-      const plan = yield* createPlan(userId, { name: "Invitations", repository: "acme/relay" });
+      const plan = yield* startPlan(userId, { name: "Invitations", repository: "acme/relay" });
       const started = yield* createCodingAgent(userId, {
         planId: plan.id,
         idempotencyKey: `start-${mintSession()}`,

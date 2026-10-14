@@ -139,6 +139,23 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
   the date), moved on each minute, the full moment on hover. Pinned and
   archived rows stay flat and name their `owner/repository` beneath.
+- A workspace is the account's personal plans or a team's shared plans. A
+  signed-in account sees the list headed by the workspace it lists, the
+  personal one until another is chosen. Its menu lists every workspace the
+  account is a member of, the listed one checked, then "New workspace…",
+  which asks a name and lists the workspace made, and "Workspace settings…",
+  which opens Settings' Workspace page on the listed workspace; nothing else
+  stands in it. That page (`settings/workspace-page.tsx`) has a picker of
+  the account's workspaces, the workspace's name and the account's role,
+  and for a team's workspace its members: Invite people opens the service's
+  invite page, an owner or admin removes a member, and anyone but an owner
+  leaves. For an owner or admin it holds GitHub repositories: Connect, or the
+  connected account's repositories with Disconnect and "Choose repositories
+  on GitHub". Every way into Settings at a place takes one typed link,
+  `SettingsLink` (`settings-views.ts`: a page, a section, a workspace),
+  followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
+  chosen workspace's plans alone, New plan starts in it, the repository chip
+  lists its repositories, and the choice is remembered on this Mac.
 - Clicking a row opens that plan on the document page (see "Leaving and
   resuming").
 - `New plan` at the head of the list leaves any open plan for the new-plan
@@ -173,11 +190,11 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
    App reaches for the account (`GET /api/github/repositories`), the recent
    ones first and the rest as GitHub last saw them change, each under the
    GitHub mark or a lock where it is private, with a check on the chosen
-   one, in a list that scrolls past a bounded height; and pinned under the
-   list, `GitHub ↗`, which opens the App's installation page in the browser,
-   where the developer chooses which repositories Luke can see. With the App
-   installed nowhere for the account, the chip reads `Install Luke on GitHub
-   ↗` and opens that page directly. With no repository used before it reads
+   one, in a list that scrolls past a bounded height. The chip only chooses:
+   with GitHub not connected, or the App installed nowhere for the
+   workspace, its menu says so with one `Open Settings` row, to the
+   account's Connected accounts or to the workspace's GitHub repositories
+   in Settings, where the App is installed and its repositories chosen. With no repository used before it reads
    `Choose repository`; a plan can start without one and be given one later.
    The list is read when the chip mounts and again whenever the window takes
    focus, which is how the chip picks up an App installed in the browser
@@ -1211,7 +1228,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace made, its invite page opened, its GitHub organization connected and disconnected, its members read and removed, and one left (`workspace.create`, `workspace.invite`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/hosted/src/plan-markdown.ts`). |

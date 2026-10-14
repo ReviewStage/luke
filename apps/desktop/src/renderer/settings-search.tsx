@@ -88,6 +88,7 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
   [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
+  [SETTINGS_VIEW.WORKSPACE]: "Workspace",
 } satisfies Record<SettingsView, string>;
 
 /** The words every shortcut row can be found by, beside its own name. */

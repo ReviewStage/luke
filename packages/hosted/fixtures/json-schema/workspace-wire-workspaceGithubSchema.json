@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "login": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "login",
+    "active"
+  ],
+  "additionalProperties": false
+}

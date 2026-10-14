@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi } from "@sidecar/wire/testing";
+import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_BOUNDS } from "./plan-wire.js";
@@ -10,6 +10,7 @@ const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const SUMMARY = {
   id: PLAN_ID,
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1_800_000_000_000,
   updatedAt: 1_800_000_100_000,
@@ -77,4 +78,23 @@ it.effect(
         [edit, edit],
       );
     }),
+);
+
+it.effect("the repositories of one workspace are asked by its id, and every one by none", () =>
+  Effect.gen(function* () {
+    const listed = {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    };
+    const api = fakeCloudApi({ "GET /api/github/repositories": { answer: () => listed } });
+
+    yield* Effect.provide(client().repositories("workspace-acme"), api.layer);
+    yield* Effect.provide(client().repositories(), api.layer);
+
+    assert.deepEqual(recordedRoutes(api.requests()), [
+      "GET /api/github/repositories?workspaceId=workspace-acme",
+      "GET /api/github/repositories",
+    ]);
+  }),
 );

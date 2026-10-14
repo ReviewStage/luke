@@ -37,6 +37,15 @@ import {
   shownCodeSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
+import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
+import {
+  workspaceCreateRequestSchema,
+  workspaceGithubRequestSchema,
+  workspaceLeaveRequestSchema,
+  workspaceMemberRemovalSchema,
+  workspaceMemberSchema,
+  workspaceSchema,
+} from "./workspace-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -47,7 +56,10 @@ import { planTranscriptSchema } from "./transcript-wire.js";
  * open, and it is the plan a voice session binds to. The view carries plan
  * names, documents, and what was said on the active plan's calls from the
  * service, and nothing of this Mac's own: a plan's repository is the
- * service's, named on the plan itself.
+ * service's, named on the plan itself. Beside the plans it carries the
+ * workspaces the account is a member of, and the shapes the window asks a
+ * workspace made, a GitHub organization connected or disconnected, a
+ * members read, a removal, and a leave in.
  */
 
 /** Where one read of the service stands, as the window draws it. */
@@ -346,10 +358,26 @@ export const planCodeAnswerSchema = EffectSchema.Struct({
 
 export type PlanCodeAnswer = typeof planCodeAnswerSchema.Type;
 
+/**
+ * Whether the account has a GitHub account linked, and its login where the
+ * service holds one: the view's copy of the connection the service answers.
+ * Note that it is declared here rather than in `github-connection-wire.ts`,
+ * which takes it from here, because the window reads this module and that
+ * one's claim vocabulary has no business in the window's bundle.
+ */
+export const githubConnectionSchema = EffectSchema.Struct({
+  connected: EffectSchema.Boolean,
+  login: EffectSchema.NullOr(EffectSchema.String),
+});
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
+  /** The workspaces the account is a member of, its personal one first, as the last list read answered; none before the first lands. */
+  workspaces: EffectSchema.Array(workspaceSchema),
+  /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
+  github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
@@ -427,6 +455,7 @@ export type PlanningMessagesParams = typeof planningMessagesParamsSchema.Type;
 export const IDLE_PLANNING_VIEW: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.IDLE,
+  workspaces: [],
   document: { status: PLANNING_READ.IDLE },
 };
 
@@ -434,6 +463,13 @@ export const IDLE_PLANNING_VIEW: PlanningView = {
 export const planningStartRequestSchema = planCreateRequestSchema;
 
 export type PlanningStartRequest = typeof planningStartRequestSchema.Type;
+
+/** The repository chip's read, as the window asks it: the workspace the listing is for, where one is chosen; every repository the account reaches otherwise. */
+export const planningRepositoriesParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.optionalKey(workspaceSchema.fields.id),
+});
+
+export type PlanningRepositoriesParams = typeof planningRepositoriesParamsSchema.Type;
 
 /** Renaming a plan, as the window asks it: the plan, and the name the service keeps. */
 export const planningRenameParamsSchema = EffectSchema.Struct({
@@ -689,3 +725,73 @@ export const planningPageSourceAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningPageSourceAnswer = typeof planningPageSourceAnswerSchema.Type;
+const workspaceCallFailureSchema = EffectSchema.Struct({
+  failure: EffectSchema.Literals(Object.values(WORKSPACE_CALL_FAILURE)),
+});
+
+/** Making a workspace, as the window asks it: its name, as the service takes it; the account that asks owns it. */
+export const planningWorkspaceCreateParamsSchema = workspaceCreateRequestSchema;
+
+export type PlanningWorkspaceCreateParams = typeof planningWorkspaceCreateParamsSchema.Type;
+
+/** One workspace, as the window names it to invite people to, or to connect or disconnect its GitHub organization. */
+export const planningWorkspaceParamsSchema = workspaceGithubRequestSchema;
+
+export type PlanningWorkspaceParams = typeof planningWorkspaceParamsSchema.Type;
+
+/** A workspace made or its GitHub organization disconnected, as the window hears it: the workspace as it then stands, or why it does not. */
+export const planningWorkspaceAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ workspace: workspaceSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceAnswer = typeof planningWorkspaceAnswerSchema.Type;
+
+/** A GitHub organization's connection begun, as the window's process hears it: the Luke GitHub App's install address to open, or why there is none. */
+export const planningWorkspaceGitHubConnectAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ url: EffectSchema.String }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceGitHubConnectAnswer =
+  typeof planningWorkspaceGitHubConnectAnswerSchema.Type;
+
+/** A workspace's members, as the window asks for them: the workspace. */
+export const planningWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;
+
+export type PlanningWorkspaceMembersParams = typeof planningWorkspaceMembersParamsSchema.Type;
+
+/** Removing one member of a workspace, as the window asks it: the workspace and the member's account. */
+export const planningWorkspaceMemberRemoveParamsSchema = workspaceMemberRemovalSchema;
+
+export type PlanningWorkspaceMemberRemoveParams =
+  typeof planningWorkspaceMemberRemoveParamsSchema.Type;
+
+/** A workspace's members, as the window hears them after a read or a removal: the members as they then stand, or why there are none. */
+export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ members: EffectSchema.Array(workspaceMemberSchema) }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceMembersAnswer = typeof planningWorkspaceMembersAnswerSchema.Type;
+
+/** Leaving a workspace, as the window asks it: the workspace. */
+export const planningWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;
+
+export type PlanningWorkspaceLeaveParams = typeof planningWorkspaceLeaveParamsSchema.Type;
+
+/** A leave, as the window hears it: left, the view's list then without it, or why not. */
+export const planningWorkspaceLeaveAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ left: EffectSchema.Literal(true) }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceLeaveAnswer = typeof planningWorkspaceLeaveAnswerSchema.Type;
+
+/** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
+export const planningGitHubPageAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ url: EffectSchema.String }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningGitHubPageAnswer = typeof planningGitHubPageAnswerSchema.Type;

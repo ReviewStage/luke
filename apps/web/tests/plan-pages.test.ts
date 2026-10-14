@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { listPages, readPageVersion, writePage } from "@sidecar/database/models/plan-pages";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Option } from "effect";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A plan's pages, through the store's write and reads: a write is a page's
@@ -28,7 +28,7 @@ const openAccount = Effect.gen(function* () {
 
 const openPlan = Effect.gen(function* () {
   const userId = yield* openAccount;
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 

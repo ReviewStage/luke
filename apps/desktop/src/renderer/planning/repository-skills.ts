@@ -1,5 +1,6 @@
 import { PLAN_FILE_REFUSAL, type PlanFileRefusal } from "@sidecar/hosted/plan-wire";
 import type { PlanningSkillsAnswer } from "@sidecar/hosted/planning-view";
+import { CONNECTED_ACCOUNTS_LINK } from "../open-settings";
 import type { SkillSource, SkillsRead } from "./skill-picker";
 
 /**
@@ -20,7 +21,7 @@ const SKILLS_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
     "The Luke GitHub App no longer reaches this plan's repository.",
   [PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED]:
-    "Sign in with GitHub again to read this repository's skills.",
+    "Connect GitHub in Settings to read this repository's skills.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
   [PLAN_FILE_REFUSAL.SECRET]: "This repository's skills could not be read.",
   [PLAN_FILE_REFUSAL.MISSING]: "This repository's skills could not be read.",
@@ -30,8 +31,12 @@ const SKILLS_REFUSAL_LINE = {
 /** The service's answer as the list reads it: the skills, or why there are none to offer. */
 function skillsReadOf(answer: PlanningSkillsAnswer): SkillsRead {
   if ("skills" in answer) return { skills: answer.skills.skills };
-  if ("refusal" in answer) return { unread: SKILLS_REFUSAL_LINE[answer.refusal] };
-  return { unread: SKILLS_REFUSAL_LINE[PLAN_FILE_REFUSAL.UNAVAILABLE] };
+  if (!("refusal" in answer)) return { unread: SKILLS_REFUSAL_LINE[PLAN_FILE_REFUSAL.UNAVAILABLE] };
+  // GitHub not connected is mended in Settings, which the list offers to open.
+  if (answer.refusal === PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED) {
+    return { unread: SKILLS_REFUSAL_LINE[answer.refusal], mendedAt: CONNECTED_ACCOUNTS_LINK };
+  }
+  return { unread: SKILLS_REFUSAL_LINE[answer.refusal] };
 }
 
 /** A source over the read given that reads once and keeps what it read; a read that did not land, or was refused, is asked again next time. */

@@ -48,6 +48,7 @@ import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, FoldedCount, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * What the sidebar leaves the work column beside it, in CSS pixels: the
@@ -184,7 +185,7 @@ interface PinnedRow {
 function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): PinnedRow[] {
   const planRows = pinned.map((plan) => ({ plan, pin: undefined, at: plan.pinnedAt ?? 0 }));
   const tabRows = plans.sidePanel.pins.flatMap((pin): PinnedRow[] => {
-    const plan = plans.plans.find((each) => each.id === pin.plan);
+    const plan = plans.listed.plans.find((each) => each.id === pin.plan);
     return plan === undefined ? [] : [{ plan, pin, at: pin.at }];
   });
   return [...planRows, ...tabRows].sort((a, b) => b.at - a.at);
@@ -448,7 +449,7 @@ function RepositorySection({
  */
 function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
-  const { archived } = context.plans;
+  const { archived } = context.plans.listed;
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
@@ -535,7 +536,9 @@ function SidebarInboxRow({
 
 /**
  * The window's left column: Luke, the way to a new plan, Search, which
- * opens the command palette, every plan the account owns, and the account's
+ * opens the command palette, every plan of the workspace chosen, headed by
+ * the workspace's switcher while the account is in more than one
+ * (`workspace-switcher.tsx`), and the account's
  * row, whose menu and gear lead to Settings and the rest. The Inbox's row
  * follows Search above the rule, counting what waits on the developer, and opens the
  * window's Inbox. The pinned plans, and the side panel tabs
@@ -564,7 +567,6 @@ export function DesktopSidebar({
   onTabChange,
   account,
   updates,
-  onSignOut,
   call,
 }: {
   sidebar: SidebarCollapse;
@@ -574,8 +576,6 @@ export function DesktopSidebar({
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
-  /** Signs the account out, once the account menu's Log out is answered. */
-  onSignOut: () => Promise<void>;
   /** The call card, at the column's foot above the account row, while one is to be drawn here. */
   call: CallCardInput | undefined;
 }): React.JSX.Element {
@@ -614,8 +614,9 @@ export function DesktopSidebar({
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) =>
     onPlans && !inInbox && !composing && planId === plans.activePlanId;
-  const unlisted = plans.plans.length === 0 && plans.archived.length === 0;
-  const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  // The list is the chosen workspace's; the unread marks above read every plan.
+  const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
+  const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
   // The pin the open plan was opened from is marked in its plan's place,
   // whichever of the plan's tabs is shown, while its row still stands.
@@ -652,7 +653,9 @@ export function DesktopSidebar({
             sameTab(plans.sidePanel.tab, pin.tab))));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
-  const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
+  const grouped = repositoryGroups(
+    plans.listed.plans.filter((plan) => plan.pinnedAt === undefined),
+  );
   const pinnedAt = (group: RepositoryGroup) =>
     group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
   const groups = [
@@ -722,6 +725,9 @@ export function DesktopSidebar({
         onOpen={openInbox}
       />
       <hr className="sidebar-rule" />
+      {/* The workspace the list is, while the account is in more than one;
+          it stands over the scroller, so it never scrolls away. */}
+      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
@@ -779,7 +785,6 @@ export function DesktopSidebar({
           shown={!sidebar.collapsed}
           settingsOpen={tab === PANEL_TAB.SETTINGS}
           onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
-          onSignOut={onSignOut}
         />
       </div>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}

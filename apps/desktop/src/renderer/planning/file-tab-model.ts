@@ -60,7 +60,7 @@ const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This plan has no repository.",
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
     "The Luke GitHub App no longer reaches this plan's repository.",
-  [PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED]: "Sign in with GitHub again to read this file.",
+  [PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED]: "Connect GitHub in Settings to read this file.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
 } as const satisfies Record<PlanFileRefusal, string>;
 

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { writeDrawing, writeScene } from "@sidecar/database/models/board-store";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
@@ -11,6 +10,7 @@ import { unparsedWire } from "@sidecar/wire";
 import { Effect } from "effect";
 import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "../server/hosted/board-look";
 import { driven, forkClockDriven } from "./support/clock-driven";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's look at its latest drawing: the Mac's first save of
@@ -33,7 +33,7 @@ const openPlan = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const started = yield* createPlan(userId, { name: "Teammate invitations" });
+  const started = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: started.id, binding: { userId, planId: started.id } };
 });
 
