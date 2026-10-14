@@ -6,10 +6,11 @@
  * (`/release-notes`), which the coding agent loads before it acts. The
  * composer opens its list while the caret stands in such a word, so a
  * slash typed inside a word (`a/b`), a path, or code (between backticks or
- * inside a fenced block) opens nothing. A chosen skill is written into the
- * message as its own word, `/name` and a space, and stands as one token
- * after that: drawn as a chip, and taken out whole by one Backspace at its
- * end. Nothing here draws.
+ * inside a fenced block) opens nothing. A chosen skill stands in the message
+ * as its own word, `/name`, which the composer's editor holds as a chip
+ * (`../plan-editor/composer-editor.ts`) and a sent message draws as one
+ * (`skill-chip.tsx`). Nothing here draws, and nothing here is the panel's
+ * alone: the editor bundle reads the same words.
  */
 
 /** A skill as the composer offers it: its name, what it is for, and its `SKILL.md`, named from the repository's root. */
@@ -29,12 +30,6 @@ export interface SkillMention {
 export interface TextRange {
   readonly start: number;
   readonly end: number;
-}
-
-/** The words and the caret after an edit. */
-export interface TextEdit {
-  readonly text: string;
-  readonly caret: number;
 }
 
 const SLASH = "/";
@@ -150,19 +145,6 @@ export function skillWord(name: string): string {
   return `${SLASH}${name}`;
 }
 
-/** The message with the `/` word under the caret written as the skill chosen, a space after it, and the caret after that. */
-export function chooseSkill(text: string, mention: SkillMention, name: string): TextEdit {
-  let end = mention.start + 1;
-  while (end < text.length && NAME_CHARACTER.test(text[end] ?? "")) end += 1;
-  const after = text.slice(end);
-  const spaced = after.startsWith(" ") ? after : ` ${after}`;
-  const written = skillWord(name);
-  return {
-    text: `${text.slice(0, mention.start)}${written}${spaced}`,
-    caret: mention.start + written.length + 1,
-  };
-}
-
 /** Every chosen skill the message names, as `/name` words of the skills given, in order. */
 export function skillTokens(text: string, names: ReadonlySet<string>): readonly TextRange[] {
   const tokens: TextRange[] = [];
@@ -175,15 +157,4 @@ export function skillTokens(text: string, names: ReadonlySet<string>): readonly 
     if (names.has(text.slice(at + 1, end))) tokens.push({ start: at, end });
   }
   return tokens;
-}
-
-/** The message with the chosen skill the caret ends taken out whole, as Backspace there does; nothing where the caret ends none. */
-export function withoutTokenBefore(
-  text: string,
-  caret: number,
-  names: ReadonlySet<string>,
-): TextEdit | undefined {
-  const token = skillTokens(text, names).find((each) => each.end === caret);
-  if (token === undefined) return undefined;
-  return { text: `${text.slice(0, token.start)}${text.slice(token.end)}`, caret: token.start };
 }

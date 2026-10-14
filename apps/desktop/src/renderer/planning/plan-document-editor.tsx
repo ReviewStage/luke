@@ -3,14 +3,9 @@ import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
-import { bundleAtom } from "../bundle-loader";
-import {
-  PLAN_EDITOR_ASSET,
-  type PlanEditorHandle,
-  type PlanEditorModule,
-  type PlanEditorProps,
-} from "../plan-editor/contract";
-import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
+import { editorBundleAtom, prefetchEditorBundle } from "../editor-bundle";
+import type { PlanEditorHandle, PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
+import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
 import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
@@ -20,9 +15,9 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  *
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
- * the caret where the click landed; the editor is TipTap, from a bundle of
- * its own loaded the first time a section is hovered or selected
- * (`../plan-editor/contract.ts`), and draws the words exactly as the
+ * the caret where the click landed; the editor is TipTap, from the editor
+ * bundle the panel starts loading as it first paints, and again the first
+ * time a section is hovered or selected (`../editor-bundle.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
  * sections stay drawn, so a click's point still lands on the same word. The
  * keyboard moves between the title and the sections as a document editor
@@ -59,18 +54,6 @@ const draftPauseAtom = rendererRuntime.fn((stamp: number) =>
 const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
 );
-
-/** The plan editor's own bundle, loaded once per window. */
-const planEditorAtom = bundleAtom(
-  { script: PLAN_EDITOR_ASSET.SCRIPT },
-  () => window.lukePlanEditor,
-  EDITOR_LOAD_FAILED,
-);
-
-/** Starts the editor's bundle loading as the pointer or the keyboard comes onto a block, so it is there by the click. */
-function prefetchPlanEditor(): void {
-  rendererRegistry.get(planEditorAtom);
-}
 
 /** The keyboard moved to the block before or after this one in the document. */
 function stepBlock(from: HTMLElement, by: 1 | -1): void {
@@ -140,9 +123,9 @@ export function DocumentBlock({
       tabIndex={entry ? 0 : -1}
       aria-label={label}
       aria-keyshortcuts="Enter"
-      onPointerEnter={prefetchPlanEditor}
+      onPointerEnter={prefetchEditorBundle}
       onFocus={() => {
-        prefetchPlanEditor();
+        prefetchEditorBundle();
         editing.select(host);
       }}
       onClick={(event) => {
@@ -290,9 +273,9 @@ export function EditableTitle({
       tabIndex={entry ? 0 : -1}
       aria-label="Title"
       aria-keyshortcuts="Enter"
-      onPointerEnter={prefetchPlanEditor}
+      onPointerEnter={prefetchEditorBundle}
       onFocus={(event) => {
-        prefetchPlanEditor();
+        prefetchEditorBundle();
         if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
       }}
       onKeyDown={(event) => {
@@ -527,7 +510,7 @@ export function PlanDocumentEditor({
   const doors = useDraftHandOver(editing, hostOf);
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
   useMergedAnswers(editor, editing, plan, handle);
-  const module = useAtomValue(planEditorAtom);
+  const module = useAtomValue(editorBundleAtom);
   if (!AsyncResult.isSuccess(module)) {
     return (
       <section className="plan-document-editor ph-no-capture" aria-busy="true">

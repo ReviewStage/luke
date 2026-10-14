@@ -595,7 +595,9 @@ not its words: before it leaves your Mac, every piece of text, and every
 label, description, picture address, and link address a page carries for
 itself, is replaced with blocks of the same length, so a plan's document, a
 caption of what you or Luke said, your name and email address, and anything
-you type all appear as blocks. As a second line, some parts are left out
+you type all appear as blocks. A coding agent's message box is an editor, and
+the words in it and a skill chosen there are text it draws, which appear as
+blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
 app's words; a plan's title while you edit it, its document while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with

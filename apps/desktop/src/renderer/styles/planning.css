@@ -1375,48 +1375,49 @@ button.file-ref:hover .file-ref-path {
   padding-left: 4px;
 }
 
-/* The box's words over the layer that draws a chosen skill's chip
-   (`skill-picker.tsx`): the layer is set in the field's own type at the
-   field's own insets, its words transparent, so each pill lies exactly
-   under its `/name`; the field stands over it, clear. */
+/* The box's field (`composer-field.tsx`): its editor, set in the card's
+   type with no space between its paragraphs, as a textarea's lines stand,
+   and the placeholder the field draws at the editor's own insets while the
+   words are empty, dimmed with the editor while the box is held. */
 .agent-composer-field {
   position: relative;
 }
 
-.agent-composer-input {
-  position: relative;
-  z-index: 1;
+.agent-composer-input p {
+  margin: 0;
 }
 
-.skill-chips {
+.agent-composer-placeholder {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  left: 0;
   overflow: hidden;
-  padding: 1rem 1rem 0.5rem;
-  color: transparent;
+  padding: 1rem 1rem 0;
+  color: var(--text-secondary);
   font-size: var(--composer-type);
   line-height: 1.45;
-  overflow-wrap: break-word;
   pointer-events: none;
-  white-space: pre-wrap;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-field:has([aria-disabled="true"]) .agent-composer-placeholder {
+  opacity: 0.6;
 }
 
 /* A chosen skill's pill, the composer's and a sent message's alike
-   (`skill-chip.tsx`): in the composer it lies under the field's words, so
-   its own are clear, and a press on it opens the skill's file; in a
-   message it is a button drawing its words in the bubble's type, which
-   opens the same file. */
+   (`skill-chip.tsx`): in the composer it is a word of the editor's, which a
+   press opens the skill's file from where the skill is known; in a message
+   it is a button drawing its words in the bubble's type, which opens the
+   same file. */
 .skill-chip {
   border-radius: 4px;
   background: var(--raised-strong);
   box-shadow: 0 0 0 2px var(--raised-strong);
 }
 
-.skill-chips .skill-chip {
-  color: transparent;
-}
-
-/* Note that the button keeps to its words' height, as the composer's mark
+/* Note that the button keeps to its words' height, as the composer's pill
    does, rather than standing the line's full height as a button would. */
 button.skill-chip {
   padding: 0;
@@ -1427,16 +1428,14 @@ button.skill-chip {
   line-height: 1.25;
 }
 
-button.skill-chip:hover,
-.skill-chips .skill-chip[data-hovered] {
-  background: var(--selected);
-  box-shadow: 0 0 0 2px var(--selected);
+.skill-chip[data-opens] {
+  cursor: pointer;
 }
 
-/* The box over the composer's chips hears the pointer for them, so it
-   turns to a hand over one, as the sent message's button does. */
-.agent-composer-input[data-over-chip="true"] {
-  cursor: pointer;
+button.skill-chip:hover,
+.skill-chip[data-opens]:hover {
+  background: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
 }
 
 /* The list a `/` opens: a searchable menu whose field is the composer,

@@ -607,9 +607,10 @@ The service lays each save over what Luke wrote meanwhile
 
 - **Opening.** The title and each section are blocks, and nothing on them
   marks them editable. A click into a section's words opens the whole text in
-  place, the caret where the click landed. The editor is TipTap, loaded as a
-  bundle of its own (`plan-editor.js`) the first time a block is hovered or
-  selected, and it draws the words exactly as the sections were drawn, so
+  place, the caret where the click landed. The editor is TipTap, from the editor
+  bundle (`plan-editor.js`), which the panel starts loading as it first paints
+  and asks for again the first time a block is hovered or selected, and which
+  an agent's message box shares (`planning/composer-field.tsx`); it draws the words exactly as the sections were drawn, so
   nothing moves as it opens; a click before the bundle has loaded keeps the
   sections drawn until it has. Everything TipTap's Markdown holds is edited
   as it reads (headings, lists, quotes, code, links, task lists, tables), with

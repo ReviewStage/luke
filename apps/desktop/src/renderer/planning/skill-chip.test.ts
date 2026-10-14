@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
-  type CodingAgentMessage,
-} from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
+import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
@@ -32,18 +29,20 @@ const RELEASE: SkillOption = {
   path: ".agents/skills/release/SKILL.md",
 };
 
-/** Where the layout puts the composer's one chip, in window pixels. */
-const CHIP_BOX = { left: 100, top: 20, right: 160, bottom: 38 };
-
 const roots: Root[] = [];
 
-beforeEach(installScrollIntoView);
+// Set before any composer renders, since the box reads the editor bundle once per window.
+installEditorBundle();
+
+beforeEach(() => {
+  installScrollIntoView();
+  installEditorLayout();
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   delete document.documentElement.dataset.keyboard;
-  vi.restoreAllMocks();
 });
 
 const ignore = () => undefined;
@@ -79,7 +78,7 @@ function Composer({ words }: { words: string }): ReactNode {
   const [draft, setDraft] = useState(words);
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
   return createElement(AgentComposer, {
-    status: CODING_AGENT_STATUS.COMPLETED,
+    ...QUIET_COMPOSER,
     composer: {
       draft,
       setDraft,
@@ -92,47 +91,30 @@ function Composer({ words }: { words: string }): ReactNode {
       retry: ignore,
       sent: [],
     },
-    model: undefined,
-    models: undefined,
-    readModels: ignore,
-    usage: undefined,
-    servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
-    published: undefined,
-    doors: { openGitHub: ignore, copy: ignore },
-    onStop: () => Promise.resolve(),
-    followsUp: true,
     skills: reading,
   });
 }
 
-/** A press on the box at the point given, as the pointer lands it. */
-function pressAt(field: HTMLTextAreaElement, x: number, y: number): void {
+/** A press on an element of the box, as the pointer lands it. */
+function pressOn(element: Element): void {
   act(() => {
-    field.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
 test("a press on a skill's chip in the composer opens the skill's file, and a press on its other words opens nothing", async () => {
-  // Note that jsdom lays nothing out, so the chip is given the box a window would draw it in.
-  vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    const boxes = this.matches("mark.skill-chip") ? [new DOMRect(100, 20, 60, 18)] : [];
-    // SAFETY: the lookup reads the list by iterating it, as an array iterates.
-    return boxes as unknown as DOMRectList;
-  });
   const { container, opened } = await mounted(
     createElement(Composer, { words: "Cut it with /release now" }),
   );
-  const chip = container.querySelector(".skill-chips .skill-chip");
+  const chip = container.querySelector(".agent-composer-input .skill-chip");
   assert.equal(chip?.textContent, "/release", "the chosen skill is drawn as a chip");
-  const field = container.querySelector("textarea");
-  assert.ok(field, "the box is drawn");
-  pressAt(field, CHIP_BOX.right + 40, CHIP_BOX.top + 4);
+  const words = container.querySelector(".agent-composer-input p");
+  assert.ok(chip && words, "the box is drawn");
+  pressOn(words);
   assert.deepEqual(opened, [], "a press beside the chip opens nothing");
-  pressAt(field, CHIP_BOX.left + 10, CHIP_BOX.top + 4);
+  pressOn(chip);
   assert.deepEqual(opened, [RELEASE.path]);
-  assert.equal(field.value, "Cut it with /release now", "the words are left as they were");
+  assert.equal(words.textContent, "Cut it with /release now", "the words are left as they were");
 });
 
 test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which opens it", async () => {

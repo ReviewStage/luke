@@ -240,7 +240,15 @@ function preloadRemoteConfig(key: string): void {
  * default, because the library reads it before the remote configuration and a
  * project that switched canvas recording on would otherwise turn it on here.
  */
-const WORDS = new Set(["title", "aria-label", "aria-description", "alt", "placeholder", "src"]);
+const WORDS = new Set([
+  "title",
+  "aria-label",
+  "aria-description",
+  "aria-placeholder",
+  "alt",
+  "placeholder",
+  "src",
+]);
 const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {
   autocapture: false,

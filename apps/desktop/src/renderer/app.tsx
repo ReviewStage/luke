@@ -25,6 +25,7 @@ import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
+import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
@@ -111,6 +112,8 @@ export function App(): React.JSX.Element {
     if (!sessionReplay || !run) return;
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
+  // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
+  useEffect(prefetchEditorBundle, []);
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);

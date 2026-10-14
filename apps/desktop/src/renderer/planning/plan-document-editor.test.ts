@@ -40,6 +40,7 @@ const STAND_IN: PlanEditorModule = {
       },
     };
   },
+  mountComposer: () => assert.fail("the plan document mounts no message box"),
 };
 
 // Set before any document renders, since the document reads the bundle once per window.
