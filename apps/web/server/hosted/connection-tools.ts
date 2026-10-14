@@ -38,8 +38,12 @@ export const CONNECTION_TOOL = {
 /** How eve qualifies a remote tool's name: the connection, two underscores, and the tool. */
 const QUALIFIED_SEPARATOR = "__";
 
-/** A remote tool's own name as the envelope keeps it: an identifier, and nothing shaped like a sentence. */
-const REMOTE_TOOL_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+/**
+ * A remote tool's own name as the envelope keeps it: the characters MCP
+ * allows a tool's name, dots among them (Y Combinator's `hiring.list_jobs`),
+ * and nothing shaped like a sentence.
+ */
+const REMOTE_TOOL_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
 
 /** A call's input as the row keeps it: one JSON object, whose fields eve's or the remote server's own schema already read. */
 const OBJECT_INPUT = verbatimJsonSchema(WireValueSchema, {

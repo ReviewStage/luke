@@ -23,10 +23,17 @@ import { Schema as EffectSchema } from "effect";
  * agent's `connections/`, and the path segment its routes are addressed by.
  */
 export const INTEGRATION_PROVIDER = {
+  GRANOLA: "granola",
   LINEAR: "linear",
+  MERCURY: "mercury",
+  NEON: "neon",
   NOTION: "notion",
+  POSTHOG: "posthog",
   SENTRY: "sentry",
   SLACK: "slack",
+  SUPABASE: "supabase",
+  VERCEL: "vercel",
+  YCOMBINATOR: "ycombinator",
 } as const;
 
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDER)[keyof typeof INTEGRATION_PROVIDER];
@@ -37,10 +44,17 @@ export const INTEGRATION_PROVIDER_LIST: readonly IntegrationProvider[] =
 
 /** What each provider is called wherever Luke names it, to the developer and to a model alike. */
 export const INTEGRATION_NAME = {
+  [INTEGRATION_PROVIDER.GRANOLA]: "Granola",
   [INTEGRATION_PROVIDER.LINEAR]: "Linear",
+  [INTEGRATION_PROVIDER.MERCURY]: "Mercury",
+  [INTEGRATION_PROVIDER.NEON]: "Neon",
   [INTEGRATION_PROVIDER.NOTION]: "Notion",
+  [INTEGRATION_PROVIDER.POSTHOG]: "PostHog",
   [INTEGRATION_PROVIDER.SENTRY]: "Sentry",
   [INTEGRATION_PROVIDER.SLACK]: "Slack",
+  [INTEGRATION_PROVIDER.SUPABASE]: "Supabase",
+  [INTEGRATION_PROVIDER.VERCEL]: "Vercel",
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: "Y Combinator",
 } as const satisfies Record<IntegrationProvider, string>;
 
 const PROVIDERS: ReadonlySet<string> = new Set(INTEGRATION_PROVIDER_LIST);

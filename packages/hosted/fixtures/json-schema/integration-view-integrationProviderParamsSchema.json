@@ -4,10 +4,17 @@
     "provider": {
       "type": "string",
       "enum": [
+        "granola",
         "linear",
+        "mercury",
+        "neon",
         "notion",
+        "posthog",
         "sentry",
-        "slack"
+        "slack",
+        "supabase",
+        "vercel",
+        "ycombinator"
       ]
     }
   },

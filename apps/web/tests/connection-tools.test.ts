@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import { storedRemoteCall } from "../server/hosted/connection-tools";
+
+/**
+ * A nested call of an integration's own tool, as a transcript stores it:
+ * under the provider's fixed name, with the remote tool's own name in the
+ * envelope. MCP allows a dot in a tool's name, which Y Combinator's
+ * Bookface server uses for every tool, so a dotted name is stored like any
+ * other; a name shaped like a sentence is still no tool's.
+ */
+
+test("a dotted tool name, as Y Combinator's server names its tools, is stored under the provider's fixed name", () => {
+  assert.deepEqual(storedRemoteCall("ycombinator__hiring.list_jobs", { limit: 5 }, "call_1"), {
+    name: "ycombinator_remote",
+    input: { remoteTool: "hiring.list_jobs", parentCallId: "call_1", input: { limit: 5 } },
+  });
+});
+
+test("a name shaped like a sentence is no remote tool's, and is left out", () => {
+  assert.equal(storedRemoteCall("ycombinator__list my jobs", {}, "call_1"), undefined);
+});

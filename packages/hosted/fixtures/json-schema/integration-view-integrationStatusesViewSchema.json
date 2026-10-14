@@ -6,6 +6,16 @@
         "integrations": {
           "type": "object",
           "properties": {
+            "granola": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
             "linear": {
               "type": "string",
               "enum": [
@@ -16,7 +26,37 @@
                 "unavailable"
               ]
             },
+            "mercury": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
+            "neon": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
             "notion": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
+            "posthog": {
               "type": "string",
               "enum": [
                 "connected",
@@ -45,13 +85,50 @@
                 "disconnected",
                 "unavailable"
               ]
+            },
+            "supabase": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
+            "vercel": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
+            "ycombinator": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
             }
           },
           "required": [
+            "granola",
             "linear",
+            "mercury",
+            "neon",
             "notion",
+            "posthog",
             "sentry",
-            "slack"
+            "slack",
+            "supabase",
+            "vercel",
+            "ycombinator"
           ],
           "additionalProperties": false
         }

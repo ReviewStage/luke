@@ -774,11 +774,18 @@ answers the route over a scripted OpenAI at its HTTP door.
 
 Every agent Luke runs — the planning assistant, the coding agent, and each
 one's declared worker — can use the signed-in account's integrations, each
-through the provider's own hosted MCP server with every tool it lists and no
-approval step: Linear (`https://mcp.linear.app/mcp`), Notion
-(`https://mcp.notion.com/mcp`), Sentry (`https://mcp.sentry.dev/mcp`), and
-Slack (`https://mcp.slack.com/mcp`), which is read-only: its entry allows
-Slack's search and read tools alone (`ALLOWED_TOOLS`, eve's tool filter). A connection belongs to the account, so it reaches every plan and
+through the provider's own hosted MCP server with every tool it lists, the
+ones that write and the ones that answer a credential among them (`AGENTS.md`'s
+carve-out for integrations), and no approval step: Granola
+(`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
+(`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
+(`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp`),
+Sentry (`https://mcp.sentry.dev/mcp`), Slack (`https://mcp.slack.com/mcp`),
+Supabase (`https://mcp.supabase.com/mcp`), Vercel (`https://mcp.vercel.com`),
+and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
+grant can do is still the provider's to bound: the scopes its connector asks
+for, and the boxes the developer leaves ticked on the provider's own consent
+page. A connection belongs to the account, so it reaches every plan and
 project the account has. `server/hosted/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, the one naming
 the accounts it is offered to, its MCP server
@@ -819,8 +826,7 @@ that table.
   description }] }`, for the composer's MCP popover. It reads them as an MCP
   client does (`server/hosted/mcp-tools.ts`: `initialize`, then `tools/list`
   page by page, JSON or event-stream answers), with the account's token from
-  Connect. The list is narrowed to the provider's `ALLOWED_TOOLS` where it
-  has them, and each description is cut to its first line. It is held in the
+  Connect. Each description is cut to its first line. It is held in the
   instance's memory for five minutes per account and provider. A provider
   the account has not connected is refused as unavailable before any token
   is read.
@@ -875,16 +881,42 @@ project's directory:
 
 ```
 vercel link
-vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
-vercel connect create mcp.notion.com --name notion   # Notion
-vercel connect create mcp.sentry.dev --name sentry   # Sentry
-vercel connect attach <connector-uid> --yes          # each of the above: production, preview, and development
+vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
+vercel connect create mcp.notion.com --name notion             # Notion
+vercel connect create mcp.sentry.dev --name sentry             # Sentry
+vercel connect create granola --name granola                   # Granola
+vercel connect create mcp.mercury.com --name mercury           # Mercury
+vercel connect create mcp.neon.tech --name neon                # Neon
+vercel connect create posthog --name posthog                   # PostHog
+vercel connect create supabase --name supabase                 # Supabase
+vercel connect create vercel --target mcp --name vercel        # Vercel, through Connect's own Vercel MCP target
+vercel connect create api.ycombinator.com/v1/mcp --name ycombinator   # Y Combinator's Bookface
+vercel connect attach <connector-uid> --yes                    # each of the above: production, preview, and development
 # Slack: an OAuth connector against Slack's MCP authorization server, created and attached below
 ```
 
-Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
-`NOTION_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`, `SLACK_CONNECTOR_UID`) to that UID in the `luke-web` project for production,
-preview, and development. The web, `eve`, and `coder` are services of that
+Each of those is a server that publishes its OAuth discovery and registers
+clients itself, so Connect registers its own client and no app of ours is
+needed; a provider in Connect's catalog is created by its catalog name, the
+rest by their server's address. Vercel's MCP server accepts only the clients
+Vercel has reviewed, which is why it is created through Connect's own Vercel
+target rather than by address. A connector's user scopes are every scope
+its server publishes (`scopes_supported` in the server's
+`/.well-known/oauth-protected-resource`), so a grant is bounded by what the
+developer allows on the provider's consent page alone: check them with
+`vercel api /v1/connect/connectors/<connector-id>` after the create, and set
+any missing one as Slack's are set below. Neon's consent page asks whether
+to allow writes, and Mercury's `transactions:request` and
+`transfers:request` scopes request a payment or transfer that an approver
+still confirms in Mercury. Y Combinator's server serves only accounts YC
+has enabled MCP access for.
+
+Then set the provider's variable (`GRANOLA_CONNECTOR_UID`,
+`LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
+`NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
+`SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
+`YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
+production, preview, and development. The web, `eve`, and `coder` are services of that
 one project (`vercel.json`'s `services`), so its variables and the
 connector's link reach all three, which matters because the agents read
 tokens too. Asking Connect about an arbitrary user id needs the deployment's
@@ -939,9 +971,13 @@ authorization server, credentialed by a Slack app of the team's workspace:
     "enabled": true,
     "scopes": [
       "search:read.public", "search:read.private", "search:read.mpim", "search:read.im",
-      "search:read.files", "search:read.users",
+      "search:read.files", "search:read.users", "emoji:read",
       "channels:history", "groups:history", "mpim:history", "im:history",
-      "canvases:read", "files:read", "users:read", "users:read.email"
+      "channels:read", "groups:read", "mpim:read", "im:read",
+      "chat:write", "reactions:read", "reactions:write",
+      "channels:write", "groups:write", "mpim:write", "im:write",
+      "canvases:read", "canvases:write", "lists:read", "lists:write",
+      "files:read", "files:write", "users:read", "users:read.email"
     ]
   },
   "refreshTokens": { "enabled": true }
@@ -954,9 +990,15 @@ rm "$HOME/slack-mcp.json"
 vercel connect attach mcp.slack.com/slack-mcp --yes   # production, preview, and development
 ```
 
-Those scopes are what the read and search tools `integrations.ts` offers
-need, and none of them writes, so the token is read-only at Slack as well
-as in the offer. `SLACK_CONNECTOR_UID` is the UID this create prints
+Those are the user scopes every tool of Slack's MCP server needs
+(`https://docs.slack.dev/ai/slack-mcp-server/`: search, read, send and
+schedule messages, react, create conversations, write canvases and lists,
+and upload files), and the Slack app's User Token Scopes hold the same list.
+A scope added later goes on the app first, then on the connector, whose
+`userAuthorization.scopes` a PATCH changes (`vercel api
+/v2/connect/connectors/<connector-id> -X PATCH --input <file>`); a token
+keeps the scopes it was granted, so everyone connected before connects
+again. `SLACK_CONNECTOR_UID` is the UID this create prints
 (`mcp.slack.com/slack-mcp`). A developer who connected under another
 connector disconnects and connects again, because a grant belongs to the
 connector it was made under.

@@ -3,10 +3,11 @@ import { it } from "@effect/vitest";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
 import { ConnectError } from "@vercel/connect";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
+import { test } from "vitest";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
@@ -23,6 +24,7 @@ import {
 import {
   type IntegrationAdmission,
   integrationAccessToken,
+  integrationConnection,
   integrationUnavailable,
 } from "../server/hosted/integration-connection";
 import {
@@ -41,7 +43,9 @@ import { noNetwork } from "./support/no-network";
  * and both hosts are the real ones over the migrations on PGlite; Vercel
  * Connect is the one double, a connector that holds a token per account.
  * Every token a test reads back names the account it was issued for, so a
- * read that reached another account's grant fails by its value.
+ * read that reached another account's grant fails by its value. Every
+ * provider's connection offers the agents every tool its server lists, the
+ * ones that write among them, with no filter of Luke's.
  */
 
 const NOW = 1_800_000_000_000;
@@ -236,3 +240,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an integration connection's to
       }),
   );
 });
+
+test.for(INTEGRATION_PROVIDER_LIST)(
+  "%s's connection offers every tool its server lists, the ones that write among them",
+  (provider) => {
+    const connection = integrationConnection(provider, () =>
+      Promise.reject(new Error("no token is read to define a connection")),
+    );
+    assert.equal(connection.tools, undefined);
+  },
+);
