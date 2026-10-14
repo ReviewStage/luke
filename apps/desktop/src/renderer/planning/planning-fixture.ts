@@ -181,6 +181,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   ],
   listStatus: PLANNING_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
+  github: { connected: true, login: null },
   document: { status: PLANNING_READ.IDLE },
 };
 

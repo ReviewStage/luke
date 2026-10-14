@@ -150,6 +150,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
+    // Connected accounts, beside the account and anchored by its section.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SECTION.CONNECTED_ACCOUNTS,
+          label: "GitHub",
+          page: SETTINGS_VIEW.ROOT,
+          haystack: ["GitHub", "connected accounts connect disconnect reconnect"],
+        }
+      : undefined,
     // Each integration's row on its page, drawn once an account is signed in and anchored by its provider.
     ...INTEGRATION_PROVIDER_LIST.map((provider) =>
       input.accountDrawn

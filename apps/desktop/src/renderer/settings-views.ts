@@ -34,6 +34,8 @@ export const SETTINGS_SECTION = {
   MEMBERS: "workspace-members",
   /** A workspace's GitHub repositories: the connected GitHub account, its connect and disconnect, and the repositories chosen on GitHub. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
+  /** The accounts linked to the account: its own GitHub, connected or disconnected in the browser. */
+  CONNECTED_ACCOUNTS: "connected-accounts",
 } as const;
 
 /** Every page, the front page first as General: the desktop Settings sidebar's list, and the command palette's. */

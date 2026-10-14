@@ -8,6 +8,7 @@ import {
 } from "@sidecar/gateway";
 import type {
   HostedCodingAgentClient,
+  HostedGitHubConnectionClient,
   HostedPlanClient,
   HostedWorkspaceClient,
   PlanActivityFrame,
@@ -39,6 +40,7 @@ import {
   type PlanningDocument,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
+  type PlanningGitHubPageAnswer,
   type PlanningPageAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -236,6 +238,9 @@ type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
  */
 const WORKSPACES_READ_EVERY = Duration.minutes(1);
 
+/** A GitHub page asked behind a closed gate, or of a service that did not answer, which opens nothing. */
+const GITHUB_PAGE_UNANSWERED = { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
@@ -274,6 +279,8 @@ export type PlanningClient = Pick<
     HostedWorkspaceClient,
     "list" | "create" | "githubConnect" | "githubDisconnect" | "members" | "removeMember" | "leave"
   >;
+  /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
+  github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnectUrl">;
 };
 
 /** The service's side of a plan's planning conversation, read as an agent's transcript is. */
@@ -476,9 +483,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   let workspacesRead = 0;
 
   /**
-   * Reads the account's workspaces and the ones it may join, apart from the
-   * plans, which never wait on it. A failed read keeps the workspaces it
-   * last read, as a failed list read keeps the plans.
+   * Reads the account's workspaces, and whether its GitHub is connected
+   * beside them, apart from the plans, which never wait on it. Note that the
+   * connection is read with the workspaces, because both move in the
+   * browser and the panel coming forward is when either is read again; each
+   * lands on the view as soon as it is read, so a slow connection read never
+   * holds back the workspaces. A failed read keeps what it last read, as a
+   * failed list read keeps the plans.
    *
    * Note that only the latest read started is drawn, because reads overlap
    * (a refresh, a write's read after it) and an older one answering last
@@ -488,9 +499,21 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     workspacesRead += 1;
     const read = workspacesRead;
     workspacesAskedAt = yield* Clock.currentTimeMillis;
-    const answer = yield* Effect.provide(client.workspaces.list(), FetchHttpClient.layer);
-    if (answer === undefined || read !== workspacesRead) return;
-    write({ workspaces: answer.workspaces });
+    const current = () => read === workspacesRead;
+    const workspaces = Effect.tap(client.workspaces.list(), (answer) =>
+      Effect.sync(() => {
+        if (current() && answer !== undefined) write({ workspaces: answer.workspaces });
+      }),
+    );
+    const github = Effect.tap(client.github.status(), (read) =>
+      Effect.sync(() => {
+        if (current() && read.ok) write({ github: read.answer });
+      }),
+    );
+    yield* Effect.provide(
+      Effect.all([workspaces, github], { concurrency: "unbounded", discard: true }),
+      FetchHttpClient.layer,
+    );
   });
 
   /** Reads the workspaces where none was asked for since a sign-out, or the last ask is older than its bound. */
@@ -1400,6 +1423,24 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             return carried<PlanningEditAnswer>({ saved: true });
           }),
         );
+      }),
+    // The browser connects or disconnects GitHub, so the panel coming
+    // forward again reads the connection and the workspaces whatever the
+    // bound says.
+    [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
+      Effect.gen(function* () {
+        if (!gate()) return carried<PlanningGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
+        const page = yield* Effect.provide(client.github.connect(), FetchHttpClient.layer);
+        workspacesAskedAt = undefined;
+        return carried<PlanningGitHubPageAnswer>(
+          page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
+        );
+      }),
+    [GATEWAY_METHOD.GITHUB_DISCONNECT]: () =>
+      Effect.sync(() => {
+        if (!gate()) return carried<PlanningGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
+        workspacesAskedAt = undefined;
+        return carried<PlanningGitHubPageAnswer>({ url: client.github.disconnectUrl() });
       }),
     [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
       Effect.gen(function* () {

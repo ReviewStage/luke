@@ -11,6 +11,7 @@ import { connectionHealth, type IntegrationTool, toolsCount } from "../integrati
 import { IntegrationMark } from "../integration-marks";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
+import { GITHUB_REMEDY_TITLE, OPEN_SETTINGS_LABEL } from "../open-settings";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
@@ -149,8 +150,13 @@ function ServersPopover({
     onClose();
   };
 
-  /** A sign-in begun from the row: the browser opens, and the row waits on the window's return, or the sign-in's landing, to read it. */
+  /**
+   * A grant begun from the row: a Connect sign-in opens the browser, and the
+   * row waits on the window's return to read it; GitHub's opens Settings ›
+   * Connected accounts, so the popover gives way first.
+   */
   const connect = (provider: IntegrationProvider) => {
+    if (grantedBySignIn(provider)) onClose();
     setConnecting(provider);
     void grant.begin(provider).then(() => setConnecting(undefined));
   };
@@ -186,13 +192,13 @@ function ServersPopover({
             disabled={connecting === row.provider}
             title={
               grantedBySignIn(row.provider)
-                ? "Sign in to Luke with GitHub in your browser"
+                ? GITHUB_REMEDY_TITLE
                 : `Sign in to ${row.name} in your browser`
             }
             onClick={() => connect(row.provider)}
           >
             {grantedBySignIn(row.provider)
-              ? SERVER_ACTION.SIGN_IN
+              ? OPEN_SETTINGS_LABEL
               : row.kind === SERVER_ROW.CONNECT
                 ? SERVER_ACTION.CONNECT
                 : SERVER_ACTION.RECONNECT}

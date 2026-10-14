@@ -358,12 +358,26 @@ export const planCodeAnswerSchema = EffectSchema.Struct({
 
 export type PlanCodeAnswer = typeof planCodeAnswerSchema.Type;
 
+/**
+ * Whether the account has a GitHub account linked, and its login where the
+ * service holds one: the view's copy of the connection the service answers.
+ * Note that it is declared here rather than in `github-connection-wire.ts`,
+ * which takes it from here, because the window reads this module and that
+ * one's claim vocabulary has no business in the window's bundle.
+ */
+export const githubConnectionSchema = EffectSchema.Struct({
+  connected: EffectSchema.Boolean,
+  login: EffectSchema.NullOr(EffectSchema.String),
+});
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
   /** The workspaces the account is a member of, its personal one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
+  /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
+  github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
@@ -774,3 +788,11 @@ export const planningWorkspaceLeaveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningWorkspaceLeaveAnswer = typeof planningWorkspaceLeaveAnswerSchema.Type;
+
+/** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
+export const planningGitHubPageAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ url: EffectSchema.String }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningGitHubPageAnswer = typeof planningGitHubPageAnswerSchema.Type;

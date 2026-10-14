@@ -7,6 +7,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { OpenSettingsButton } from "../open-settings";
+import type { SettingsLink } from "../settings-views";
+
 import {
   chooseSkill,
   holdsSlashWord,
@@ -49,7 +52,13 @@ import {
  */
 
 /** The skills the plan's repository keeps, as the composer reads them: the skills, or why they were not read. */
-export type SkillsRead = { readonly skills: readonly SkillOption[] } | { readonly unread: string };
+export type SkillsRead =
+  | { readonly skills: readonly SkillOption[] }
+  | {
+      readonly unread: string;
+      /** Where the refusal is mended, in Settings: GitHub not connected is mended at the account's connected accounts. */
+      readonly mendedAt?: SettingsLink;
+    };
 
 /** Reads the plan's repository's skills; asked the first time a `/` is typed. */
 export type SkillSource = () => Promise<SkillsRead>;
@@ -215,7 +224,16 @@ function offered(read: SkillsRead | undefined, mention: SkillMention | undefined
 function MenuNote({ read }: { read: SkillsRead | undefined }): React.JSX.Element {
   if (read === undefined)
     return <p className="plan-compose-menu-note">{SKILL_MENU_NOTE.READING}</p>;
-  if ("unread" in read) return <p className="plan-compose-menu-note">{read.unread}</p>;
+  if ("unread" in read) {
+    return (
+      <>
+        <p className="plan-compose-menu-note">{read.unread}</p>
+        {read.mendedAt === undefined ? null : (
+          <OpenSettingsButton link={read.mendedAt} className="plan-compose-menu-row" />
+        )}
+      </>
+    );
+  }
   if (read.skills.length > 0) {
     return <p className="plan-compose-menu-note">{SKILL_MENU_NOTE.NO_MATCH}</p>;
   }

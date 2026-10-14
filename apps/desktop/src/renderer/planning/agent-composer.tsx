@@ -8,12 +8,10 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_NAME } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -71,7 +69,8 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * by itself; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
- * the agent has on whose sign-in expired is offered to reconnect. The box takes
+ * the agent has on whose sign-in expired offers Settings › Integrations, the
+ * one place a server is reconnected. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
@@ -191,14 +190,7 @@ export function AgentComposer({
   const held = composer.sending || closed;
   const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
-  const { act } = useAct();
   const statuses = useIntegrationStatuses();
-  // The browser opens on the integration's sign-in, whose outcome the window's return reads.
-  const reconnect = (provider: IntegrationProvider) =>
-    act(ACT_KIND.INTEGRATIONS_CONNECT, { provider }).then(
-      (answer) => ("failure" in answer ? undefined : statuses.signInBegun(provider)),
-      () => undefined,
-    );
   const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
   const words =
     composer.closed ?? refusal ?? (composer.note === undefined ? model?.note : undefined);
@@ -211,7 +203,6 @@ export function AgentComposer({
           : {
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
               text: `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
-              provider: lapsed,
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === composer.note;
@@ -418,7 +409,7 @@ export function AgentComposer({
           failure={note}
           className="agent-note agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
-          onRemedy={lapsed === undefined ? undefined : () => reconnect(lapsed)}
+          onRemedy={lapsed === undefined ? undefined : servers.onOpenSettings}
         />
       ) : null}
     </div>

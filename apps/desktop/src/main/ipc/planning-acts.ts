@@ -8,6 +8,7 @@ import type {
   PlanningEditParams,
   PlanningFileAnswer,
   PlanningFileParams,
+  PlanningGitHubPageAnswer,
   PlanningMessagesParams,
   PlanningPageAnswer,
   PlanningPageParams,
@@ -86,6 +87,8 @@ export interface PlanningActsDependencies {
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
     planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+    githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+    githubDisconnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: PlanningWorkspaceParams,
@@ -134,6 +137,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.WEB_OPEN
+  | typeof ACT_KIND.GITHUB_CONNECT
+  | typeof ACT_KIND.GITHUB_DISCONNECT
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
@@ -209,6 +214,28 @@ function invitePageOf(serviceBaseUrl: string, workspaceId: string): string {
   return page.href;
 }
 
+/** Whether an address the host answered parses and stands on the service's own origin. */
+function isServicePage(url: string, serviceBaseUrl: string): boolean {
+  return URL.canParse(url) && new URL(url).origin === new URL(serviceBaseUrl).origin;
+}
+
+/**
+ * A GitHub page the host named, opened in the browser; refused in the act's
+ * own words where it named none. Note that a page off the service's own
+ * origin is refused too, because the answer is any string and the opener
+ * would hand a `file:` or custom-scheme address to whatever handles it.
+ */
+function openedPage(
+  kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
+  page: PlanningGitHubPageAnswer,
+  dependencies: Pick<PlanningActsDependencies, "openExternal" | "serviceBaseUrl">,
+) {
+  const refused = new ActRefused({ message: ACT[kind].refusal });
+  return "url" in page && isServicePage(page.url, dependencies.serviceBaseUrl)
+    ? Effect.tryPromise({ try: () => dependencies.openExternal(page.url), catch: () => refused })
+    : Effect.fail(refused);
+}
+
 export function planningActRows(
   dependencies: PlanningActsDependencies,
 ): Pick<ActRows, PlanningActKind> {
@@ -278,6 +305,20 @@ export function planningActRows(
     [ACT_KIND.GITHUB_OPEN]: ({ url }, sender) => {
       refuseUnlessPanel(ACT_KIND.GITHUB_OPEN, sender);
       return dependencies.openExternal(url);
+    },
+    // The address of either page is the service's own, named by the host,
+    // and never one a window handed in, so the act carries none.
+    [ACT_KIND.GITHUB_CONNECT]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_CONNECT, sender);
+      return Effect.flatMap(host.githubConnect(), (page) =>
+        openedPage(ACT_KIND.GITHUB_CONNECT, page, dependencies),
+      );
+    },
+    [ACT_KIND.GITHUB_DISCONNECT]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_DISCONNECT, sender);
+      return Effect.flatMap(host.githubDisconnect(), (page) =>
+        openedPage(ACT_KIND.GITHUB_DISCONNECT, page, dependencies),
+      );
     },
     // The address is an http or https one by the act's own schema, so it
     // opens in the browser and never in a file's or another app's handler.

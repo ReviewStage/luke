@@ -560,9 +560,10 @@ never to your Mac, a model, or a sandbox, and keeps no other record of the
 connection. What GitHub answers goes to the model that made the call, and each
 call, with its input and everything GitHub answered, is written to the plan's
 conversation or the agent's transcript like any other tool call. An account
-that signed in with Google alone is offered Sign in with GitHub in Settings ›
-Integrations instead. Luke stops using it when your GitHub sign-in ends: when
-you revoke the App in GitHub's settings, or delete your account; what agents
+that signed in with Google alone is offered Connect GitHub in Settings ›
+Integrations instead, which opens Connected accounts to connect it. Luke
+stops using it when your GitHub connection ends: when you disconnect it,
+revoke the App in GitHub's settings, or delete your account; what agents
 already changed on GitHub, and the record of it, stays.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach

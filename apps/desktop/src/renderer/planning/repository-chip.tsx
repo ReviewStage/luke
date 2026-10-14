@@ -1,11 +1,13 @@
 import type { GitHubRepository } from "@sidecar/hosted";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
-import { ExternalIcon } from "@sidecar/panel";
+import { GearIcon } from "@sidecar/panel";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
+import { CONNECTED_ACCOUNTS_LINK, OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { Spinner } from "../spinner";
 import { useDisclosure } from "../use-disclosure";
 import { repositoryFailureNote } from "./planning-model";
@@ -26,7 +28,9 @@ import { repositoryFailureNote } from "./planning-model";
  * pinned under the list the page on GitHub where the developer chooses
  * which repositories the App reaches, which with the App installed nowhere
  * is the page that installs it. With the App installed nowhere and no
- * repository named, the chip offers installing it instead of a menu. The
+ * repository named, the chip offers installing it instead of a menu; with
+ * the list refused for GitHub not connected, the menu offers connecting it
+ * in place of Retry. The
  * list is read from the service when the chip mounts and again whenever
  * the window takes focus, so a developer back from installing the App in
  * the browser sees the change on the next opening; nothing polls. The menu
@@ -40,12 +44,14 @@ export interface RepositoryChooser {
   recent: readonly string[];
   /** Reads the repositories the account reaches now, as the service answers them. */
   read: () => Promise<PlanningRepositoriesAnswer>;
-  /** Opens a page of GitHub's in the browser. */
+  /** Opens a page of GitHub's in the browser, such as a repository's own. */
   openGitHub: (url: string) => void;
   /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
   pictures: boolean;
   /** The workspace the list is for, where one is chosen; a chip keyed by it reads afresh when it changes. */
   scope?: string | undefined;
+  /** Whether the account manages that workspace, so can install Luke there; a member is told to ask. */
+  manages: boolean;
 }
 
 /** Where the chip stands, which is how it is sized. */
@@ -56,20 +62,14 @@ export const CHIP_PLACE = {
 
 export type ChipPlace = (typeof CHIP_PLACE)[keyof typeof CHIP_PLACE];
 
-/** The chip's words while it waits on a pick, and while the App is installed nowhere. */
-const CHIP_LABEL = {
-  CHOOSE: "Choose repository",
-  INSTALL: "Install Luke on GitHub",
-} as const;
-
-/** The rows pinned under the list. */
-const FOOT_ROW = {
-  GITHUB: "github",
-} as const;
+/** The chip's words while it waits on a pick. */
+const CHOOSE_LABEL = "Choose repository";
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
+  NOT_INSTALLED: "Luke isn't installed on GitHub for this workspace yet.",
+  ASK_TO_INSTALL: "Ask an owner or admin to install Luke on GitHub.",
   NO_MATCH: "No repositories match",
 } as const;
 
@@ -106,6 +106,7 @@ export function RepositoryChip(props: {
   place: ChipPlace;
 }): React.JSX.Element {
   const { chooser, openRequest } = props;
+  const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   const [list, setList] = useState<PlanningRepositoriesAnswer | undefined>(undefined);
@@ -155,16 +156,21 @@ export function RepositoryChip(props: {
 
   const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
-  const installing = listed !== undefined && !listed.installed;
-  // With the App installed nowhere and no repository named, the chip's one press is installing it.
-  const offersInstall = installing && props.value === null;
-  const label = props.value ?? (offersInstall ? CHIP_LABEL.INSTALL : CHIP_LABEL.CHOOSE);
-  const installationUrl = listed?.installationUrl;
+  // GitHub not connected, and the App installed nowhere, are each mended in
+  // Settings, at their own place; a member's Workspace page draws no
+  // GitHub repositories, so a member is told to ask instead.
+  const mendedAt: SettingsLink | undefined =
+    failure === PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED
+      ? CONNECTED_ACCOUNTS_LINK
+      : listed !== undefined && !listed.installed && chooser.manages
+        ? {
+            page: SETTINGS_VIEW.WORKSPACE,
+            section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+            ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
+          }
+        : undefined;
+  const label = props.value ?? CHOOSE_LABEL;
   const press = () => {
-    if (offersInstall && installationUrl !== undefined) {
-      chooser.openGitHub(installationUrl);
-      return;
-    }
     opener.current = trigger.current;
     setOpen(!open);
   };
@@ -172,16 +178,34 @@ export function RepositoryChip(props: {
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
+  const openSettingsRow =
+    mendedAt === undefined ? null : (
+      <button
+        type="button"
+        className="plan-compose-menu-row"
+        onClick={() => choose(() => openSettings(mendedAt))}
+      >
+        <GearIcon />
+        <span className="plan-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
+      </button>
+    );
   const note =
     failure !== undefined ? (
       <>
         <p className="plan-compose-menu-note" role="alert">
           {repositoryFailureNote(failure)}
         </p>
-        <button type="button" className="plan-compose-menu-row" onClick={read}>
-          <RotateCwIcon aria-hidden="true" />
-          <span className="plan-compose-menu-name">Retry</span>
-        </button>
+        {openSettingsRow ?? (
+          <button type="button" className="plan-compose-menu-row" onClick={read}>
+            <RotateCwIcon aria-hidden="true" />
+            <span className="plan-compose-menu-name">Retry</span>
+          </button>
+        )}
+      </>
+    ) : listed !== undefined && !listed.installed ? (
+      <>
+        <p className="plan-compose-menu-note">{MENU_NOTE.NOT_INSTALLED}</p>
+        {openSettingsRow ?? <p className="plan-compose-menu-note">{MENU_NOTE.ASK_TO_INSTALL}</p>}
       </>
     ) : list === undefined ? (
       <div className="plan-compose-menu-note">
@@ -198,8 +222,8 @@ export function RepositoryChip(props: {
           ref={trigger}
           type="button"
           className="plan-compose-chip"
-          aria-haspopup={offersInstall ? undefined : "dialog"}
-          aria-expanded={offersInstall ? undefined : open}
+          aria-haspopup="dialog"
+          aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           onClick={press}
         >
@@ -213,7 +237,6 @@ export function RepositoryChip(props: {
             />
           )}
           <span className="plan-compose-chip-name">{label}</span>
-          {offersInstall ? <ExternalIcon /> : null}
         </button>
       ) : null}
       {drawn.mounted ? (
@@ -232,18 +255,6 @@ export function RepositoryChip(props: {
           onLeave={(left) => {
             if (!(left instanceof Node && chip.current?.contains(left))) setOpen(false);
           }}
-          foot={
-            installationUrl !== undefined
-              ? [
-                  {
-                    id: FOOT_ROW.GITHUB,
-                    label: "GitHub",
-                    mark: <ExternalIcon />,
-                    onPress: () => choose(() => chooser.openGitHub(installationUrl)),
-                  },
-                ]
-              : undefined
-          }
         />
       ) : null}
     </div>
