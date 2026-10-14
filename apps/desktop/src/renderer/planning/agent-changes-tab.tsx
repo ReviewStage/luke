@@ -15,6 +15,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { EmptyState } from "../empty-state";
+import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -282,25 +283,27 @@ export function ChangesCard({
 }): React.JSX.Element {
   const count = pullRequest.changedFiles;
   return (
-    <div className="tab-card" data-tab-card="">
-      <div className="tab-card-head">
-        <div className="tab-card-title">
-          <span className="tab-card-name">{pullRequest.title}</span>
-          <span className="tab-card-agent" data-changes-agent="">
+    <HoverCard data-tab-card="">
+      <CardHead
+        name={pullRequest.title}
+        sub={
+          <>
             <AgentGlyph agent={agent} />
             <span>{agentLabel}</span>
-          </span>
-        </div>
-        <span className="tab-card-time changes-card-number">
-          <PullRequestMark pullRequest={pullRequest} />
-          {pullRequestNumberLabel(pullRequest)}
-        </span>
-      </div>
-      <p className="tab-card-note">
+          </>
+        }
+        corner={
+          <>
+            <PullRequestMark pullRequest={pullRequest} />
+            {pullRequestNumberLabel(pullRequest)}
+          </>
+        }
+      />
+      <CardNote>
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </p>
-    </div>
+      </CardNote>
+    </HoverCard>
   );
 }
 

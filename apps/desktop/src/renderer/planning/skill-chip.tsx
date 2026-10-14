@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
 import { CardDetail } from "../desktop/plan-card";
+import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
 import { holdsSlashWord, type SkillOption, skillTokens, type TextRange } from "./skill-mention";
@@ -92,22 +93,11 @@ function SkillCard({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div className="plan-card" data-skill-card="">
-      <div className="plan-card-heading">
-        <div className="plan-card-head">
-          <span className="plan-card-glyph">
-            <BookOpenIcon aria-hidden="true" />
-          </span>
-          <span className="plan-card-name">/{skill.name}</span>
-        </div>
-        {skill.description === "" ? null : <p className="plan-card-note">{skill.description}</p>}
-        <CardDetail
-          glyph={<FileTypeIcon name={skill.path} />}
-          label={skill.path}
-          onPress={onOpen}
-        />
-      </div>
-    </div>
+    <HoverCard data-skill-card="">
+      <CardHead glyph={<BookOpenIcon aria-hidden="true" />} name={`/${skill.name}`} />
+      {skill.description === "" ? null : <CardNote>{skill.description}</CardNote>}
+      <CardDetail glyph={<FileTypeIcon name={skill.path} />} label={skill.path} onPress={onOpen} />
+    </HoverCard>
   );
 }
 

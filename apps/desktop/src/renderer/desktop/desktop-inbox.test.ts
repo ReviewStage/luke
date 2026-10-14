@@ -390,8 +390,8 @@ function standingCard(): readonly [string | null | undefined, string | null | un
   const card = document.querySelector(".tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
   return [
-    card.querySelector(".tab-card-name")?.textContent,
-    card.querySelector(".tab-card-time")?.textContent,
+    card.querySelector(".card-name")?.textContent,
+    card.querySelector(".card-corner")?.textContent,
   ];
 }
 

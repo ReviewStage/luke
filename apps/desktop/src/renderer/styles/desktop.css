@@ -4152,25 +4152,31 @@ body:has(.app-stage[data-capture="true"])
 .searchable-menu .plan-compose-menu-detail[data-overflow="true"],
 .subagent-job[data-overflow="true"],
 .agent-published-title[data-overflow="true"],
-.tab-card-name[data-untitled][data-overflow="true"],
-.tab-card-preview[data-overflow="true"] {
+.card-name[data-one-line][data-overflow="true"],
+.card-note[data-one-line][data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* An agent's or a subagent's tab hangs a card in its hint's place, as a
-   browser's tab hover card hangs: a small panel of the window's own, light in
-   the light, hung from the tab's start. Its head is the name, wrapped to two
-   lines, or a task standing in for one on a single line faded at its end,
-   with the model under it and the time muted at its right; under the head,
-   one line of the latest step, faded where it is cut short as a tab's
-   label is. */
+/* A control with more to say than a pill hangs a card in the pill's place
+   (`tooltip.tsx`'s `card`), as a browser's tab hover card hangs: a small
+   panel of the window's own, light in the light, hung from the control's
+   start. Every card says what it says in the same parts (`hover-card.tsx`),
+   in one type scale: its head is its glyph where it wears one, on the name's
+   first line, then the name in the medium weight wrapped to two lines, or a
+   task standing in for one on a single line faded at its end, a quieter line
+   under the name a size down, and the corner muted a size down at the head's
+   right; under the head, its notes, read whole and so wrapped to three
+   lines, or one line of a latest step faded at its end, and a hairline
+   before what it lists. Its words stand as far in from its sides as a
+   menu's do, so a row it lists (`.plan-card-line`) washes off its edge as a
+   menu item does. */
 .tooltip-card {
   display: flex;
   width: 280px;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-4);
-  padding: var(--space-6) var(--row-inset);
+  padding: var(--space-6) calc(var(--menu-inset) + var(--row-inset));
   border-color: var(--hairline-strong);
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
@@ -4184,21 +4190,47 @@ body:has(.app-stage[data-capture="true"])
   transform-origin: top left;
 }
 
-.tab-card-head {
+.card {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-8);
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
-.tab-card-title {
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--glyph-gap);
+}
+
+/* The glyph takes a menu glyph's footprint on the name's first line, so the
+   rows a card lists under its head (`.plan-card-line`) start their words on
+   the name's column. */
+.card-glyph {
+  --state-glyph-size: 14px;
+
+  display: inline-flex;
+  width: var(--menu-glyph);
+  height: 1lh;
+  flex: none;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-glyph > :is(svg, img) {
+  width: 14px;
+  height: 14px;
+}
+
+.card-title {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.tab-card-name {
+.card-name {
   display: -webkit-box;
   overflow: hidden;
   font-size: 12.5px;
@@ -4208,19 +4240,14 @@ body:has(.app-stage[data-capture="true"])
   -webkit-line-clamp: 2;
 }
 
-.tab-card-name[data-untitled] {
+.card-name[data-one-line] {
   display: block;
   white-space: nowrap;
 }
 
-/* The pair in the shared label's own inks, its effort dimmed, a size under the name. */
-.tab-card-model {
-  font-size: 11.5px;
-}
-
-/* A Changes card's agent under its pull request's title, a size under the
-   name as a model is, wearing the agent's glyph at a pin's size. */
-.tab-card-agent {
+/* What the subject runs on, whose it is, or when it ran, a size under the
+   name, a glyph on it at a pin's size. */
+.card-sub {
   --state-glyph-size: 12px;
 
   display: flex;
@@ -4229,41 +4256,27 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-4);
   color: var(--text-secondary);
   font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
 }
 
-.tab-card-time {
-  flex: 0 0 auto;
+.card-corner {
+  flex: none;
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* The Changes card's corner leads its number with the pull request's mark,
-   set inline so the corner keeps the head's baseline. */
-.changes-card-number .pull-request-mark {
+/* A corner leading with a pull request's mark sets it inline, so the corner
+   keeps the head's baseline. */
+.card-corner .pull-request-mark {
   width: 12px;
   height: 12px;
   margin-right: var(--space-4);
   vertical-align: -2px; /* off-scale */
 }
 
-.tab-card-preview {
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.tab-card-preview code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-/* A summary row's words under its card's name, Luke's note on a file or the
-   title of what waits in the Inbox, wrapped to three lines rather than cut
-   to one, since they are read whole rather than glanced at. */
-.tab-card-note {
+.card-note {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
@@ -4271,6 +4284,25 @@ body:has(.app-stage[data-capture="true"])
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+.card-note[data-one-line] {
+  display: block;
+  white-space: nowrap;
+}
+
+.card-note code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.card-rule {
+  width: 100%;
+  height: 1px;
+  flex: none;
+  margin: 0;
+  border: 0;
+  background: var(--hairline);
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
@@ -5316,51 +5348,22 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   }
 }
 
-/* A sidebar plan's card: its name wrapped to two lines with how long ago it
-   was updated muted at the head's right, its repository under the name, then
-   a few rows each for its agents and its pull requests, each list under a
-   rule. It is set as a menu is (`.plan-menu`): the card stands its rows the
-   menu's inset from its edge, and each row is a menu row's height, inset,
-   and corner, so the wash on the repository, an agent, or a pull request
-   under the pointer sits off the card's edge as a menu item's does. A line
-   a press does nothing on keeps a row's place, so every word starts on the
-   rows' column. A pinned tab's card (`sidebar-pinned-tab.tsx`) and a
-   skill chip's (`skill-chip.tsx`) are this card. */
-.tooltip-card:has(> .plan-card) {
-  padding: var(--menu-inset);
-}
-
-.plan-card {
+/* The rows a plan's card lists under its head, which a pinned tab's card
+   (`sidebar-pinned-tab.tsx`) and a skill chip's (`skill-chip.tsx`) list
+   too: its repository, its agents, and its pull requests, each list under a
+   rule. Each row is set as a menu's row is (`.plan-menu`), a menu row's
+   height and corner, with its glyph on the card's column, under the head's,
+   and the wash under the pointer off the card's edge by a menu's inset, as a
+   menu item's sits. A line a press does nothing on keeps a row's place, so
+   every word starts on the rows' column. */
+.plan-card-rows {
   display: flex;
   flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.plan-card-heading {
-  display: flex;
-  flex-direction: column;
-}
-
-.plan-card-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--glyph-gap);
-  padding: var(--space-6) var(--row-inset) var(--space-4);
-}
-
-.plan-card-name {
-  display: -webkit-box;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.plan-card-time,
 .plan-card-corner,
 .plan-card-more {
   color: var(--text-tertiary);
@@ -5369,7 +5372,6 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   white-space: nowrap;
 }
 
-.plan-card-time,
 .plan-card-corner {
   flex: none;
 }
@@ -5377,11 +5379,12 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-detail,
 .plan-card-line {
   display: flex;
-  width: 100%;
+  width: calc(100% + 2 * var(--row-inset));
   height: var(--menu-row-height);
   min-width: 0;
   align-items: center;
   gap: var(--glyph-gap);
+  margin-inline: calc(-1 * var(--row-inset));
   padding: 0 var(--row-inset);
   border-radius: var(--menu-row-radius);
   background: none;
@@ -5402,23 +5405,6 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-line {
   color: var(--text-primary);
   font-size: 13px;
-}
-
-/* A list's rule is a menu's (`.plan-menu-rule`), off the card's sides by a
-   row's inset. */
-.plan-card-lines {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.plan-card-lines::before {
-  height: 1px;
-  margin: var(--menu-inset) var(--row-inset);
-  background: var(--hairline);
-  content: "";
 }
 
 /* A glyph takes a menu glyph's footprint, the working mark, a harness's mark
@@ -5455,112 +5441,35 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* A card's words under its name, a skill's description, on the name's
-   column and wrapped to four lines, since they are read whole rather than
-   glanced at. Note that the gap under them is a margin, because a padding
-   would show the start of a fifth line the clamp hid. */
-.plan-card-note {
-  display: -webkit-box;
-  margin: 0 var(--row-inset) var(--space-4)
-    calc(var(--row-inset) + var(--menu-glyph) + var(--glyph-gap));
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
-
 .plan-card-more {
   display: flex;
   height: 22px;
   align-items: center;
-  padding-left: calc(var(--row-inset) + var(--menu-glyph) + var(--glyph-gap));
+  padding-left: calc(var(--menu-glyph) + var(--glyph-gap));
 }
 
-/* A finished turn's card, hung from its "Worked for" line: the model it
-   ran on with its harness's mark and how it ended at the head's right, when
-   it ran muted under the head, then under a hairline its tokens, each label
-   muted at the start and its count at the end in tabular figures, as the
-   plan's card sets its lines. */
-.turn-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.turn-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.turn-card-model {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-6);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.turn-card-harness {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.turn-card-harness > :is(svg, img) {
-  width: 14px;
-  height: 14px;
-}
-
-.turn-card-ending {
-  flex: none;
-  margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  white-space: nowrap;
-}
-
-.turn-card-when {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.turn-card-note {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-}
-
-.turn-card-tokens {
+/* A run's figures under its card's rule (`turn-card.tsx`), a turn's tokens
+   or a call's metered time, each label muted at the start and its count at
+   the end in tabular figures. */
+.run-card-figures {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   margin: 0;
-  padding: var(--space-4) 0 0;
-  border-top: 1px solid var(--hairline);
   font-size: 12px;
 }
 
-.turn-card-token {
+.run-card-figure {
   display: flex;
   justify-content: space-between;
   gap: var(--space-8);
 }
 
-.turn-card-token dt {
+.run-card-figure dt {
   color: var(--text-secondary);
 }
 
-.turn-card-token dd {
+.run-card-figure dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }

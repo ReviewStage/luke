@@ -136,14 +136,11 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
   act(() => chip.focus());
-  const card = document.querySelector<HTMLElement>(".tooltip-card > .plan-card");
+  const card = document.querySelector<HTMLElement>(".tooltip-card > [data-skill-card]");
   assert.ok(card, "the card is the window's plan card");
-  assert.ok(
-    card.querySelector(".plan-card-head .plan-card-glyph svg"),
-    "the head wears the skill's mark",
-  );
-  assert.equal(card.querySelector(".plan-card-name")?.textContent, "/release");
-  assert.equal(card.querySelector(".plan-card-note")?.textContent, RELEASE.description);
+  assert.ok(card.querySelector(".card-head .card-glyph svg"), "the head wears the skill's mark");
+  assert.equal(card.querySelector(".card-name")?.textContent, "/release");
+  assert.equal(card.querySelector(".card-note")?.textContent, RELEASE.description);
   const line = card.querySelector<HTMLButtonElement>("button.plan-card-detail");
   assert.equal(line?.textContent, RELEASE.path);
   act(() => line?.click());

@@ -57,6 +57,6 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = document.querySelector(".tooltip-card [data-tab-card]");
-  assert.equal(card?.querySelector(".tab-card-name")?.textContent, "Retry audit");
-  assert.match(card?.querySelector(".tab-card-time")?.textContent ?? "", /^Archived · /u);
+  assert.equal(card?.querySelector(".card-name")?.textContent, "Retry audit");
+  assert.match(card?.querySelector(".card-corner")?.textContent ?? "", /^Archived · /u);
 });

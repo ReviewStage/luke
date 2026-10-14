@@ -135,6 +135,10 @@ const NEWER_LUKE = {
   RESPONSE: "Answer this in a newer Luke.",
 } as const;
 
+/** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
+const THREAD_TIME_CLASS =
+  "text-[11.5px] whitespace-nowrap text-(color:--text-tertiary) tabular-nums";
+
 /** What the box's Send is called. */
 const SEND = "Send to agent";
 
@@ -728,7 +732,7 @@ function Byline({
         </span>
       </AgentRef>
       <span className="shrink-0">
-        {did} <RelativeTime className="tab-card-time" at={at} now={now} />
+        {did} <RelativeTime className={THREAD_TIME_CLASS} at={at} now={now} />
       </span>
     </div>
   );
@@ -755,7 +759,8 @@ function Answered({
         </MessageContent>
       )}
       <p className="m-0 text-[11.5px] text-muted-foreground">
-        {settled.lead} · <RelativeTime className="tab-card-time" at={item.updatedAt} now={now} /> ·{" "}
+        {settled.lead} ·{" "}
+        <RelativeTime className={THREAD_TIME_CLASS} at={item.updatedAt} now={now} /> ·{" "}
         <Delivered item={item} by={by} />
       </p>
     </Message>

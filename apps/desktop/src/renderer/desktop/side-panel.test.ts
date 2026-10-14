@@ -112,10 +112,10 @@ test("a Changes card names the coding agent whose pull request it is, wearing it
       pullRequest: pullRequest(42, "Expire invitations"),
     }),
   );
-  assert.equal(page.querySelector(".tab-card-name")?.textContent, "Expire invitations");
-  assert.equal(page.querySelector(".tab-card-time")?.textContent, "#42");
-  const named = page.querySelector("[data-changes-agent]");
+  assert.equal(page.querySelector(".card-name")?.textContent, "Expire invitations");
+  assert.equal(page.querySelector(".card-corner")?.textContent, "#42");
+  const named = page.querySelector(".card-sub");
   assert.equal(named?.textContent, "Expiry job");
   assert.ok(named?.querySelector(".state-glyph svg"), "the agent's glyph, as its tab wears it");
-  assert.match(page.querySelector(".tab-card-note")?.textContent ?? "", /^6 files changed/);
+  assert.match(page.querySelector(".card-note")?.textContent ?? "", /^6 files changed/);
 });

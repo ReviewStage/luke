@@ -2,6 +2,7 @@ import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { ChangesCard } from "../planning/agent-changes-tab";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
@@ -296,17 +297,17 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   const waiting = inbox.open.length;
   const latest = waiting > 0 ? inbox.open.at(-1) : inbox.settled[0];
   return (
-    <div className="tab-card" data-tab-card="">
-      <div className="tab-card-head">
-        <span className="tab-card-name">{INBOX_LABEL}</span>
-        <span className="tab-card-time">
-          {waiting === 0
+    <HoverCard data-tab-card="">
+      <CardHead
+        name={INBOX_LABEL}
+        corner={
+          waiting === 0
             ? NEEDS_YOU.NONE
-            : `${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
-        </span>
-      </div>
-      {latest === undefined ? null : <p className="tab-card-note">{latest.title}</p>}
-    </div>
+            : `${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`
+        }
+      />
+      {latest === undefined ? null : <CardNote>{latest.title}</CardNote>}
+    </HoverCard>
   );
 }
 
@@ -317,10 +318,10 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
  */
 function FileCard({ path, note }: { path: string; note: string | undefined }): React.JSX.Element {
   return (
-    <div className="tab-card" data-tab-card="">
-      <span className="tab-card-name">{path}</span>
-      {note === undefined ? null : <p className="tab-card-note">{note}</p>}
-    </div>
+    <HoverCard data-tab-card="">
+      <CardHead name={path} />
+      {note === undefined ? null : <CardNote>{note}</CardNote>}
+    </HoverCard>
   );
 }
 
