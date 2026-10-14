@@ -6,7 +6,7 @@ import { LinesChanged } from "../planning/agent-published";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
-import type { InboxBoardView } from "../planning/inbox-model";
+import { type InboxBoardView, NEEDS_YOU } from "../planning/inbox-model";
 import { sameTab } from "../planning/tab-strip-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
@@ -293,9 +293,6 @@ interface SummarySection {
   entries: readonly SummaryEntry[];
 }
 
-/** What the Inbox's card says while nothing waits on the developer. */
-const NOTHING_WAITS = "Nothing waiting";
-
 /**
  * The Inbox row's card, in a tab card's look: its name, how many items wait
  * on the developer at its right, and under them the title of the newest
@@ -309,7 +306,9 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
       <div className="tab-card-head">
         <span className="tab-card-name">{INBOX_LABEL}</span>
         <span className="tab-card-time">
-          {waiting === 0 ? NOTHING_WAITS : `${waiting} waiting`}
+          {waiting === 0
+            ? NEEDS_YOU.NONE
+            : `${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
         </span>
       </div>
       {latest === undefined ? null : <p className="tab-card-note">{latest.title}</p>}

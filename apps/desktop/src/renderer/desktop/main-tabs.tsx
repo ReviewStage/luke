@@ -25,6 +25,7 @@ import {
   providerOf,
 } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
+import { NEEDS_YOU } from "../planning/inbox-model";
 import {
   inPlanOrder,
   isDraftTab,
@@ -358,7 +359,10 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
     waiting === 0 ? undefined : (
       <span className="inbox-row-count">
         {waiting}
-        <span className="visually-hidden"> waiting</span>
+        <span className="visually-hidden">
+          {" "}
+          {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
+        </span>
       </span>
     );
   return { row, endMark, onPick };

@@ -86,7 +86,7 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
   assert.match(call.textContent ?? "", /Live/u);
 });
 
-test("a plan's Inbox tab whose read holds nothing says nothing is waiting under the Inbox's glyph, rather than standing blank", async () => {
+test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, rather than standing blank", async () => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -132,7 +132,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing is waiting under 
   });
   const tab = container.querySelector('section.inbox-view[aria-label="Inbox"]');
   assert.ok(tab, "the plan's Inbox tab");
-  assert.match(tab.textContent ?? "", /Nothing is waiting on you\./u);
+  assert.match(tab.textContent ?? "", /Nothing needs you/u);
   act(() => root.unmount());
   container.remove();
 });

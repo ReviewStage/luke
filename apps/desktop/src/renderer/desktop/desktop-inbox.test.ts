@@ -197,7 +197,19 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where drawn bold. */
+/**
+ * What marks a row as needing the developer: `*` where it is drawn bold and
+ * wears the dot read as "Needs you", nothing where it wears neither, and
+ * `?` where it wears only one, so a half-drawn mark fails every listing.
+ */
+function needsYouMark(row: HTMLElement): string {
+  const bold = row.dataset.unread === "true";
+  const dot = row.querySelector(".inbox-row-dot")?.textContent === "Needs you";
+  if (bold && dot) return "*";
+  return bold || dot ? "?" : "";
+}
+
+/** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-plans");
   assert.ok(list, "the list is drawn");
@@ -206,7 +218,7 @@ function listed(page: HTMLElement): string[] {
       return `# ${node.textContent}`;
     }
     const name = node.querySelector(".sidebar-plan-name")?.textContent ?? "";
-    return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${node.dataset.unread === "true" ? "*" : ""}${name}`;
+    return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
 
@@ -218,7 +230,7 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   return row;
 }
 
-test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and bold while waiting, the first waiting item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
+test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and marked bold with a dot while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   assert.deepEqual(listed(page), [
@@ -308,7 +320,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("a plan main says changed is read again, so an item answered on another Mac lists as settled; Waiting only then lists only what still waits until pressed again, and outlives a relaunch", async () => {
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled; Needs you then lists only what still needs you until pressed again, and outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   inboxes.set(INVITES.id, [
@@ -336,8 +348,8 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything);
 
   const waitingOnly = () => {
-    const button = page.querySelector<HTMLButtonElement>('button[aria-label="Waiting only"]');
-    assert.ok(button, "the head offers Waiting only");
+    const button = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+    assert.ok(button, "the head offers Needs you");
     return button;
   };
   assert.equal(waitingOnly().getAttribute("aria-pressed"), "false");
@@ -355,6 +367,30 @@ test("a plan main says changed is read again, so an item answered on another Mac
   act(() => waitingOnly().click());
   assert.equal(waitingOnly().getAttribute("aria-pressed"), "false");
   assert.deepEqual(listed(page), everything);
+});
+
+test("a folded plan counts what in it needs you, and one where nothing does counts nothing", async () => {
+  const { page } = mount();
+  await settle();
+  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, updatedAt: 6_000 }]);
+  act(() =>
+    setHolding([
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  const headers = () => [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-repository-toggle"),
+  ];
+  for (const header of headers()) act(() => header.click());
+  assert.deepEqual(
+    headers().map((header) => [header.getAttribute("aria-expanded"), header.textContent]),
+    [
+      ["false", "Invites"],
+      ["false", "Billing usage alerts1 needs you"],
+    ],
+  );
 });
 
 test("the list is resized from its edge between its bounds, and keeps its width across a relaunch", async () => {

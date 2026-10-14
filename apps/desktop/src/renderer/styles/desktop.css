@@ -837,7 +837,8 @@ body,
 }
 
 .sidebar-repository-header:is(:hover, :has(.sidebar-repository-toggle:focus-visible))
-  .sidebar-repository-count {
+  .sidebar-repository-count,
+.sidebar-repository-count[data-steady="true"] {
   opacity: 1;
 }
 
@@ -2512,6 +2513,30 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-6);
 }
 
+/* An item that needs the developer wears a mail app's unread dot in the system
+   blue, beside its title's heavier weight; an answered one wears neither. The
+   dots stand in a column of their own past the times, kept on every row, so
+   the times line up whether a row wears one or not. */
+.inbox-row {
+  --inbox-dot: 7px;
+}
+
+.inbox-row .sidebar-plan-line {
+  position: relative;
+  padding-right: calc(var(--inbox-dot) + var(--space-6));
+}
+
+.inbox-row-dot {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--inbox-dot);
+  height: var(--inbox-dot);
+  border-radius: 50%;
+  background: var(--message-sent);
+  transform: translateY(-50%);
+}
+
 /* The pane's words under the agent's byline start where its name does, past its mark. */
 .inbox-indent {
   padding-left: calc(var(--control-glyph) + var(--glyph-gap));
@@ -3288,12 +3313,25 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The toolbar's button is drawn on while the summary is pinned, as it is
-   while the card it hangs stands, and the Inbox's Waiting only while the
-   list holds only what waits. */
+   while the card it hangs stands, and the Inbox's Needs you while the list
+   holds only what needs the developer. */
 .summary-toggle[aria-pressed="true"],
-.inbox-waiting-only[aria-pressed="true"] {
+.inbox-needs-you-only[aria-pressed="true"] {
   background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
   color: var(--text-primary);
+}
+
+/* Needs you's glyph is the rows' dot in a ring: the dot filled in the
+   glyph's ink, and in the rows' blue while the button is pressed, so the
+   filter says which rows it keeps. */
+.inbox-needs-you-only svg circle[r="1"] {
+  r: 3.5px;
+  fill: currentColor;
+}
+
+.inbox-needs-you-only[aria-pressed="true"] svg circle[r="1"] {
+  fill: var(--message-sent);
+  stroke: var(--message-sent);
 }
 
 /* Expanded where it cannot be pinned, the whole summary stands in a card

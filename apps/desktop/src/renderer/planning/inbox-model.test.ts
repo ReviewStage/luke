@@ -341,7 +341,7 @@ test("the list holds every item the latest changed first, under its plan, the pl
   );
 });
 
-test("Waiting lists only what waits and the item chosen, so one just answered stays listed, and a plan with nothing listed has no group", () => {
+test("Needs you lists only what waits and the item chosen, so one just answered stays listed, and a plan with nothing listed has no group", () => {
   const waiting = { grouping: INBOX_GROUPING.PLAN, waitingOnly: true } as const;
   assert.deepEqual(drawn(inboxList(PLANS, { ...waiting, chosen: undefined })), [
     ["Invites", ["expiry"]],
