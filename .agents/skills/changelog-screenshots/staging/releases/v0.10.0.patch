@@ -269,8 +269,8 @@ index 00000000..088fadf5
 +  CodingAgentMessagesAnswerView,
 +  CodingAgentModelsAnswer,
 +  CodingAgentPullRequestAnswerView,
-+} from "@sidecar/features/coding-agent-view";
-+import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
++} from "@sidecar/hosted/coding-agent-view";
++import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 +import type { WireRecord, WireValue } from "@sidecar/wire";
 +import { ACT_KIND } from "#shared/messages/acts";
 +import { SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../planning/use-side-panel";
@@ -673,7 +673,7 @@ index 00000000..bd1b294d
 + * is of the focused window.
 + */
 +
-+import type { PlanningRepositoriesAnswer } from "@sidecar/features/planning-view";
++import type { PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
 +import { daysAgo, hoursAgo } from "./clock";
 +import { shotHomeView } from "./plan-world";
 +import type { ShotSpec } from "./shot-spec";
@@ -772,9 +772,9 @@ index 00000000..fba5dda8
 + * launch (`clock.ts`).
 + */
 +
-+import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/features/plan-template";
-+import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
-+import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
++import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 +import { ago, daysAgo, hoursAgo } from "./clock";
 +
 +/** The ids the shots share, so a plan and its agents agree with one another. */
@@ -1016,7 +1016,7 @@ index 00000000..586c706d
 + * without an evaluation-order cycle.
 + */
 +
-+import type { PlanningRepositoriesAnswer, PlanningView } from "@sidecar/features/planning-view";
++import type { PlanningRepositoriesAnswer, PlanningView } from "@sidecar/hosted/planning-view";
 +import type { ActKind, ActPayload, ActResultFor } from "#shared/messages/acts";
 +import type { SidebarCollapse } from "../desktop/sidebar-collapse";
 +import type { PlansControl } from "../planning/use-plans-tab";

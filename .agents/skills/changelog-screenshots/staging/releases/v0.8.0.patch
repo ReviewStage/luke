@@ -186,8 +186,8 @@ index 00000000..b02b9acd
 + * again once the window has taken its capture size (`layout.boardRefit`).
 + */
 +
-+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/features/board-vocabulary";
-+import type { DrawingElement } from "@sidecar/features/board-wire";
++import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
++import type { DrawingElement } from "@sidecar/hosted/board-wire";
 +import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../planning/use-side-panel";
 +import type { ShotSpec } from "./shot-spec";
 +import { shotOpenPlan } from "./world";
@@ -460,7 +460,7 @@ index 00000000..ad20164f
 + * and every hook into the app can import it without an evaluation-order cycle.
 + */
 +
-+import type { PlanningView } from "@sidecar/features/planning-view";
++import type { PlanningView } from "@sidecar/hosted/planning-view";
 +import type { VoiceView } from "#shared/messages/voice-view";
 +import type { SidePanelState } from "../planning/use-side-panel";
 +
@@ -646,14 +646,14 @@ index 00000000..2a3e0b46
 + * (`clock.ts`), so nothing draws a 1969 date.
 + */
 +
-+import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/features/plan-template";
-+import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
-+import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
++import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 +import {
 +  type PlanTranscript,
 +  TRANSCRIPT_PART_TYPE,
 +  type TranscriptMessage,
-+} from "@sidecar/features/transcript-wire";
++} from "@sidecar/hosted/transcript-wire";
 +import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 +import { ago, daysAgo, hoursAgo, LAUNCHED_AT } from "./clock";
 +

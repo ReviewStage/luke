@@ -204,7 +204,7 @@ index 00000000..8e3732b1
 +  PLAN_WORK_TOOL,
 +  type PlanningView,
 +  type PlanWorkTurn,
-+} from "@sidecar/features/planning-view";
++} from "@sidecar/hosted/planning-view";
 +import { RUN_PROFILE } from "#shared/messages/app-state";
 +import { FIXTURE_OPEN_PLAN, FIXTURE_PLAN } from "../planning/planning-fixture";
 +import {
