@@ -2,9 +2,15 @@
 <html lang="en" class="call-window">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      connect-src is LiveKit Cloud's, whose regional hosts the avatar's room
+      joins over a socket and validates a refused join over HTTPS. It was read
+      from the SDK's code, not from a live session: the server_url Keyframe
+      hands a grant is unverified, and the first real call confirms it.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; connect-src 'none'; worker-src 'none'; object-src 'none'; frame-src 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; connect-src wss://*.livekit.cloud https://*.livekit.cloud; worker-src 'none'; object-src 'none'; frame-src 'none'"
     />
     <title>Luke call</title>
     <link rel="stylesheet" href="styles.css" />
