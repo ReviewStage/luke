@@ -35,6 +35,7 @@ const STAND_IN: PlanEditorModule = {
         editor.took.push([sent, merged]);
         return { base: merged, text: merged };
       },
+      chooseMention: () => undefined,
       destroy: () => {
         editor.destroyed = true;
       },

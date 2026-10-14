@@ -33,6 +33,29 @@ export interface PlanEditorProps {
   readonly onFinish: (section: number) => void;
   /** ↑ from the first line of the text, which goes to the title above it. */
   readonly onLeaveUp: () => void;
+  /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
+  readonly mentions?: PlanEditorMentions | undefined;
+}
+
+/** A mention the plan's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
+export interface MentionNode {
+  readonly name: string;
+  readonly target: string;
+}
+
+/**
+ * The plan editor's mentions, as the panel draws and picks them: an `@` word
+ * the caret ends reported (`onTrigger`), the keys a list over it takes first
+ * (`onKey`), each mention the text holds drawn into its node's own element
+ * (`drawMention`), and a target named again where a heading of the text it
+ * names was renamed in the edit (`retarget`), answering the new target or
+ * nothing where the target names no section renamed.
+ */
+export interface PlanEditorMentions {
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly onKey: (event: KeyboardEvent) => boolean;
+  readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
+  readonly retarget: (target: string, renamed: ReadonlyMap<string, string>) => string | undefined;
 }
 
 /** An editor as mounted. */
@@ -43,6 +66,8 @@ export interface PlanEditorHandle {
    * save is a change from, and the text the editor holds now.
    */
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
+  /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
+  readonly chooseMention: (mention: MentionNode) => void;
   readonly destroy: () => void;
 }
 
