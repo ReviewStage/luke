@@ -68,6 +68,8 @@ export interface PlanEditorHandle {
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
+  /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
+  readonly markdown: () => string;
   readonly destroy: () => void;
 }
 

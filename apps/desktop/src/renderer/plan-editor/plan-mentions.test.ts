@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, mentionMarkdown } from "@sidecar/hosted/mention-link";
+import { MENTION_KIND, mentionMarkdown, mentionsIn } from "@sidecar/hosted/mention-link";
+import { planSections } from "@sidecar/hosted/plan-document";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
@@ -34,8 +35,9 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text, with every draft, report, and drawn mention written down. */
+/** The editor mounted on the text, with every draft, report, drawn mention, and key the list was offered written down. */
 function mounted(markdown: string) {
+  const offered: string[] = [];
   const drafts: string[] = [];
   const triggers: (ComposerTrigger | undefined)[] = [];
   const drawn: MentionNode[] = [];
@@ -52,7 +54,10 @@ function mounted(markdown: string) {
     onLeaveUp: () => undefined,
     mentions: {
       onTrigger: (trigger) => triggers.push(trigger),
-      onKey: () => false,
+      onKey: (event) => {
+        offered.push(event.key);
+        return false;
+      },
       drawMention: (element, mention) => {
         element.textContent = `@${mention.name}`;
         drawn.push(mention);
@@ -78,7 +83,29 @@ function mounted(markdown: string) {
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)));
     editor.view.dispatch(editor.state.tr.insertText(typed));
   };
-  return { handle, drafts, triggers, drawn, typeAfter, last: () => drafts.at(-1) ?? "" };
+  /** A key pressed in the editor. */
+  const press = (init: KeyboardEventInit) =>
+    editor.view.dom.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+    );
+  /** The caret moved back by the characters given. */
+  const back = (characters: number) =>
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, editor.state.selection.from - characters),
+      ),
+    );
+  return {
+    handle,
+    drafts,
+    triggers,
+    drawn,
+    offered,
+    typeAfter,
+    press,
+    back,
+    last: () => drafts.at(-1) ?? "",
+  };
 }
 
 test("a mention in the text opens as its node, drawn by the panel, and writes back as the link it was read from", () => {
@@ -122,4 +149,44 @@ test("renaming a heading in the editor renames the text's own mentions of it, in
     plan.last(),
     `## Goal\n\nShip as ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading: "Rollout plan" }, "Rollout")} says.\n\n## Rollout plan\n\nStore first.\n`,
   );
+});
+
+test("renaming a heading written with its own formatting still renames its mentions, read from the heading's source", () => {
+  const plan = mounted(
+    `## Ship _today_\n\nStore first.\n\n## Notes\n\nSee ${section("Ship _today_")}.\n`,
+  );
+
+  plan.typeAfter("today", " now");
+
+  const draft = plan.last();
+  const headings = new Set(planSections(draft).map((each) => each.heading));
+  const named = mentionsIn(draft).map(({ mention }) =>
+    mention.kind === MENTION_KIND.SECTION ? mention.heading : "",
+  );
+  assert.equal(named.length, 1);
+  assert.ok(
+    headings.has(named[0] ?? ""),
+    `${named[0]} is a heading of ${[...headings].join(", ")}`,
+  );
+});
+
+test("a key an input method is composing with goes to the input method, never to the list", () => {
+  const plan = mounted(TEXT);
+  plan.typeAfter("Store first.", " See @go");
+  plan.offered.length = 0;
+
+  plan.press({ key: "Enter", isComposing: true });
+  plan.press({ key: "Enter", keyCode: 229 });
+
+  assert.deepEqual(plan.offered, []);
+});
+
+test("a pick with the caret inside the word replaces the word through its end", () => {
+  const plan = mounted(TEXT);
+
+  plan.typeAfter("Store first.", " See @goal");
+  plan.back(2);
+  plan.handle.chooseMention({ name: "Goal", target: `luke://plan/${PLAN_ID}#Goal` });
+
+  assert.ok(plan.last().endsWith(`Store first. See ${section("Goal")}\n`), plan.last());
 });

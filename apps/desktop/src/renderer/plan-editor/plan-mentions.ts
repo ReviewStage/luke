@@ -41,6 +41,9 @@ const RETARGETED_META = "luke-plan-retargeted";
 /** The `@` word the caret ends: `@`, at the start of a word, then up to four words with no bracket, parenthesis, or `@` in them. */
 const MENTION_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,3})?)$/u;
 
+/** The rest of an `@` word after the caret, which a pick replaces too. */
+const WORD_REST = /^[^\s@[\]()]*/u;
+
 /** The character an inline node that is no text stands for in its block's words, one position wide as the node is. */
 const LEAF_CHARACTER = "￼";
 
@@ -78,10 +81,18 @@ function triggerAt(view: EditorView): PlanTrigger | undefined {
   )
     return undefined;
   const box = view.coordsAtPos(from);
+  // Note that a pick with the caret inside the word replaces the word through its end.
+  const after = $from.parent.textBetween(
+    $from.parentOffset,
+    $from.parent.content.size,
+    undefined,
+    LEAF_CHARACTER,
+  );
+  const rest = WORD_REST.exec(after)?.[0].length ?? 0;
   return {
     trigger: { start: from, query, rect: { left: box.left, top: box.top, bottom: box.bottom } },
     from,
-    to: selection.from,
+    to: selection.from + rest,
   };
 }
 
@@ -111,10 +122,21 @@ function opensSection(node: PmNode): boolean {
   return node.type.name === "heading" && SECTION_LEVELS.has(Number(node.attrs.level));
 }
 
-/** A heading's words as the plan's text spells them, its formatting kept, as `planSections` knows a section by. */
-function headingWords(manager: MarkdownManager, node: PmNode): string {
-  const line = manager.serialize({ type: "doc", content: [node.toJSON()] }).trim();
+/**
+ * A heading's words as the plan's text spells them, its formatting kept, as
+ * `planSections` knows a section by: the block's own source while it is the
+ * block it opened as, so `_today_` stays `_today_`, else as the editor will
+ * write it.
+ */
+function headingWords(
+  manager: MarkdownManager,
+  sourceOf: (node: PmNode) => string | undefined,
+  node: PmNode,
+): string {
+  const line =
+    sourceOf(node)?.split("\n")[0] ?? manager.serialize({ type: "doc", content: [node.toJSON()] });
   return line
+    .trim()
     .replace(/^#{1,6}\s+/u, "")
     .replace(/\s+#+$/u, "")
     .trim();
@@ -134,13 +156,14 @@ function mappedThrough(transactions: readonly Transaction[], position: number): 
 /** The sections' headings the changes renamed in place, old words to new; none where they renamed none. */
 function renamedHeadings(
   manager: MarkdownManager,
+  sourceOf: (node: PmNode) => string | undefined,
   transactions: readonly Transaction[],
   before: PmNode,
   after: PmNode,
 ): Map<string, string> {
   const standing = new Set<string>();
   after.forEach((node) => {
-    if (opensSection(node)) standing.add(headingWords(manager, node));
+    if (opensSection(node)) standing.add(headingWords(manager, sourceOf, node));
   });
   const renamed = new Map<string, string>();
   before.forEach((node, offset) => {
@@ -148,8 +171,8 @@ function renamedHeadings(
     const at = mappedThrough(transactions, offset);
     const now = at === undefined ? null : after.nodeAt(at);
     if (now === null || !opensSection(now)) return;
-    const was = headingWords(manager, node);
-    const is = headingWords(manager, now);
+    const was = headingWords(manager, sourceOf, node);
+    const is = headingWords(manager, sourceOf, now);
     if (was !== is && was !== "" && is !== "" && !standing.has(was)) renamed.set(was, is);
   });
   return renamed;
@@ -173,14 +196,18 @@ function retargeted(
 }
 
 /** The plan editor's mentions: the `@` word reported as the editor's state moves and as it takes or loses the caret, and renamed headings' mentions named again. */
-export function planMentions(manager: MarkdownManager, mentions: PlanEditorMentions) {
+export function planMentions(
+  manager: MarkdownManager,
+  sourceOf: (node: PmNode) => string | undefined,
+  mentions: PlanEditorMentions,
+) {
   const state: MentionsState = { found: undefined, reported: undefined };
   const plugin = new Plugin({
     key: new PluginKey("plan-mentions"),
     appendTransaction: (transactions, before, after) => {
       if (!transactions.some((tr) => tr.docChanged)) return undefined;
       if (transactions.some((tr) => tr.getMeta(RETARGETED_META) === true)) return undefined;
-      const renamed = renamedHeadings(manager, transactions, before.doc, after.doc);
+      const renamed = renamedHeadings(manager, sourceOf, transactions, before.doc, after.doc);
       return renamed.size === 0 ? undefined : retargeted(after, renamed, mentions);
     },
     view: () => ({ update: (view) => reported(view, state, mentions) }),

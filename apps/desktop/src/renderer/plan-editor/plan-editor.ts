@@ -39,6 +39,9 @@ import { planMentions } from "./plan-mentions";
  * stood in; ↑ on the text's first line goes to the title above it.
  */
 
+/** The key code a browser gives a key an input method takes. */
+const COMPOSING_KEY_CODE = 229;
+
 /** The class the editor's own element wears beside the read view's, which `planning.css` styles. */
 const EDITOR_CLASS = "plan-document-text";
 
@@ -128,10 +131,14 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     props;
   const extensions = markdownExtensions(mentions?.drawMention);
   const manager = documentManager(extensions);
-  const picking = mentions === undefined ? undefined : planMentions(manager, mentions);
-  const opened = documentOpened(manager, markdown);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
-  let held: HeldSources = { sources: new Map(), lead: opened.lead, ending: opened.ending };
+  let held: HeldSources = { sources: new Map(), lead: "", ending: "" };
+  const picking =
+    mentions === undefined
+      ? undefined
+      : planMentions(manager, (node) => held.sources.get(node), mentions);
+  const opened = documentOpened(manager, markdown);
+  held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
     extensions: [...extensions, Placeholder.configure({ placeholder: "Write the plan" })],
@@ -145,8 +152,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-label": label,
       },
       handleKeyDown: (view, event) => {
-        // The keys a mention's list takes are its own first, Escape among them, which closes it.
-        if (mentions?.onKey(event) === true) return true;
+        // The keys a mention's list takes are its own first, Escape among them, which closes it,
+        // but for a key an input method is composing with, whose Enter confirms its words.
+        const composing =
+          event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE;
+        if (!composing && mentions?.onKey(event) === true) return true;
         if (event.key === "Escape" || (event.key === "Enter" && event.metaKey)) {
           onFinish(caretSection(editor));
           return true;
@@ -171,6 +181,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
       return { base: answer.base, text: documentMarkdown(manager, editor.state.doc, held) };
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
+    markdown: () => documentMarkdown(manager, editor.state.doc, held),
     destroy: () => editor.destroy(),
   };
 }

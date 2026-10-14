@@ -259,8 +259,8 @@ export function useMentionPicker({
 }: {
   planId: string;
   planName: string;
-  /** The plan's text as it stands, whose sections the list offers. */
-  text: string;
+  /** The plan's text as it stands now, whose sections the list offers, read as the list draws. */
+  text: () => string;
   /** The element the list is placed in, under the word. */
   room: RefObject<HTMLElement | null>;
   onChoose: (mention: MentionNode) => void;
@@ -303,7 +303,7 @@ export function useMentionPicker({
     };
   }, [open, read, act, planId]);
 
-  const groups = open ? groupsFor(trigger.query, read, planRows(planId, planName, text)) : [];
+  const groups = open ? groupsFor(trigger.query, read, planRows(planId, planName, text())) : [];
   const rows = groups.flatMap((group) => group.rows);
   const held =
     highlight !== undefined &&

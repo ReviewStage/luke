@@ -102,7 +102,25 @@ async function opened() {
     act(() => {
       element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
     });
-  return { container, typeAtEnd, press };
+  /** The words typed right after the words given, as the editor's own input inserts them. */
+  const typeAfter = async (words: string, typed: string) => {
+    act(() => {
+      let at: number | undefined;
+      editor.state.doc.descendants((node, position) => {
+        if (at === undefined && node.isText && node.text?.includes(words)) {
+          at = position + (node.text.indexOf(words) + words.length);
+        }
+      });
+      assert.ok(at !== undefined, `the text holds ${words}`);
+      editor.view.focus();
+      editor.view.dispatch(
+        editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)),
+      );
+      editor.view.dispatch(editor.state.tr.insertText(typed));
+    });
+    await act(async () => undefined);
+  };
+  return { container, typeAtEnd, typeAfter, press };
 }
 
 /** The list's groups as it draws them: each heading and its rows' names. */
@@ -151,4 +169,16 @@ test("Escape closes the list and leaves the editor open", async () => {
 
   assert.equal(plan.container.querySelector(".mention-menu"), null);
   assert.notEqual(plan.container.querySelector(".plan-document-text"), null);
+});
+
+test("a heading just renamed is offered by its new words, before the editor hands its draft over", async () => {
+  const plan = await opened();
+
+  await plan.typeAfter("Rollout", " plan");
+  await plan.typeAtEnd(" See @roll");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Plan"),
+    ["Plan", ["Rollout plan"]],
+  );
 });

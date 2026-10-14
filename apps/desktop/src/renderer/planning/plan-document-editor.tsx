@@ -544,7 +544,8 @@ export function PlanDocumentEditor({
   const picker = useMentionPicker({
     planId: plan.id,
     planName: plan.name,
-    text: editor.draft,
+    // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
+    text: () => handle.current?.markdown() ?? editor.draft,
     room,
     onChoose: (mention) => handle.current?.chooseMention(mention),
   });
