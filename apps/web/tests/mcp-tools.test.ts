@@ -327,6 +327,79 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an argument that refers to itself is read as far as it goes, and the list still answers",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            {
+              name: "pick",
+              description: "Picks.",
+              inputSchema: {
+                type: "object",
+                properties: { choice: { $ref: "#/$defs/Choice" } },
+                $defs: { Choice: { anyOf: [{ $ref: "#/$defs/Choice" }, { type: "null" }] } },
+              },
+            },
+            { name: "after", description: "Listed after it." },
+          ]),
+        ),
+      );
+
+      assert.deepEqual(
+        tools.map((tool) => tool.name),
+        ["pick", "after"],
+      );
+      assert.equal(tools[0]?.parameters?.[0]?.name, "choice");
+      assert.equal(tools[0]?.parameters?.[0]?.values, undefined);
+    }),
+);
+
+it.effect(
+  "an argument meets every schema it is given: each declaration, what it refers to, and its allOf",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            {
+              name: "run",
+              description: "Runs.",
+              inputSchema: {
+                type: "object",
+                allOf: [
+                  { properties: { mode: { type: "string" } } },
+                  { properties: { mode: { enum: ["safe"] } }, required: ["mode"] },
+                ],
+                properties: {
+                  speed: { $ref: "#/$defs/Speed", enum: ["slow"] },
+                  id: { allOf: [{ description: "An identifier." }, { type: "string" }] },
+                },
+                $defs: {
+                  Speed: { type: "string", enum: ["slow", "fast"], description: "How fast." },
+                },
+              },
+            },
+          ]),
+        ),
+      );
+
+      assert.deepEqual(tools[0]?.parameters, [
+        {
+          name: "speed",
+          type: "enum",
+          required: false,
+          description: "How fast.",
+          values: ["slow"],
+        },
+        { name: "id", type: "string", required: false, description: "An identifier." },
+        { name: "mode", type: "enum", required: true, values: ["safe"] },
+      ]);
+    }),
+);
+
 it.effect("a tool keeps a bounded number of arguments, each bounded", () =>
   Effect.gen(function* () {
     const properties = Object.fromEntries(
