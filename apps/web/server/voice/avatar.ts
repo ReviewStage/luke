@@ -123,9 +123,9 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       options.send({ type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE, requestId, reason }),
     );
 
-  const closeOpen = (id: string, reason: AvatarEndReason, startedBefore?: Date) =>
+  const closeOpen = (id: string, reason: AvatarEndReason, startedBy?: Date) =>
     Effect.flatMap(currentInstant, (endedAt) =>
-      closeOpenAvatarSessionsOf({ voiceSessionId: id, endedAt, reason, startedBefore }),
+      closeOpenAvatarSessionsOf({ voiceSessionId: id, endedAt, reason, startedBy }),
     );
 
   // Note that whatever the call already shows is closed before Keyframe is
@@ -183,8 +183,10 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
    * The stop of the row the request opened. A stop for an earlier request
    * than the one this connection holds is late and closes nothing; one this
    * connection holds none for is about an avatar an earlier connection put
-   * up, and closes what the call shows that started before this connection,
-   * so a newer connection's avatar is never closed by a stop that is not its.
+   * up, and closes what the call shows that started by the instant this
+   * connection began (a row of the same millisecond included, since a newer
+   * connection's own row waits on a Keyframe mint after that), so a newer
+   * connection's avatar is never closed by a stop that is not its.
    */
   const answerStop = (frame: AvatarStopFrame) =>
     Effect.gen(function* () {

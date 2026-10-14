@@ -121,26 +121,28 @@ it.layer(getTestDB())("the voice avatar sessions", (it) => {
     }),
   );
 
-  it.effect("a close bounded by an instant leaves the sessions started after it open", () =>
-    Effect.gen(function* () {
-      const call = yield* openCall;
-      const earlier = yield* openOn(call);
-      const later = yield* openOn(call, after(30_000));
+  it.effect(
+    "a close bounded by an instant closes the sessions started by it, that instant's own included, and leaves the later open",
+    () =>
+      Effect.gen(function* () {
+        const call = yield* openCall;
+        yield* openOn(call);
+        yield* openOn(call, after(20_000));
+        const later = yield* openOn(call, after(20_001));
 
-      const closed = yield* closeOpenAvatarSessionsOf({
-        voiceSessionId: call.voiceSessionId,
-        endedAt: after(40_000),
-        reason: AVATAR_END_REASON.USER,
-        startedBefore: after(20_000),
-      });
+        const closed = yield* closeOpenAvatarSessionsOf({
+          voiceSessionId: call.voiceSessionId,
+          endedAt: after(40_000),
+          reason: AVATAR_END_REASON.USER,
+          startedBy: after(20_000),
+        });
 
-      assert.equal(closed, 1);
-      assert.deepEqual(
-        (yield* openAvatarSessionsOf(call)).map((session) => session.id),
-        [later],
-        `only ${earlier}, started before the bound, is closed`,
-      );
-    }),
+        assert.equal(closed, 2, "the session started on the bound's own millisecond is closed");
+        assert.deepEqual(
+          (yield* openAvatarSessionsOf(call)).map((session) => session.id),
+          [later],
+        );
+      }),
   );
 
   it.effect(

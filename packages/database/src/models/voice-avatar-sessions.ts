@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull, lt, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, type SQL, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
@@ -40,8 +40,8 @@ export interface OpenAvatarSessionsClosing {
   readonly voiceSessionId: string;
   readonly endedAt: Date;
   readonly reason: AvatarEndReason;
-  /** Only the sessions started before this instant; every open one where absent. */
-  readonly startedBefore?: Date | undefined;
+  /** Only the sessions started at or before this instant; every open one where absent. */
+  readonly startedBy?: Date | undefined;
 }
 
 /** A voice session as the account that owns it names it. */
@@ -152,7 +152,7 @@ const writeClosingOf = SqlSchema.findAll({
     voiceSessionId: Schema.String,
     endedAt: Schema.Date,
     reason: ReasonSchema,
-    startedBefore: Schema.optional(Schema.Date),
+    startedBy: Schema.optional(Schema.Date),
   }),
   Result: IdRowSchema,
   execute: (closing) =>
@@ -168,9 +168,9 @@ const writeClosingOf = SqlSchema.findAll({
           and(
             eq(voiceAvatarSessions.voiceSessionId, closing.voiceSessionId),
             isNull(voiceAvatarSessions.endedAt),
-            closing.startedBefore === undefined
+            closing.startedBy === undefined
               ? undefined
-              : lt(voiceAvatarSessions.startedAt, closing.startedBefore),
+              : lte(voiceAvatarSessions.startedAt, closing.startedBy),
           ),
         )
         .returning({ id: voiceAvatarSessions.id }),
