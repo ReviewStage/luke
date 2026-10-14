@@ -274,7 +274,7 @@ Both are added in PR 3, worded to the file's style.
   app state, or the voice window."
 - **"Where an Effect may run":** `apps/web/server/terminal/function.ts`, the
   terminal relay, stood for a function instance's life as the voice service
-  is. It also goes into `tools/oxlint/anti-slop/effect-edges.json`'s
+  is. It also goes into `tools/anti-slop/effect-edges.json`'s
   `runtimeEdges`.
 
 ## 8. Risks

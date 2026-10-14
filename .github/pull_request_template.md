@@ -17,8 +17,8 @@ judgment call is a reason to stop and ask, not to tick it.
 - [ ] Every behavior change has, in this PR, the test that fails without it; no change-detector test added. (manual; root `AGENTS.md` "Testing")
 - [ ] Gateway envelope goldens unchanged. (CI)
 - [ ] No new `as` type assertion outside the allowlisted files. (CI via anti-slop)
-- [ ] No `Effect.runPromise`/`runSync`/`runFork` outside the runtime edges and the shims `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-run-promise-outside-edges`)
-- [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController`/`fs.watch` outside the files `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-raw-async-primitives`)
+- [ ] No `Effect.runPromise`/`runSync`/`runFork` outside the runtime edges and the shims `tools/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-run-promise-outside-edges`)
+- [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController`/`fs.watch` outside the files `tools/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-raw-async-primitives`)
 - [ ] No Effect, Stream, or Layer written as a statement and dropped; a description a caller walks past runs nothing. (CI via `pnpm discarded-effect`)
 - [ ] Test count equals the pre-PR count or the delta is listed. (manual: `vitest run --reporter=json`)
 - [ ] Each hand-rolled file the PR replaces is deleted, or the part that remains is a permanent adaptor named in root `AGENTS.md`'s "The permanent adaptors" with the reason it stays.

@@ -99,7 +99,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   or waiting on real time (`setTimeout`, `setInterval`, `Effect.sleep`,
   `it.live`). No lint rule holds a test file to this: the Effect edge rules
   exempt one by extension, because a test body is its own edge
-  (`tools/oxlint/anti-slop/shared/effect-edges.ts`), so review is the check.
+  (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
   helpers, with the diff explained in the PR.
 - Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
@@ -140,7 +140,7 @@ deliberately.
 ### Where an Effect may run
 
 An Effect describes work; only a runtime edge runs one. The edges are listed
-in `tools/oxlint/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
+in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
 (the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
 (the layer that runtime is built from), the renderer root
 `apps/desktop/src/renderer/index.tsx` (loaded once per window, the panels and

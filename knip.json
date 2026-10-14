@@ -19,7 +19,7 @@
         "design/generate-brand-assets.mjs",
         "design/generate-surface-shared.mjs"
       ],
-      "project": ["scripts/**", "design/**", "tools/**"]
+      "project": ["scripts/**", "design/**"]
     },
     "apps/desktop": {
       "entry": [
@@ -59,6 +59,10 @@
     },
     "apps/web/eve": {
       "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "project": ["**/*.ts"]
+    },
+    "tools/anti-slop": {
+      "entry": ["index.ts"],
       "project": ["**/*.ts"]
     }
   },
