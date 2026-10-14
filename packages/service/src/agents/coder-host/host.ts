@@ -62,6 +62,7 @@ import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./
 import {
   CHAT_TOOL_REFUSAL,
   type ChatToolResult,
+  chatDigest,
   chatRejected,
   postAsAgent,
   readAsAgent,
@@ -275,6 +276,10 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     call: ChatCall,
   ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp>;
+  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where nothing waits or the conversation is no agent's. */
+  chatDigest(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<string | undefined, never, DatabaseServices>;
   /**
    * Runs one of the agent's public reads, the planning model's own
    * (`../public-research.ts`): a search or a page read, under the turn's
@@ -663,6 +668,17 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
+      ),
+
+    chatDigest: (admitted) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return undefined;
+        const { id: agentId, planId } = found.success;
+        return yield* chatDigest({ userId: admitted.target.userId, agentId, planId });
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(undefined)),
       ),
 
     showPage: (admitted, input, sandbox) =>
