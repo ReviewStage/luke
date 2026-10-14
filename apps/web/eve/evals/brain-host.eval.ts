@@ -118,7 +118,7 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
 async function planConversation(run: Run, planId: string): Promise<string> {
   const opened = await run(openPlanConversation(LOCAL_DEV_PRINCIPAL, planId));
   assert.ok(Option.isSome(opened));
-  return opened.value;
+  return opened.value.conversationId;
 }
 
 /** The document the plan holds now, failing the eval where it does not read. */

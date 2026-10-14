@@ -13,6 +13,7 @@ import { plan } from "../schemas/plan.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect } from "./plan-store.js";
+import { planReachableBy, reachablePlan } from "./workspace-store.js";
 
 /**
  * plan-pages.ts -- a plan's pages: write a page or its next version, list the plan's pages, and read one version.
@@ -20,8 +21,10 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * A write is a page's next version, taken under the plan row's own lock, so
  * two writes of one page never take one number and a plan deleted meanwhile
  * reads as gone rather than written back into being. Every statement names
- * the account beside the plan, so a plan another account owns reads and
- * writes as no plan, exactly as in `plan-store.ts`. A write is read against
+ * the account beside the plan and gates on its membership of the plan's
+ * workspace, so a member reads and writes the pages a teammate wrote, and a
+ * plan of a workspace the account is not in reads and writes as no plan,
+ * exactly as in `plan-store.ts`. A write is read against
  * the wire's own bounds before it touches a row, so nothing is stored that
  * the desktop could not read back. Pages written in the same millisecond
  * list in no particular order between them.
@@ -43,18 +46,13 @@ const PAGE_LINE_COLUMNS = {
   at: planPageVersion.at,
 };
 
-/** The account's plan, when it owns one under this id. */
-function ownedPlan(userId: string, planId: string) {
-  return and(eq(plan.id, planId), eq(plan.userId, userId));
-}
-
-/** The plan's id under its row's lock until the transaction ends; nothing where the account owns no such plan. */
+/** The plan's id under its row's lock until the transaction ends; nothing where the account reaches no such plan. */
 const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, planId }) =>
     Database.use((db) =>
-      db.select({ id: plan.id }).from(plan).where(ownedPlan(userId, planId)).for("update"),
+      db.select({ id: plan.id }).from(plan).where(reachablePlan(userId, planId)).for("update"),
     ),
 });
 
@@ -87,7 +85,7 @@ const insertVersion = SqlSchema.findOne({
     Database.use((db) => db.insert(planPageVersion).values(row).returning(PAGE_LINE_COLUMNS)),
 });
 
-/** Each page of the account's plan by its newest version, the most recently written first. */
+/** Each page of the plan by its newest version, the most recently written first. */
 const findPageLines = SqlSchema.findAll({
   Request: PlanKeySchema,
   Result: PageLineRowSchema,
@@ -97,7 +95,7 @@ const findPageLines = SqlSchema.findAll({
       .selectDistinctOn([planPageVersion.pageId], PAGE_LINE_COLUMNS)
       .from(planPageVersion)
       .innerJoin(plan, eq(plan.id, planPageVersion.planId))
-      .where(and(eq(planPageVersion.planId, planId), eq(plan.userId, userId)))
+      .where(and(eq(planPageVersion.planId, planId), planReachableBy(userId)))
       .orderBy(planPageVersion.pageId, desc(planPageVersion.version))
       .as("newest");
     return Database.use((db) => db.select().from(newest).orderBy(desc(newest.at), newest.pageId));
@@ -121,7 +119,7 @@ const findVersion = SqlSchema.findOneOption({
         .where(
           and(
             eq(planPageVersion.planId, planId),
-            eq(plan.userId, userId),
+            planReachableBy(userId),
             eq(planPageVersion.pageId, pageId),
             eq(planPageVersion.version, version),
           ),
@@ -136,7 +134,7 @@ function lineOf(row: typeof PageLineRowSchema.Type): PageLine {
 
 /**
  * Writes the page's next version, or a new page's first where the write
- * names none; the page as it now stands. Nothing where the account owns no
+ * names none; the page as it now stands. Nothing where the account reaches no
  * such plan, or the plan no such page, and a schema failure, with nothing
  * written, for a write past the wire's bounds.
  */
@@ -172,12 +170,12 @@ export function writePage(
   );
 }
 
-/** The plan's pages, each by its newest version, the most recently written first; none where the account owns no such plan. */
+/** The plan's pages, each by its newest version, the most recently written first; none where the account reaches no such plan. */
 export function listPages(userId: string, planId: string): PlanStoreEffect<readonly PageLine[]> {
   return Effect.map(findPageLines({ userId, planId }), (rows) => rows.map(lineOf));
 }
 
-/** One version of one page of the plan, with its HTML; nothing where the account owns no such plan, page, or version. */
+/** One version of one page of the plan, with its HTML; nothing where the account reaches no such plan, page, or version. */
 export function readPageVersion(
   userId: string,
   planId: string,

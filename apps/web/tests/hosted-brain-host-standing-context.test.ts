@@ -6,7 +6,10 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "../server/hosted/brain-host/conversation";
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -51,9 +54,10 @@ const seams: BrainHostSeams = {
   writer: () => Effect.succeed(writer),
   userInfo: () => Effect.succeed(undefined),
   ownership: {
-    sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
-    ownsConversation: (userId, conversationId) =>
-      database.run(conversationOwnedBy(userId, conversationId)),
+    reachesSession: (userId, sessionId) =>
+      database.run(runtimeSessionReachableBy(userId, sessionId)),
+    reachesConversation: (userId, conversationId) =>
+      database.run(conversationReachableBy(userId, conversationId)),
   },
   openAi: () => undefined,
   deploymentSecret: () => undefined,
@@ -119,7 +123,7 @@ test("a turn of a plan's conversation is handed the plan's name and the document
   const plan = await database.run(startPlan(userId, { name: PLAN_NAME }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
-  );
+  ).conversationId;
   const target = { userId, conversationId };
   await said(target, SAID);
   await database.run(savePlanText(userId, plan.id, FIRST));

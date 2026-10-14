@@ -12,29 +12,30 @@ import { BRAIN_HOST_REFUSAL } from "./bounds.js";
  * auth says who is signed in and nothing about whose session a route names:
  * once signed in, any account may follow up on or stream any session id it
  * holds. The host refuses that here. A route naming a session is admitted
- * only when the conversation that recorded the session as its runtime
- * session belongs to the caller; a request naming a conversation only when
- * that conversation is the caller's; and a message names the kind of turn it
+ * only when the caller reaches the conversation that recorded the session as
+ * its runtime session; a request naming a conversation only when the caller
+ * reaches that conversation, its own or one of its workspace's
+ * (`recorded-session.ts`); and a message names the kind of turn it
  * opens or is refused before it dispatches. A session the store attributes to
  * nobody is refused too, not admitted: that is a session whose first event
  * has not yet recorded it, which a client reaches once the record stands, or
  * one a conversation has since rotated away from, which nobody reaches again.
- * A request to open a session must name a conversation of the caller's and
+ * A request to open a session must name a conversation the caller reaches and
  * the kind of turn its opening message runs, at the door as well: eve
  * dispatches a durable run before the host's first resolver could refuse it,
  * a run no conversation records is one nobody can attach to, meter, or
  * retire, and a session opened under no turn kind would compose no prompt at
- * its start and then run every later turn under none. Whose a session or a conversation must
- * be is the account the caller acts for — the bearer's own, or the one the
+ * its start and then run every later turn under none. Who must reach a session or a conversation
+ * is the account the caller acts for — the bearer's own, or the one the
  * deployment's principal names — read through the one accessor for it.
  */
 
-/** What the store answers about who a session or a conversation belongs to. */
+/** What the store answers about who reaches a session or a conversation. */
 export interface SessionOwnership {
-  /** The account whose conversation recorded this runtime session; nothing while none has. */
-  sessionOwner(sessionId: string): Promise<string | undefined>;
-  /** Whether the conversation stands and belongs to the account. */
-  ownsConversation(userId: string, conversationId: string): Promise<boolean>;
+  /** Whether the account reaches the conversation that recorded this runtime session; no account reaches one none has. */
+  reachesSession(userId: string, sessionId: string): Promise<boolean>;
+  /** Whether the conversation stands and the account reaches it. */
+  reachesConversation(userId: string, conversationId: string): Promise<boolean>;
 }
 
 const SESSION_ROUTE = /^\/eve\/v1\/session\/([^/]+)(?:\/|$)/;
@@ -70,7 +71,7 @@ function opensSession(request: Request): boolean {
 
 /**
  * The route authenticator with ownership behind it: the inner walk decides
- * who is asking, and the caller is admitted only for what is theirs. A
+ * who is asking, and the caller is admitted only for what it reaches. A
  * refusal here is eve's own 403, before any route runs.
  */
 export function ownedAuth(
@@ -91,7 +92,7 @@ export function ownedAuth(
     const account = actedForAccount(caller);
     if (account === undefined) throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_ACCOUNT });
     const sessionId = sessionIdOf(request);
-    if (sessionId !== undefined && (await ownership.sessionOwner(sessionId)) !== account) {
+    if (sessionId !== undefined && !(await ownership.reachesSession(account, sessionId))) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
     }
     const auth = sessionAuthFor(caller, request);
@@ -101,7 +102,7 @@ export function ownedAuth(
       if (opening) throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
       return caller;
     }
-    if (!(await ownership.ownsConversation(account, conversationId))) {
+    if (!(await ownership.reachesConversation(account, conversationId))) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
     }
     if (opening && turnKindOf(auth) === undefined) {
