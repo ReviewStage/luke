@@ -1,6 +1,8 @@
 # Proposal: which workspace am I in, and what does it mean for my plans
 
-Status: **draft for Dean's decisions** (§0). No product code yet.
+Status: **Dean picked variant A** (decision 1) and the Settings labels
+(decision 8) on 2026-10-14; the other decisions are still his. The one
+product change so far is the attribution fix, #2638 (§1.6).
 
 The design show is `docs/proposals/workspace-clarity/index.html`. It is one
 self-contained file that fetches nothing. Each window in it is Luke's real
@@ -54,7 +56,7 @@ decisions they draw.
      Discord draw it.
    - D. Where it is today, restyled.
 
-   **Recommend A.** It is where Slack, Linear, Vercel, Notion and GitHub put
+   **Dean picked A** ("option A is great"). It is where Slack, Linear, Vercel, Notion and GitHub put
    the scope (§2), and it reads first. The cost: Luke's face leaves the
    sidebar's head. It stays on the welcome page, the call card, and Luke's
    lines in version history. B keeps the face but is quieter. C is the
@@ -114,19 +116,24 @@ decisions they draw.
 
    **Recommend the picker and the heading.** With nothing connected, the
    list reads *Acme has no GitHub connected yet.*
-8. **Settings, and #2570.**
-   - The page list gets three headings: *Workspace* (the listed one, by
-     name), *You, in every workspace* (Account, Coding agents,
-     Integrations, Plan template), and *This Mac* (Voice, Appearance,
-     Notifications, This Mac, Keyboard shortcuts, About).
-   - The Workspace page follows the sidebar.
+8. **Settings, and #2570's heading.**
+   - The page list gets three headings, as Linear and Notion group theirs:
+     - the listed workspace by its name, *Acme*, over *Members and GitHub*;
+     - *Account*, with the hint *Applies in all your workspaces* under it,
+       over *Profile* (today's Account page, renamed so no row repeats its
+       heading), *Coding agents*, *Integrations* and *Plan template*;
+     - *This Mac*, over Voice, Appearance, Notifications, This Mac,
+       Keyboard shortcuts and About.
+   - The workspace page follows the sidebar, titled with the workspace's
+     name.
    - The workspace's GitHub stays on that page.
 
-   **Recommend this, and closing #2570.** #2570 puts the workspace's GitHub
-   under a heading called *Integrations*. That is also the name of the page
-   holding your personal GitHub link, so the split this proposal draws
-   would blur. If its Manage menu is liked, keep the menu under *GitHub
-   repositories*.
+   **Dean picked "Account" beside the workspace's name, with the hint.** His
+   words on the first draft's *You, in every workspace*: "doesn't sound
+   polished". #2570 merged at 20:29 (luke-agent). It put the workspace's
+   GitHub under an *Integrations* heading, the same name as Account ›
+   Integrations, which holds your personal GitHub link. **Recommend** that
+   heading read *GitHub*, keeping #2570's Manage menu.
 9. **The first workspace's name, and renaming.**
    - Name new accounts' first workspace *Personal*, and let an owner or
      admin rename any workspace.
@@ -173,6 +180,15 @@ decisions they draw.
       the repository and saying why;
     - says who loses access and who gains it, and that agents follow;
     - is offered only to the plan's starter, as the server already decides.
+
+14. **Who is told about an agent.** Every member is badged ("Needs you",
+    the Dock) and notified for every member's coding agents on a shared plan.
+    - Tell only the agent's starter, and show "Started by" elsewhere.
+    - Tell everyone, naming the starter.
+
+    **Recommend the starter only.** The agent runs on the starter's keys and
+    Mac, and asks them its questions. Open PR #2608 (Factory) adds more
+    "you" copy, so this is worth settling first.
 
 ## 1. Audit
 
@@ -275,9 +291,8 @@ ownership, and an owner can't leave.
 ### 1.5 Open PRs and in-flight work
 
 - **#2570** (luke-agent): the workspace's GitHub under an *Integrations*
-  heading with one Manage menu.
-  - Alive, green, and merges cleanly. It names no requester.
-  - Decision 8 recommends closing it.
+  heading with one Manage menu. Merged 2026-10-14 20:29, after this audit
+  first read it as open. Decision 8 recommends renaming its heading.
 - **#2573** (merged) and **#2588** (open, Dean): a repository out of reach
   says why. #2573 moves a plan stranded by #2524 to the workspace that
   reaches its repository. #2588's remedy calls a new `planning.move` act,
@@ -293,6 +308,56 @@ ownership, and an owner can't leave.
     should avoid "personal" (§4.2).
 - **Worker 276's** "Luke can't reach this plan's repository" is what #2573
   and #2588 fix.
+
+### 1.6 Who did what
+
+Dean, in Stage, which he shares with Charles: "it says everything is 'You'
+when really me and Charles are both doing work there." The renderer was
+written when a plan had one person. #2133, #2151 and #2152 shared plans,
+agents and calls with the whole workspace, and the copy kept saying "you".
+
+**Fixed in #2638** (the plan's "Edited by" line, each section's byline, the
+version history). A plan revision stored only its writer's kind, never the
+member, and the window drew every developer revision as the reader's own.
+Revisions now keep the member (`plan_revision.user_id`), and the wire carries
+`by: { userId, name }`. The window says "you" only where that id is the
+signed-in account's (`AccountSnapshot.id`), and names a teammate otherwise.
+It says "someone" where no member can be named: an account that is gone, or
+an edit from before writers were kept. Two members' saves are no longer
+joined into one revision, Luke's notes say whose call they were taken on,
+and a teammate's edit types in rather than landing as if the reader typed
+it.
+
+**Still wrong for a teammate's work**, from an audit of every attribution
+(most visible first). Two server facts shape the fixes:
+- rows are written under a conversation's opener, not its speaker, so
+  `messages.user_id` can't say who spoke or typed;
+- `voice_sessions.user_id` is the caller, so whose call a turn was is one
+  join away.
+
+Every fix reuses #2638's `by` and the account id.
+
+| Surface | Today, for a teammate's work | Fix | Size |
+|---|---|---|---|
+| Call tab: each call's divider and its bubbles | A teammate's call draws as the reader's own bubbles, with no name | `by` on each call, from `voice_sessions.user_id`. The divider reads "Charles's call", and his bubbles carry his name | S |
+| Who started an agent | Nothing says whose agent it is. The task draws as the reader's bubble | `startedBy` on the agent summary, from `coding_agent.user_id`: "Started by Charles" | S |
+| An agent tab's messages | A teammate steering an agent draws as the reader's own bubble; the sender is dropped at `steer.ts` | The sender in the typed message's metadata, then `by` on the message | M |
+| Inbox answers | "You chose…", "Your pick", whoever answered | `answeredBy`: a column on `inbox_item`, since the Inbox stays | M |
+| "Changed since you last looked" | Skips every developer edit, so a teammate's never lights up | Skip only the reader's own (`by.userId`) | S |
+| "Your API key was refused", "On your Mac" | Names the reader for the starter's key or Mac | "Charles's API key…", "On Charles's Mac", once `startedBy` lands | S |
+| "Needs you", the Dock badge, agent notifications | Every member is badged and notified for every member's agents | Decision 14 | M |
+| Automations list (open PRs) | Teammates' automations will list as yours | `createdBy`: "By Charles" | S |
+| "Read your inbox", "Your plans could not be read" | Mild | "the inbox", "the plans" | S |
+
+Correct today, and unchanged:
+- the caption strip's "You", which only ever shows your own call;
+- "End your call on…";
+- plan rows and pull-request cards, which name no author.
+
+One more, outside the window: the call history Luke's voice is given
+includes every member's earlier calls, so he may tell Dean "you said" about
+Charles's words. The caller field from the Call tab row lets the prompt name
+the speaker.
 
 ## 2. How others do it
 
@@ -431,11 +496,13 @@ message its agents", and lists them with their roles.
 
 ### 3.4 Settings (decision 8)
 
-- **The page list:** three headings, in the list's own `.section-heading`.
-  The Workspace row wears the workspace's tile and name.
-- **The Workspace page:** titled with the workspace's name. Its picker gives
+- **The page list:** three headings, in the list's own `.section-heading`:
+  the workspace's tile and name, *Account* with its hint in the tertiary
+  ink, and *This Mac*.
+- **The workspace page:** titled with the workspace's name. Its picker gives
   way to a row with the tile, the role and member count, and *Rename*
-  (decision 9).
+  (decision 9). Its GitHub group reads *GitHub*.
+- **Account's own page** reads *Profile*, in the list and at its head.
 
 ### 3.5 Switching (decisions 3, 4)
 
@@ -541,5 +608,6 @@ access findings in §1.4 are fixed in their own PRs, apart from this plan.
 - **Workspace deletion, role changes and ownership transfer.** These are
   real gaps (§1.4), but not about clarity. Each is its own proposal.
 - **Workspace-shared model keys, billing or templates.** These stay with the
-  account, and the *You, in every workspace* heading now says so.
+  account, and the *Account* heading's hint, *Applies in all your
+  workspaces*, now says so.
 - **Moving many plans at once,** or a bulk merge like ChatGPT's.
