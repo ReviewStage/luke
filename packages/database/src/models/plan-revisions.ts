@@ -7,6 +7,7 @@ import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
   type PlanDocument,
+  type PlanEditor,
   type PlanLastEdit,
   type PlanRevisionAnswer,
   type PlanRevisionLine,
@@ -17,6 +18,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { planRevision } from "../schemas/plan-revision.js";
@@ -34,7 +36,10 @@ import { planReachableBy } from "./workspace-store.js";
  * replay.
  * Saves the same writer makes one after another are one revision, moved on
  * by each: the notetaker's on one call, a coding agent's, or the developer's,
- * each while the revision's latest save is a few minutes old at most. A plan
+ * each while the revision's latest save is a few minutes old at most. A
+ * revision names the member it was made for, the developer editing or the
+ * one whose call the notetaker wrote on, so two members' saves are never one
+ * revision, and each reads the other's by name. A plan
  * that was written before history began has no revision for that content, so
  * the first save that finds it records it first, under `earlier`, at the
  * plan's last save, and the save after it has something to differ from. The
@@ -73,10 +78,15 @@ export type PlanWriter =
   | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof PLAN_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
-/** One save to record: the plan, its writer, its content before and after, and how many changes it made. */
+/** One save to record: the plan, its writer and the member who made it, its content before and after, and how many changes it made. */
 export interface PlanSaveRecord {
   readonly planId: string;
   readonly writer: PlanWriter;
+  /**
+   * The member the save is made for: the developer editing, or the one whose
+   * call or turn the notetaker writes on. A coding agent's save names none.
+   */
+  readonly userId: string;
   /** The plan's text before the save. */
   readonly before: string;
   /** Its text after it. */
@@ -91,6 +101,7 @@ type RevisionFailure = QueryError | Schema.SchemaError;
 const RevisionRowSchema = Schema.Struct({
   seq: Schema.Number,
   actor: Schema.Literals(Object.values(PLAN_ACTOR)),
+  userId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   liveSessionId: Schema.NullOr(Schema.String),
   changes: Schema.Number,
@@ -109,6 +120,7 @@ const findNewestRevision = SqlSchema.findOneOption({
         .select({
           seq: planRevision.seq,
           actor: planRevision.actor,
+          userId: planRevision.userId,
           agentId: planRevision.agentId,
           liveSessionId: planRevision.liveSessionId,
           changes: planRevision.changes,
@@ -127,6 +139,7 @@ const insertRevision = SqlSchema.void({
     planId: Schema.String,
     seq: Schema.Number,
     actor: Schema.Literals(Object.values(PLAN_ACTOR)),
+    userId: Schema.NullOr(Schema.String),
     agentId: Schema.NullOr(Schema.String),
     liveSessionId: Schema.NullOr(Schema.String),
     document: Schema.String,
@@ -157,6 +170,8 @@ const moveRevisionOn = SqlSchema.void({
 
 const LastEditRowSchema = Schema.Struct({
   actor: Schema.Literals(Object.values(PLAN_ACTOR)),
+  editorId: Schema.NullOr(Schema.String),
+  editorName: Schema.NullOr(Schema.String),
   liveSessionId: Schema.NullOr(Schema.String),
   at: InstantColumnSchema,
   agentModel: Schema.NullOr(Schema.String),
@@ -171,6 +186,8 @@ const findLastEdit = SqlSchema.findOneOption({
       db
         .select({
           actor: planRevision.actor,
+          editorId: user.id,
+          editorName: user.name,
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           agentModel: codingAgent.model,
@@ -178,6 +195,7 @@ const findLastEdit = SqlSchema.findOneOption({
         })
         .from(planRevision)
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .leftJoin(user, eq(user.id, planRevision.userId))
         .where(eq(planRevision.planId, planId))
         .orderBy(desc(planRevision.seq))
         .limit(1),
@@ -217,6 +235,8 @@ const findRevisionLines = SqlSchema.findAll({
       db
         .select({
           actor: planRevision.actor,
+          editorId: user.id,
+          editorName: user.name,
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           agentModel: codingAgent.model,
@@ -232,6 +252,7 @@ const findRevisionLines = SqlSchema.findAll({
         .from(planRevision)
         .innerJoin(plan, eq(plan.id, planRevision.planId))
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .leftJoin(user, eq(user.id, planRevision.userId))
         // The call a revision names by its Live API id, read as the transcript names it.
         .leftJoin(
           voiceSessions,
@@ -294,6 +315,8 @@ const findRevisionContents = SqlSchema.findAll({
 
 const SectionRevisionRowSchema = Schema.Struct({
   actor: Schema.Literals(Object.values(PLAN_ACTOR)),
+  editorId: Schema.NullOr(Schema.String),
+  editorName: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   liveSessionId: Schema.NullOr(Schema.String),
   at: InstantColumnSchema,
@@ -311,28 +334,46 @@ const findSectionRevisions = SqlSchema.findAll({
       db
         .select({
           actor: planRevision.actor,
+          editorId: user.id,
+          editorName: user.name,
           agentId: planRevision.agentId,
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           document: planRevision.document,
         })
         .from(planRevision)
+        .leftJoin(user, eq(user.id, planRevision.userId))
         .where(eq(planRevision.planId, planId))
         .orderBy(desc(planRevision.seq))
         .limit(PLAN_REVISION.SECTION_HISTORY + 1),
     ),
 });
 
+/** The member a revision names, where its account still stands; a coding agent's names none. */
+function editorOf(row: { readonly editorId: string | null; readonly editorName: string | null }): {
+  readonly by?: PlanEditor;
+} {
+  return row.editorId === null || row.editorName === null
+    ? {}
+    : { by: { userId: row.editorId, name: row.editorName } };
+}
+
 /** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
 function lastEditOf(row: LastEditRow): PlanLastEdit {
   return {
     actor: row.actor,
+    ...editorOf(row),
     ...(row.actor === PLAN_ACTOR.AGENT
       ? { label: row.agentTitle ?? row.agentModel ?? UNKNOWN_AGENT_LABEL }
       : undefined),
     at: row.at.getTime(),
     duringCall: row.liveSessionId !== null,
   };
+}
+
+/** The member a save is kept under: none for a coding agent's, whose writer is the agent. */
+function memberOf(record: PlanSaveRecord): string | null {
+  return record.writer.actor === PLAN_ACTOR.AGENT ? null : record.userId;
 }
 
 /** The writer's agent, where a coding agent wrote it. */
@@ -353,13 +394,16 @@ function restoredOf(writer: PlanWriter): number | null {
 /**
  * Whether a save by the writer, now, joins the newest revision rather than
  * starting one. Note that a restore joins nothing and nothing joins it,
- * because each is the one revision that undoes it.
+ * because each is the one revision that undoes it, and that two members'
+ * saves never join, because each revision names one member.
  */
-function joins(newest: RevisionRow, writer: PlanWriter, now: Date): boolean {
+function joins(newest: RevisionRow, record: PlanSaveRecord, now: Date): boolean {
+  const { writer } = record;
   return (
     newest.restoredFrom === null &&
     restoredOf(writer) === null &&
     newest.actor === writer.actor &&
+    newest.userId === memberOf(record) &&
     newest.agentId === agentOf(writer) &&
     newest.liveSessionId === callOf(writer) &&
     now.getTime() - newest.at.getTime() <= PLAN_REVISION.JOIN_WITHIN_MS
@@ -383,6 +427,7 @@ function recordEarlier(
           planId: record.planId,
           seq: 1,
           actor: PLAN_ACTOR.EARLIER,
+          userId: null,
           agentId: null,
           liveSessionId: null,
           document: record.before,
@@ -396,10 +441,11 @@ function recordEarlier(
   });
 }
 
-/** A revision's writer as each section it changed names them: the actor, the agent where one wrote, and whether on a call. */
+/** A revision's writer as each section it changed names them: the actor, the member or the agent where one wrote, and whether on a call. */
 function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
   return {
     actor: row.actor,
+    ...editorOf(row),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
     ...(row.liveSessionId === null ? undefined : { duringCall: true }),
   };
@@ -407,7 +453,8 @@ function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
 
 /**
  * Records one save that changed the plan: the newest revision moved on where
- * the same writer made it lately, a new revision otherwise. Run inside the
+ * the same writer, for the same member, made it lately, a new revision
+ * otherwise, kept under the member. Run inside the
  * transaction that holds the plan's row, so two saves of one plan never take
  * one number.
  */
@@ -418,7 +465,7 @@ export function recordRevision(
     const now = yield* DateTime.nowAsDate;
     const { writer, after } = record;
     const newest = yield* findNewestRevision(record.planId);
-    if (Option.isSome(newest) && joins(newest.value, writer, now)) {
+    if (Option.isSome(newest) && joins(newest.value, record, now)) {
       return yield* moveRevisionOn({
         planId: record.planId,
         seq: newest.value.seq,
@@ -432,6 +479,7 @@ export function recordRevision(
       planId: record.planId,
       seq: last + 1,
       actor: writer.actor,
+      userId: memberOf(record),
       agentId: agentOf(writer),
       liveSessionId: callOf(writer),
       document: after,

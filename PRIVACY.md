@@ -110,10 +110,13 @@ agents started on it, and by you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
 unsaved words stay in Luke's memory on your Mac, never on disk. Our service
 keeps the plan's history without limit: the document after each revision
-(saves one writer makes close together count as one), who wrote it (you,
-editing or restoring which version; the notetaker, on which call; or which
-coding agent) and when, and who last changed each section and when, so Luke
-can say so beside it. A coding agent's last fifty saves are also kept as its
+(saves one writer makes close together count as one), who wrote it (you or
+another member, editing or restoring which version, kept as that member's
+account; the notetaker, on which member's call; or which coding agent) and
+when, and who last changed each section and when, so Luke can say so beside
+it, naming each member by their account's name to every member of the
+workspace. A revision of a member whose account is deleted keeps no account
+and names nobody. A coding agent's last fifty saves are also kept as its
 notes, so Luke can tell you what it changed. All of it is stored as written,
 bound to your account and readable by our own operators, like the
 conversation described below. Luke on your Mac remembers, for each plan, only

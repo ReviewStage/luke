@@ -112,6 +112,8 @@ export interface VersionSubject {
   readonly summary: (line: PlanRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
+  /** Whether every person's revision is the reader's own, as the account's template's are; a plan's are its members'. */
+  readonly own: boolean;
 }
 
 /** What the page says while the subject has no revision yet. */
@@ -365,8 +367,8 @@ function SectionRow({
 /** The reader as their account names them, or nobody while no account is signed in. */
 function readerOf(account: AccountSnapshot): HistoryReader {
   return account.status === ACCOUNT_STATUS.SIGNED_IN
-    ? { name: account.name ?? account.email, pictureUrl: account.pictureUrl }
-    : { name: undefined, pictureUrl: undefined };
+    ? { id: account.id, name: account.name ?? account.email, pictureUrl: account.pictureUrl }
+    : { id: undefined, name: undefined, pictureUrl: undefined };
 }
 
 /** The versions as quiet rows while they are read, in a row's own type. */
@@ -587,6 +589,7 @@ export function planVersionSubject(plans: PlansControl): VersionSubject {
     summary: revisionSummary,
     onShowSource:
       boundFor === undefined ? undefined : (source) => plans.onShowSource(boundFor, source),
+    own: false,
   };
 }
 
@@ -636,7 +639,9 @@ export function DesktopVersionHistory({
     sections?.find((section) => section.heading === opened?.heading) ?? sections?.[0];
   const unit = chosenSection?.unit;
   const openedAuthor =
-    openedLine === undefined ? undefined : revisionAuthorOf(openedLine, reader, agents);
+    openedLine === undefined
+      ? undefined
+      : revisionAuthorOf(openedLine, reader, agents, subject.own);
   const openedSource =
     openedLine === undefined || openedAuthor === undefined
       ? undefined
@@ -704,7 +709,7 @@ export function DesktopVersionHistory({
               {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
               <ol className="version-list">
                 {revisions.map((line) => {
-                  const author = revisionAuthorOf(line, reader, agents);
+                  const author = revisionAuthorOf(line, reader, agents, subject.own);
                   return (
                     <RevisionRow
                       key={line.seq}
@@ -740,7 +745,7 @@ export function DesktopVersionHistory({
             {openedLine === undefined ? null : (
               <>
                 <SectionsHead
-                  author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents)}
+                  author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)}
                   source={openedSource}
                   onBack={closeSections}
                 />

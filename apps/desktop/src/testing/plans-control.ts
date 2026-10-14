@@ -120,6 +120,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     restoring: false,
     shown: true,
     signedIn: true,
+    me: undefined,
     plans: [],
     archived: [],
     listed: { plans: overrides.plans ?? [], archived: overrides.archived ?? [] },

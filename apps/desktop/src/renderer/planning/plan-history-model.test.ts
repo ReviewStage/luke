@@ -24,6 +24,8 @@ const HOUR = 3_600_000;
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const NOW = Date.UTC(2026, 9, 11, 18, 0);
 const DOCUMENT_TEXT = DOCUMENT_PLAN.document.body.trimEnd();
+const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
 function line(overrides: Partial<PlanRevisionLine> = {}): PlanRevisionLine {
   return {
@@ -50,14 +52,21 @@ function marked(diff: ReturnType<typeof versionDiff>, kind: string): string[] {
 }
 
 test("a revision is drawn under its writer: the reader by their account's picture, and an agent by the harness of the agent the line names", () => {
-  const reader = { name: "Dean", pictureUrl: "https://avatars.githubusercontent.com/u/1" };
+  const reader = {
+    id: DEAN.userId,
+    name: "Dean",
+    pictureUrl: "https://avatars.githubusercontent.com/u/1",
+  };
   const agents = [{ id: AGENT_ID, model: "openai/gpt-6-astra" }];
   const agentEdit = { actor: PLAN_ACTOR.AGENT, label: "Invite emails", at: NOW, duringCall: false };
+  const developerEdit = { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false, by: DEAN };
 
-  assert.deepEqual(
-    revisionAuthorOf({ lastEdit: { ...agentEdit, actor: PLAN_ACTOR.DEVELOPER } }, reader, agents),
-    { kind: REVISION_AUTHOR.PERSON, you: true, ...reader },
-  );
+  assert.deepEqual(revisionAuthorOf({ lastEdit: developerEdit }, reader, agents), {
+    kind: REVISION_AUTHOR.PERSON,
+    you: true,
+    name: reader.name,
+    pictureUrl: reader.pictureUrl,
+  });
   assert.deepEqual(revisionAuthorOf({ lastEdit: agentEdit, agentId: AGENT_ID }, reader, agents), {
     kind: REVISION_AUTHOR.AGENT,
     title: "Invite emails",
@@ -72,7 +81,11 @@ test("a revision is drawn under its writer: the reader by their account's pictur
 });
 
 test("a revision names its writer as the developer knows them, and says what it did", () => {
-  const reader = { name: "Dean", pictureUrl: "https://avatars.githubusercontent.com/u/1" };
+  const reader = {
+    id: DEAN.userId,
+    name: "Dean",
+    pictureUrl: "https://avatars.githubusercontent.com/u/1",
+  };
   const agents = [{ id: AGENT_ID, model: "openai/gpt-6-astra" }];
   const named = (edit: Partial<PlanLastEdit>, agentId?: string) =>
     authorName(
@@ -83,7 +96,7 @@ test("a revision names its writer as the developer knows them, and says what it 
       ),
     );
   assert.equal(named({}), "Luke");
-  assert.equal(named({ actor: PLAN_ACTOR.DEVELOPER }), "You");
+  assert.equal(named({ actor: PLAN_ACTOR.DEVELOPER, by: DEAN }), "You");
   assert.equal(
     named({ actor: PLAN_ACTOR.AGENT, label: "Invite emails" }, AGENT_ID),
     "Invite emails",
@@ -321,4 +334,31 @@ test("a revision's Open goes to its agent's tab, Luke's call, or Luke's moment i
   );
   assert.equal(sourceLabel({ kind: REVISION_SOURCE.CALL, callId }, agent), "Open in Transcript");
   assert.equal(sourceLabel({ kind: REVISION_SOURCE.WORK, at: NOW }, agent), "Open in Work");
+});
+
+test("two members of a plan each see the other's revisions under the other's name, and only their own as You", () => {
+  const edit = (by: typeof DEAN) => ({
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false, by },
+  });
+  const asDean = { id: DEAN.userId, name: "Dean Stratakos", pictureUrl: undefined };
+  const asCharles = { id: CHARLES.userId, name: "Charles Pan", pictureUrl: undefined };
+
+  assert.equal(authorName(revisionAuthorOf(edit(DEAN), asDean, [])), "You");
+  assert.equal(authorName(revisionAuthorOf(edit(CHARLES), asDean, [])), "Charles Pan");
+  assert.equal(authorName(revisionAuthorOf(edit(CHARLES), asCharles, [])), "You");
+  assert.equal(authorName(revisionAuthorOf(edit(DEAN), asCharles, [])), "Dean Stratakos");
+});
+
+test("a person's revision the service names nobody for, or read with no account id, is never You", () => {
+  const unnamed = { lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false } };
+  const named = { lastEdit: { ...unnamed.lastEdit, by: DEAN } };
+  const reader = { id: DEAN.userId, name: "Dean Stratakos", pictureUrl: undefined };
+
+  assert.equal(authorName(revisionAuthorOf(unnamed, reader, [])), "Someone");
+  assert.equal(
+    authorName(revisionAuthorOf(named, { ...reader, id: undefined }, [])),
+    "Dean Stratakos",
+  );
+  // The account's own template is theirs alone, so its every revision is the reader's.
+  assert.equal(authorName(revisionAuthorOf(unnamed, reader, [], true)), "You");
 });

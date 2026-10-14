@@ -238,6 +238,7 @@ export function App(): React.JSX.Element {
     run: state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE },
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     account: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined,
+    accountId: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined,
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
     shown: tab === PANEL_TAB.PLANS,

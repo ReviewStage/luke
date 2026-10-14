@@ -579,6 +579,7 @@ export class SettingsStore {
       account
         ? {
             status: ACCOUNT_STATUS.SIGNED_IN,
+            ...(account.id ? { id: account.id } : undefined),
             email: account.email,
             ...(account.name ? { name: account.name } : undefined),
             ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),

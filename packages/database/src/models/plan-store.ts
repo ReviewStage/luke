@@ -219,7 +219,7 @@ function agentLabelsOf(
 /**
  * Who last changed one section, as its line reads it: a coding agent named by
  * its label, or as an agent whose row is gone, or whose writer was kept
- * before agents were.
+ * before agents were; a member by their id and name, where one is named.
  */
 function sectionEditOf(
   writer: PlanSectionWriter,
@@ -231,6 +231,7 @@ function sectionEditOf(
     section,
     actor,
     ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
+    ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
     duringCall: writer.duringCall === true,
   };

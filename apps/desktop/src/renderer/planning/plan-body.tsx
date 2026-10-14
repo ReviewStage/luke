@@ -22,6 +22,7 @@ import {
   EditableTitle,
   PlanDocumentEditor,
 } from "./plan-document-editor";
+import { UNNAMED_MEMBER } from "./plan-history-model";
 import {
   type ChaseState,
   chaseBehind,
@@ -118,11 +119,33 @@ function lastEditOf(plan: Plan): PlanLastEdit | undefined {
   return { actor: PLAN_ACTOR.AGENT, label: journaled.label, at: journaled.at, duringCall: false };
 }
 
-/** Who wrote an edit, in the developer's words; nobody for a revision from before history. */
-function editorOf(edit: PlanLastEdit): string | undefined {
+/**
+ * Who reads the plan, as its edits are named for them: the signed-in
+ * account's id, whose own edits read as "you", and whether every edit is
+ * theirs, as the account's own template's are. Nobody, as a capture or a
+ * test draws it, reads no edit as theirs.
+ */
+export interface EditReader {
+  readonly id: string | undefined;
+  readonly own: boolean;
+}
+
+const NO_READER: EditReader = { id: undefined, own: false };
+
+/** Whether the member an edit names is the reader. */
+function isReader(edit: PlanLastEdit, reader: EditReader): boolean {
+  return reader.own || (reader.id !== undefined && edit.by?.userId === reader.id);
+}
+
+/**
+ * Who wrote an edit, in the reader's words: "you" only for the reader's own,
+ * a teammate by name, and "someone" where the service names no member; nobody
+ * for a revision from before history.
+ */
+function editorOf(edit: PlanLastEdit, reader: EditReader): string | undefined {
   switch (edit.actor) {
     case PLAN_ACTOR.DEVELOPER:
-      return "you";
+      return isReader(edit, reader) ? "you" : (edit.by?.name ?? UNNAMED_MEMBER.toLowerCase());
     case PLAN_ACTOR.NOTETAKER:
       return "Luke";
     case PLAN_ACTOR.AGENT:
@@ -132,11 +155,17 @@ function editorOf(edit: PlanLastEdit): string | undefined {
   }
 }
 
+/** Whose call Luke wrote an edit on: the reader's, a teammate's by name, or a call nobody can be named for. */
+function callOf(edit: PlanLastEdit, reader: EditReader): string {
+  if (isReader(edit, reader)) return " during your call";
+  return edit.by === undefined ? " during a call" : ` during ${edit.by.name}'s call`;
+}
+
 /** The line over the document, and each section's: "Edited by Luke during your call · 2h ago". */
-function editedLine(edit: PlanLastEdit, now: number): string {
-  const editor = editorOf(edit);
+function editedLine(edit: PlanLastEdit, now: number, reader: EditReader): string {
+  const editor = editorOf(edit, reader);
   const by = editor === undefined ? "Edited" : `Edited by ${editor}`;
-  const call = edit.duringCall ? " during your call" : "";
+  const call = edit.duringCall ? callOf(edit, reader) : "";
   return `${by}${call} · ${agoText(edit.at, now)}`;
 }
 
@@ -146,13 +175,15 @@ type ShowHistory = (save: number | undefined) => void;
 /** The line over the document, which opens the plan's history where the window offers it. */
 function EditedLine({
   edit,
+  reader,
   onShowHistory,
 }: {
   edit: PlanLastEdit;
+  reader: EditReader;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   const now = useMinute();
-  const line = editedLine(edit, now);
+  const line = editedLine(edit, now, reader);
   if (onShowHistory === undefined) return <p className="plan-edit-note">{line}</p>;
   return (
     <p className="plan-edit-note">
@@ -196,6 +227,7 @@ interface SectionMarks {
   readonly edits: ReadonlyMap<string, PlanLastEdit>;
   readonly changed: ReadonlySet<string>;
   readonly now: number;
+  readonly reader: EditReader;
   readonly onShowHistory: ShowHistory | undefined;
 }
 
@@ -208,7 +240,7 @@ interface SectionMarks {
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
-  const line = editedLine(edit, marks.now);
+  const line = editedLine(edit, marks.now, marks.reader);
   const { onShowHistory } = marks;
   if (onShowHistory === undefined) return <span className="plan-unit-byline">{line}</span>;
   const named = heading === "" ? line : `${heading}: ${line}`;
@@ -256,13 +288,21 @@ function opened(plan: Plan): Chase {
   };
 }
 
-/** The chase aimed at the plan as handed over now: a new target for the same plan, a fresh start for another. */
-function aimed(chase: Chase, plan: Plan): Chase {
+/**
+ * The chase aimed at the plan as handed over now: a new target for the same
+ * plan, a fresh start for another. Note that only the reader's own edit lands
+ * at once, because a teammate's arrives unseen and types in as Luke's does.
+ */
+function aimed(chase: Chase, plan: Plan, reader: EditReader): Chase {
   if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
-  // The developer's own edit lands at once: they watched it being typed already.
+  // The reader's own edit lands at once: they watched it being typed already.
   const lastEditAt = plan.lastEdit?.at;
-  const ownEdit = plan.lastEdit?.actor === PLAN_ACTOR.DEVELOPER && lastEditAt !== chase.lastEditAt;
+  const ownEdit =
+    plan.lastEdit !== undefined &&
+    plan.lastEdit.actor === PLAN_ACTOR.DEVELOPER &&
+    isReader(plan.lastEdit, reader) &&
+    lastEditAt !== chase.lastEditAt;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
   const aim = { reduced: ownEdit || prefersReducedMotion() };
   const state = chaseRetargeted(chase.state, body, aim);
@@ -274,11 +314,11 @@ function aimed(chase: Chase, plan: Plan): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function usePlanChase(plan: Plan, live: boolean): PlanChase {
+function usePlanChase(plan: Plan, live: boolean, reader: EditReader): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   if (chase.planId !== plan.id || chase.body !== plan.document.body) {
-    current = aimed(chase, plan);
+    current = aimed(chase, plan, reader);
     setChase(current);
   }
   const behind = chaseBehind(current.state);
@@ -487,6 +527,7 @@ export function PlanBody({
   looks = NO_LOOKS,
   page,
   sectionLinks,
+  reader = NO_READER,
 }: {
   plan: Plan;
   live: boolean;
@@ -501,8 +542,10 @@ export function PlanBody({
   page?: { actions: React.ReactNode; note: React.ReactNode };
   /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
+  /** Who reads it, whose own edits are named "you"; without it, no edit is. */
+  reader?: EditReader;
 }): React.JSX.Element {
-  const { views, behind, jumps } = usePlanChase(plan, live);
+  const { views, behind, jumps } = usePlanChase(plan, live, reader);
   const editable = onEdit !== undefined;
   const text = editable ? plan.document.body : undefined;
   const editing = usePlanEditing(plan.id, text, onEdit ?? NO_EDIT);
@@ -511,6 +554,7 @@ export function PlanBody({
     edits: new Map((plan.sectionEdits ?? []).map(({ section, ...edit }) => [section, edit])),
     changed: looks.changed,
     now,
+    reader,
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
@@ -640,7 +684,9 @@ export function PlanBody({
     ),
   );
   const editedNote =
-    edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />;
+    edited === undefined ? null : (
+      <EditedLine edit={edited} reader={reader} onShowHistory={onShowHistory} />
+    );
   return (
     <div ref={scroller} className="plan-document-scroll">
       {page === undefined ? editedNote : null}

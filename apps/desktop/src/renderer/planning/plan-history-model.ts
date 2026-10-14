@@ -1,7 +1,12 @@
 import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
 import type { ModelProvider } from "@sidecar/features/models-wire";
 import { type PlanSection, planSections } from "@sidecar/features/plan-document";
-import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/features/plan-wire";
+import {
+  PLAN_ACTOR,
+  type PlanDocument,
+  type PlanEditor,
+  type PlanRevisionLine,
+} from "@sidecar/features/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
@@ -14,7 +19,7 @@ import { TAB_WORDS } from "./tab-strip-model";
  *
  * A revision is drawn under its writer the way the rest of the window draws
  * them: Luke for the notetaker, the reader by their account's picture as
- * You, a coding agent by its harness and title, and Earlier for the plan as
+ * You, a teammate by their name, a coding agent by its harness and title, and Earlier for the plan as
  * it stood before its history began. Its line says
  * what it did: how many changes its saves made, or which version a restore
  * brought back. A version is drawn whole, a unit to each section of its
@@ -26,6 +31,9 @@ import { TAB_WORDS } from "./tab-strip-model";
  * "Edited by" names the save that last changed it, which is found
  * as the revision it moved on. Everything here is pure.
  */
+
+/** How a person's revision is named where the service names no member: their account is gone, or it predates writers being kept. */
+export const UNNAMED_MEMBER = "Someone";
 
 /** A section as a version compares it: its heading and its words, wherever they stood. */
 type SectionWords = Pick<PlanSection, "heading" | "text">;
@@ -85,15 +93,43 @@ export type RevisionAuthor =
     }
   | { readonly kind: typeof REVISION_AUTHOR.EARLIER };
 
-/** The one reading the history, as their account names them: none while no account is signed in. */
+/**
+ * The one reading the history, as their account names them: none while no
+ * account is signed in. The id is what tells their revisions from a
+ * teammate's; without one, nobody is drawn as them.
+ */
 export interface HistoryReader {
+  readonly id: string | undefined;
   readonly name: string | undefined;
   readonly pictureUrl: string | undefined;
 }
 
 /**
- * Who wrote a revision: the developer as the reader, since a plan has one
- * person today; Luke; a coding agent by the title its row has now, wearing
+ * The member a person's revision names, as its row draws them: the reader,
+ * by their own name and picture, where it is theirs or where every revision
+ * is (`own`, the account's template); a teammate by the name the service
+ * holds now; nobody the row can name where the service names nobody.
+ */
+function personOf(
+  by: PlanEditor | undefined,
+  reader: HistoryReader,
+  own: boolean,
+): Extract<RevisionAuthor, { kind: typeof REVISION_AUTHOR.PERSON }> {
+  const yours = own || (by !== undefined && reader.id !== undefined && by.userId === reader.id);
+  if (yours)
+    return {
+      kind: REVISION_AUTHOR.PERSON,
+      you: true,
+      name: reader.name,
+      pictureUrl: reader.pictureUrl,
+    };
+  return { kind: REVISION_AUTHOR.PERSON, you: false, name: by?.name, pictureUrl: undefined };
+}
+
+/**
+ * Who wrote a revision: a member, the reader as You only where the revision
+ * names them, or every revision where `own` says the history is theirs
+ * alone; Luke; a coding agent by the title its row has now, wearing
  * the harness of the agent the line names among the plan's `agents`, or no
  * harness where the agent is not among them; or nobody.
  */
@@ -101,11 +137,12 @@ export function revisionAuthorOf(
   line: Pick<PlanRevisionLine, "lastEdit" | "agentId">,
   reader: HistoryReader,
   agents: readonly Pick<CodingAgentSummary, "id" | "model">[],
+  own = false,
 ): RevisionAuthor {
   const { lastEdit } = line;
   switch (lastEdit.actor) {
     case PLAN_ACTOR.DEVELOPER:
-      return { kind: REVISION_AUTHOR.PERSON, you: true, ...reader };
+      return personOf(lastEdit.by, reader, own);
     case PLAN_ACTOR.NOTETAKER:
       return { kind: REVISION_AUTHOR.LUKE };
     case PLAN_ACTOR.AGENT: {
@@ -121,11 +158,16 @@ export function revisionAuthorOf(
   }
 }
 
-/** A revision's writer as their row names them: You for the reader, another person by name, Luke, an agent by its title, or Earlier. */
+/**
+ * A revision's writer as their row names them: You for the reader, another
+ * person by name, Luke, an agent by its title, or Earlier. A member the
+ * service names nobody for, one whose account is gone or who wrote before
+ * writers were kept, is Someone, never You.
+ */
 export function authorName(author: RevisionAuthor): string {
   switch (author.kind) {
     case REVISION_AUTHOR.PERSON:
-      return author.you ? "You" : (author.name ?? "Someone");
+      return author.you ? "You" : (author.name ?? UNNAMED_MEMBER);
     case REVISION_AUTHOR.LUKE:
       return "Luke";
     case REVISION_AUTHOR.AGENT:

@@ -12,7 +12,7 @@ import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
-import { PlanBody } from "../planning/plan-body";
+import { type EditReader, PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -67,6 +67,9 @@ const PAGE_LINE = {
 
 /** The id the template is drawn under as a plan's document, which names no plan of the account's. */
 export const TEMPLATE_DOCUMENT_ID = "plan-template";
+
+/** Who reads the template: its account, whose every edit it is. */
+const TEMPLATE_READER: EditReader = { id: undefined, own: true };
 
 /** The workspace the template's document names: none, since the template is the account's own and stands in no workspace. */
 const TEMPLATE_WORKSPACE_ID = "plan-template";
@@ -355,6 +358,7 @@ function TemplateDocument({
         <PlanBody
           plan={templateDocument(template.text, template.lastEdit)}
           live={false}
+          reader={TEMPLATE_READER}
           onEdit={template.edit}
           onShowHistory={onShowHistory}
           page={{

@@ -23,6 +23,7 @@ import { RelativeTime } from "./relative-time";
 const NOW = new Date(2026, 9, 14, 18, 0).getTime();
 
 const SECOND = 1_000;
+const DANA = { userId: "user-dana", name: "Dana Reyes" };
 const DAY = 86_400_000;
 
 const roots: Root[] = [];
@@ -47,7 +48,7 @@ function saidOf(at: number) {
   const plan: Plan = {
     ...DOCUMENT_PLAN,
     updatedAt: at,
-    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false, by: DANA },
   };
   const row = mount(
     createElement(SidebarPlan, {
@@ -59,7 +60,9 @@ function saidOf(at: number) {
       onOpen: () => undefined,
     }),
   );
-  const body = mount(createElement(PlanBody, { plan, live: false }));
+  const body = mount(
+    createElement(PlanBody, { plan, live: false, reader: { id: DANA.userId, own: false } }),
+  );
   return {
     row: row.querySelector(".sidebar-plan-time time")?.textContent,
     edited: body.querySelector(".plan-edit-note")?.textContent,

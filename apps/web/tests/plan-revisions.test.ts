@@ -13,6 +13,7 @@ import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { PLAN_HEADING, type PlanNote } from "@sidecar/features/plan-template";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/features/plan-wire";
+import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -43,12 +44,18 @@ const DRAFT_NOTES: readonly PlanNote[] = [
   added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
 ];
 
-const openUser = Effect.gen(function* () {
-  const db = yield* Database;
-  const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  return userId;
-});
+const openNamedUser = (name: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name, email: `${userId}@luke.test` });
+    return userId;
+  });
+
+const openUser = openNamedUser("Test User");
+
+/** The developer, as the writer of an edit the window sends. */
+const DEVELOPER: PlanWriter = { actor: PLAN_ACTOR.DEVELOPER };
 
 const openPlan = Effect.gen(function* () {
   const userId = yield* openUser;
@@ -189,5 +196,85 @@ it.layer(getTestDB())("a plan's history", (it) => {
       assert.deepEqual(yield* contentOf(userId, planId), before);
       assert.equal((yield* revisionsOf(userId, planId)).length, 2);
     }),
+  );
+  it.effect(
+    "two members' edits are each a revision under the member who made it, and each reads the other's by name",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openNamedUser("Dean Stratakos");
+        const plan = yield* startPlan(dean, { name: "Teammate invitations" });
+        const charles = yield* openNamedUser("Charles Pan");
+        yield* joinWorkspace(plan.workspaceId, charles);
+        const planId = plan.id;
+        yield* saveNotes(
+          { userId: dean, planId },
+          [added(PLAN_HEADING.GOAL, "Members invite.")],
+          DEVELOPER,
+        );
+        // Within the join's reach, which one member's saves in a row would share.
+        yield* saveNotes(
+          { userId: charles, planId },
+          [added(PLAN_HEADING.APPROACH, "Invites expire.")],
+          DEVELOPER,
+        );
+
+        const DEAN = { userId: dean, name: "Dean Stratakos" };
+        const CHARLES = { userId: charles, name: "Charles Pan" };
+        for (const reader of [dean, charles]) {
+          const lines = yield* revisionsOf(reader, planId);
+          assert.deepEqual(
+            lines.map((line) => line.lastEdit.by),
+            [CHARLES, DEAN],
+          );
+          const stored = Option.getOrThrow(yield* readPlan(reader, planId));
+          assert.deepEqual(stored.plan.lastEdit?.by, CHARLES);
+          const bySection = new Map(
+            stored.plan.sectionEdits?.map((edit) => [edit.section, edit.by]),
+          );
+          assert.deepEqual(bySection.get(PLAN_HEADING.GOAL), DEAN);
+          assert.deepEqual(bySection.get(PLAN_HEADING.APPROACH), CHARLES);
+        }
+      }),
+  );
+
+  it.effect("Luke's notes on a member's call are kept under that member", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
+
+      const [line] = yield* revisionsOf(userId, planId);
+      assert.deepEqual(line?.lastEdit.by, { userId, name: "Test User" });
+    }),
+  );
+
+  it.effect(
+    "a coding agent's revision names no member, and a member whose account is gone is named by nobody",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId, workspaceId } = yield* openPlan;
+        const teammate = yield* openNamedUser("Ana Kowalski");
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* saveNotes(
+          { userId: teammate, planId },
+          [added(PLAN_HEADING.GOAL, "Members invite.")],
+          DEVELOPER,
+        );
+        const agentId = yield* startAgent(userId, planId);
+        yield* saveNotes({ userId, planId }, [added(PLAN_HEADING.APPROACH, "Invites expire.")], {
+          actor: PLAN_ACTOR.AGENT,
+          agentId,
+        });
+        const db = yield* Database;
+        yield* db.delete(user).where(eq(user.id, teammate));
+
+        const lines = yield* revisionsOf(userId, planId);
+        assert.deepEqual(
+          lines.map((line) => [line.lastEdit.actor, line.lastEdit.by]),
+          [
+            [PLAN_ACTOR.AGENT, undefined],
+            [PLAN_ACTOR.DEVELOPER, undefined],
+          ],
+        );
+      }),
   );
 });

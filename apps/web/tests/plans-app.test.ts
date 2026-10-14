@@ -1151,8 +1151,10 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const at = plan.lastEdit?.at ?? assert.fail("the edit names no last edit");
         assert.deepEqual(plan.document, { body: value, assumptions: [] });
         assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
+        const by = plan.lastEdit?.by ?? assert.fail("the edit names no member");
+        assert.equal(by.userId, owner);
         assert.deepEqual(plan.sectionEdits, [
-          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
+          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, by, at, duringCall: false },
         ]);
         assert.deepEqual(
           page.revisions.map(({ seq, lastEdit, changes }) => [seq, lastEdit.actor, changes]),
