@@ -51,8 +51,9 @@ Dean: "approve and unfreeze", with these changes:
    in a small PR. A failing run records its failure, and the next firing
    tries again. A departed creator's automation fails each run with the
    reason shown, and owners and admins delete it.
-6. **Still open:** whether a personal automation's runs are visible to the
-   workspace (D2).
+6. **Decided:** a personal automation's runs are workspace-visible (D2), and
+   Editor · round 2 is approved ("Yes, build it"). Charles's Chat is a
+   prototype that won't merge, so asks stay on the Inbox.
 
 ## TL;DR (round 2)
 
@@ -344,23 +345,13 @@ step drops it (D9).
 
 A run is a planless agent (D4) with its Inbox items.
 
-**Still open with Dean.** How visibility works today:
-- Every member of a plan's workspace reads and answers that plan's Inbox
-  items (`inbox-store.ts:47-53`, `itemReachableBy`).
-- The account-wide Inbox lists the items of every plan the account
-  reaches, so teammates already see each other's agents' asks on shared
-  plans.
-
-The question: should a **personal** automation's runs (their agents and
-Inbox items) be visible to the workspace, as every plan's are, or only to
-their creator plus owners and admins?
-
-- **R: workspace-visible.** It is one rule for every agent, it needs no new
-  column, and "personal" means only who sees and changes the automation's
-  settings.
-- **Private** needs a `visibility` column on agents and Inbox items and a
-  filter in every agent and Inbox read: about M on top of #3 and #6, with
-  the leak risk on every read.
+**Decided (Dean): workspace-visible, one rule.** Every member of a plan's
+workspace already reads and answers that plan's Inbox items, and the
+account-wide Inbox lists the items of every plan the account reaches. A
+personal automation's runs, and their Inbox items, are visible to the
+workspace in the same way. "Personal" governs only who sees and changes the
+automation's settings. There is no `visibility` column on agents or Inbox
+items.
 
 ### D3. Runs as the creator: accepted, with a service identity on the roadmap
 
@@ -397,7 +388,7 @@ rework."
   - `organization_id` (the workspace), backfilled from the plan;
   - `plan_id` becomes nullable;
   - `automation_id` (set null), which labels the tab "⚡ <automation>";
-  - A `visibility` column comes only if Dean picks private runs (D2).
+  - No `visibility` column: runs are workspace-visible (D2).
   - `repositories`, an ordered list backfilled as `[repository]`.
     `repository` stays as its first entry for readers until full
     multi-repo (`automations-multi-repo.md`).
@@ -405,8 +396,7 @@ rework."
   nullable.
 
 **Permissions.** An agent is reachable by a member of its
-`organization_id` (and, should Dean pick private runs, a personal
-automation's agents only by their starter, owners, and admins). A plan's agents keep their plan check, so nothing changes for
+`organization_id`, a personal automation's included (D2). A plan's agents keep their plan check, so nothing changes for
 them. Start serialises on the automation's row lock for a planless run,
 which `withAutomationLocked` already takes.
 
@@ -602,7 +592,4 @@ workspace-scoped reach it reuses.
 
 ## 6. For Dean
 
-1. D2: should a personal automation's runs be visible to the workspace, as
-   every plan's agents and Inbox items are (R), or private to the creator,
-   owners, and admins?
-2. Editor · round 2 in the show.
+Nothing open. The plan is approved, and building in §4's order.
