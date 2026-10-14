@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { appLinkFromAddress } from "../src/open-address";
 
 /**
@@ -10,6 +10,10 @@ import { appLinkFromAddress } from "../src/open-address";
  */
 
 const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test("a plan's address, or a section's, opens that plan in the app, whichever host served the page", () => {
   assert.equal(
@@ -35,4 +39,14 @@ test("an address that names no plan opens nothing", () => {
   ] as const) {
     assert.equal(appLinkFromAddress(pathname, hash), undefined, `${pathname}${hash}`);
   }
+});
+
+test("a browser without URL.parse, as Safari before 18 is, still opens the plan", () => {
+  vi.stubGlobal("URL", Object.assign(class extends URL {}, { parse: undefined }));
+
+  assert.equal(
+    appLinkFromAddress(`/acme/plan/${PLAN_ID}`, "#rollout"),
+    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
+  );
+  assert.equal(appLinkFromAddress("/acme/plans/x", ""), undefined);
 });

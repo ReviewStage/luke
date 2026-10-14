@@ -265,6 +265,20 @@ function decodedPath(pathname: string): string | undefined {
   return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
 }
 
+/**
+ * A target read as an address, or nothing where it is none. Note that it is
+ * `new URL` caught rather than `URL.parse`, because the "Open in Luke" page
+ * reads a link in whatever browser opened it, and Safari before 18 has no
+ * `URL.parse`.
+ */
+function parsedUrl(target: string): URL | undefined {
+  try {
+    return new URL(target);
+  } catch {
+    return undefined;
+  }
+}
+
 /** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */
 function headingAnchor(heading: string): string {
   return heading.toLowerCase().replace(ANCHOR_DROPPED, "").replace(/ /gu, "-");
@@ -337,8 +351,8 @@ function repositoryFields(url: URL, repository: string | null) {
  * else a GitHub address names.
  */
 function fieldsOf(target: string, repository: string | null) {
-  const url = URL.parse(target);
-  if (url === null) return undefined;
+  const url = parsedUrl(target);
+  if (url === undefined) return undefined;
   if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
   if (LINK.PROTOCOLS.has(url.protocol) && url.host === LINK.HOST) return planFields(url);
   if (url.origin === GITHUB.ORIGIN) return repositoryFields(url, repository);
@@ -546,8 +560,8 @@ export function decodeMention(target: string, repository: string | null): Mentio
  */
 export function appLinkOf(target: string): string | undefined {
   if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
-  const url = URL.parse(target);
-  if (url === null || !LINK.PROTOCOLS.has(url.protocol) || url.host !== LINK.HOST) {
+  const url = parsedUrl(target);
+  if (url === undefined || !LINK.PROTOCOLS.has(url.protocol) || url.host !== LINK.HOST) {
     return undefined;
   }
   const mention = Option.getOrUndefined(readMention(planFields(url)));
