@@ -111,7 +111,7 @@ export async function encodeImage(
 }
 
 /** The image files among whatever was pasted or dropped, in their given order. */
-export function imageFiles(list: FileList | null | undefined): File[] {
+export function imageFiles(list: ArrayLike<File> | null | undefined): File[] {
   if (!list) return [];
   return Array.from(list).filter((file) => file.type.startsWith("image/"));
 }

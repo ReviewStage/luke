@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -11,20 +12,23 @@ import {
 import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
-import { useEffect, useRef, useState } from "react";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useRef, useState } from "react";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
   PromptInputFooter,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
+  submitPromptInput,
 } from "../ai-elements/prompt-input";
+import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { imageFiles } from "../feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
 import { useIntegrationStatuses } from "../integration-statuses";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
@@ -33,6 +37,7 @@ import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { lapsedServer } from "./agent-servers-model";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
+import { ComposerField } from "./composer-field";
 import { DictateButton, DictationStrip } from "./dictation-strip";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
@@ -53,7 +58,9 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * the ring that shows, once a step has ended, how full the agent's model's
  * context is and opens what fills it (`agent-context.tsx`), the
  * microphone, and the round button. The box takes a message to the agent:
- * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
+ * Enter sends it, Shift+Enter is a new line, and Escape leaves the box; the
+ * box is an editor (`composer-field.tsx`) that holds plain words and a
+ * chosen skill's chip, and the message is its words as a string. A
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
@@ -71,7 +78,8 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
  * the agent has on whose sign-in expired is offered to reconnect, in place, as
- * the MCP popover reconnects it. The box takes
+ * the MCP popover reconnects it; an editor bundle that could not be loaded
+ * says so there too. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
@@ -94,9 +102,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  *
  * A `/` at the start of a word opens the list of the skills the plan's
  * repository keeps, at the caret, and the one chosen is written into the
- * words as `/name`, drawn as a chip, which the agent loads before it acts
+ * words as its chip, read as `/name`, which the agent loads before it acts
  * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
  */
+
+/** What the box's note says while the editor bundle could not be loaded. */
+const EDITOR_LOAD_FAILED = "The message box could not be loaded.";
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
 const PLACEHOLDER = {
@@ -115,17 +126,6 @@ const BUTTON = {
 /** Whether a drag carries files, which is all the card takes from one. */
 function carriesFiles(event: React.DragEvent): boolean {
   return event.dataTransfer.types.includes("Files");
-}
-
-/** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
-function typingElsewhere(): boolean {
-  const active = document.activeElement;
-  if (!(active instanceof HTMLElement) || active === document.body) return false;
-  return (
-    active instanceof HTMLInputElement ||
-    active instanceof HTMLTextAreaElement ||
-    active.isContentEditable
-  );
 }
 
 export function AgentComposer({
@@ -172,7 +172,8 @@ export function AgentComposer({
   /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
   skills?: SkillSource | undefined;
 }): React.JSX.Element {
-  const field = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  const room = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [stopping, setStopping] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -191,6 +192,8 @@ export function AgentComposer({
   const held = composer.sending || closed;
   const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
+  const bundle = useAtomValue(editorBundleAtom);
+  const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
   // A reconnect that could not begin says so in the note, as Settings' row does.
@@ -206,8 +209,12 @@ export function AgentComposer({
     });
   };
   const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
+  const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
   const words =
-    composer.closed ?? refusal ?? (composer.note === undefined ? model?.note : undefined);
+    composer.closed ??
+    refusal ??
+    unloaded ??
+    (composer.note === undefined ? model?.note : undefined);
   const note: Failure | undefined =
     words !== undefined
       ? { reason: FAILURE_REASON.OTHER, text: words }
@@ -226,37 +233,23 @@ export function AgentComposer({
   const retries = note !== undefined && note === composer.note;
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
-  const dictation = useDictation({
-    field,
-    draft: () => latest.current.draft,
-    setDraft: (next) => latest.current.setDraft(next),
-    maxLength: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
-    keywords,
-    onNote: setRefusal,
-  });
+  const dictation = useDictation({ editor, keywords, onNote: setRefusal });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
   const openSkill = useSkillOpener();
   const skillPicker = useSkillPicker({
-    field,
+    editor,
+    room,
     draft: composer.draft,
-    setDraft: (next) => latest.current.setDraft(next),
     source: skills,
-    maxLength: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
     onOpen: openSkill,
   });
 
-  // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
-  useEffect(() => {
-    if (!typingElsewhere()) field.current?.focus();
-  }, []);
-
-  const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (dictation.onFieldKey(event)) return;
-    if (skillPicker.onKeyDown(event)) return;
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      event.currentTarget.blur();
-    }
+  const onFieldKey = (event: KeyboardEvent): boolean => {
+    if (dictation.onFieldKey(event) || skillPicker.onKey(event)) return true;
+    if (event.key !== "Escape") return false;
+    event.stopPropagation();
+    editor.current?.blur();
+    return true;
   };
 
   const stop = () => {
@@ -317,39 +310,41 @@ export function AgentComposer({
                 }
           }
         />
-        <div className="agent-composer-field">
-          {skillPicker.chips}
-          <PromptInputTextarea
-            ref={field}
-            className="ph-no-capture agent-composer-input"
-            aria-label="Message to the agent"
-            placeholder={placeholder}
-            maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
-            value={composer.draft}
-            disabled={held}
-            readOnly={dictating}
-            {...skillPicker.fieldProps}
-            onChange={(event) => {
-              composer.setDraft(event.currentTarget.value);
-              skillPicker.onCaret();
-            }}
-            onKeyDown={onFieldKey}
-            onSelect={skillPicker.onCaret}
-            onBlur={skillPicker.onBlur}
-            onScroll={skillPicker.onScroll}
-            onClick={skillPicker.onClick}
-            onPointerMove={skillPicker.onPointerMove}
-            onPointerLeave={skillPicker.onPointerLeave}
-            onPaste={(event) => {
-              // Only images are taken from the clipboard; text pastes as it always does.
-              const pasted = imageFiles(event.clipboardData.files);
-              if (pasted.length === 0) return;
-              event.preventDefault();
-              attach(pasted);
-            }}
-          />
+        <ComposerField
+          module={module}
+          editor={editor}
+          room={room}
+          draft={composer.draft}
+          setDraft={composer.setDraft}
+          placeholder={placeholder}
+          label="Message to the agent"
+          className="ph-no-capture agent-composer-input"
+          input={
+            held
+              ? COMPOSER_INPUT.DISABLED
+              : dictating
+                ? COMPOSER_INPUT.READ_ONLY
+                : COMPOSER_INPUT.EDITABLE
+          }
+          maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
+          skills={skillPicker.names}
+          aria={{ ...skillPicker.aria, "aria-placeholder": placeholder }}
+          onKey={onFieldKey}
+          onEnter={() => {
+            if (room.current !== null) submitPromptInput(room.current);
+          }}
+          onPasteFiles={(files) => {
+            // Only images are taken from the clipboard; text pastes as it always does.
+            const pasted = imageFiles(files);
+            if (pasted.length === 0) return false;
+            attach(pasted);
+            return true;
+          }}
+          onTrigger={skillPicker.onTrigger}
+          chip={skillPicker.chip}
+        >
           {skillPicker.menu}
-        </div>
+        </ComposerField>
         <PromptInputFooter>
           {dictating ? (
             <DictationStrip dictation={dictation} />
@@ -393,7 +388,7 @@ export function AgentComposer({
                 )}
                 <AgentServersButton servers={servers} statuses={statuses} />
                 <AgentContextRing context={context} brief={brief} />
-                <DictateButton dictation={dictation} disabled={held} />
+                <DictateButton dictation={dictation} disabled={held || module === undefined} />
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit

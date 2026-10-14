@@ -4,7 +4,7 @@
     "renderer/renderer.js": 757948,
     "renderer/whiteboard.js": 467697,
     "renderer/file-tree.js": 70635,
-    "renderer/plan-editor.js": 161390,
+    "renderer/plan-editor.js": 164568,
     "renderer/session-recorder.js": 61872
   }
 }

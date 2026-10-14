@@ -2,10 +2,11 @@ import { useAtomValue } from "@effect/atom-react";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { useAct } from "../act";
+import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { appSettingsNow, appStateNow } from "../use-app-state";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
@@ -20,9 +21,11 @@ import { base64Of } from "./attached-files";
  * WebM at the wire's bitrate, measured by an analyser the strip draws.
  * Finishing hands the clip to main in one act, and main to Luke's service,
  * which has OpenAI hear it and answers the words; the renderer never
- * reaches OpenAI. The words go in at the caret the press found, spaced from
- * the words around them, never over the draft, and the box takes the caret
- * back after them; words a full box has no room for are not put in at all.
+ * reaches OpenAI. The words go in at the caret the press found, carried
+ * through whatever changed the words since as a mark the box's editor keeps
+ * (`../plan-editor/composer-editor.ts`), spaced from the words around them,
+ * never over the draft, and the box takes the caret back after them; words a
+ * full box has no room for are not put in at all.
  * Cancelling, or a press elsewhere that unmounts the box, drops the clip
  * unsent. The recording stops itself a second short of the wire's two
  * minutes on a deadline of its own, kept on the renderer's runtime rather
@@ -67,8 +70,6 @@ const ANALYSER_FFT_SIZE = 1_024;
 /** One recording as it stands: what was opened for it, and what it has written. */
 interface Recording {
   readonly generation: number;
-  /** Where the words go: the caret as the press found it. */
-  readonly caret: number;
   readonly stream: MediaStream;
   readonly recorder: MediaRecorder;
   readonly context: AudioContext;
@@ -86,27 +87,7 @@ export interface DictationControl {
   finish: () => void;
   cancel: () => void;
   /** The box's own keys while a dictation stands; answers whether it took the key. */
-  onFieldKey: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
-}
-
-/**
- * The words put in at the caret, a space between them and a word on either
- * side, and cut where the box's bound would cut them; answers the box's
- * words and where the caret goes after them, or nothing where no word fits.
- */
-function withDictatedWords(draft: string, caret: number, words: string, maxLength: number) {
-  const before = draft.slice(0, caret);
-  const after = draft.slice(caret);
-  const lead = before === "" || /\s$/u.test(before) ? "" : " ";
-  const trail = after === "" || /^\s/u.test(after) ? "" : " ";
-  const room = Math.max(0, maxLength - draft.length - lead.length - trail.length);
-  const fitting = words.slice(0, room).trim();
-  if (fitting === "") return undefined;
-  const inserted = `${lead}${fitting}${trail}`;
-  return {
-    draft: `${before}${inserted}${after}`,
-    caret: before.length + inserted.length - trail.length,
-  };
+  onFieldKey: (event: KeyboardEvent) => boolean;
 }
 
 /** Everything a recording opened, let go: the microphone's light goes out with the tracks. */
@@ -116,11 +97,8 @@ function release(opened: { readonly stream: MediaStream; readonly context?: Audi
 }
 
 export function useDictation(input: {
-  field: RefObject<HTMLTextAreaElement | null>;
-  /** The box's words as they stand now, read as the words land. */
-  draft: () => string;
-  setDraft: (next: string) => void;
-  maxLength: number;
+  /** The box's editor, which marks the caret and takes the words; nothing until it has mounted. */
+  editor: RefObject<ComposerEditorHandle | undefined>;
   /** The words the clip is likely to say (`dictation-keywords.ts`). */
   keywords: readonly string[];
   /** Says why a dictation left nothing, or clears what the last one said. */
@@ -135,7 +113,8 @@ export function useDictation(input: {
   // it was for gone rather than act on the one after it.
   const generation = useRef(0);
   const recording = useRef<Recording | undefined>(undefined);
-  const pendingCaret = useRef<number | undefined>(undefined);
+  /** Where the words go: the caret as the press found it, carried through every change since. */
+  const marked = useRef<ComposerMark | undefined>(undefined);
   const latest = useRef(input);
   latest.current = input;
   // The deadline stands from the moment the microphone opens: an atom on the
@@ -143,16 +122,6 @@ export function useDictation(input: {
   const [idle] = useState(() => rendererRuntime.atom(Effect.asVoid(Effect.never)));
   const [deadline, setDeadline] = useState(idle);
   const deadlinePassed = AsyncResult.isSuccess(useAtomValue(deadline));
-
-  // The caret goes after the words once the box draws them.
-  useLayoutEffect(() => {
-    const caret = pendingCaret.current;
-    const box = input.field.current;
-    if (caret === undefined || box === null || box.value.length < caret) return;
-    pendingCaret.current = undefined;
-    box.focus();
-    box.setSelectionRange(caret, caret);
-  });
 
   /** Lets the standing dictation go unsent: a later stop, open, or answer finds its generation passed. */
   const drop = () => {
@@ -169,6 +138,8 @@ export function useDictation(input: {
 
   const settle = (note: string | undefined) => {
     recording.current = undefined;
+    marked.current?.release();
+    marked.current = undefined;
     setDeadline(idle);
     setAnalyser(undefined);
     setStartedAt(undefined);
@@ -180,13 +151,10 @@ export function useDictation(input: {
     if (generation.current === asked) settle(note);
   };
 
-  const land = (caret: number, words: string) => {
-    const { draft, setDraft, maxLength } = latest.current;
-    const next = withDictatedWords(draft(), caret, words, maxLength);
-    if (next === undefined) return settle(DICTATION_NOTE.BOX_FULL);
-    pendingCaret.current = next.caret;
-    setDraft(next.draft);
-    settle(undefined);
+  const land = (words: string) => {
+    const mark = marked.current;
+    marked.current = undefined;
+    settle(mark?.insert(words) === true ? undefined : DICTATION_NOTE.BOX_FULL);
   };
 
   const transcribe = async (clip: Recording, durationMs: number) => {
@@ -204,7 +172,7 @@ export function useDictation(input: {
     if (answer === undefined || "failure" in answer) return settle(DICTATION_NOTE.FAILED);
     const words = answer.text.trim();
     if (words === "") return settle(DICTATION_NOTE.NO_WORDS);
-    land(clip.caret, words);
+    land(words);
   };
 
   const finish = () => {
@@ -225,10 +193,10 @@ export function useDictation(input: {
   const cancel = () => {
     drop();
     settle(undefined);
-    input.field.current?.focus();
+    input.editor.current?.focus();
   };
 
-  const open = async (asked: number, caret: number) => {
+  const open = async (asked: number) => {
     // Note that macOS is asked only where it has not answered, because the ask is counted and a granted microphone needs none.
     const known = appStateNow()?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED;
     const status =
@@ -265,7 +233,6 @@ export function useDictation(input: {
       });
       const standing: Recording = {
         generation: asked,
-        caret,
         stream,
         recorder,
         context,
@@ -292,19 +259,19 @@ export function useDictation(input: {
   }, [deadlinePassed]);
 
   const start = () => {
-    if (phase !== DICTATION_PHASE.IDLE) return;
-    const box = input.field.current;
-    const caret = box?.selectionEnd ?? input.draft().length;
+    const box = input.editor.current;
+    if (phase !== DICTATION_PHASE.IDLE || box === undefined) return;
+    marked.current = box.mark();
     generation.current += 1;
     const asked = generation.current;
     input.onNote(undefined);
     setPhase(DICTATION_PHASE.RECORDING);
     // The caret stays in the box, so its keys are the strip's while the button that was pressed goes.
-    box?.focus();
-    open(asked, caret).catch(() => fail(asked, DICTATION_NOTE.MICROPHONE_FAILED));
+    box.focus();
+    open(asked).catch(() => fail(asked, DICTATION_NOTE.MICROPHONE_FAILED));
   };
 
-  const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+  const onFieldKey = (event: KeyboardEvent): boolean => {
     if (phase === DICTATION_PHASE.IDLE) return false;
     if (event.key === "Escape") {
       event.preventDefault();
@@ -312,7 +279,7 @@ export function useDictation(input: {
       cancel();
       return true;
     }
-    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+    if (event.key === "Enter" && !event.isComposing) {
       event.preventDefault();
       if (phase === DICTATION_PHASE.RECORDING) finish();
       return true;

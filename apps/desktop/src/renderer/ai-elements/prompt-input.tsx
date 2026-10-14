@@ -1,7 +1,6 @@
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import {
   type ComponentProps,
-  type FormEvent,
   type FormEventHandler,
   type HTMLAttributes,
   type KeyboardEventHandler,
@@ -17,9 +16,9 @@ import { cn } from "./utils";
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
  * restyled on the corner and the
  * hairline the window's menus and cards share: one card on the sidebar's
- * ground, ringed as every field is while its textarea holds the caret
+ * ground, ringed as every field is while its field holds the caret
  * (base.css), and nothing drawn behind it, so no shadow darkens the page or the
- * transcript around the card. The textarea
+ * transcript around the card. The field
  * sizing itself to its words from one line to about eight and scrolling
  * past that, and under it a footer with whatever the owner puts at its
  * left and the round submit at its right. The agent tab's message box and
@@ -33,14 +32,17 @@ import { cn } from "./utils";
  * here, because nothing draws them yet; each arrives with the surface that
  * first does, and the submit button's status icons are the registry's own.
  *
- * Two changes of substance from the registry. The form reads the words
- * from the textarea named `message` as the registry does, but it does not
- * reset itself after a submit: the owner holds the words, controlled, and
- * clears them once the message has gone, so a message that did not go
- * stays in the box to be sent again. And the textarea runs the owner's
- * `onKeyDown` before its own Enter handling and stops where the owner
- * prevented the default, so an owner can give a modified Enter a meaning
- * of its own without re-stating what plain Enter and Shift+Enter do.
+ * Two changes of substance from the registry. The form neither reads the
+ * words back from its field nor resets itself after a submit: the owner
+ * holds the words and clears them once the message has gone, so a message
+ * that did not go stays in the box to be sent again. And the textarea runs
+ * the owner's `onKeyDown` before its own Enter handling and stops where the
+ * owner prevented the default, so an owner can give a modified Enter a
+ * meaning of its own without re-stating what plain Enter and Shift+Enter
+ * do. The field is a textarea here; the agent's message box draws an editor
+ * in its place (`../planning/composer-field.tsx`) in the same look
+ * (`PROMPT_INPUT_FIELD_CLASS`), whose Enter submits through the same door
+ * (`submitPromptInput`).
  *
  * The submit is drawn the way Claude's and ChatGPT's are: one round
  * button that never changes size or place, filled in the panel's ink with
@@ -53,16 +55,9 @@ import { cn } from "./utils";
  * the arrow in the disc's own colour.
  */
 
-type PromptInputMessage = {
-  text: string;
-};
-
 export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit"> & {
-  onSubmit: (message: PromptInputMessage, event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: () => void;
 };
-
-/** The name the textarea stands under in its form, which the form reads the words back by. */
-const MESSAGE_FIELD = "message";
 
 /** The card's one size: the type its field is set in. */
 const COMPOSER_TYPE = {
@@ -78,8 +73,7 @@ export function PromptInput({
 }: PromptInputProps): ReactNode {
   const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
-    const field = event.currentTarget.elements.namedItem(MESSAGE_FIELD);
-    onSubmit({ text: field instanceof HTMLTextAreaElement ? field.value : "" }, event);
+    onSubmit();
   };
   return (
     <form
@@ -94,6 +88,18 @@ export function PromptInput({
       {children}
     </form>
   );
+}
+
+/** The field's look, a textarea's or an editor's: one line to about eight, then scrolling, in the card's type. */
+export const PROMPT_INPUT_FIELD_CLASS =
+  "max-h-[calc(8*1.45em+24px)] min-h-[calc(1.45em+24px)] w-full overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-(length:--composer-type) leading-[1.45] text-foreground outline-none select-text";
+
+/** Submits the form around a field, as Enter there does, unless its submit button is disabled. */
+export function submitPromptInput(field: Element): void {
+  const form = field.closest("form");
+  const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+  if (submit?.disabled) return;
+  form?.requestSubmit();
 }
 
 export type PromptInputTextareaProps = ComponentProps<"textarea">;
@@ -118,19 +124,16 @@ export function PromptInputTextarea({
     if (isComposing || event.nativeEvent.isComposing) return;
     if (event.shiftKey) return;
     event.preventDefault();
-    const form = event.currentTarget.form;
-    const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (submit?.disabled) return;
-    form?.requestSubmit();
+    submitPromptInput(event.currentTarget);
   };
 
   return (
     <textarea
       className={cn(
-        "field-sizing-content max-h-[calc(8*1.45em+24px)] min-h-[calc(1.45em+24px)] w-full resize-none overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-(length:--composer-type) leading-[1.45] text-foreground outline-none select-text placeholder:text-muted-foreground disabled:opacity-60",
+        PROMPT_INPUT_FIELD_CLASS,
+        "field-sizing-content resize-none placeholder:text-muted-foreground disabled:opacity-60",
         className,
       )}
-      name={MESSAGE_FIELD}
       onCompositionEnd={() => setIsComposing(false)}
       onCompositionStart={() => setIsComposing(true)}
       onKeyDown={handleKeyDown}

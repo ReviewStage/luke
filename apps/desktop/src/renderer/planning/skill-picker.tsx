@@ -1,24 +1,6 @@
-import {
-  type ReactNode,
-  type RefObject,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  chooseSkill,
-  holdsSlashWord,
-  matchingSkills,
-  mentionAt,
-  type SkillMention,
-  type SkillOption,
-  skillTokens,
-  skillWord,
-  type TextRange,
-  withoutTokenBefore,
-} from "./skill-mention";
+import { type ReactNode, type RefObject, useEffect, useId, useMemo, useState } from "react";
+import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../plan-editor/contract";
+import { holdsSlashWord, matchingSkills, type SkillOption, skillWord } from "./skill-mention";
 
 /**
  * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the plan's repository keeps, and the chips the chosen ones are drawn as.
@@ -27,7 +9,7 @@ import {
  * caret, as soon as a `/` starts a word (`skill-mention.ts`), with one row
  * per skill, its name and a muted line of what it is for, narrowed as the
  * name is typed. ↑ and ↓ move the highlight, Enter or Tab writes the
- * highlighted skill into the message as `/name`, and Escape closes the
+ * highlighted skill into the message as its chip, and Escape closes the
  * list until the caret leaves that word; the caret stays in the box
  * throughout, so the keys the list does not take are the box's own. The
  * skills are read the first time a `/` is typed in the box, from the
@@ -35,18 +17,14 @@ import {
  * (`repository-skills.ts`), so nothing is read for a message that names
  * none. A repository that keeps none says so, and where one is added.
  *
- * A chosen skill is drawn as a chip in the words: the box stays a plain
- * textarea, and a layer under it, set in the same type at the same
- * insets, lays a pill behind each `/name` that names one of the
- * repository's skills. A Backspace at a chip's end takes the whole word
- * out. A press on a chip opens the skill's `SKILL.md` in a File tab, as a
- * sent message's chip does (`skill-chip.tsx`), and as a press on an
- * attached file's chip opens it while its × takes it off: the press still
- * sets the caret where it landed, so the words stay as editable as any,
- * and the pointer over a chip turns to a hand and washes it as a button
- * would, since the textarea over the layer hears the pointer for it. The
- * list stands above the caret's line, since the box stands at
- * the foot of its tab, and inside the box's width.
+ * The box is an editor (`../plan-editor/composer-editor.ts`), which finds
+ * the `/` word the caret ends and says where its slash stands in the
+ * window, so the list stands above that line, inside the box's width, as
+ * the box stands at the foot of its tab. A chosen skill is a chip in the
+ * words, an atom one Backspace takes out whole, which reads out as `/name`,
+ * so the message sent is the words it always was; the editor draws each
+ * through the box (`chip`), as a pill a press on opens the skill's
+ * `SKILL.md` in a File tab, as a sent message's chip does (`skill-chip.tsx`).
  */
 
 /** The skills the plan's repository keeps, as the composer reads them: the skills, or why they were not read. */
@@ -72,102 +50,8 @@ const MENU_GAP = 4;
 /** The list's width, as the stylesheet sets it (`.skill-menu`), which keeps it inside the box. */
 const MENU_WIDTH = 320;
 
-/** The styles a textarea's text is laid out by, copied onto the mirror that measures where its caret stands. */
-const MIRRORED = [
-  "box-sizing",
-  "width",
-  "padding-top",
-  "padding-right",
-  "padding-bottom",
-  "padding-left",
-  "border-top-width",
-  "border-right-width",
-  "border-bottom-width",
-  "border-left-width",
-  "font-family",
-  "font-size",
-  "font-weight",
-  "font-style",
-  "letter-spacing",
-  "line-height",
-  "text-transform",
-  "word-spacing",
-  "tab-size",
-  "text-indent",
-] as const;
-
-/** Where a character of the field stands, from the field's top left as it is scrolled now. */
-interface FieldPoint {
-  readonly left: number;
-  readonly top: number;
-}
-
-/**
- * Where the character at the index stands in the field, measured on a
- * hidden copy of its text laid out as the field lays it out, since a
- * textarea says where its caret is in characters and never in pixels.
- */
-function caretPoint(field: HTMLTextAreaElement, index: number): FieldPoint {
-  const mirror = document.createElement("div");
-  const style = getComputedStyle(field);
-  for (const property of MIRRORED) {
-    mirror.style.setProperty(property, style.getPropertyValue(property));
-  }
-  mirror.style.position = "absolute";
-  mirror.style.visibility = "hidden";
-  mirror.style.whiteSpace = "pre-wrap";
-  mirror.style.overflowWrap = "break-word";
-  mirror.textContent = field.value.slice(0, index);
-  const marker = document.createElement("span");
-  marker.textContent = field.value.slice(index) || ".";
-  mirror.append(marker);
-  document.body.append(mirror);
-  const point = { left: marker.offsetLeft, top: marker.offsetTop - field.scrollTop };
-  mirror.remove();
-  return point;
-}
-
-/** The message cut at the chips, each chip's words marked, the one under the pointer washed, for the layer under the box. */
-function chipped(
-  text: string,
-  tokens: readonly TextRange[],
-  hovered: number | undefined,
-): ReactNode[] {
-  const pieces: ReactNode[] = [];
-  let at = 0;
-  for (const token of tokens) {
-    pieces.push(text.slice(at, token.start));
-    pieces.push(
-      <mark
-        key={token.start}
-        className="skill-chip"
-        data-start={token.start}
-        data-hovered={token.start === hovered ? "" : undefined}
-      >
-        {text.slice(token.start, token.end)}
-      </mark>,
-    );
-    at = token.end;
-  }
-  pieces.push(text.slice(at));
-  return pieces;
-}
-
-/**
- * Where the chip under a point of the window starts in the words, read off
- * the layer under the box, since the box over it hears the pointer and
- * says nothing of where its words are drawn; nothing where no chip is.
- */
-function chipAt(layer: HTMLElement | null, x: number, y: number): number | undefined {
-  for (const chip of layer?.querySelectorAll<HTMLElement>(".skill-chip") ?? []) {
-    for (const box of chip.getClientRects()) {
-      if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) {
-        return Number(chip.dataset.start);
-      }
-    }
-  }
-  return undefined;
-}
+/** No skill is known, before the read lands or where it did not. */
+const NO_NAMES: ReadonlySet<string> = new Set();
 
 /** The highlight as it was moved, held against the word it was moved in, so a word typed on starts it again at the first row. */
 interface Highlight {
@@ -176,40 +60,26 @@ interface Highlight {
   readonly at: number;
 }
 
-/** What the composer draws and wires: the list while it is open, the layer of chips, and the field's handlers. */
+/** What the composer draws and wires: the list while it is open, the chips, and what the editor hears and is told. */
 export interface SkillPicker {
   /** The list, while a `/` word is being typed and not closed; nothing otherwise. */
   readonly menu: ReactNode;
-  /** The layer under the box that draws the chips. */
-  readonly chips: ReactNode;
-  /** The field's attributes that tie it to the list, for assistive technology. */
-  readonly fieldProps: {
-    readonly "aria-autocomplete": "list";
-    readonly "aria-expanded": boolean;
-    readonly "aria-controls": string | undefined;
-    readonly "aria-activedescendant": string | undefined;
-    /** Whether the pointer stands over a chip, which turns it to a hand. */
-    readonly "data-over-chip": boolean;
-  };
-  /** Takes a key the list or a chip answers, and says whether it did. */
-  readonly onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
-  /** Hears the caret move, a type or a press or a selection. */
-  readonly onCaret: () => void;
-  /** Hears the box lose the caret, which closes the list. */
-  readonly onBlur: () => void;
-  /** Hears the box scroll, which the chips follow. */
-  readonly onScroll: () => void;
-  /** Hears a press on the box, which opens the skill of a chip it landed on. */
-  readonly onClick: (event: React.MouseEvent<HTMLTextAreaElement>) => void;
-  /** Hears the pointer move over the box, or leave it, to wash the chip it stands over. */
-  readonly onPointerMove: (event: React.PointerEvent<HTMLTextAreaElement>) => void;
-  readonly onPointerLeave: () => void;
+  /** The editor's attributes that tie it to the list, for assistive technology. */
+  readonly aria: Readonly<Record<string, string | undefined>>;
+  /** The skills a `/name` names, which the editor draws as chips. */
+  readonly names: ReadonlySet<string>;
+  /** Hears the `/` word the caret ends, as the editor reports it. */
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  /** Takes a key the list answers, and says whether it did. */
+  readonly onKey: (event: KeyboardEvent) => boolean;
+  /** A chip the editor draws, as the box draws it. */
+  readonly chip: (chip: ComposerChip) => ReactNode;
 }
 
 /** The rows the list offers for the word under the caret; none while the skills are not read, or could not be. */
-function offered(read: SkillsRead | undefined, mention: SkillMention | undefined) {
-  if (read === undefined || "unread" in read || mention === undefined) return [];
-  return matchingSkills(read.skills, mention.query);
+function offered(read: SkillsRead | undefined, trigger: ComposerTrigger | undefined) {
+  if (read === undefined || "unread" in read || trigger === undefined) return [];
+  return matchingSkills(read.skills, trigger.query);
 }
 
 /** The line the list shows where it offers no row. */
@@ -286,41 +156,62 @@ function SkillMenu({
   );
 }
 
-export function useSkillPicker({
-  field,
-  draft,
-  setDraft,
-  source,
-  maxLength,
+/**
+ * A chosen skill in the box: its pill, which a press opens the skill's
+ * `SKILL.md` from where the skill is known and the box stands on a plan's
+ * page, the pointer turning to a hand over it then.
+ */
+function BoxChip({
+  name,
+  skill,
   onOpen,
 }: {
-  field: RefObject<HTMLTextAreaElement | null>;
+  name: string;
+  skill: SkillOption | undefined;
+  onOpen: ((skill: SkillOption) => void) | undefined;
+}): React.JSX.Element {
+  const opens = skill !== undefined && onOpen !== undefined;
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the pill is a word of the box's text, which the keyboard edits rather than presses; its press is the pointer's shortcut to the file, as a sent message's chip button is.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
+    <span
+      className="skill-chip"
+      data-opens={opens ? "" : undefined}
+      onClick={opens ? () => onOpen(skill) : undefined}
+    >
+      {skillWord(name)}
+    </span>
+  );
+}
+
+export function useSkillPicker({
+  editor,
+  room,
+  draft,
+  source,
+  onOpen,
+}: {
+  /** The box's editor, which a chosen skill is written into; nothing until it has mounted. */
+  editor: RefObject<ComposerEditorHandle | undefined>;
+  /** The box's field, which the list stands inside. */
+  room: RefObject<HTMLElement | null>;
+  /** The box's words, which say whether a skill is named already, so its chip wants the skills read. */
   draft: string;
-  setDraft: (text: string) => void;
-  /** The longest message the box takes, which a chosen skill's name may not carry it past. */
-  maxLength: number;
   /** Where the skills are read from; nothing where the box offers none. */
   source: SkillSource | undefined;
   /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no plan's page. */
   onOpen: ((skill: SkillOption) => void) | undefined;
 }): SkillPicker {
   const listId = useId();
-  const [caret, setCaret] = useState<number | undefined>(undefined);
+  const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
   const [read, setRead] = useState<
     { source: SkillSource; read: SkillsRead; start: number | undefined } | undefined
   >();
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
-  const [point, setPoint] = useState<FieldPoint | undefined>(undefined);
-  const [scroll, setScroll] = useState(0);
-  const [hovered, setHovered] = useState<number | undefined>(undefined);
-  const layer = useRef<HTMLDivElement>(null);
-  // Note that the caret an edit leaves is set once the words it goes with
-  // are in the box, because the box takes its value only on the next render.
-  const pendingCaret = useRef<number | undefined>(undefined);
 
   const skills = source !== undefined && read?.source === source ? read.read : undefined;
-  const mention = source === undefined || caret === undefined ? undefined : mentionAt(draft, caret);
+  const mention = source === undefined ? undefined : trigger;
   const open = mention !== undefined && closedAt !== mention.start;
   const rows = open ? offered(skills, mention) : [];
   const held =
@@ -331,8 +222,10 @@ export function useSkillPicker({
       ? highlight.at
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
-  const names = new Set(
-    skills !== undefined && "skills" in skills ? skills.skills.map((each) => each.name) : [],
+  const known = skills !== undefined && "skills" in skills ? skills.skills : undefined;
+  const names = useMemo(
+    () => (known === undefined ? NO_NAMES : new Set(known.map((each) => each.name))),
+    [known],
   );
   // Note that a message already naming a skill reads them too, so its chips are drawn.
   const wantsSkills = source !== undefined && skills === undefined && holdsSlashWord(draft);
@@ -363,50 +256,12 @@ export function useSkillPicker({
     };
   }, [source, open, wantsSkills, settled, start]);
 
-  useLayoutEffect(() => {
-    if (pendingCaret.current === undefined || field.current === null) return;
-    field.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
-    setCaret(pendingCaret.current);
-    pendingCaret.current = undefined;
-  }, [draft, field]);
+  // Note that a name the message has no room left for is not written, as a key typed past the bound is not.
+  const choose = (skill: SkillOption) => editor.current?.chooseSkill(skill.name);
 
-  // The list is measured to its word's slash as the word opens it, and again
-  // as the box scrolls or its words rewrap under it.
-  const measure = () => {
-    if (start !== undefined && field.current !== null) setPoint(caretPoint(field.current, start));
-  };
-  // Note that the words are a dependency, because an edit before the slash rewraps the line it stands on.
-  useLayoutEffect(measure, [start, draft, field]);
-
-  const edit = (text: string, nextCaret: number) => {
-    pendingCaret.current = nextCaret;
-    setDraft(text);
-  };
-  const choose = (skill: SkillOption) => {
-    if (mention === undefined) return;
-    const written = chooseSkill(draft, mention, skill.name);
-    // A name the message has no room left for is not written, as a key typed past the bound is not.
-    if (written.text.length > maxLength) return;
-    edit(written.text, written.caret);
-  };
-  const onCaret = () => {
-    const now = field.current;
-    if (now === null) return;
-    setCaret(now.selectionStart === now.selectionEnd ? now.selectionStart : undefined);
-  };
-
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    const box = event.currentTarget;
-    if (event.key === "Backspace" && box.selectionStart === box.selectionEnd) {
-      const without = withoutTokenBefore(draft, box.selectionStart, names);
-      if (without === undefined) return false;
-      event.preventDefault();
-      edit(without.text, without.caret);
-      return true;
-    }
+  const onKey = (event: KeyboardEvent): boolean => {
     if (!open) return false;
     if (event.key === "Escape") {
-      event.preventDefault();
       event.stopPropagation();
       setClosedAt(mention.start);
       return true;
@@ -414,79 +269,53 @@ export function useSkillPicker({
     const row = rows[at];
     if (row === undefined) return false;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
       const step = event.key === "ArrowDown" ? 1 : rows.length - 1;
       setHighlight({ start: mention.start, query: mention.query, at: (at + step) % rows.length });
       return true;
     }
     if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
-      event.preventDefault();
       choose(row);
       return true;
     }
     return false;
   };
 
-  const room = field.current?.parentElement;
+  // The list stands over the slash's line, measured from the box's field, which it keeps inside.
+  const box = room.current;
+  const placed = box?.getBoundingClientRect();
   const menu =
-    !open || point === undefined ? null : (
+    !open || box === null || placed === undefined ? null : (
       <SkillMenu
         id={listId}
         rows={rows}
         at={at}
         read={skills}
         place={{
-          left: Math.max(0, Math.min(point.left, (room?.clientWidth ?? 0) - MENU_WIDTH)),
-          bottom: (room?.clientHeight ?? 0) - point.top + MENU_GAP,
+          left: Math.max(
+            0,
+            Math.min(mention.rect.left - placed.left, box.clientWidth - MENU_WIDTH),
+          ),
+          bottom: placed.bottom - mention.rect.top + MENU_GAP,
         }}
         onHover={(index) => setHighlight({ start: mention.start, query: mention.query, at: index })}
         onChoose={choose}
       />
     );
 
-  const tokens = skillTokens(draft, names);
-  const chips = (
-    <div ref={layer} className="skill-chips ph-no-capture" aria-hidden="true">
-      <div style={{ transform: `translateY(${-scroll}px)` }}>
-        {tokens.length === 0 ? null : chipped(draft, tokens, hovered)}
-      </div>
-    </div>
-  );
-  // Note that only a press that left the caret, rather than a selection,
-  // opens a chip, so a drag across one still selects its words.
-  const onClick = (event: React.MouseEvent<HTMLTextAreaElement>) => {
-    const box = event.currentTarget;
-    if (onOpen === undefined || box.selectionStart !== box.selectionEnd) return;
-    const start = chipAt(layer.current, event.clientX, event.clientY);
-    const token = tokens.find((each) => each.start === start);
-    if (token === undefined || skills === undefined || "unread" in skills) return;
-    const name = draft.slice(token.start + 1, token.end);
-    const skill = skills.skills.find((each) => each.name === name);
-    if (skill !== undefined) onOpen(skill);
-  };
-
   return {
     menu,
-    chips,
-    fieldProps: {
+    aria: {
       "aria-autocomplete": "list",
-      "aria-expanded": menu !== null,
+      "aria-expanded": String(menu !== null),
       "aria-controls": menu === null ? undefined : listId,
       "aria-activedescendant":
         menu === null || rows.length === 0 ? undefined : optionId(listId, at),
-      "data-over-chip": tokens.some((each) => each.start === hovered),
     },
-    onKeyDown,
-    onCaret,
-    onBlur: () => setCaret(undefined),
-    onScroll: () => {
-      setScroll(field.current?.scrollTop ?? 0);
-      measure();
-    },
-    onClick,
-    onPointerMove: (event) => {
-      if (onOpen !== undefined) setHovered(chipAt(layer.current, event.clientX, event.clientY));
-    },
-    onPointerLeave: () => setHovered(undefined),
+    names,
+    onTrigger: setTrigger,
+    onKey,
+    chip: ({ name }) => (
+      <BoxChip name={name} skill={known?.find((each) => each.name === name)} onOpen={onOpen} />
+    ),
   };
 }

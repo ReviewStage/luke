@@ -58,6 +58,9 @@ function drawPage(): void {
       <p title="feature-branch" aria-label="Folder">feature-branch</p>
       <button type="button">Delete</button>
       <input value="typed-secret" placeholder="Folder" />
+      <div contenteditable="true" role="textbox" aria-placeholder="Delete">
+        <p>typed-secret <span contenteditable="false" data-chip="skill"><span class="skill-chip">/feature-branch</span></span></p>
+      </div>
     </main>`;
 }
 
@@ -133,12 +136,13 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   const snapshots = jsonRoundTrip(sent.filter((event) => event.event === "$snapshot"));
   const recording = JSON.stringify(snapshots === undefined ? undefined : opened(snapshots));
   // The page was recorded: its elements are there, by tag.
-  for (const tag of ["h1", "a", "button", "input"]) {
+  for (const tag of ["h1", "a", "button", "input", "div"]) {
     assert.ok(recording.includes(`"tagName":"${tag}"`), tag);
   }
   // A stylesheet's address and an icon's symbol are layout, not words, so the replay can still lay out.
   assert.ok(recording.includes("styles.css"), "the stylesheet's address");
   assert.ok(recording.includes("#file-icon-ts"), "the icon's symbol");
-  // And none of its words, in a text node, an attribute, a link's address, or an input's value.
+  // And none of its words, in a text node, an attribute, a link's address, an input's value, or
+  // an editor's words and chips (the agent's message box, `planning/composer-field.tsx`).
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
 });

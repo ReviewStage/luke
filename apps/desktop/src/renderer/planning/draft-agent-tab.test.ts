@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { installEditorBundle, installEditorLayout, pressInComposer } from "#testing/composer";
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import type { Failure } from "../failure-remedy";
@@ -54,8 +55,12 @@ const DRAFT: AgentDraft = {
 
 const roots: Root[] = [];
 
+// Set before any tab renders, since the box reads the editor bundle once per window.
+installEditorBundle();
+
 beforeEach(() => {
   installScrollIntoView();
+  installEditorLayout();
   sent = [];
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
@@ -167,11 +172,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     settings,
     github,
     send: async () => {
-      const field = container.querySelector("textarea");
-      assert.ok(field, "the draft's box is drawn");
-      act(() => {
-        field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      });
+      pressInComposer(container, "Enter");
       await settle();
     },
     note: () => container.querySelector(".agent-composer-note")?.textContent ?? undefined,
