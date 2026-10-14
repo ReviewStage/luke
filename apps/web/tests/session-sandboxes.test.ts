@@ -24,9 +24,12 @@ const SESSION = "wrun_fixture";
 
 /** An unsigned token naming the fixture's project and team, a year from expiring. */
 function fixtureToken(): string {
-  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
-  return `${encode({ alg: "none" })}.${encode({ project_id: PROJECT, owner_id: TEAM, exp })}.`;
+  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+  const payload = Buffer.from(
+    JSON.stringify({ project_id: PROJECT, owner_id: TEAM, exp }),
+  ).toString("base64url");
+  return `${header}.${payload}.`;
 }
 
 interface Asked {
