@@ -6,6 +6,7 @@ import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
 import { type WordChange, wordChanges } from "./plan-diff";
+import { dayAndTimeText } from "./plan-time";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
@@ -50,19 +51,6 @@ interface VersionUnit {
 export interface VersionDiff {
   readonly units: readonly VersionUnit[];
   readonly changed: boolean;
-}
-
-/** A day and a time in the fewest words a version is named by: "Oct 11, 2:14 PM". */
-const DAY_AND_TIME = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-/** The moment a version was saved, as the version history names it. */
-export function versionMoment(at: number): string {
-  return DAY_AND_TIME.format(at);
 }
 
 /** The kinds of writer a revision is drawn under. */
@@ -149,7 +137,7 @@ export function authorName(author: RevisionAuthor): string {
 /** What a revision did, in a few words: the version a restore brought back, the plan before history, or how many changes its saves made. */
 export function revisionSummary(line: PlanRevisionLine): string {
   if (line.restoredFrom !== undefined) {
-    return `Restored the version from ${versionMoment(line.restoredFrom.at)}`;
+    return `Restored the version from ${dayAndTimeText(line.restoredFrom.at)}`;
   }
   if (line.lastEdit.actor === PLAN_ACTOR.EARLIER) return "The plan before its history began";
   return line.changes === 1 ? "1 change" : `${line.changes} changes`;

@@ -21,11 +21,11 @@ import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallEnded } from "./call-card";
 import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
+import { callHeading } from "./plan-time";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
 import {
   callEndedLine,
-  callHeading,
   TRANSCRIPT_EMPTY_LINE,
   TRANSCRIPT_REGION,
   type TranscriptCallRow,

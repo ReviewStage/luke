@@ -8,8 +8,7 @@ import { Shimmer } from "../ai-elements/shimmer";
 import { cn } from "../ai-elements/utils";
 import { rendererRuntime } from "../renderer-runtime";
 import { Tooltip } from "../tooltip";
-import { useMinute } from "./plan-time";
-import { callHeading } from "./transcript-model";
+import { callHeading, useMinute } from "./plan-time";
 import { TurnCard } from "./turn-card";
 
 /**
@@ -58,9 +57,9 @@ export function workingTime(elapsedMs: number): string {
   return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
 }
 
-/** What a finished turn's last line says: how long it worked, and the day and time it ended in the developer's own locale and zone, the day as a call's header says it from `now`. */
-function workedForText(startedAt: number, endedAt: number, now: number, locale?: string): string {
-  const ended = callHeading(endedAt, now, locale);
+/** What a finished turn's last line says: how long it worked, and the day and time it ended, as a call's header says it from `now`. */
+function workedForText(startedAt: number, endedAt: number, now: number): string {
+  const ended = callHeading(endedAt, now);
   return `${WORKED_WORDS}${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
 }
 

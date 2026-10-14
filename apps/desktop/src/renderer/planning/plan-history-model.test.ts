@@ -17,8 +17,8 @@ import {
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
-  versionMoment,
 } from "./plan-history-model";
+import { dayAndTimeText } from "./plan-time";
 
 const HOUR = 3_600_000;
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -109,7 +109,7 @@ test("a revision names its writer as the developer knows them, and says what it 
   const restoredAt = NOW - 5 * HOUR;
   assert.equal(
     revisionSummary(line({ restoredFrom: { seq: 1, at: restoredAt } })),
-    `Restored the version from ${versionMoment(restoredAt)}`,
+    `Restored the version from ${dayAndTimeText(restoredAt)}`,
   );
 });
 

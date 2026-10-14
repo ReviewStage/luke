@@ -242,26 +242,3 @@ const LIVE_CALL_SLACK_MS = 30_000;
 export function callStart(call: Pick<TranscriptCallRow, "startedAt" | "live">): number {
   return call.live ? call.startedAt - LIVE_CALL_SLACK_MS : call.startedAt;
 }
-
-/**
- * A call's header: the day, as today, yesterday, a weekday this week, or a
- * date, then the time, in the developer's own locale and zone.
- */
-export function callHeading(startedAt: number, now: number, locale?: string): string {
-  const started = new Date(startedAt);
-  const today = new Date(now);
-  const midnight = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const daysAgo = Math.round((midnight(today) - midnight(started)) / 86_400_000);
-  const time = started.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
-  if (daysAgo === 0) return `Today, ${time}`;
-  if (daysAgo === 1) return `Yesterday, ${time}`;
-  const options: Intl.DateTimeFormatOptions =
-    daysAgo > 1 && daysAgo < 7
-      ? { weekday: "long" }
-      : started.getFullYear() === today.getFullYear()
-        ? { month: "short", day: "numeric" }
-        : { month: "short", day: "numeric", year: "numeric" };
-  const day = started.toLocaleDateString(locale, options);
-  return `${day}, ${time}`;
-}

@@ -9,7 +9,6 @@ import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/l
 import { test } from "vitest";
 import {
   callEndedLine,
-  callHeading,
   type HeardCall,
   heardCalls,
   messageText,
@@ -211,18 +210,6 @@ test("the same call keeps when it was first heard, a call begun at once keeps th
     heardCalls({ held: grown, voice: NO_CALL, planId: "another-plan", now: 9_000 }),
     [],
   );
-});
-
-test("a call's header names its day as today, yesterday, a weekday this week, or a date", () => {
-  const now = new Date(2026, 9, 8, 18, 0).getTime();
-  const at = (month: number, day: number, year = 2026) =>
-    new Date(year, month, day, 15, 42).getTime();
-
-  assert.equal(callHeading(at(9, 8), now, "en-US"), "Today, 3:42 PM");
-  assert.equal(callHeading(at(9, 7), now, "en-US"), "Yesterday, 3:42 PM");
-  assert.equal(callHeading(at(9, 5), now, "en-US"), "Monday, 3:42 PM");
-  assert.equal(callHeading(at(8, 21), now, "en-US"), "Sep 21, 3:42 PM");
-  assert.equal(callHeading(at(11, 30, 2025), now, "en-US"), "Dec 30, 2025, 3:42 PM");
 });
 
 test("a call that ended closes with a line saying so, one Luke ended says he did, and the call standing closes with none", () => {

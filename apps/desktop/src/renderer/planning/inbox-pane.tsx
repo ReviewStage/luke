@@ -58,7 +58,8 @@ import {
   withChoice,
   withValue,
 } from "./inbox-model";
-import { momentText, sinceText, useMinute } from "./plan-time";
+import { useMinute } from "./plan-time";
+import { RelativeTime } from "./relative-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -134,17 +135,6 @@ const NEWER_LUKE = {
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
-
-/** How long ago, muted in even figures, the moment itself in the shared tooltip, as a file note's time is. */
-function Moment({ at, now }: { at: number; now: number }): React.JSX.Element {
-  return (
-    <Tooltip label={momentText(at)}>
-      <time className="tab-card-time" dateTime={new Date(at).toISOString()}>
-        {sinceText(at, now)}
-      </time>
-    </Tooltip>
-  );
-}
 
 /** A link block: a press where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
 function LinkBlock({
@@ -751,7 +741,7 @@ function Byline({
         </span>
       </AgentRef>
       <span className="shrink-0">
-        {did} <Moment at={at} now={now} />
+        {did} <RelativeTime className="tab-card-time" at={at} now={now} />
       </span>
     </div>
   );
@@ -778,7 +768,7 @@ function Answered({
         </MessageContent>
       )}
       <p className="m-0 text-[11.5px] text-muted-foreground">
-        {settled.lead} · <Moment at={item.updatedAt} now={now} /> ·{" "}
+        {settled.lead} · <RelativeTime className="tab-card-time" at={item.updatedAt} now={now} /> ·{" "}
         <Delivered item={item} by={by} />
       </p>
     </Message>

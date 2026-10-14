@@ -3,7 +3,8 @@ import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useClipped } from "../use-clipped";
 import { agentParts, agentStillWriting, isDelegation } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
-import { sinceText, useMinute } from "./plan-time";
+import { useMinute } from "./plan-time";
+import { RelativeTime } from "./relative-time";
 import { delegationView } from "./tool-call-model";
 import { type CopiedTranscript, LATEST_ACTIVITY, latestActivity } from "./transcript-copy";
 import { WorkingTime } from "./working-time";
@@ -76,12 +77,8 @@ export interface CardReading {
   readonly transcript: CopiedTranscript | undefined;
 }
 
-function Since({ at }: { at: number }): React.JSX.Element {
-  const now = useMinute();
-  return <time dateTime={new Date(at).toISOString()}>{sinceText(at, now)}</time>;
-}
-
 function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
+  const now = useMinute();
   switch (corner.kind) {
     case CARD_CORNER.WORKING:
       return (
@@ -95,7 +92,7 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
         <span className="tab-card-time">
           {corner.state}
           {corner.state === undefined || corner.at === undefined ? null : ENDED_SEPARATOR}
-          {corner.at === undefined ? null : <Since at={corner.at} />}
+          {corner.at === undefined ? null : <RelativeTime at={corner.at} now={now} hint={false} />}
         </span>
       );
     case CARD_CORNER.NONE:
