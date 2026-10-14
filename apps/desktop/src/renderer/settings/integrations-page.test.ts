@@ -92,11 +92,22 @@ test("a provider the deployment does not offer the account has no row, and every
   withheld = [INTEGRATION_PROVIDER.SLACK];
   const page = await mount();
 
-  assert.deepEqual(rowNames(page), ["Linear", "Notion", "Sentry"]);
+  assert.deepEqual(rowNames(page), [
+    "Granola",
+    "Linear",
+    "Mercury",
+    "Neon",
+    "Notion",
+    "PostHog",
+    "Sentry",
+    "Supabase",
+    "Vercel",
+    "Y Combinator",
+  ]);
   assert.equal(
     [...page.querySelectorAll("button")].filter((button) => button.textContent === "Connect")
       .length,
-    3,
+    10,
   );
 });
 

@@ -1006,9 +1006,13 @@ connector it was made under.
 **Offering a provider to some accounts.** An internal Slack app works for
 its own workspace alone, so production offers Slack only to the accounts
 that workspace's people sign in with. Each provider has an optional
-allowlist variable beside its connector's (`LINEAR_ALLOWED_ACCOUNTS`,
-`NOTION_ALLOWED_ACCOUNTS`, `SENTRY_ALLOWED_ACCOUNTS`,
-`SLACK_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
+allowlist variable beside its connector's (`<PROVIDER>_ALLOWED_ACCOUNTS`:
+`GRANOLA_ALLOWED_ACCOUNTS`, `LINEAR_ALLOWED_ACCOUNTS`,
+`MERCURY_ALLOWED_ACCOUNTS`, `NEON_ALLOWED_ACCOUNTS`,
+`NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`,
+`SENTRY_ALLOWED_ACCOUNTS`, `SLACK_ALLOWED_ACCOUNTS`,
+`SUPABASE_ALLOWED_ACCOUNTS`, `VERCEL_ALLOWED_ACCOUNTS`,
+`YCOMBINATOR_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
 every account whose email is at that domain, or one exact email, matched
 without regard to case against the email on the account's user row.
 Unset or empty, the provider is offered to every account. The list fails
