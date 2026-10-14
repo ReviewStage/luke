@@ -21,6 +21,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "./settings-v
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };

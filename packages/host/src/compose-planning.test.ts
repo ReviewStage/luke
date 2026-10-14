@@ -174,18 +174,21 @@ interface FakeService extends PlanningClient {
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
+  slug: "ada-lovelace",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };
 const RELAY: Workspace = {
   id: "workspace-relay",
   name: "Relay Labs",
+  slug: "relay-labs",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };

@@ -23,6 +23,12 @@ import { workspaceIdSchema } from "./plan-wire.js";
  *
  * A member of a workspace reads its members; an owner or an admin removes
  * one who is not an owner, and anyone but an owner leaves.
+ *
+ * A workspace's slug is the first step of a Luke link's path
+ * (`https://tryluke.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
+ * takes one Luke's own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
+ * slug only reads well; a link is found by the plan's id alone, so a slug
+ * spelled differently later breaks no link written under the old one.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -33,6 +39,55 @@ export const WORKSPACE_ROLE = {
 } as const;
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
+
+/**
+ * The first steps of tryluke.dev's paths that are Luke's own, now or likely
+ * soon, which no workspace's slug may be: every page the web app serves
+ * under its own name (`apps/web/vercel.json`, `apps/web/vite.config.ts`),
+ * and the words a later page is likeliest to want.
+ */
+export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
+  "about",
+  "accept-invitation",
+  "account",
+  "admin",
+  "agents",
+  "api",
+  "app",
+  "assets",
+  "auth",
+  "blog",
+  "changelog",
+  "connect-github",
+  "consent",
+  "desktop-session",
+  "docs",
+  "download",
+  "eve",
+  "github-installed",
+  "help",
+  "inbox",
+  "integration-connected",
+  "integrations",
+  "invite",
+  "login",
+  "logout",
+  "new",
+  "oauth",
+  "open",
+  "plan",
+  "plans",
+  "pricing",
+  "privacy",
+  "security",
+  "settings",
+  "sign-in",
+  "sign-out",
+  "sign-up",
+  "status",
+  "support",
+  "terms",
+]);
 
 export const WORKSPACE_BOUNDS = {
   /** The most characters a workspace's name may spell, after its ends are trimmed. */
@@ -54,6 +109,8 @@ export const workspaceGithubSchema = EffectSchema.Struct({
 export const workspaceSchema = EffectSchema.Struct({
   id: workspaceIdSchema,
   name: EffectSchema.String,
+  /** The first step of the workspace's links' paths, unique among workspaces. */
+  slug: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
   /** The GitHub account its connected installation is on, or null where none is connected. */
   github: EffectSchema.NullOr(workspaceGithubSchema),

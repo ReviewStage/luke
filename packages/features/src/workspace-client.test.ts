@@ -10,12 +10,14 @@ import { WORKSPACE_ROLE } from "./workspace-wire.js";
 const PERSONAL = {
   id: "org-personal-1",
   name: "Ada Lovelace",
+  slug: "ada-lovelace",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME = {
   id: "org-acme-1",
   name: "Acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: false },
 };

@@ -57,12 +57,14 @@ const MEMBER: WorkspaceMember = {
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
 const FIRST: Workspace = {
   id: "workspace-personal",
   name: "Dana",
+  slug: "dana",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -634,6 +636,7 @@ test("the picker shows another workspace on the page, the account's role, and it
     ...ACME,
     id: "workspace-beta",
     name: "Beta",
+    slug: "beta",
     role: WORKSPACE_ROLE.ADMIN,
   };
   const { page } = await mount(ACME, [beta]);

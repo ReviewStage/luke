@@ -12,6 +12,9 @@
         "name": {
           "type": "string"
         },
+        "slug": {
+          "type": "string"
+        },
         "role": {
           "type": "string",
           "enum": [
@@ -47,6 +50,7 @@
       "required": [
         "id",
         "name",
+        "slug",
         "role",
         "github"
       ],

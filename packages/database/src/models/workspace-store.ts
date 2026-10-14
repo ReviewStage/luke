@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  RESERVED_WORKSPACE_SLUGS,
   type Workspace as WireWorkspace,
   WORKSPACE_ROLE,
   type WorkspaceRole,
@@ -72,6 +73,7 @@ const OrganizationIdSchema = Schema.Struct({ organizationId: Schema.String });
 const WorkspaceRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
+  slug: Schema.String,
   /** The account's own id where this workspace is the first one made for it, else null. */
   personalOf: Schema.NullOr(Schema.String),
   /** The plugin's role text, which may list several roles comma-separated. */
@@ -182,6 +184,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
     .select({
       id: organization.id,
       name: organization.name,
+      slug: organization.slug,
       personalOf: personalWorkspace.userId,
       role: member.role,
       login: githubInstallation.accountLogin,
@@ -224,6 +227,7 @@ function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
   return {
     id: row.id,
     name: row.name,
+    slug: row.slug,
     role: roleOf(row.role),
     github:
       row.login === null
@@ -235,7 +239,7 @@ function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
 /** The longest slug spelled from a workspace's name, before any suffix. */
 const MAX_SLUG_CHARS = 48;
 
-/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under. */
+/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one Luke's own pages stand under. */
 function slugOf(name: string): string {
   const spelled = name
     .normalize("NFKD")
@@ -245,8 +249,9 @@ function slugOf(name: string): string {
     .slice(0, MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
   if (spelled === "") return "workspace";
-  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there.
-  return spelled.startsWith(PERSONAL_SLUG_PREFIX) ? `workspace-${spelled}` : spelled;
+  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of Luke's own paths.
+  const own = spelled.startsWith(PERSONAL_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
+  return own ? `workspace-${spelled}` : spelled;
 }
 
 /** The highest role the plugin's role text names, read as a member where it names none Luke knows. */

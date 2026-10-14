@@ -289,6 +289,7 @@ function row(
 const PERSONAL = {
   id: "workspace-personal",
   name: "Personal",
+  slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -296,6 +297,7 @@ const PERSONAL = {
 const ACME = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
@@ -343,6 +345,7 @@ const UNSTARTED = {
 const PLATFORM = {
   id: "workspace-platform",
   name: "Platform",
+  slug: "platform",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
