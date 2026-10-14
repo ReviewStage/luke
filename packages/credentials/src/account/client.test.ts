@@ -148,3 +148,78 @@ it.effect("a failed account completion revokes every issued refresh token", () =
     assert.deepEqual(revoked, [ISSUED_TOKENS.refreshToken]);
   }),
 );
+
+/** A client over a fake service that records the one request it was sent. */
+function recordingClient(answer: () => Response) {
+  let request: Request | undefined;
+  const fetch: FakeResponder = async (input, init) => {
+    request = new Request(input, init);
+    return answer();
+  };
+  const client = new AccountClient({
+    baseUrl: "https://tryluke.dev/api/auth",
+    clientId: "luke-desktop",
+    httpClient: fakeHttpClientLayer(fetch),
+  });
+  return { client, sent: () => request };
+}
+
+it.effect(
+  "the session exchange sends the plugin's code, state, and verifier, and keeps the signed token",
+  () =>
+    Effect.gen(function* () {
+      const { client, sent } = recordingClient(() => {
+        const answered = json({
+          token: "bare-session",
+          user: { id: "user-1", email: "dev@example.com" },
+        });
+        answered.headers.set("set-auth-token", "bare-session.signature");
+        return answered;
+      });
+
+      const session = yield* client.exchangeSessionCode({
+        code: "plugin-code",
+        state: "state-value",
+        codeVerifier: "verifier",
+      });
+
+      assert.deepEqual(session, {
+        sessionToken: "bare-session.signature",
+        userId: "user-1",
+        email: "dev@example.com",
+      });
+      const request = sent();
+      assert.equal(request?.url, "https://tryluke.dev/api/auth/electron/token");
+      assert.equal(request?.method, "POST");
+      assert.deepEqual(yield* Effect.promise(() => request?.json() ?? Promise.resolve()), {
+        token: "plugin-code",
+        state: "state-value",
+        code_verifier: "verifier",
+      });
+    }),
+);
+
+it.effect("an exchange answered without the signed token is no session", () =>
+  Effect.gen(function* () {
+    const { client } = recordingClient(() =>
+      json({ token: "bare-session", user: { id: "user-1" } }),
+    );
+
+    const exchanged = yield* Effect.exit(
+      client.exchangeSessionCode({ code: "plugin-code", state: "s", codeVerifier: "v" }),
+    );
+
+    assert.equal(Exit.isFailure(exchanged), true);
+  }),
+);
+
+it.effect("ending the session signs out under the session as a bearer", () =>
+  Effect.gen(function* () {
+    const { client, sent } = recordingClient(() => json({ success: true }));
+
+    yield* client.endSession("bare-session.signature");
+
+    assert.equal(sent()?.url, "https://tryluke.dev/api/auth/sign-out");
+    assert.equal(sent()?.headers.get("authorization"), "Bearer bare-session.signature");
+  }),
+);

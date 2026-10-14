@@ -299,10 +299,15 @@ export type PersistedSettings = Types.Mutable<typeof PersistedSettingsSchema.Typ
 const decodePersistedSettings = Schema.decodeUnknownSync(PersistedSettingsSchema);
 const encodePersistedSettings = Schema.encodeSync(PersistedSettingsSchema);
 
-/** The two OAuth tokens one Keychain-backed ciphertext holds, as `setAccount` sealed them. */
+/**
+ * The two OAuth tokens one Keychain-backed ciphertext holds, as `setAccount`
+ * sealed them, and the Mac's own session beside them once it holds one; a
+ * ciphertext sealed before the Mac held sessions reads as one without.
+ */
 const AccountTokensSchema = Schema.Struct({
   accessToken: Schema.String,
   refreshToken: Schema.String,
+  sessionToken: Schema.optionalKey(Schema.String),
 });
 
 type AccountTokens = typeof AccountTokensSchema.Type;
@@ -583,7 +588,7 @@ export class SettingsStore {
     );
   }
 
-  /** Stores both OAuth tokens under one Keychain-backed ciphertext. */
+  /** Stores both OAuth tokens, and the session when there is one, under one Keychain-backed ciphertext. */
   setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       if (!this.#secretStorageUsable()) {
@@ -595,6 +600,7 @@ export class SettingsStore {
             JSON.stringify({
               accessToken: account.accessToken,
               refreshToken: account.refreshToken,
+              ...(account.sessionToken ? { sessionToken: account.sessionToken } : undefined),
             }),
           )
           .toString("base64");
