@@ -17,11 +17,13 @@ import {
  * running where that command is not the shell at its prompt.
  */
 
-const FIELD = "\u001f";
 const SHELL_A = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const SHELL_B = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 
-/** One line as `list-sessions` prints it in the list's fields. */
+/** One field as the list prints it: what tmux printed, newline and all, in base64. */
+const field = (value: string) => Buffer.from(`${value}\n`).toString("base64");
+
+/** One line as the list prints it: the session's name, when it was created, and its free-text fields in base64. */
 function listed(
   name: string,
   created: number,
@@ -29,21 +31,23 @@ function listed(
   command: string,
   cwd: string,
 ): string {
-  return [name, String(created), title, command, cwd].join(FIELD);
+  return [name, String(created), field(title), field(command), field(cwd)].join(" ");
 }
 
 test("starting, naming, and ending a shell target its session exactly and carry a name as one argument", () => {
   const exact = `=luke-${SHELL_A}`;
-  const hostile = "dev server; rm -rf /";
+  const hostile = "dev server; rm -rf / $(id) 'q'";
   const started = startTerminal(SHELL_A, hostile);
   const renamed = renameTerminal(SHELL_A, hostile);
   const killed = killTerminal(SHELL_A);
 
-  for (const ask of [started, renamed, killed]) assert.equal(ask.command, "tmux");
-  // tmux would take a bare name as a prefix of another session's.
-  assert.ok(
-    started.args.includes(exact) && renamed.args.includes(exact) && killed.args.includes(exact),
-  );
+  for (const ask of [started, renamed, killed]) {
+    assert.equal(ask.command, "sh");
+    assert.ok(!ask.args[1]?.includes(hostile), "nothing typed is spliced into the script");
+  }
+  // tmux would take a bare name as a prefix of another session's; an option command takes the session's own pane.
+  assert.ok(started.args.includes(`${exact}:`) && renamed.args.includes(`${exact}:`));
+  assert.ok(killed.args.includes(exact));
   assert.equal(started.args.at(-1), hostile);
   assert.equal(renamed.args.at(-1), hostile);
   assert.ok(startTerminal(SHELL_A, undefined).args.includes(TMUX.START_DIRECTORY));
@@ -71,6 +75,12 @@ test("a list reads back a tab's shells oldest first, named and marked running as
   ]);
 });
 
-test("a tmux with no session left lists no shells", () => {
-  assert.deepEqual(terminalsOf({ exitCode: 1, stdout: "" }), []);
+test("a title or folder with spaces is read back whole, and a list that failed is none at all", () => {
+  const stdout = listed(`luke-${SHELL_A}`, 100, "dev  server", "node", "/workspace/my app");
+
+  assert.deepEqual(terminalsOf({ exitCode: 0, stdout }), [
+    { id: SHELL_A, title: "dev  server", command: "node", cwd: "/workspace/my app", running: true },
+  ]);
+  assert.deepEqual(terminalsOf({ exitCode: 0, stdout: "" }), []);
+  assert.equal(terminalsOf({ exitCode: 1, stdout: "" }), undefined);
 });

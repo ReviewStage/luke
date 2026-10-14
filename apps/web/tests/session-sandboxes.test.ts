@@ -97,3 +97,16 @@ it.effect("a stop Vercel refused fails with its status alone", () =>
     assert.equal(failure.status, 503);
   }),
 );
+
+it.effect(
+  "a sandbox that is up with no session named fails the stop rather than counting as stopped",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel([{ name: "eve-sbx-vercel-up", status: "running" }]);
+
+      const failure = yield* stopFor(SESSION).pipe(Effect.provide(api.layer), Effect.flip);
+
+      assert.ok(failure instanceof SandboxUnavailable);
+    }),
+);

@@ -9,14 +9,16 @@ import {
   agentSandboxLayer,
   SHELL_REFUSAL,
 } from "../server/hosted/terminal/agent-sandbox";
+import { SandboxUnavailable } from "../server/hosted/vercel-sandbox-api";
 
 /**
  * A coding agent's sandbox as its Terminal tab reaches it, over Vercel
  * Sandbox's REST API answering from a script: a stopped sandbox lists no
  * shells and is never woken by a list or a start, a running one's shells are
  * read from tmux in its running session, a shell starts under the id given
- * and is read back, one tmux does not hold is not found, and only a resume
- * wakes a stopped sandbox, by its name. The token is a synthetic one the
+ * and is read back, one tmux does not hold is not found, a list tmux could
+ * not give is an outage, and only a resume wakes a stopped sandbox, by its
+ * name. The token is a synthetic one the
  * environment carries, unexpired, so nothing refreshes it.
  */
 
@@ -24,7 +26,6 @@ const SESSION = "wrun_fixture";
 const SANDBOX = "eve-sbx-vercel-fixture";
 const RUNNING_SESSION = "sbs_running";
 const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
-const FIELD = "\u001f";
 
 /** An unsigned token naming a fixture project and team, a year from expiring. */
 function fixtureToken(): string {
@@ -59,7 +60,7 @@ function commandStream(exitCode: number, stdout = ""): Response {
  * tmux holding the shells the list prints, refusing to name a shell it does
  * not hold, and a resume that brings the sandbox up under a fresh session.
  */
-function vercel(status: string | undefined, shells: readonly string[] = []) {
+function vercel(status: string | undefined, shells: readonly string[] = [], listExit = 0) {
   const asked: Asked[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
@@ -70,9 +71,12 @@ function vercel(status: string | undefined, shells: readonly string[] = []) {
         const body = JSON.parse(await new Response(init.body).text());
         const args: readonly string[] = body.args;
         asked.push({ method, url: parsed, args });
-        if (args[0] === "list-sessions") return commandStream(0, shells.join("\n"));
-        if (args[0] === "new-session") return commandStream(0);
-        return commandStream(args.includes(`=luke-${SHELL}`) ? 0 : 1);
+        // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
+        const tmuxArgs = args.slice(3);
+        if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
+        if (tmuxArgs[0] === "new-session") return commandStream(0);
+        const named = tmuxArgs.some((arg) => arg.startsWith(`=luke-${SHELL}`));
+        return commandStream(named ? 0 : 1);
       }
       asked.push({ method, url: parsed });
       if (parsed.searchParams.get("resume") === "true") {
@@ -92,8 +96,11 @@ function vercel(status: string | undefined, shells: readonly string[] = []) {
   return { layer, asked };
 }
 
+/** One field as the list prints it: what tmux printed, newline and all, in base64. */
+const field = (value: string) => Buffer.from(`${value}\n`).toString("base64");
+
 const listedShell = (id: string, title: string, command: string) =>
-  [`luke-${id}`, "100", title, command, "/workspace/repository"].join(FIELD);
+  [`luke-${id}`, "100", field(title), field(command), field("/workspace/repository")].join(" ");
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -183,6 +190,19 @@ it.effect(
       );
       assert.deepEqual(renamedOther, Result.fail({ kind: SHELL_REFUSAL.NOT_FOUND }));
     }),
+);
+
+it.effect("a list tmux could not give is an outage, never a sandbox with no shells", () =>
+  Effect.gen(function* () {
+    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+    const api = vercel("running", [], 1);
+
+    const listed = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+      sandbox.terminals(SESSION),
+    ).pipe(Effect.provide(api.layer), Effect.flip);
+
+    assert.ok(listed instanceof SandboxUnavailable);
+  }),
 );
 
 it.effect("a resume wakes the stopped sandbox by its name and answers it running", () =>

@@ -30,7 +30,7 @@ import { Context, Effect, Layer, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
-  type SandboxUnavailable,
+  SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "./vercel-sandbox-api.js";
@@ -70,14 +70,10 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
         let stopped = 0;
         for (const sandbox of sandboxes) {
           const running = sandbox.currentSessionId;
-          // A sandbox already stopped, or one with no session up, has nothing to stop.
-          if (
-            running === undefined ||
-            sandbox.status === undefined ||
-            !UP_STATUSES.has(sandbox.status)
-          ) {
-            continue;
-          }
+          // A sandbox already stopped has nothing to stop.
+          if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
+          // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
+          if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
           yield* api.stopSession(running);
           stopped += 1;
         }

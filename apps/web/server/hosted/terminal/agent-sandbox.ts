@@ -23,7 +23,7 @@ import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  type SandboxUnavailable,
+  SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
@@ -116,15 +116,19 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
       Effect.gen(function* () {
         const { state, running } = yield* standing(sessionId);
         if (running === undefined) return { sandbox: state, terminals: [] };
-        const listed = yield* api.run(running, listTerminals());
-        return { sandbox: state, terminals: terminalsOf(listed) };
+        const listed = terminalsOf(yield* api.run(running, listTerminals()));
+        // A list tmux could not give is an outage, never a sandbox with no shells.
+        if (listed === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        return { sandbox: state, terminals: listed };
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>
         Effect.gen(function* () {
           const started = yield* api.run(running, startTerminal(terminalId, title));
-          if (started.exitCode !== 0) return Result.fail({ kind: SHELL_REFUSAL.NOT_FOUND });
+          // A shell tmux could not start, or could not list once started, is an outage: the id is the service's own, so it names nothing missing.
+          if (started.exitCode !== 0) return yield* Effect.fail(new SandboxUnavailable({}));
           const listed = terminalsOf(yield* api.run(running, listTerminals()));
+          if (listed === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
           const shell = listed.find((terminal) => terminal.id === terminalId);
           return shell === undefined
             ? Result.fail({ kind: SHELL_REFUSAL.NOT_FOUND })
