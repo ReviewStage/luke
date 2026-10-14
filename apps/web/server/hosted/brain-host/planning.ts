@@ -12,7 +12,7 @@ import {
   ROLLOUT_BAR,
   ROLLOUT_PURPOSE,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_FIELD, type Plan } from "@sidecar/hosted/plan-wire";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -43,6 +43,7 @@ import { INTEGRATION_NAMES_SAID } from "../integrations.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../page-tool.js";
+import { type RolloutAgents, rolloutStateOf } from "../plan-agents.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -361,11 +362,22 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
 }
 
 /**
+ * The plan's rollout behind its marker: its pull requests as JSON, whole, so
+ * Luke can answer a worker from what each was cut to do, then their state as
+ * the workers stand; nothing for a plan with no rollout yet.
+ */
+function rolloutText(rollout: Plan["rollout"], agents: RolloutAgents): readonly string[] {
+  if (rollout.length === 0) return [];
+  return [ROLLOUT_MARKER, JSON.stringify(rollout), ...rolloutStateOf(rollout, agents)];
+}
+
+/**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, its rollout as JSON where it has
- * one, the newest saves coding agents
- * made on it (so Luke can raise what an agent asked or decided), the sections
- * the developer last wrote themselves (so Luke treats them as decided), and the
+ * plan's name, the saved document as JSON, its rollout where it has one with
+ * each pull request's state as its workers stand (so Luke reads which is
+ * ready rather than inferring it), the newest saves coding agents made on it
+ * (so Luke can raise what an agent asked or decided), the sections the
+ * developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the
  * next turn reads. A plan that no longer stands gets the heading alone.
@@ -374,6 +386,7 @@ export function planningStandingContext(
   stored: StoredPlan | undefined,
   board: Board,
   now: number,
+  agents: RolloutAgents,
 ): string {
   const heading = `${PLAN_MARKER} ${new Date(now).toISOString()}`;
   if (!stored) return heading;
@@ -383,7 +396,7 @@ export function planningStandingContext(
     `Name: ${plan.name}`,
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
-    ...(plan.rollout.length === 0 ? [] : [ROLLOUT_MARKER, JSON.stringify(plan.rollout)]),
+    ...rolloutText(plan.rollout, agents),
     ...agentEditsText(stored.agentEdits),
     ...developerFieldsText(stored),
     boardText(board),

@@ -202,8 +202,9 @@ export const LIST_CODING_AGENTS_TOOL = {
     "List the coding agents working on this plan: each with its id, its title (how the " +
     "developer sees it named), the model and effort it runs on with the model's name to say it " +
     "by, its status (starting, running, " +
-    "completed, failed, cancelled), the branch its sandbox is on if a turn has ended, and one " +
-    "line of what it last did. Call it when the developer asks about or addresses an agent, to " +
+    "completed, failed, cancelled), the branch its sandbox is on if a turn has ended, one " +
+    "line of what it last did, and its position where it works one pull request of the " +
+    "plan's rollout. Call it when the developer asks about or addresses an agent, to " +
     "find which one they mean.",
   inputSchema: Schema.Struct({}),
 } as const;
@@ -327,6 +328,8 @@ interface AgentReading {
   readonly repository: string;
   readonly branch: string | null;
   readonly activity: string | null;
+  /** The pull request of the plan's rollout it works, counted from one; absent for an agent started outside the rollout. */
+  readonly position?: number;
 }
 
 /** The newest journals of an agent's conversation, read under the member who started it, oldest first; none where the page does not read. */
@@ -394,6 +397,7 @@ const readAgent = (
       repository: agent.repository,
       branch: agent.branch,
       activity: activity ?? null,
+      ...(agent.position === null ? undefined : { position: agent.position }),
     };
   });
 

@@ -579,7 +579,7 @@ const HOLDING_TURN_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /** What a rollout agent's place is read from: its newest turn, and whether a line of the developer's awaits its turn. */
-interface RolloutStanding {
+export interface RolloutStanding {
   readonly turn: LatestTurn | undefined;
   readonly lineAwaits: boolean;
 }
@@ -592,7 +592,11 @@ interface RolloutStanding {
  * store's own copy of that rule, interim until the rule moves down beside
  * the store and the status reads it from here.
  */
-function isLiveWorkerTurn(agent: CodingAgent, standing: RolloutStanding, now: Date): boolean {
+export function isLiveWorkerTurn(
+  agent: CodingAgent,
+  standing: RolloutStanding,
+  now: Date,
+): boolean {
   if (standing.lineAwaits) return true;
   const turn = standing.turn;
   if (turn === undefined) {
