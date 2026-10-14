@@ -156,7 +156,7 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
 };
 
 /** Why an automation stands paused where the developer did not pause it. */
-const AUTOMATION_PAUSE = {
+export const AUTOMATION_PAUSE = {
   /** Its last runs failed one after another, so the service stopped firing it. */
   FAILURES: "failures",
 } as const;

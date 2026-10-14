@@ -2761,7 +2761,9 @@ each inside ten seconds, counted as `voice`. A deployment without the OpenAI
 key opened no voice session and sweeps none.
 
 It then fires the automations whose schedule is due ("Automations" below),
-at most twenty-five a sweep, counted as `automations.fired`.
+at most twenty-five a sweep, counted as `automations.fired`, and acts on
+the runs still queued from the last hour, at most twelve a sweep and four
+at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project; the same secret is the one the
@@ -2796,3 +2798,22 @@ same minute twice; the second claim finds the row moved on or locked, and
 a claim that still read it at its old instant records nothing past the
 unique key. A schedule due more than an hour ago, the cron down or a
 deploy between, is moved on without a run, so a backlog is never replayed.
+
+A queued run is acted on by `hosted/automation-runs.ts`. Its guards come
+first: a run past the daily cap (runs started in the last twenty-four
+hours) or past the concurrency guard (agents its runs started still
+starting or running, read as each agent's tab reads it) is skipped, never
+queued. Then it is a Start with a task, on the one path a Start takes
+(`coder-host/start.ts`): the plan, its repository, the owner's reach of it
+through the App, and the model are checked as for the developer's own
+Start, the agent runs as the owner on the owner's keys, and eve is reached
+as the deployment acting for the owner under `CRON_SECRET`, the opening the
+coder channel already admits for the voice brain. The task is the
+automation's prompt with a closing line naming the automation and why it
+fired. The run's id is the Start's key, so a run two sweeps both act on
+starts one agent, and a named model does not become the account's default.
+A refused start is a failed run with one fixed word
+(`AUTOMATION_RUN_REASON`), and three failed starts in a row pause the
+automation (`paused_reason` `failures`, `next_run_at` cleared). The agent's
+questions reach the Inbox and its end the finished-agent notification as
+any agent's do.
