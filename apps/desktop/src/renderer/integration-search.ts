@@ -47,6 +47,19 @@ export interface IntegrationMatch {
   readonly tools: readonly IntegrationTool[];
 }
 
+/**
+ * The tools one integration's list shows for what a query found of it: the
+ * tools it found, else every one where it found the integration itself,
+ * else none.
+ */
+export function shownTools(
+  match: IntegrationMatch | undefined,
+  tools: readonly IntegrationTool[],
+): readonly IntegrationTool[] {
+  if (match === undefined) return [];
+  return match.tools.length > 0 ? match.tools : tools;
+}
+
 /** The lines an integration itself is found by: its name, and what it is for. */
 export function integrationLines(provider: IntegrationProvider): readonly string[] {
   return [INTEGRATION_NAME[provider], INTEGRATION_KEYWORDS[provider]];

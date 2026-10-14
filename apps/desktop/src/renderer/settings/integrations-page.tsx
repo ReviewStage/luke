@@ -23,7 +23,7 @@ import {
   type IntegrationTool,
   toolsCount,
 } from "../integration-health";
-import { matchIntegration } from "../integration-search";
+import { matchIntegration, shownTools } from "../integration-search";
 import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration-sign-in";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
@@ -539,8 +539,13 @@ function foundRow(
   const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
   const match = matchIntegration(provider, all, tokens);
   if (match === undefined) return undefined;
-  const toolsFound = match.tools.length > 0;
-  return { provider, health, all, shown: toolsFound ? match.tools : all, toolsFound };
+  return {
+    provider,
+    health,
+    all,
+    shown: shownTools(match, all),
+    toolsFound: match.tools.length > 0,
+  };
 }
 
 /** A set with `provider` turned: taken out where it stood, put in where it did not. */
