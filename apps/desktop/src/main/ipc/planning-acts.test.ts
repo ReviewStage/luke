@@ -17,6 +17,7 @@ import {
   ACT,
   ACT_KIND,
   ACT_OUTCOME_STATUS,
+  ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
@@ -30,6 +31,13 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SERVICE = "https://luke.test";
+const INVITATION = {
+  id: "inv-1",
+  email: "alan@luke.test",
+  role: WORKSPACE_ROLE.MEMBER,
+  expiresAt: "2026-10-16T12:00:00.000Z",
+  acceptUrl: "https://luke.test/accept-invitation.html?id=inv-1",
+};
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 const ACME = {
   id: "workspace-acme",
@@ -79,6 +87,7 @@ function fixture() {
    */
   const host = {
     notPermitted: false,
+    alreadyInvited: false,
     connectUrl: INSTALL_URL,
     githubUnanswered: false,
     connectPage: CONNECT_PAGE,
@@ -235,6 +244,23 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`leave:${params.workspaceId}`);
           return host.notPermitted ? refusal() : ({ left: true } as const);
+        }),
+      workspaceInvitations: (params) =>
+        Effect.sync(() => {
+          asked.push(`invitations:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { invitations: [INVITATION] };
+        }),
+      workspaceInvite: (params) =>
+        Effect.sync(() => {
+          asked.push(`invite:${params.workspaceId}:${params.email}`);
+          return host.alreadyInvited
+            ? ({ failure: WORKSPACE_CALL_FAILURE.ALREADY_INVITED } as const)
+            : { invitation: INVITATION };
+        }),
+      workspaceInvitationCancel: (params) =>
+        Effect.sync(() => {
+          asked.push(`cancel:${params.workspaceId}:${params.invitationId}`);
+          return { invitations: [] };
         }),
     },
     openExternal: (url) => {
@@ -469,24 +495,45 @@ it.effect(
 );
 
 it.effect(
-  "inviting people opens the service's invite page for the workspace, from a panel alone, and asks the host nothing",
+  "an invitation is read, made, and canceled through the host from a panel alone, and an address already invited is refused in words that say so",
   () =>
     Effect.gen(function* () {
       const f = fixture();
+      const panel = (act: Parameters<typeof f.router.performAct>[0]) =>
+        f.router.performAct(act, PANEL);
+      const invite = {
+        kind: ACT_KIND.WORKSPACE_INVITE,
+        payload: { workspaceId: ACME.id, email: INVITATION.email, role: WORKSPACE_ROLE.MEMBER },
+      } as const;
 
-      const invited = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_INVITE, payload: { workspaceId: "org a&b" } },
-        PANEL,
-      );
-      const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_INVITE, payload: { workspaceId: ACME.id } },
-        VOICE,
-      );
+      const read = yield* panel({
+        kind: ACT_KIND.WORKSPACE_INVITATIONS_READ,
+        payload: { workspaceId: ACME.id },
+      });
+      const made = yield* panel(invite);
+      const canceled = yield* panel({
+        kind: ACT_KIND.WORKSPACE_INVITATION_CANCEL,
+        payload: { workspaceId: ACME.id, invitationId: INVITATION.id },
+      });
+      const fromVoice = yield* f.router.performAct(invite, VOICE);
+      f.host.alreadyInvited = true;
+      const again = yield* panel(invite);
 
-      assert.equal(invited.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(read, { status: ACT_OUTCOME_STATUS.DONE, value: [INVITATION] });
+      assert.deepEqual(made, { status: ACT_OUTCOME_STATUS.DONE, value: INVITATION });
+      assert.deepEqual(canceled, { status: ACT_OUTCOME_STATUS.DONE, value: [] });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.opened, [`${SERVICE}/invite.html?workspace=org+a%26b`]);
-      assert.deepEqual(f.asked, []);
+      assert.deepEqual(again, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ALREADY_INVITED_REFUSAL,
+      });
+      assert.deepEqual(f.asked, [
+        `invitations:${ACME.id}`,
+        `invite:${ACME.id}:${INVITATION.email}`,
+        `cancel:${ACME.id}:${INVITATION.id}`,
+        `invite:${ACME.id}:${INVITATION.email}`,
+      ]);
+      assert.deepEqual(f.opened, []);
     }),
 );
 

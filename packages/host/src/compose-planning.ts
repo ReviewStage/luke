@@ -52,6 +52,8 @@ import {
   type PlanningView,
   type PlanningWorkspaceAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
+  type PlanningWorkspaceInvitationAnswer,
+  type PlanningWorkspaceInvitationsAnswer,
   type PlanningWorkspaceLeaveAnswer,
   type PlanningWorkspaceMembersAnswer,
   type PlanShownCode,
@@ -73,6 +75,8 @@ import {
   planningStartRequestSchema,
   planningTreeParamsSchema,
   planningWorkspaceCreateParamsSchema,
+  planningWorkspaceInvitationCancelParamsSchema,
+  planningWorkspaceInviteParamsSchema,
   planningWorkspaceLeaveParamsSchema,
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
@@ -277,7 +281,16 @@ export type PlanningClient = Pick<
   /** The account's workspaces, the ones it may join, and their members. */
   workspaces: Pick<
     HostedWorkspaceClient,
-    "list" | "create" | "githubConnect" | "githubDisconnect" | "members" | "removeMember" | "leave"
+    | "list"
+    | "create"
+    | "githubConnect"
+    | "githubDisconnect"
+    | "members"
+    | "removeMember"
+    | "leave"
+    | "invite"
+    | "invitations"
+    | "cancelInvitation"
   >;
   /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnectUrl">;
@@ -1559,6 +1572,55 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const left = yield* workspaceCall(leave, { plans: true });
         return carried<PlanningWorkspaceLeaveAnswer>(
           left.ok ? { left: true } : { failure: left.failure },
+        );
+      }),
+    // An invitation is answered to the window that asked and held nowhere,
+    // and moves no workspace or plan, so nothing else is read with it.
+    [GATEWAY_METHOD.WORKSPACES_INVITATIONS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading invitations names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
+        const pending = yield* Effect.provide(
+          client.workspaces.invitations(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspaceInvitationsAnswer>(
+          pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceInviteParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("an invitation names a workspace, an address, and a role");
+        }
+        if (!gate()) return carried<PlanningWorkspaceInvitationAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, email, role } = read.success;
+        const made = yield* Effect.provide(
+          client.workspaces.invite(workspaceId, email, role),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspaceInvitationAnswer>(
+          made.ok ? { invitation: made.answer } : { failure: made.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceInvitationCancelParamsSchema)(
+          unparsedWire(params),
+        );
+        if (Result.isFailure(read)) {
+          return yield* invalid("canceling an invitation names the workspace and the invitation");
+        }
+        if (!gate()) return carried<PlanningWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, invitationId } = read.success;
+        const pending = yield* Effect.provide(
+          client.workspaces.cancelInvitation(workspaceId, invitationId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspaceInvitationsAnswer>(
+          pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
         );
       }),
     // A save of another plan than the open one is dropped: its board is not drawn.

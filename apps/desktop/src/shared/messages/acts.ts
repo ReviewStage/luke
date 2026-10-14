@@ -117,11 +117,17 @@ import {
   planningTreeAnswerSchema,
   planningTreeParamsSchema,
   planningWorkspaceCreateParamsSchema,
+  planningWorkspaceInvitationCancelParamsSchema,
+  planningWorkspaceInviteParamsSchema,
   planningWorkspaceLeaveParamsSchema,
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
 } from "@sidecar/hosted/planning-view";
+import {
+  type WorkspaceInvitation,
+  workspaceInvitationSchema,
+} from "@sidecar/hosted/workspace-invitation-wire";
 import {
   type Workspace,
   type WorkspaceMember,
@@ -251,8 +257,8 @@ export const ACT_KIND = {
   PLANNING_PAGE_SOURCE: "planning.pageSource",
   /**
    * The account's workspaces: one made under a name, answered as made, which
-   * the account owns; the service's invite page for one opened in the
-   * browser, where its owners and admins invite people; a GitHub
+   * the account owns; one's pending invitations read, one made, answered
+   * with its accept link, and one canceled, for its owners and admins; a GitHub
    * organization connected to one, the Luke GitHub App's install address the
    * service answers opened in the browser, or disconnected from it; one
    * workspace's members read; one member removed, answered with the members
@@ -261,7 +267,9 @@ export const ACT_KIND = {
    * not allow is refused in words that say so.
    */
   WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
   WORKSPACE_INVITE: "workspace.invite",
+  WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
@@ -452,6 +460,12 @@ export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
 
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
+
+const workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
+
+/** What an invitation is refused with where the address is already in the workspace or already invited. */
+export const ALREADY_INVITED_REFUSAL =
+  "That address is already in this workspace or invited." as const;
 
 /**
  * Whether a value reads under a schema at all, for a result the payload's own
@@ -724,10 +738,20 @@ export const ACT = {
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
     refusal: "Could not make that workspace on this system.",
   },
-  [ACT_KIND.WORKSPACE_INVITE]: {
+  [ACT_KIND.WORKSPACE_INVITATIONS_READ]: {
     payload: actSchema(planningWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not open the invite page on this system.",
+    result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
+    refusal: "Could not read invitations on this system.",
+  },
+  [ACT_KIND.WORKSPACE_INVITE]: {
+    payload: actSchema(planningWorkspaceInviteParamsSchema),
+    result: wireResult<WorkspaceInvitation>(isReadable(workspaceInvitationSchema)),
+    refusal: "Could not invite that address on this system.",
+  },
+  [ACT_KIND.WORKSPACE_INVITATION_CANCEL]: {
+    payload: actSchema(planningWorkspaceInvitationCancelParamsSchema),
+    result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
+    refusal: "Could not cancel that invitation on this system.",
   },
   [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
     payload: actSchema(planningWorkspaceParamsSchema),
