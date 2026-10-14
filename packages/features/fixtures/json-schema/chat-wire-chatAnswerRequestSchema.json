@@ -1,0 +1,100 @@
+{
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "number",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reply": {
+          "type": "object",
+          "properties": {
+            "reply": {
+              "type": "string",
+              "enum": [
+                "chose",
+                "approved",
+                "declined",
+                "answered",
+                "done",
+                "not-done",
+                "submitted",
+                "acknowledged"
+              ]
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 6
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 8
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "required": [
+            "reply"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "seq",
+        "revision",
+        "reply"
+      ],
+      "additionalProperties": false
+    },
+    "clientKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "required": [
+    "answer",
+    "clientKey"
+  ],
+  "additionalProperties": false
+}

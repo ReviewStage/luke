@@ -101,7 +101,7 @@ function askOnWire(row: ChatMessageRow): Pick<ChatMessage, "ask"> | undefined {
 }
 
 /** A message as the window reads one. */
-function messageOnWire(row: ChatMessageRow): ChatMessage {
+export function messageOnWire(row: ChatMessageRow): ChatMessage {
   return {
     id: row.id,
     seq: row.seq,
