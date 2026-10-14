@@ -8,9 +8,10 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { ChevronRightIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
+import { type ActHandle, useAct } from "../act";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import {
   CONNECTION_HEALTH,
@@ -20,12 +21,12 @@ import {
   type IntegrationToolIndex,
   toolsCount,
 } from "../integration-health";
-import { IntegrationMark } from "../integration-marks";
 import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration-sign-in";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
+import { ProviderMark } from "../provider-marks";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
@@ -42,14 +43,22 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * browser with Reopen and Cancel, and one that failed or never finished
  * says so with Try again (`integration-sign-in.ts`). A connection is said to be
  * connected only once its server answered with its tools; one whose server
- * answered why it would not says why instead, and offers Reconnect where
- * that mends it (`integration-health.ts`). A Connect sends the browser to
- * sign in with the provider; a connected row's ⋯ (or a right-click on it)
- * offers Disconnect, which asks first in the confirm dialog. GitHub is
- * granted by the account's own GitHub (`integration-grant.ts`), so its row
- * offers Connect GitHub, which opens Settings › Connected accounts, and no
- * Disconnect. The window never sees a sign-in address; the
- * host opens it. Where every
+ * answered why it would not says why instead (`integration-health.ts`). A
+ * row's button is for the problem state alone: Connect while none stands,
+ * and Reconnect where a sign-in expired or a broken connection is mended by
+ * one. A connected row that works stands quiet, and its ⋯ (or a right-click
+ * on it) keeps Reconnect, which signs in with the provider again, beside
+ * Disconnect, which asks first in the confirm dialog. The rows stand in the
+ * order of their names, GitHub's among them. GitHub is granted by the
+ * account's own GitHub (`integration-grant.ts`), which its ⋯ says over its
+ * acts: its row offers Connect GitHub, which connects the account's GitHub
+ * in place, and once connected its ⋯ adds Manage repositories, the Luke
+ * GitHub App's page on GitHub where the repositories it reaches are chosen.
+ * Its Disconnect is Settings › Connected accounts' own, which unlinks the
+ * account's GitHub and never signs the account out: the service refuses it
+ * where GitHub is the account's only way to sign in, and the dialog that
+ * asked says so. The window never sees a sign-in address; the host opens
+ * it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
  * developer comes back from the browser. A provider this deployment does not
@@ -82,7 +91,17 @@ const PAGE_LINE = {
   READ_FAILED: "Your integrations could not be read.",
   NONE_OFFERED: "No integrations are available for this account.",
   NOT_OPENED: "Luke could not open your browser to sign in.",
+  GITHUB_SIGN_IN: "Uses your GitHub sign-in",
+  REPOSITORIES_NOT_OPENED: "Luke could not open GitHub's repositories page. Try again in a moment.",
 } as const;
+
+/** What a row offers to mend or manage its connection, on its button or in its ⋯. */
+const ROW_ACT = {
+  RECONNECT: "Reconnect",
+  MANAGE_REPOSITORIES: "Manage repositories",
+} as const;
+
+const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** What a row's line looks like: connected with its dot, a problem in the attention tint, a wait with its ring, or plain. */
 const LINE_STATE = {
@@ -151,16 +170,20 @@ function rowLine(
   }
 }
 
-/** What a row's grant button says: Connect GitHub for GitHub, Try again after a sign-in that did not connect, else Connect or Reconnect. */
+/**
+ * What a row's grant button says: Reconnect over a connection that broke,
+ * GitHub's included, else Connect GitHub for GitHub, Try again after a
+ * sign-in that did not connect, else Connect or Reconnect.
+ */
 function grantLabel(
   bySignIn: boolean,
   status: IntegrationStatus | undefined,
   signIn: SignIn | undefined,
 ): string {
+  if (status === INTEGRATION_STATUS.CONNECTED) return ROW_ACT.RECONNECT;
   if (bySignIn) return CONNECT_GITHUB_LABEL;
-  if (status === INTEGRATION_STATUS.CONNECTED) return "Reconnect";
   if (signIn !== undefined) return SIGN_IN_ACTION.TRY_AGAIN;
-  return status === INTEGRATION_STATUS.EXPIRED ? "Reconnect" : "Connect";
+  return status === INTEGRATION_STATUS.EXPIRED ? ROW_ACT.RECONNECT : "Connect";
 }
 
 /** A row's line, with the ring before a wait's words. */
@@ -243,6 +266,39 @@ function RowToolsPanel({
   );
 }
 
+/**
+ * Disconnects one provider: a Connect grant at the service, and GitHub by
+ * unlinking the account's GitHub as Connected accounts does, whose refusal
+ * where GitHub is the account's only way to sign in is the dialog's to say.
+ */
+function disconnectProvider(
+  act: ActHandle["act"],
+  provider: IntegrationProvider,
+  settle: IntegrationStatuses["settle"],
+): Promise<ActionResult> {
+  const refused: ActionResult = {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: `Luke could not disconnect ${INTEGRATION_NAME[provider]}. Try again in a moment.`,
+  };
+  if (grantedBySignIn(provider)) {
+    return act(ACT_KIND.GITHUB_DISCONNECT).then(
+      () => {
+        settle(provider, INTEGRATION_STATUS.DISCONNECTED);
+        return ACCEPTED;
+      },
+      (refusal: Error) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal.message }),
+    );
+  }
+  return act(ACT_KIND.INTEGRATIONS_DISCONNECT, { provider }).then(
+    (answer: IntegrationStatusView) => {
+      if ("failure" in answer) return refused;
+      settle(provider, answer.status);
+      return ACCEPTED;
+    },
+    () => refused,
+  );
+}
+
 function IntegrationRow({
   provider,
   status,
@@ -290,38 +346,58 @@ function IntegrationRow({
     });
   }, [cancelSignIn, provider, name]);
 
+  // The Luke GitHub App's page on GitHub, which the service names beside
+  // the repositories it reaches.
+  const manageRepositories = useCallback(() => {
+    setRejection(undefined);
+    void act(ACT_KIND.PLANNING_REPOSITORIES, {})
+      .then((answer) => {
+        if ("failure" in answer) throw new Error(answer.failure);
+        return act(ACT_KIND.GITHUB_OPEN, { url: answer.repositories.installationUrl });
+      })
+      .catch(() => setRejection(PAGE_LINE.REPOSITORIES_NOT_OPENED));
+  }, [act]);
+
   const connected = status === INTEGRATION_STATUS.CONNECTED;
-  const disconnect = useConfirmDialog(
-    { subject: connected, surfaceOpen: true },
-    async (): Promise<ActionResult> => {
-      const answer: IntegrationStatusView | undefined = await act(
-        ACT_KIND.INTEGRATIONS_DISCONNECT,
-        { provider },
-      ).catch(() => undefined);
-      if (answer === undefined || "failure" in answer) {
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: `Luke could not disconnect ${name}. Try again in a moment.`,
-        };
-      }
-      settle(provider, answer.status);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    },
+  const disconnect = useConfirmDialog({ subject: connected, surfaceOpen: true }, () =>
+    disconnectProvider(act, provider, settle),
   );
 
   const line = rowLine(provider, status, health, signIn);
   const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect;
   const waiting = !connected && signIn?.kind === SIGN_IN.WAITING;
-  // A grant that is the account's GitHub sign-in ends with that sign-in, never here.
-  const actions =
-    connected && !bySignIn
-      ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
-      : [];
+  // A broken connection's Reconnect is the row's button, so its ⋯ keeps it
+  // only while the connection stands quiet.
+  const reconnect = {
+    label: ROW_ACT.RECONNECT,
+    icon: <RefreshCwIcon />,
+    disabled: connecting,
+    onSelect: connect,
+  };
+  const repositories = {
+    label: ROW_ACT.MANAGE_REPOSITORIES,
+    icon: <ExternalLinkIcon />,
+    onSelect: manageRepositories,
+  };
+  const leave = {
+    label: "Disconnect",
+    icon: <TrashIcon />,
+    danger: true,
+    onSelect: disconnect.ask,
+  };
+  const actions = connected
+    ? [...(broken ? [] : [reconnect]), ...(bySignIn ? [repositories] : []), leave]
+    : [];
   return (
     <>
-      <MenuRow label={`${name} actions`} actions={actions} anchor={provider}>
+      <MenuRow
+        label={`${name} actions`}
+        actions={actions}
+        anchor={provider}
+        {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
+      >
         <span className="settings-row-mark">
-          <IntegrationMark provider={provider} />
+          <ProviderMark provider={provider} />
         </span>
         <span className="settings-copy">
           <strong>
@@ -381,7 +457,9 @@ function IntegrationRow({
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,
-          body: "What Luke already did there stays.",
+          body: bySignIn
+            ? "Your account's GitHub is disconnected with it, so coding agents lose GitHub until you connect it again. What Luke already did there stays."
+            : "What Luke already did there stays.",
           verb: "Disconnect",
           running: "Disconnecting…",
         }}
@@ -485,9 +563,11 @@ function IntegrationRows({
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
+  // Note that the rows stand in the order of their names, so no provider is
+  // pinned above the rest by the order its value set happens to list it in.
   const offered = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => statuses.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
-  );
+  ).toSorted((one, other) => INTEGRATION_NAME[one].localeCompare(INTEGRATION_NAME[other], "en"));
   const tokens = searchTokens(query);
   // A turn made under an older query is forgotten with it.
   const turnedNow: ReadonlySet<IntegrationProvider> =

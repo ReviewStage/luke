@@ -1,11 +1,12 @@
 import type { GitHubRepository } from "@sidecar/hosted";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
 import { GearIcon } from "@sidecar/panel";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { GitHubMark } from "../account-marks";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { CONNECTED_ACCOUNTS_LINK, OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
+import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
@@ -99,7 +100,13 @@ function repositoryRows(
   return names.map((fullName) => ({
     id: fullName,
     label: fullName,
-    icon: <RepositoryPicture repository={fullName} pictures={pictures} fallback={<GitHubMark />} />,
+    icon: (
+      <RepositoryPicture
+        repository={fullName}
+        pictures={pictures}
+        fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+      />
+    ),
   }));
 }
 
@@ -234,12 +241,12 @@ export function RepositoryChip(props: {
           onClick={press}
         >
           {props.value === null ? (
-            <GitHubMark />
+            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
           ) : (
             <RepositoryPicture
               repository={props.value}
               pictures={chooser.pictures}
-              fallback={<GitHubMark />}
+              fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
             />
           )}
           <span className="chip-name">{label}</span>

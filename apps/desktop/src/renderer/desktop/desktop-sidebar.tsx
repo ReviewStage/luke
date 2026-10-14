@@ -1,4 +1,5 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   ArchiveIcon,
@@ -15,7 +16,6 @@ import {
 import { InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { GitHubMark } from "../account-marks";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
@@ -32,6 +32,7 @@ import { sameTab } from "../planning/tab-strip-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";
+import { ProviderMark } from "../provider-marks";
 import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";
@@ -298,7 +299,7 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
     : { label: "Pin", icon: <PinIcon />, onSelect: () => plans.onPinRepository(repository, true) };
   const github: MenuAction = {
     label: "Open on GitHub",
-    icon: <GitHubMark />,
+    icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => plans.repositories.openGitHub(repositoryPageUrl(repository)),
   };
   return [[pin, archive], [github]];

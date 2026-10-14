@@ -402,6 +402,19 @@
   height: 14px;
 }
 
+/* The provider the account signed in with, its mark beside its name as the
+   sign-in button drew them, at the size of the line's own words. */
+.account-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.account-provider .provider-mark {
+  width: 12px;
+  height: 12px;
+}
+
 .link-icon {
   width: 9px;
   height: 9px;

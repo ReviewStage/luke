@@ -323,7 +323,7 @@ await Promise.all(
     ),
 );
 
-// The harness marks drawn as images rather than traced (`src/renderer/provider-marks.tsx`),
+// The harness marks drawn as images rather than traced (`src/renderer/harness-marks.tsx`),
 // copied beside the bundle so the panel reaches them as its own files and the
 // bundle carries none of their bytes.
 await fs.cp(path.join(appRoot, "src/renderer/marks"), path.join(outputRoot, "renderer/marks"), {

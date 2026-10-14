@@ -532,7 +532,7 @@ button.code-card-path:hover {
   margin-left: auto;
 }
 
-.file-view-actions .account-mark {
+.file-view-actions .provider-mark {
   width: var(--control-glyph);
   height: var(--control-glyph);
 }
@@ -2118,7 +2118,7 @@ button.agent-ref:hover .agent-ref-name {
   border-bottom: 1px solid var(--hairline);
 }
 
-.agent-servers-page-head .integration-mark {
+.agent-servers-page-head .provider-mark {
   width: var(--menu-glyph);
   height: var(--menu-glyph);
   flex: none;

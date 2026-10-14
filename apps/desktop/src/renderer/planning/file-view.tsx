@@ -1,3 +1,4 @@
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
 import {
@@ -10,9 +11,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { GitHubMark } from "../account-marks";
 import { paneTiming } from "../desktop/pane-motion";
 import type { ReadFolder } from "../file-tree/contract";
+import { ProviderMark } from "../provider-marks";
 import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
@@ -255,7 +256,7 @@ export function FileViewBar({
             disabled={onGitHub === undefined}
             onClick={onGitHub}
           >
-            <GitHubMark />
+            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
           </button>
         </Tooltip>
         {menu}

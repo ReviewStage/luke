@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import {
@@ -12,10 +13,10 @@ import {
 import { ACT_KIND } from "#shared/messages/acts";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { GitHubMark } from "../account-marks";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { PersonAvatar } from "../person-avatar";
+import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";
@@ -151,7 +152,11 @@ function accountMenuGroups(
         label: "Contact us",
         icon: <LifeBuoyIcon />,
         items: [
-          { label: "GitHub", icon: <GitHubMark />, onSelect: acts.onOpenIssues },
+          {
+            label: "GitHub",
+            icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
+            onSelect: acts.onOpenIssues,
+          },
           { label: "Email", icon: <MailIcon />, onSelect: acts.onEmail },
         ],
       },

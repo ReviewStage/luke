@@ -3,8 +3,8 @@
  * They are brand marks, not glyphs of ours: the Google G keeps its four
  * official colours, and the GitHub mark rides `currentColor` the way GitHub's
  * own guidance draws it on a dark ground. They are the desktop sign-in gate's
- * marks (`apps/desktop/src/renderer/account-marks.tsx`), duplicated on purpose
- * the way `provider-marks.tsx` duplicates the session marks: the React that
+ * marks (`apps/desktop/src/renderer/provider-marks.tsx`), duplicated on purpose
+ * as `integration-marks.tsx` duplicates the integration marks: the React that
  * traces a mark stays in each app. Do not restyle the geometry or recolour
  * them; change both copies if a provider publishes an updated mark.
  */

@@ -1406,7 +1406,7 @@ body,
   white-space: nowrap;
 }
 
-.chip :is(.account-mark, .repository-picture, .provider-mark) {
+.chip :is(.repository-picture, .provider-mark, .harness-mark) {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
@@ -2101,9 +2101,10 @@ body,
   left: auto;
 }
 
-/* A harness mark keeps its box in a row however tight the row is, the one
-   drawn as an image (`provider-marks.tsx`) as the traced one does. */
-.provider-mark {
+/* A harness's or a provider's mark keeps its box in a row however tight the
+   row is, the harness mark drawn as an image (`harness-marks.tsx`) as the
+   traced ones (`provider-marks.tsx`) do. */
+:is(.harness-mark, .provider-mark) {
   flex: 0 0 auto;
 }
 
@@ -2111,7 +2112,7 @@ body,
    wears them by the ground: Notion's pure white on dark and pure black on
    light, Sentry's white on dark and its dark blurple on light, Neon's two
    greens, and Mercury's near-white on dark and near-black on light
-   (`integration-marks.tsx`). */
+   (`provider-marks.tsx`). */
 :root {
   --integration-ink-mercury: #f4f5f9;
   --integration-ink-neon: #34d59a;
@@ -5241,7 +5242,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   height: var(--menu-glyph);
 }
 
-.plan-card-detail .plan-card-glyph > :is(.repository-picture, .account-mark) {
+.plan-card-detail .plan-card-glyph > :is(.repository-picture, .provider-mark) {
   width: 14px;
   height: 14px;
 }

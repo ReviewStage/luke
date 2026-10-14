@@ -25,12 +25,15 @@ import { Tooltip } from "../tooltip";
 export function MenuRow({
   label,
   actions,
+  heading,
   anchor,
   children,
 }: {
   /** What the menu is named: "Linear actions". */
   label: string;
   actions: readonly MenuAction[];
+  /** A muted line over the menu's acts saying what they act on, where the row's words do not. */
+  heading?: string;
   /** The id a pressed search result lands on. */
   anchor?: string;
   /** The row's words, and any control standing before the ⋯. */
@@ -77,7 +80,13 @@ export function MenuRow({
         ) : null}
       </div>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+        <ActionMenu
+          label={label}
+          menu={menu.drawn}
+          groups={[actions]}
+          {...(heading === undefined ? undefined : { heading })}
+          onClose={menu.close}
+        />
       )}
     </>
   );

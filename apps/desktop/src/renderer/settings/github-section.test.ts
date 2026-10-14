@@ -9,9 +9,9 @@ import { GitHubSection } from "./github-section";
 
 /**
  * Settings' GitHub row over the connection as the host last read it: Connect
- * GitHub while none is connected or before the first read, Connected with
- * Reconnect, and Disconnect in its ⋯, which asks first, once one is.
- * Synthetic accounts.
+ * GitHub while none is connected or before the first read, and once one is,
+ * Connected with no button of its own, Reconnect and Disconnect in its ⋯,
+ * the Disconnect asking first. Synthetic accounts.
  */
 
 const roots: Root[] = [];
@@ -46,11 +46,31 @@ function mount(connection: GitHubConnection | undefined) {
         assert.fail(`no ${words} button`)
       ).click(),
     );
+  const choose = (words: string) => {
+    act(() =>
+      (
+        container.querySelector<HTMLButtonElement>('button[aria-label="GitHub actions"]') ??
+        assert.fail("no ⋯ on the row")
+      ).click(),
+    );
+    act(() =>
+      (
+        [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+          (each) => each.textContent === words,
+        ) ?? assert.fail(`no ${words} in the menu`)
+      ).click(),
+    );
+  };
   return {
     page: container,
     opened,
     press,
+    choose,
     line: () => container.querySelector(".settings-copy small")?.textContent,
+    buttons: () =>
+      [...container.querySelectorAll("button")]
+        .filter((each) => !each.hasAttribute("aria-haspopup"))
+        .map((each) => each.textContent),
   };
 }
 
@@ -70,19 +90,7 @@ test("with no GitHub connected, and before the first read, the row offers Connec
 test("with GitHub connected, the row says so, and Disconnect in its ⋯ asks before it disconnects", () => {
   const connected = mount({ connected: true, login: null });
 
-  act(() =>
-    (
-      connected.page.querySelector<HTMLButtonElement>('button[aria-label="GitHub actions"]') ??
-      assert.fail("no ⋯ on the row")
-    ).click(),
-  );
-  act(() =>
-    (
-      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-        (each) => each.textContent === "Disconnect",
-      ) ?? assert.fail("no Disconnect in the menu")
-    ).click(),
-  );
+  connected.choose("Disconnect");
   const askedFirst = connected.opened.length === 0;
   act(() =>
     (
@@ -103,10 +111,12 @@ test("with GitHub connected, the row says so, and Disconnect in its ⋯ asks bef
   );
 });
 
-test("with GitHub connected, Reconnect opens the connect page, which renews an authorization GitHub revoked", () => {
+test("with GitHub connected, the row offers no button of its own, and Reconnect in its ⋯ opens the connect page, which renews an authorization GitHub revoked", () => {
   const connected = mount({ connected: true, login: null });
+  const buttons = connected.buttons();
 
-  connected.press("Reconnect");
+  connected.choose("Reconnect");
 
+  assert.deepEqual(buttons, []);
   assert.deepEqual(connected.opened, ["connect"]);
 });

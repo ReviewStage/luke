@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { ProviderMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";
 import { SettingsGroup } from "./settings-group";
@@ -55,8 +56,10 @@ export function AccountSection({
         )}
         <span className="settings-copy">
           <strong>{account.email}</strong>
-          <small>
-            Signed in with {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
+          <small className="account-provider">
+            Signed in with
+            <ProviderMark provider={account.provider} />
+            {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
           </small>
         </span>
         <button

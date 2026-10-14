@@ -1,6 +1,6 @@
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
-import { HarnessMark } from "../provider-marks";
+import { HarnessMark } from "../harness-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
 import { Spinner } from "../spinner";
 import {

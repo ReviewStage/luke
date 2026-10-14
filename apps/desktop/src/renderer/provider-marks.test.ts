@@ -1,18 +1,30 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountProvider,
+} from "@sidecar/credentials/snapshot";
 import { INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { IntegrationMark } from "./integration-marks";
+import { type MarkedProvider, ProviderMark } from "./provider-marks";
+import { AccountSection } from "./settings/account-section";
+import { GitHubSection } from "./settings/github-section";
+import { SignInGate } from "./sign-in-gate";
 
 /**
- * Every integration's mark as a row draws it: well-formed path data, since
- * a browser draws a path only up to its first malformed segment and leaves
- * a stray stroke where the brand should be, as Granola's once did, and its
+ * Every provider's mark as a row draws it: well-formed path data, since a
+ * browser draws a path only up to its first malformed segment and leaves a
+ * stray stroke where the brand should be, as Granola's once did, and its
  * artwork inside its own viewBox and filling it. Bounds are read from the
  * points each path passes through, which a curve never strays far beyond.
+ * And every surface that names a provider the account signs in with or
+ * connects draws that provider's one mark beside the name. Synthetic
+ * accounts.
  */
 
 /** How far, as a share of the viewBox, a mark may run past its edge or fall short of filling it. */
@@ -98,9 +110,39 @@ function markBounds(svg: Element): Bounds | undefined {
   return bounds;
 }
 
-test("every integration's mark lies inside its own box and fills it", () => {
-  for (const provider of INTEGRATION_PROVIDER_LIST) {
-    const markup = renderToStaticMarkup(createElement(IntegrationMark, { provider }));
+const MARKED: readonly MarkedProvider[] = [...INTEGRATION_PROVIDER_LIST, ACCOUNT_PROVIDER.GOOGLE];
+
+/** `element` drawn, as a page to query. */
+function drawn(element: React.ReactElement): HTMLElement {
+  const page = document.createElement("div");
+  page.innerHTML = renderToStaticMarkup(element);
+  return page;
+}
+
+/** The mark standing in `place`, as its markup. */
+function markIn(place: Element | null | undefined): string | undefined {
+  return place?.querySelector("svg.provider-mark")?.outerHTML;
+}
+
+/** The provider's own mark, as its markup. */
+function markOf(provider: MarkedProvider): string {
+  return drawn(createElement(ProviderMark, { provider })).innerHTML;
+}
+
+/** The Account section signed in with `provider`. */
+function accountLine(provider: AccountProvider): HTMLElement {
+  return drawn(
+    createElement(AccountSection, {
+      account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "ada@example.com", provider },
+      onSignOut: () => Promise.resolve(),
+      onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    }),
+  );
+}
+
+test("every provider's mark lies inside its own box and fills it", () => {
+  for (const provider of MARKED) {
+    const markup = renderToStaticMarkup(createElement(ProviderMark, { provider }));
     const svg = new DOMParser().parseFromString(markup, "image/svg+xml").documentElement;
     const [boxX = 0, boxY = 0, width = 0, height = 0] = (svg.getAttribute("viewBox") ?? "")
       .split(/[\s,]+/)
@@ -121,4 +163,36 @@ test("every integration's mark lies inside its own box and fills it", () => {
     );
     assert.ok(filled >= FILL, `${provider} fills ${Math.round(filled * 100)}% of its viewBox`);
   }
+});
+
+test("the sign-in buttons, the account's line, and Connected accounts each draw the provider's one mark beside its name", () => {
+  const gate = drawn(
+    createElement(SignInGate, {
+      account: { status: ACCOUNT_STATUS.SIGNED_OUT },
+      face: { play: 0 },
+      onBegin: () => undefined,
+      onCancel: () => undefined,
+    }),
+  );
+  const button = (provider: AccountProvider) =>
+    gate.querySelector(`button[data-provider="${provider}"]`);
+  const connected = drawn(
+    createElement(GitHubSection, {
+      control: {
+        connection: { connected: true, login: null },
+        onConnect: () => undefined,
+        onDisconnect: () => undefined,
+      },
+    }),
+  );
+
+  assert.equal(markIn(button(ACCOUNT_PROVIDER.GOOGLE)), markOf(ACCOUNT_PROVIDER.GOOGLE));
+  assert.equal(markIn(button(ACCOUNT_PROVIDER.GITHUB)), markOf(ACCOUNT_PROVIDER.GITHUB));
+  for (const provider of [ACCOUNT_PROVIDER.GOOGLE, ACCOUNT_PROVIDER.GITHUB]) {
+    assert.equal(
+      markIn(accountLine(provider).querySelector(".settings-copy small")),
+      markOf(provider),
+    );
+  }
+  assert.equal(markIn(connected.querySelector(".settings-row")), markOf(ACCOUNT_PROVIDER.GITHUB));
 });

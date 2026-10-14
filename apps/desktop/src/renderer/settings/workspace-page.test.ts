@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { WorkspaceInvitation } from "@sidecar/hosted/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
@@ -9,6 +10,7 @@ import {
 } from "@sidecar/hosted/workspace-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import {
   ACT_KIND,
@@ -22,6 +24,7 @@ import {
 } from "#shared/messages/acts";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
+import { ProviderMark } from "../provider-marks";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
@@ -395,19 +398,24 @@ test("the personal workspace says it is yours and lists no members and no GitHub
   );
 });
 
-test("an admin sees the team's GitHub organization and disconnects it from its ⋯ after confirming", async () => {
+test("an admin sees the team's GitHub organization, led by GitHub's mark, and disconnects it from its ⋯ after confirming", async () => {
   const { page } = await mount({
     ...ACME,
     role: WORKSPACE_ROLE.ADMIN,
     github: { login: "acme", active: true },
   });
   const row = rowNamed(page, "GitHub organization");
+  const mark = row.querySelector(".settings-row-mark")?.innerHTML;
 
   await chooseAction(row, "Disconnect");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT);
   await confirm("Disconnect");
 
   assert.equal(row.querySelector("small")?.textContent, "acme");
+  assert.equal(
+    mark,
+    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
+  );
   assert.equal(askedFirst, true);
   assert.deepEqual(
     sent
