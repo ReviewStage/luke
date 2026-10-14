@@ -31,11 +31,13 @@ in for the missing job before the first release.
 
 - Never let a credential or account secret enter a Gateway answer or event, the
   voice window, a counted event, a trace, or a fixture. Nothing in this repository
-  scans for secrets, so this rule is the whole of the check. The one carve-out,
+  scans for secrets, so this rule is the whole of the check. Two carve-outs,
   approved by Dean on 2026-10-13: the output of `run_on_mac`, a command an agent
   ran on the developer's own Mac, may reach the conversation, the model, and the
   tool's events as it printed; a trace, a counted event, and a fixture still never
-  carry it where that can be avoided.
+  carry it where that can be avoided. And an integration's MCP tool calls and
+  results, a credential its provider answers among them, may reach the
+  conversation, the model, an agent's transcript, and its traces.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

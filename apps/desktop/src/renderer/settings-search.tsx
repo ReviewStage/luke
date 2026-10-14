@@ -98,10 +98,17 @@ const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
 /** What each integration is for, in the words someone looking for it would type. */
 const INTEGRATION_KEYWORDS = {
+  [INTEGRATION_PROVIDER.GRANOLA]: "meetings notes transcripts calls",
   [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
+  [INTEGRATION_PROVIDER.MERCURY]: "bank banking accounts transactions payments finance",
+  [INTEGRATION_PROVIDER.NEON]: "postgres database sql branches",
   [INTEGRATION_PROVIDER.NOTION]: "pages docs wiki databases notes",
+  [INTEGRATION_PROVIDER.POSTHOG]: "analytics events feature flags experiments insights",
   [INTEGRATION_PROVIDER.SENTRY]: "errors crashes exceptions monitoring traces issues",
   [INTEGRATION_PROVIDER.SLACK]: "chat messages channels threads team",
+  [INTEGRATION_PROVIDER.SUPABASE]: "postgres database sql auth storage edge functions",
+  [INTEGRATION_PROVIDER.VERCEL]: "deployments hosting logs domains projects",
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: "yc bookface startups founders investors hiring",
 } as const satisfies Record<IntegrationProvider, string>;
 
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */

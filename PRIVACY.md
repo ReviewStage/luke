@@ -478,21 +478,48 @@ and an agent's Slack call fails before any token is read, so nothing reaches
 Slack. Where a deployment of our service offers it, connecting Slack in
 Settings › Integrations signs you in to Slack in your browser through Vercel
 Connect, which stores Slack's token for your account, encrypted, and renews
-it. Luke uses Slack read-only: the agents are offered Slack's search and read
-tools alone, so they can search messages, files, channels, and people, and
-read channels, private channels, direct messages, threads, canvases, and
-profiles, with people's email addresses, that your Slack account can see, and
-cannot post, schedule, react, or write anything. Our service handles the token
-as it does Linear's, and keeps the same record of your connection; which
-agents can use Slack is as for Linear. What Slack answers, which can include
-other people's messages in conversations you can see, goes to the
-model that made the call, and each call, with its input and everything Slack
-answered, is written to the plan's conversation or the agent's transcript like
-any other tool call. Disconnecting and deleting your account work as they do
-for Linear: Luke stops using it from each agent's next step, removes the
-connection's record, and asks Vercel Connect to revoke the grant; the record
-of what agents read stays with the plan, and a grant Vercel Connect could not
-revoke stays until you remove Luke in Slack's own settings.
+it. While you are connected, the agents, as for Linear, can do whatever your
+Slack grant allows, without asking you first: search messages, files,
+channels, and people, read channels, private channels, direct messages,
+threads, canvases, and profiles, with people's email addresses, that your
+Slack account can see, and send and schedule messages, react, and write
+canvases as you. Our service handles the token as it does Linear's, and keeps
+the same record of your connection; which agents can use Slack is as for
+Linear. What Slack answers, which can include other people's messages in
+conversations you can see, goes to the model that made the call, and each
+call, with its input and everything Slack answered, is written to the plan's
+conversation or the agent's transcript like any other tool call.
+Disconnecting and deleting your account work as they do for Linear: Luke
+stops using it from each agent's next step, removes the connection's record,
+and asks Vercel Connect to revoke the grant; what agents already sent or
+changed in Slack, and the record of it, stays, and a grant Vercel Connect
+could not revoke stays until you remove Luke in Slack's own settings.
+
+**Granola, Mercury, Neon, PostHog, Supabase, Vercel, and Y Combinator, if you
+connect them.** Connecting one signs you in to it in your browser through
+Vercel Connect, which stores its token for your account, encrypted, and renews
+it. Our service handles each token as it does Linear's, and keeps the same
+record of your connection. While you are connected, the agents, as for
+Linear, can do whatever your grant at that service allows, through its own
+MCP server, without asking you first: read and change your Granola meeting
+notes and transcripts; read your Mercury accounts, balances, transactions,
+cards, recipients, and statements, with account and routing numbers,
+categorize and annotate transactions, and request payments and transfers,
+which an approver still confirms in Mercury; manage your Neon and Supabase
+projects and databases and run SQL on them; query and change your PostHog
+analytics, feature flags, and experiments; manage your Vercel projects,
+deployments, domains, and environment variables; and use Y Combinator's
+Bookface as your YC account can. What a service answers can include a
+credential it hands out, such as a database connection string or password, a
+decrypted environment variable, or an API key; like everything else it
+answers, it goes to the model that made the call, and each call, with its
+input and everything the service answered, is written to the plan's
+conversation or the agent's transcript like any other tool call.
+Disconnecting and deleting your account work as they do for Linear: Luke stops
+using it from each agent's next step, removes the connection's record, and
+asks Vercel Connect to revoke the grant; what agents already changed there,
+and the record of it, stays, and a grant Vercel Connect could not revoke
+stays until you remove Luke in that service's own settings.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
@@ -683,6 +710,10 @@ only when you press Send.
 - Vercel Connect and Slack, if you connect Slack where it is offered: Vercel
   Connect keeps Slack's token, and our service sends each Slack call, with its
   input, to Slack's MCP server, which keeps it under Slack's own policy.
+- Vercel Connect and Granola, Mercury, Neon, PostHog, Supabase, Vercel, or Y
+  Combinator, for each you connect: Vercel Connect keeps its token, and our
+  service sends each call, with its input, to that service's MCP server,
+  which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
   database: everything our service keeps is stored with Neon and passes
   through Vercel. Luke's planning model, its workers, and each coding agent
@@ -772,10 +803,10 @@ reports by Sentry.
   Luke stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and earlier
   anonymous crash reports cannot be identified as yours and targeted through
-  account deletion. Deleting does not affect your Google, GitHub, Linear,
-  Notion, Sentry, or Slack account, and does not revoke the Luke GitHub App
-  (revoke it in GitHub's settings). It asks Vercel Connect to revoke the
-  Linear, Notion, Sentry, and Slack grants it holds; if Vercel Connect cannot
+  account deletion. Deleting does not affect your Google or GitHub account
+  or the account at any service you connected, and does not revoke the Luke
+  GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
+  revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
   Luke in that service's own settings. It ends every session of yours on
   Vercel Workflow and, shortly after, deletes their sandboxes with the

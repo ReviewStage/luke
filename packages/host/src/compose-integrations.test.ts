@@ -4,6 +4,7 @@ import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sideca
 import { INTEGRATION_CALL_FAILURE } from "@sidecar/hosted/integration-view";
 import {
   INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
@@ -16,6 +17,11 @@ import { composeIntegrations, type IntegrationsClient } from "./compose-integrat
 const SIGN_IN = "https://vercel.com/connect/authorize/request-1";
 
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
+
+// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
+const UNAVAILABLE = Object.fromEntries(
+  INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
+) as Record<IntegrationProvider, IntegrationStatus>;
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
@@ -31,12 +37,7 @@ function fakeService(script: ServiceScript) {
   const client: IntegrationsClient = {
     statuses: () =>
       Effect.sync(() => ({
-        integrations: {
-          linear: script.status,
-          notion: INTEGRATION_STATUS.UNAVAILABLE,
-          sentry: INTEGRATION_STATUS.UNAVAILABLE,
-          slack: INTEGRATION_STATUS.UNAVAILABLE,
-        },
+        integrations: { ...UNAVAILABLE, linear: script.status },
       })),
     connect: (provider) =>
       Effect.sync(() => {

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INTEGRATION_CALL_FAILURE } from "@sidecar/hosted/integration-view";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@sidecar/hosted/integration-wire";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+  type IntegrationStatus,
+} from "@sidecar/hosted/integration-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
@@ -17,6 +23,11 @@ const CALL: ActSender = { ...PANEL, panel: false, call: true };
 
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
 
+// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
+const DISCONNECTED = Object.fromEntries(
+  INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.DISCONNECTED]),
+) as Record<IntegrationProvider, IntegrationStatus>;
+
 function fixture() {
   const asked: string[] = [];
   const rows = integrationActRows({
@@ -25,12 +36,7 @@ function fixture() {
         Effect.sync(() => {
           asked.push("status");
           return {
-            integrations: {
-              linear: INTEGRATION_STATUS.CONNECTED,
-              notion: INTEGRATION_STATUS.DISCONNECTED,
-              sentry: INTEGRATION_STATUS.DISCONNECTED,
-              slack: INTEGRATION_STATUS.DISCONNECTED,
-            },
+            integrations: { ...DISCONNECTED, linear: INTEGRATION_STATUS.CONNECTED },
           };
         }),
       integrationsConnect: ({ provider }) =>

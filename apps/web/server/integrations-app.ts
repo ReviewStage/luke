@@ -21,9 +21,9 @@
  *   same.
  * - `GET /api/account/integrations/{provider}/tools` answers the tools the
  *   provider's server offers the account's agents, read from the server with
- *   the account's token as an MCP client reads them, narrowed to the ones its
- *   table entry allows, and held for a few minutes per account and provider
- *   so a popover opened again asks the server nothing. A server that listed
+ *   the account's token as an MCP client reads them, and held for a few
+ *   minutes per account and provider so a popover opened again asks the
+ *   server nothing. A server that listed
  *   none answers why, with its own one-line message where it sent one that
  *   carries no credential (`hosted/mcp-tools.ts`), and is never held, so a
  *   connection mended at the provider reads as mended at once. A provider
@@ -362,11 +362,7 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     );
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { problem: toolsProblem(failure) });
   }
-  const allowed = definition.ALLOWED_TOOLS;
-  const tools =
-    allowed === undefined
-      ? listed.success
-      : listed.success.filter((tool) => allowed.includes(tool.name));
+  const tools = listed.success;
   heldToolsSwept(cache, seams.now());
   const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
   accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
