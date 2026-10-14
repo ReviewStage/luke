@@ -7,6 +7,7 @@
     "renderer/plan-editor.js": 164568,
     "renderer/session-recorder.js": 61872,
     "renderer/terminal.js": 133576,
-    "renderer/pcm-tee-worklet.js": 430
+    "renderer/pcm-tee-worklet.js": 430,
+    "renderer/avatar-session.js": 148920
   }
 }

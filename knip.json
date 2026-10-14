@@ -31,6 +31,8 @@
         "src/renderer/terminal/index.css",
         "src/renderer/avatar-feed/pcm-tee-worklet.ts",
         "src/renderer/avatar-feed/start-avatar-feed.ts",
+        "src/renderer/avatar-session/index.ts",
+        "src/renderer/call/avatar-session-bundle.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],
