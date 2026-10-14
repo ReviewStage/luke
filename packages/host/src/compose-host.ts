@@ -6,6 +6,7 @@ import {
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
 import {
+  HostedAutomationClient,
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -24,6 +25,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
+import { composeAutomations } from "./compose-automations.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
@@ -53,6 +55,7 @@ const HOST_CONCERN = {
   PLANNING: "planning",
   CODING_AGENTS: "codingAgents",
   INTEGRATIONS: "integrations",
+  AUTOMATIONS: "automations",
   MAC_COMMANDS: "macCommands",
 } as const;
 
@@ -69,6 +72,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.PLANNING,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.INTEGRATIONS,
+  HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
 
@@ -167,6 +171,14 @@ export const hostAssemblyLayer: Layer.Layer<
           (result) => result.status === NODE_CAPABILITY_STATUS.OK,
         ),
     });
+    const automations = yield* composeAutomations({
+      kernel,
+      account,
+      client: new HostedAutomationClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     const macCommands = yield* composeMacCommands({
       kernel,
       account,
@@ -227,6 +239,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.PLANNING]: planning,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
+      [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 

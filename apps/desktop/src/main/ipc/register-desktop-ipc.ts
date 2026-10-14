@@ -11,6 +11,7 @@ import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
+import { automationActRows } from "./automation-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
 import { planningActRows } from "./planning-acts";
@@ -106,6 +107,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
     ...integrationActRows({ host: operator.host }),
+    ...automationActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

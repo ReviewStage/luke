@@ -14,6 +14,7 @@ export {
   type AccountToken,
 } from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
+export { HostedAutomationClient, type HostedAutomationClientOptions } from "./automation-client.js";
 export {
   HostedCodingAgentClient,
   type HostedCodingAgentClientOptions,

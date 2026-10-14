@@ -9,6 +9,7 @@ import {
   automationPath,
   automationRunPath,
   automationRunsPath,
+  automationWebhookSecretPath,
   HOSTED_API_ERROR,
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
@@ -118,7 +119,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
     ) =>
       Effect.gen(function* () {
         // Note that the rewrite moves a path's id into the `id` query, which the group reads.
-        const segments = /^\/api\/automations\/([^/]+)(?:\/(runs?))?$/u.exec(path);
+        const segments = /^\/api\/automations\/([^/]+)(?:\/(runs?|webhook-secret))?$/u.exec(path);
         const routed =
           segments === null
             ? path
@@ -505,6 +506,62 @@ it.layer(getTestDB())("the automation routes", (it) => {
           "the instant the sweep set stands",
         );
         assert.deepEqual(malformed.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+      }),
+  );
+  it.effect(
+    "a webhook secret the client names is kept as its hash and never answered back, on a make and on a rotation, and one too short to be a secret is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const named = `named-by-the-window-${randomUUID()}`;
+        const hashed = (secret: string) => createHash("sha256").update(secret).digest("hex");
+        const hashOf = (id: string) =>
+          Effect.map(
+            Database.use((db) =>
+              db
+                .select({ hash: automationTable.webhookSecretHash })
+                .from(automationTable)
+                .where(eq(automationTable.id, id)),
+            ),
+            (rows) => rows[0]?.hash,
+          );
+
+        const made = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: {
+              ...weekdays(plan.id),
+              trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+              webhookSecret: named,
+            },
+          }),
+        );
+        assert.equal(made.webhookSecret, undefined, "the client holds it already");
+        assert.equal(yield* hashOf(made.automation.id), hashed(named));
+
+        const renamed = `${named}-again`;
+        const rotated = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationWebhookSecretPath(made.automation.id), owner, {
+            method: "POST",
+            body: { webhookSecret: renamed },
+          }),
+        );
+        assert.equal(rotated.webhookSecret, undefined);
+        assert.equal(yield* hashOf(made.automation.id), hashed(renamed));
+
+        const short = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+          method: "POST",
+          body: {
+            ...weekdays(plan.id),
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            webhookSecret: "guessable",
+          },
+        });
+        assert.deepEqual(short.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
       }),
   );
 });

@@ -132,6 +132,20 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** The account's automations, or one plan's, read from the service now; answered to the caller, never held in the view. */
+  AUTOMATIONS_LIST: "automations.list",
+  /** An automation made on the service, a webhook trigger's secret the caller's own; the automation as kept, or why none was. */
+  AUTOMATIONS_CREATE: "automations.create",
+  /** One automation changed on the service; the automation as it then stands, or why it is unchanged. */
+  AUTOMATIONS_CHANGE: "automations.change",
+  /** One automation deleted on the service with its history; whether it went. */
+  AUTOMATIONS_DELETE: "automations.delete",
+  /** One automation run now on the service under the caller's key; the run as it came out. */
+  AUTOMATIONS_RUN: "automations.run",
+  /** One automation's runs, read from the service now, newest first. */
+  AUTOMATIONS_RUNS: "automations.runs",
+  /** A webhook trigger's secret replaced on the service by the caller's own; the automation as it then stands. */
+  AUTOMATIONS_WEBHOOK_SECRET: "automations.webhookSecret",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one provider begun on the service and opened on this Mac; whether it was opened, never the address. */

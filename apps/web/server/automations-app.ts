@@ -31,6 +31,7 @@ import {
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationRunRequestSchema,
+  automationWebhookSecretRequestSchema,
 } from "@sidecar/hosted/automation-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -50,6 +51,8 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  parseJsonBytes,
+  readBodyBytesEffect,
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
@@ -69,8 +72,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * be one the catalog offers the account, and the plan must name a
  * repository. A schedule's next due instant is computed here whenever the
  * automation is made, resumed, or given a new trigger, and cleared while it
- * is paused. A webhook trigger's secret is minted here, kept only as its
- * SHA-256, and answered once, on the write that made it.
+ * is paused. A webhook trigger's secret is the client's own where it names
+ * one, which the desktop does so no answer it reads carries a secret, and
+ * minted here otherwise and answered once, on the write that made it;
+ * either way it is kept only as its SHA-256.
  *
  * "Run now" records a manual firing under the client's key and acts on it
  * at once, through the same guards and the same start a scheduled run
@@ -102,6 +107,9 @@ const QUERY = { ID: "id" } as const;
  * the frame with room, so every prompt the schema takes fits.
  */
 const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
+
+/** A rotation's body: the longest secret at six bytes a character, which is the most JSON spends on one, with room for its frame. */
+const ROTATION_BODY_BYTES = 256 * 6 + 64;
 
 /** How many runs a history read answers. */
 const RUNS_READ = 50;
@@ -146,16 +154,25 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** A webhook trigger's secret, answered once, and the hash the store keeps of it. */
+/** A webhook trigger's secret and the hash the store keeps of it, with the secret to answer where the service minted it. */
 interface WebhookSecret {
-  readonly secret: string;
   readonly hash: string;
+  /** The secret, answered once, where the service minted it; nothing where the client named it and holds it already. */
+  readonly answered: string | undefined;
 }
 
-/** A fresh webhook secret and its hash. */
-function mintWebhookSecret(): WebhookSecret {
-  const secret = randomBytes(WEBHOOK_SECRET_BYTES).toString("base64url");
-  return { secret, hash: createHash("sha256").update(secret).digest("hex") };
+/** The secret the client named, hashed and answered never, or a fresh one the service mints and answers once. */
+function webhookSecretOf(named: string | undefined): WebhookSecret {
+  const secret = named ?? randomBytes(WEBHOOK_SECRET_BYTES).toString("base64url");
+  return {
+    hash: createHash("sha256").update(secret).digest("hex"),
+    answered: named === undefined ? secret : undefined,
+  };
+}
+
+/** The answer's field for the secret, where it is one to answer. */
+function answeredSecret(webhook: WebhookSecret | undefined) {
+  return webhook?.answered === undefined ? undefined : { webhookSecret: webhook.answered };
 }
 
 /** When a trigger is first due from `now`: a schedule's next instant, nothing for any other, and the refusal for a schedule that does not read. */
@@ -279,7 +296,9 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (plan.value.plan.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   const webhook =
-    made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
+    made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK
+      ? webhookSecretOf(made.webhookSecret)
+      : undefined;
   const created = yield* hostedStoreOrUnavailable(
     createAutomation(userId, {
       planId: made.planId,
@@ -295,7 +314,7 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const automation = yield* summaryOf(userId, created.value);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     automation,
-    ...(webhook === undefined ? undefined : { webhookSecret: webhook.secret }),
+    ...answeredSecret(webhook),
   });
 });
 
@@ -327,7 +346,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   standing: Automation,
   asked: typeof automationChangeRequestSchema.Type,
 ): Effect.fn.Return<
-  { readonly changes: AutomationChanges; readonly webhookSecret: string | undefined },
+  { readonly changes: AutomationChanges; readonly webhook: WebhookSecret | undefined },
   HostedRefusal,
   DatabaseServices | ModelCatalog
 > {
@@ -347,7 +366,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const becameWebhook =
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
-  const webhook = becameWebhook ? mintWebhookSecret() : undefined;
+  const webhook = becameWebhook ? webhookSecretOf(asked.webhookSecret) : undefined;
   // Note that only a resume or a pause moves the due instant, so a form that sends `enabled` as it stands skips no firing.
   const reschedules =
     newTrigger !== undefined || (asked.enabled !== undefined && asked.enabled !== standing.enabled);
@@ -362,7 +381,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(reschedules ? { nextRunAt: enabled ? due : null } : undefined),
     ...(webhook === undefined ? undefined : { webhookSecretHash: webhook.hash }),
   };
-  return { changes, webhookSecret: webhook?.secret };
+  return { changes, webhook };
 });
 
 /** The one automation path: GET reads it, PATCH changes it, DELETE deletes it. */
@@ -396,12 +415,12 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
     yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES),
   );
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { changes, webhookSecret } = yield* changesOf(userId, standing.value, asked.success);
+  const { changes, webhook } = yield* changesOf(userId, standing.value, asked.success);
   const written = yield* hostedStoreOrUnavailable(updateAutomation(userId, id, changes));
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     automation: yield* summaryOf(userId, written.value),
-    ...(webhookSecret === undefined ? undefined : { webhookSecret }),
+    ...answeredSecret(webhook),
   });
 });
 
@@ -460,7 +479,7 @@ const runsEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsEndpoint")(fun
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(runs) });
 });
 
-/** POST: a webhook trigger's secret minted again and answered once; the one before stops admitting calls. */
+/** POST: a webhook trigger's secret minted again, the client's own or the service's answered once; the one before stops admitting calls. */
 const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSecretEndpoint")(
   function* (
     seams: AutomationsAppSeams,
@@ -477,10 +496,17 @@ const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSe
     if (standing.value.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
+    // No body names no secret, which a caller asking by hand sends.
+    const body =
+      request.body === null
+        ? unparsedWire({})
+        : yield* parseJsonBytes(yield* readBodyBytesEffect(ROTATION_BODY_BYTES));
+    const asked = readEither(automationWebhookSecretRequestSchema)(body);
+    if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     const kept = yield* hostedStoreOrUnavailable(readWebhookAutomation(id));
     const previous = Option.getOrUndefined(kept)?.webhookSecretHash ?? null;
     if (previous === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const webhook = mintWebhookSecret();
+    const webhook = webhookSecretOf(asked.success.webhookSecret);
     // A rotation another request made between the read and this write leaves this one refused, never undone.
     const swapped = yield* hostedStoreOrUnavailable(
       replaceWebhookSecretHash(userId, id, previous, webhook.hash),
@@ -490,7 +516,7 @@ const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSe
     if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       automation: yield* summaryOf(userId, written.value),
-      webhookSecret: webhook.secret,
+      ...answeredSecret(webhook),
     });
   },
 );

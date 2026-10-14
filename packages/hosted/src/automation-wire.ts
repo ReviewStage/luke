@@ -300,7 +300,7 @@ export type AutomationRunSummary = typeof automationRunSummarySchema.Type;
  * runs and why not where the service paused it, what fires it and what it
  * starts, its guards, when a schedule is next due, and its newest run.
  */
-const automationSummarySchema = EffectSchema.Struct({
+export const automationSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   planId: wireUuidSchema,
   planName: EffectSchema.String,
@@ -331,13 +331,26 @@ export const automationAnswerSchema = EffectSchema.Struct({
   webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** An automation to make (POST): its plan, name, trigger, and action, and its guards or the defaults. */
+/**
+ * A webhook trigger's secret as a client names it: at least thirty-two
+ * characters, the length of the 192 bits the desktop mints in base64url,
+ * so a client cannot name a secret a caller could guess. A client that names
+ * one already holds it, so no answer carries it back; one that names none is
+ * answered the secret the service minted, once.
+ */
+export const webhookSecretSchema = EffectSchema.String.check(
+  EffectSchema.isMinLength(32),
+  EffectSchema.isMaxLength(256),
+);
+
+/** An automation to make (POST): its plan, name, trigger, and action, its guards or the defaults, and a webhook trigger's secret where the client names it. */
 export const automationCreateRequestSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   name: nameSchema,
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: EffectSchema.optionalKey(automationGuardsSchema),
+  webhookSecret: EffectSchema.optionalKey(webhookSecretSchema),
 });
 
 /** A change to an automation (PATCH): any of its fields, a field left out standing as it was. */
@@ -347,6 +360,13 @@ export const automationChangeRequestSchema = EffectSchema.Struct({
   trigger: EffectSchema.optionalKey(automationTriggerSchema),
   action: EffectSchema.optionalKey(automationActionSchema),
   guards: EffectSchema.optionalKey(automationGuardsSchema),
+  /** The secret for a trigger becoming a webhook, where the client names it. */
+  webhookSecret: EffectSchema.optionalKey(webhookSecretSchema),
+});
+
+/** A webhook trigger's secret minted again (POST), named by the client or, where it names none, by the service. */
+export const automationWebhookSecretRequestSchema = EffectSchema.Struct({
+  webhookSecret: EffectSchema.optionalKey(webhookSecretSchema),
 });
 
 /**

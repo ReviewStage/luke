@@ -7,6 +7,7 @@
     ".": "./src/index.js",
     "./account-inbox-wire": "./src/account-inbox-wire.js",
     "./automation-schedule": "./src/automation-schedule.js",
+    "./automation-view": "./src/automation-view.js",
     "./automation-wire": "./src/automation-wire.js",
     "./board-text": "./src/board-text.js",
     "./agent-tools": "./src/agent-tools.js",

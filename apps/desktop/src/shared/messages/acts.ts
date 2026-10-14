@@ -14,6 +14,24 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import {
+  type AutomationDeletedView,
+  type AutomationListView,
+  type AutomationRunsView,
+  type AutomationRunView,
+  type AutomationView,
+  automationChangeParamsSchema,
+  automationCreateParamsSchema,
+  automationDeletedViewSchema,
+  automationIdParamsSchema,
+  automationListParamsSchema,
+  automationListViewSchema,
+  automationRunParamsSchema,
+  automationRunsViewSchema,
+  automationRunViewSchema,
+  automationViewSchema,
+  automationWebhookSecretParamsSchema,
+} from "@sidecar/hosted/automation-view";
+import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -191,6 +209,18 @@ export const ACT_KIND = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** The tools one provider's server offers the account's agents, read from the service when a list of them is shown. */
   INTEGRATIONS_TOOLS: "integrations.tools",
+  /**
+   * The account's automations: listed, made, changed, deleted, run now, one's
+   * runs read, and a webhook's secret replaced. A webhook trigger's secret is
+   * the window's own, named in a write's payload, and no answer carries one.
+   */
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
+  AUTOMATIONS_WEBHOOK_SECRET: "automations.webhookSecret",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   UPDATE_CHECK: "update.check",
@@ -843,6 +873,41 @@ export const ACT = {
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
     refusal: "Could not read that plan's conversation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_LIST]: {
+    payload: actSchema(automationListParamsSchema),
+    result: wireResult<AutomationListView>(isReadable(automationListViewSchema)),
+    refusal: "Could not read your automations on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_CREATE]: {
+    payload: actSchema(automationCreateParamsSchema),
+    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
+    refusal: "Could not make that automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_CHANGE]: {
+    payload: actSchema(automationChangeParamsSchema),
+    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
+    refusal: "Could not change that automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_DELETE]: {
+    payload: actSchema(automationIdParamsSchema),
+    result: wireResult<AutomationDeletedView>(isReadable(automationDeletedViewSchema)),
+    refusal: "Could not delete that automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_RUN]: {
+    payload: actSchema(automationRunParamsSchema),
+    result: wireResult<AutomationRunView>(isReadable(automationRunViewSchema)),
+    refusal: "Could not run that automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_RUNS]: {
+    payload: actSchema(automationIdParamsSchema),
+    result: wireResult<AutomationRunsView>(isReadable(automationRunsViewSchema)),
+    refusal: "Could not read that automation's runs on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_WEBHOOK_SECRET]: {
+    payload: actSchema(automationWebhookSecretParamsSchema),
+    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
+    refusal: "Could not replace that webhook's secret on this system.",
   },
   [ACT_KIND.INTEGRATIONS_STATUS]: {
     payload: noPayload,

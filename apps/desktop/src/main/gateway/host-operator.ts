@@ -17,6 +17,25 @@ import {
 } from "@sidecar/gateway";
 import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import {
+  AUTOMATION_CALL_FAILURE,
+  type AutomationChangeParams,
+  type AutomationCreateParams,
+  type AutomationDeletedView,
+  type AutomationIdParams,
+  type AutomationListParams,
+  type AutomationListView,
+  type AutomationRunParams,
+  type AutomationRunsView,
+  type AutomationRunView,
+  type AutomationView,
+  type AutomationWebhookSecretParams,
+  automationDeletedViewSchema,
+  automationListViewSchema,
+  automationRunsViewSchema,
+  automationRunViewSchema,
+  automationViewSchema,
+} from "@sidecar/hosted/automation-view";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
@@ -284,6 +303,20 @@ export interface HostOperator {
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
   planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+  /** The account's automations, or one plan's; or why there are none. */
+  automationsList(params: AutomationListParams): Effect.Effect<AutomationListView>;
+  /** An automation made, a webhook trigger's secret the window's own; the automation as kept, or why none was. */
+  automationsCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
+  /** One automation changed; the automation as it then stands, or why it is unchanged. */
+  automationsChange(params: AutomationChangeParams): Effect.Effect<AutomationView>;
+  /** One automation deleted with its history; whether it went. */
+  automationsDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
+  /** One automation run now under the window's key; the run as it came out. */
+  automationsRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
+  /** One automation's runs, newest first; or why there are none. */
+  automationsRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
+  /** A webhook trigger's secret replaced by the window's own; the automation as it then stands. */
+  automationsWebhookSecret(params: AutomationWebhookSecretParams): Effect.Effect<AutomationView>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -469,6 +502,8 @@ const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED 
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
+const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
+
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -526,7 +561,59 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? INTEGRATION_UNANSWERED;
 
+  /** An automation answer as the host's method documents it, or unanswered, on the same terms as an integration answer. */
+  const automationAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof AUTOMATION_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? AUTOMATION_UNANSWERED;
+
   return {
+    automationsList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_LIST, { ...params }),
+        automationAnswer(automationListViewSchema),
+      ),
+    automationsCreate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, { ...params }),
+        automationAnswer(automationViewSchema),
+      ),
+    automationsChange: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, {
+          automationId: params.automationId,
+          change: { ...params.change },
+        }),
+        automationAnswer(automationViewSchema),
+      ),
+    automationsDelete: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_DELETE, { automationId: params.automationId }),
+        automationAnswer(automationDeletedViewSchema),
+      ),
+    automationsRun: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, {
+          automationId: params.automationId,
+          idempotencyKey: params.idempotencyKey,
+        }),
+        automationAnswer(automationRunViewSchema),
+      ),
+    automationsRuns: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_RUNS, { automationId: params.automationId }),
+        automationAnswer(automationRunsViewSchema),
+      ),
+    automationsWebhookSecret: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_WEBHOOK_SECRET, {
+          automationId: params.automationId,
+          webhookSecret: params.webhookSecret,
+        }),
+        automationAnswer(automationViewSchema),
+      ),
     integrationsStatus: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_STATUS),
