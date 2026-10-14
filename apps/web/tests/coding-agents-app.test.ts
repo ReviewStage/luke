@@ -11,6 +11,7 @@ import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import {
   fakeWorkspaceSeams,
@@ -63,6 +64,7 @@ import {
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { eq } from "drizzle-orm";
 import {
   Clock,
   DateTime,
@@ -916,6 +918,31 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           lines: [SNAPSHOT, "Rename the subject line too."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
+      }),
+  );
+
+  it.effect(
+    "an agent with no plan reads as not found to every route, before a message reaches eve, since the wire's summary names a plan",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: true });
+        // An automation's run leaves an agent so: in its workspace, on no plan.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+
+        const sent = yield* ask(
+          messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
+        );
+        const read = yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id }));
+
+        assert.deepEqual(sent, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
+        assert.deepEqual(read, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
+        assert.deepEqual(eve.sent, []);
       }),
   );
 

@@ -36,7 +36,12 @@ import {
   turnUsagesOf,
 } from "./message-reads.js";
 import { PlanArchived } from "./plan-store.js";
-import { planReachableBy, reachablePlan, workspaceReachableBy } from "./workspace-store.js";
+import {
+  AGENT_WORKSPACE,
+  agentReachableBy,
+  planReachableBy,
+  reachablePlan,
+} from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -161,9 +166,6 @@ export type NewCodingAgent = CodingAgentBriefText & {
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
 };
 
-/** The agent's workspace: its own, or its plan's on a row the backfill has not reached yet. */
-const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${codingAgent.planId}))`;
-
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const CODING_AGENT_COLUMNS = {
   id: codingAgent.id,
@@ -227,11 +229,6 @@ const CodingAgentRowSchema = Schema.Struct({
 });
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
-
-/** The condition that the account is a member of the workspace of the agent row a statement reads, an agent with no plan as much as one on a plan. */
-function agentReachableBy(userId: string): SQL {
-  return workspaceReachableBy(userId, AGENT_WORKSPACE);
-}
 
 /** The agent under this id, where the account is a member of its workspace; any other id reads as no agent. */
 function reachableAgent(userId: string, agentId: string): SQL | undefined {

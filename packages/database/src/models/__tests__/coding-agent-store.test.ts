@@ -16,6 +16,7 @@ import {
   turnUsagesOf,
   writeDelegation,
 } from "../coding-agent-store.js";
+import { conversationReachableBy } from "../recorded-session.js";
 
 /**
  * The workers a coding agent's conversation delegated to, over a real
@@ -167,12 +168,12 @@ const planlessAgent = (userId: string, organizationId: string) =>
       repositories: ["acme/api"],
       idempotencyKey: randomUUID(),
     });
-    return id;
+    return { agentId: id, conversationId };
   });
 
 it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
   it.effect(
-    "an agent with no plan reads under its workspace for a member who did not start it, and reads as none for an account outside the workspace",
+    "an agent with no plan and its conversation read under its workspace for its starter and a member who did not start it, and as none for an account outside the workspace",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -189,7 +190,7 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
           }),
         );
         yield* openWorkspace(outsider);
-        const agentId = yield* planlessAgent(starter, workspace);
+        const { agentId, conversationId } = yield* planlessAgent(starter, workspace);
 
         const read = Option.getOrThrow(yield* readCodingAgent(teammate, agentId));
         assert.deepEqual(
@@ -197,6 +198,15 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
           [null, workspace, starter],
         );
         assert.ok(Option.isNone(yield* readCodingAgent(outsider, agentId)));
+        assert.deepEqual(
+          [
+            yield* conversationReachableBy(starter, conversationId),
+            yield* conversationReachableBy(teammate, conversationId),
+            yield* conversationReachableBy(outsider, conversationId),
+          ],
+          [true, true, false],
+          "the agent's conversation is its workspace's, as its sessions are admitted",
+        );
       }),
   );
 });

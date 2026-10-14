@@ -4,7 +4,7 @@ import {
   WORKSPACE_ROLE,
   type WorkspaceRole,
 } from "@luke/features/workspace-wire";
-import { and, asc, eq, exists, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, exists, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../core/query.js";
 import { GITHUB_INSTALLATION_STATUS } from "../github-installation-vocabulary.js";
 import { member, organization, user } from "../schemas/auth.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
@@ -309,9 +310,12 @@ function isOwnPersonalOrganization(
   return Effect.map(findOwnedOrganization({ userId, organizationId }), Option.isSome);
 }
 
-/** The condition that the account is a member of the workspace a statement names, by its id or a column or expression standing for it. */
-export function workspaceReachableBy(userId: string, organizationId: string | SQLWrapper): SQL {
-  return memberOfWorkspace(userId, organizationId);
+/** A coding agent row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
+export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${codingAgent.planId}))`;
+
+/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no plan as much as one on a plan. */
+export function agentReachableBy(userId: string): SQL {
+  return memberOfWorkspace(userId, AGENT_WORKSPACE);
 }
 
 /** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
