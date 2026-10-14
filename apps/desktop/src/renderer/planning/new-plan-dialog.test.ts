@@ -259,7 +259,7 @@ const NOWHERE_INSTALLED = () =>
     },
   });
 
-test("an owner or admin of a workspace with no GitHub connected is told so and offered Open Settings at that workspace's GitHub repositories", async () => {
+test("an owner or admin of a workspace with no GitHub connected is told so and offered Open Settings at that workspace's Integrations", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-acme",
     read: NOWHERE_INSTALLED,

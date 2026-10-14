@@ -14,7 +14,8 @@ import { MenuRow } from "../settings/menu-row";
  * The window's menus as the developer opens them: a ⋯ that drops its menu
  * and closes it again, a right-click that hangs the same menu at the
  * pointer, or under the row where the menu key asked with no point of its
- * own, and every menu, the window's own and the searchable picker alike,
+ * own, a row that names its door opening the same menu from a labelled
+ * button, and every menu, the window's own and the searchable picker alike,
  * drawn on one surface with one row.
  */
 
@@ -156,4 +157,76 @@ test("the window's menu and the searchable picker stand on one surface and draw 
     assert.ok(row.classList.contains("menu-item"), `${name}'s rows are the one menu row`);
     assert.ok(row.querySelector(".menu-item-glyph > svg"), "with the mark in the glyph slot");
   }
+});
+
+test("a Settings row naming its door draws one hairlined Manage with its chevron in the ⋯'s place, opening the same menu, its groups ruled apart", () => {
+  const container = mount(
+    createElement(MenuRow, {
+      label: "GitHub actions",
+      triggerLabel: "Manage",
+      actions: [ACTIONS, [{ label: "Disconnect", danger: true, onSelect: ignore }]],
+      children: "GitHub",
+    }),
+  );
+  const row = container.querySelector<HTMLElement>(".settings-row");
+  assert.ok(row, "the row is drawn");
+  const doors = [...row.querySelectorAll<HTMLButtonElement>("button")];
+  assert.deepEqual(
+    doors.map((door) => door.textContent),
+    ["Manage"],
+    "the row's one control is Manage",
+  );
+  const manage = doors[0] ?? assert.fail("no Manage");
+  assert.ok(manage.classList.contains("bordered-button"), "Manage wears the row buttons' hairline");
+  assert.ok(manage.querySelector("svg.settings-chevron"), "and the menu's chevron after its word");
+  assert.equal(row.querySelector('button[aria-label="GitHub actions"]'), null, "no ⋯ beside it");
+  assert.equal(manage.getAttribute("aria-haspopup"), "menu");
+
+  press(manage);
+  const menu = openMenu();
+  assert.equal(menu?.getAttribute("aria-label"), "GitHub actions", "the menu keeps its name");
+  assert.equal(manage.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(
+    [...(menu?.children ?? [])].map((child) =>
+      child.tagName === "HR" ? "rule" : (child.textContent ?? ""),
+    ),
+    ["Copy key", "rule", "Disconnect"],
+  );
+  assert.equal(document.activeElement?.textContent, "Copy key", "focus lands on the first item");
+  act(() => menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+  assert.equal(document.activeElement?.textContent, "Disconnect", "Down walks past the rule");
+  act(() => menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  assert.equal(openMenu(), null, "Escape closes it");
+  assert.equal(manage.getAttribute("aria-expanded"), "false");
+  assert.equal(document.activeElement, manage, "and focus is back on Manage");
+
+  rightClick(row, { x: 300, y: 200 });
+  assert.equal(openMenu()?.getAttribute("aria-label"), "GitHub actions", "a right-click opens it");
+  act(() =>
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+    ),
+  );
+  assert.equal(openMenu(), null, "Tab closes it");
+  assert.equal(document.activeElement, manage, "handing focus to Manage, the keyboard's door");
+
+  press(manage);
+  act(() => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.equal(openMenu(), null, "a press elsewhere closes it");
+});
+
+test("a Settings row naming no door keeps its muted ⋯, named for its menu, and More on the pointer", () => {
+  const container = mount(
+    createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
+  );
+  const ellipsis =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Linear actions"]') ??
+    assert.fail("no ⋯");
+
+  act(() => ellipsis.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+
+  assert.ok(ellipsis.classList.contains("icon-button"), "the ⋯ is the muted glyph button");
+  assert.equal(ellipsis.textContent, "", "with no words of its own");
+  assert.equal(container.querySelector(".chip"), null, "and no labelled door");
+  assert.equal(document.querySelector(".tooltip")?.textContent, "More");
 });

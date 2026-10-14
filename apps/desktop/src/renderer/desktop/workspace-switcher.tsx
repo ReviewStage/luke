@@ -12,8 +12,8 @@ import { useNewWorkspaceDialog } from "./new-workspace-dialog";
  * and a press drops the menu of every workspace the account is a member of
  * from its left edge, the listed one checked, then New workspace, which asks
  * a name and lists the workspace made, and Workspace settings, which opens Settings on the
- * listed workspace's page, where its members and its GitHub repositories
- * are managed. Nothing else stands in the menu. The head
+ * listed workspace's page, where its members and its Integrations, GitHub
+ * among them, are managed. Nothing else stands in the menu. The head
  * stands whenever an account is signed in, its first workspace alone
  * included, because its menu is where a workspace is made.
  */

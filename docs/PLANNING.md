@@ -151,9 +151,10 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   address as a member or an admin and sees the invitations still pending,
   each with its accept link to copy and send and a Cancel, under the Mac's
   own Better Auth session; an owner or admin removes a member, and anyone but
-  an owner leaves. For an owner or admin it holds GitHub repositories: Connect, or the
-  connected account's repositories with Disconnect and "Choose repositories
-  on GitHub". Every way into Settings at a place takes one typed link,
+  an owner leaves. Its Integrations group holds the GitHub row: for an owner
+  or admin, Connect, or once connected, "Connected" with one Manage menu
+  holding "Choose repositories on GitHub" and Disconnect; a member reads it
+  alone. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`settings-views.ts`: a page, a section, a workspace),
   followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
   chosen workspace's plans alone, New plan starts in it, the repository chip

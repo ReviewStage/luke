@@ -45,13 +45,47 @@ test("Invite people finds Members for every workspace, the account's first one t
   assert.deepEqual(workspaceFound("Invite people", FIRST), [SETTINGS_SECTION.MEMBERS]);
 });
 
-test("GitHub repositories is found for every workspace, a member's and the account's first one's too", () => {
+test("Integrations, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
-  assert.deepEqual(workspaceFound("GitHub repositories", FIRST), found);
-  assert.deepEqual(workspaceFound("GitHub repositories", TEAM), found);
+  const queries = [
+    "Integrations",
+    "manage",
+    "GitHub repositories",
+    "GitHub",
+    "organization",
+    "connect",
+    "choose",
+    "disconnect",
+  ];
+  for (const workspace of [FIRST, TEAM, { ...TEAM, role: WORKSPACE_ROLE.ADMIN }]) {
+    for (const query of queries) {
+      assert.deepEqual(workspaceFound(query, workspace), found, `${query} for ${workspace.role}`);
+    }
+  }
+});
+
+test("the Workspace page's group reads Integrations, under its Workspace page apart from the Integrations page's rows", () => {
+  const groups =
+    searchSettings(
+      settingsSearchEntries({
+        settings: settingsView(),
+        voiceControlsDrawn: true,
+        accountDrawn: true,
+        workspace: TEAM,
+      }),
+      "Integrations",
+    )?.groups ?? [];
+  const workspaceGroup = groups.find((group) => group.page === SETTINGS_VIEW.WORKSPACE);
+
   assert.deepEqual(
-    workspaceFound("GitHub repositories", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }),
-    found,
+    workspaceGroup?.items.map((entry) => [entry.id, entry.label]),
+    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Integrations"]],
+  );
+  assert.equal(
+    groups
+      .find((group) => group.page === SETTINGS_VIEW.INTEGRATIONS)
+      ?.items.some((entry) => entry.id === SETTINGS_SECTION.GITHUB_REPOSITORIES),
+    false,
   );
 });
 

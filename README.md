@@ -29,8 +29,8 @@ Requires an Apple silicon Mac on macOS 14 or newer.
 2. Open the DMG and drag **Luke** into **Applications**.
 3. Open Luke and sign in with Google or GitHub. A workspace's repositories
    come from the GitHub account or organization connected to it: an owner or
-   admin connects one in Settings › Workspace › GitHub repositories, which
-   installs the Luke GitHub App there.
+   admin connects one in Settings › Workspace › Integrations, which installs
+   the Luke GitHub App there.
 
 Luke asks for microphone access the first time you start a call.
 
