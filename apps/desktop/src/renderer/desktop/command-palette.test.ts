@@ -147,3 +147,87 @@ test("choosing a page opens Settings on that page", () => {
   assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
   assert.equal(document.querySelector(".command-palette-row"), null, "the palette closed");
 });
+
+/** The filter whose chip stands pressed. */
+function chosenFilter(): string | null | undefined {
+  return document.querySelector(".command-palette-filter[aria-pressed='true']")?.textContent;
+}
+
+/** Presses a key in the search field, answering whether the field kept it for itself. */
+function key(init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => {
+    field().dispatchEvent(event);
+  });
+  return !event.defaultPrevented;
+}
+
+const LEFT = { key: "ArrowLeft", code: "ArrowLeft" } as const;
+const RIGHT = { key: "ArrowRight", code: "ArrowRight" } as const;
+const BACK = { key: "[", code: "BracketLeft", metaKey: true } as const;
+const FORWARD = { key: "]", code: "BracketRight", metaKey: true } as const;
+
+/** The footer's hints, each its keys and then its words. */
+function footer(): (string | null)[] {
+  return [...document.querySelectorAll(".command-palette-footer-hint")].map(
+    (hint) => hint.textContent,
+  );
+}
+
+test("with the field empty, ← and → step through the filters, wrapping at the ends", () => {
+  openPalette();
+
+  assert.equal(key(RIGHT), false, "the step is the palette's, not the caret's");
+  assert.equal(chosenFilter(), "Plans");
+  key(RIGHT);
+  assert.equal(chosenFilter(), "Agents");
+  key(LEFT);
+  key(LEFT);
+  assert.equal(chosenFilter(), "All");
+  key(LEFT);
+  assert.equal(chosenFilter(), "Settings", "stepping back from All wraps to the last filter");
+  key(RIGHT);
+  assert.equal(chosenFilter(), "All", "stepping on from the last filter wraps to All");
+});
+
+test("once anything is typed, ← and → only move the caret, even at the text's ends", () => {
+  openPalette();
+  type("invite");
+  const input = field();
+
+  for (const at of [0, 3, 6]) {
+    input.setSelectionRange(at, at);
+    assert.equal(key(LEFT), true, `← at ${at} is the caret's`);
+    assert.equal(key(RIGHT), true, `→ at ${at} is the caret's`);
+  }
+  assert.equal(chosenFilter(), "All");
+  assert.equal(input.value, "invite");
+});
+
+test("⌘[ and ⌘] step through the filters, wrapping at the ends, whether or not anything is typed", () => {
+  openPalette();
+
+  assert.equal(key(FORWARD), false, "the window's Forward is held off");
+  assert.equal(chosenFilter(), "Plans");
+  type("invite");
+  key(FORWARD);
+  assert.equal(chosenFilter(), "Agents");
+  assert.equal(key(BACK), false, "the window's Back is held off");
+  key(BACK);
+  key(BACK);
+  assert.equal(chosenFilter(), "Settings", "stepping back from All wraps to the last filter");
+  key(FORWARD);
+  assert.equal(chosenFilter(), "All", "stepping on from the last filter wraps to All");
+  assert.equal(field().value, "invite", "the words stay as typed");
+});
+
+test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
+  openPalette();
+  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+
+  type("invite");
+  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "⌘[⌘]Filter"]);
+
+  type("");
+  assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+});
