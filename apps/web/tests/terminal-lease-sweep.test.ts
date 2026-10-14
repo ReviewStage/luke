@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
-import { holdSandbox, lapsedSandboxLeases } from "@sidecar/database/models/sandbox-terminal-lease";
+import { holdSandbox } from "@sidecar/database/models/sandbox-terminal-lease";
 import { user } from "@sidecar/database/schemas/auth";
+import { sandboxTerminalLease } from "@sidecar/database/schemas/sandbox-terminal-lease";
 import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { getTestDB } from "@sidecar/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
+import { inArray } from "drizzle-orm";
 import { Duration, Effect, Layer } from "effect";
 import {
   SandboxUnavailable,
@@ -20,9 +22,9 @@ import { sweepTerminalLeases, TERMINAL_LEASE_SWEEP } from "../server/hosted/term
  * The scheduled sweep's stop of a coding agent's sandbox once no terminal
  * holds it, over a real dialect and a Vercel Sandbox that answers from a
  * script: a lease lapsed past the grace has its idle sandbox stopped and
- * goes, one whose agent still runs a turn goes and leaves the stop to the
- * turn's end, one still within the grace stands, and one whose stop Vercel
- * refused stays for the next sweep. Every conversation is minted per test,
+ * goes; one whose agent still runs a turn stays, its stop left to the turn's
+ * end and to a later sweep once the turn is over; one still within the grace
+ * stands; and one whose stop Vercel refused is put back for the next sweep. Every conversation is minted per test,
  * and every read is narrowed to its ids.
  *
  * Synthetic accounts, conversations, and sessions throughout.
@@ -70,16 +72,18 @@ function scriptedSandboxes(refused: ReadonlySet<string> = new Set()) {
 
 /** The leases still standing among the conversations named, by conversation. */
 const standingAmong = (conversationIds: readonly string[]) =>
-  Effect.map(lapsedSandboxLeases(new Date(NOW.getTime() + 60 * 60_000), 1_000), (leases) =>
-    leases
-      .map((lease) => lease.conversationId)
-      .filter((id) => conversationIds.includes(id))
-      .sort(),
-  );
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const rows = yield* db
+      .select({ conversationId: sandboxTerminalLease.conversationId })
+      .from(sandboxTerminalLease)
+      .where(inArray(sandboxTerminalLease.conversationId, [...conversationIds]));
+    return rows.map((row) => row.conversationId).sort();
+  });
 
 it.layer(getTestDB())("the terminal lease sweep", (it) => {
   it.effect(
-    "a lease lapsed past the grace has its idle sandbox stopped and goes, a running turn's goes with its stop left to the turn's end, and one within the grace stands",
+    "a lease lapsed past the grace has its idle sandbox stopped and goes, a running turn's stays for later, and one within the grace stands",
     () =>
       Effect.gen(function* () {
         const idle = yield* openAgent(TURN_STATUS.SETTLED);
@@ -94,14 +98,17 @@ it.layer(getTestDB())("the terminal lease sweep", (it) => {
         const outcome = yield* sweepTerminalLeases(NOW).pipe(Effect.provide(vercel.layer));
         const ids = [idle.conversationId, working.conversationId, recent.conversationId];
 
-        assert.ok(outcome.stopped >= 1 && outcome.released >= 1);
+        assert.ok(outcome.stopped >= 1);
         assert.ok(vercel.stopAsked.includes(idle.sessionId), "the idle sandbox is stopped");
         assert.ok(
           !vercel.stopAsked.includes(working.sessionId),
           "a running turn's end stops its own",
         );
         assert.ok(!vercel.stopAsked.includes(recent.sessionId), "a lease within the grace is left");
-        assert.deepEqual(yield* standingAmong(ids), [recent.conversationId]);
+        assert.deepEqual(
+          yield* standingAmong(ids),
+          [working.conversationId, recent.conversationId].sort(),
+        );
       }),
   );
 

@@ -10,18 +10,20 @@ import { conversations, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  claimLapsedLease,
+  deferLapsedLease,
   holdSandbox,
   lapsedSandboxLeases,
-  releaseSandboxLease,
   sandboxHeld,
 } from "../sandbox-terminal-lease.js";
 
 /**
  * The lease a developer's typing holds on a coding agent's sandbox, over a
- * real dialect: it moves on and never back, holds until its instant, lapses
- * for the sweep with the session the sandbox is tagged with and whether a
- * turn still runs, and a lease taken up again after the sweep read it is not
- * removed. Every conversation is minted per test and every read is of its
+ * real dialect: it moves on and never back and holds until its instant; it
+ * lapses for the sweep with the session its sandbox is tagged with, only
+ * while no turn of its agent runs; a claim takes it only while it is still
+ * lapsed; and a stop that failed puts it back behind the leases not yet
+ * tried, unless the developer typed since. Every conversation is minted per test and every read is of its
  * ids, since the lease is the deployment's and not an account's.
  *
  * Synthetic accounts, conversations, and sessions throughout.
@@ -77,7 +79,7 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
   );
 
   it.effect(
-    "a lapsed lease is read with the session its sandbox is tagged with and whether a turn still runs, and a held one is not read",
+    "a lapsed lease is read with the session its sandbox is tagged with, a running turn's and a held one are not",
     () =>
       Effect.gen(function* () {
         const idle = yield* openAgent(TURN_STATUS.SETTLED);
@@ -94,41 +96,58 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
         ]);
 
         assert.deepEqual(lapsed, [
-          { conversationId: idle.conversationId, sessionId: idle.sessionId, turnRunning: false },
-          {
-            conversationId: working.conversationId,
-            sessionId: working.sessionId,
-            turnRunning: true,
-          },
+          { conversationId: idle.conversationId, sessionId: idle.sessionId, heldUntil: at(1) },
         ]);
       }),
   );
 
+  it.effect("a claim takes a lease only while it is still lapsed", () =>
+    Effect.gen(function* () {
+      const claimed = yield* openAgent();
+      const retaken = yield* openAgent();
+      yield* holdSandbox(claimed.conversationId, at(1));
+      yield* holdSandbox(retaken.conversationId, at(1));
+      // Typing again after the sweep read the lease as lapsed before at(3).
+      yield* holdSandbox(retaken.conversationId, at(8));
+
+      assert.equal(yield* claimLapsedLease(claimed.conversationId, at(3)), true);
+      assert.equal(
+        yield* claimLapsedLease(claimed.conversationId, at(3)),
+        false,
+        "a claim is had once",
+      );
+      assert.equal(yield* claimLapsedLease(retaken.conversationId, at(3)), false);
+      assert.equal(yield* sandboxHeld(retaken.conversationId, at(7)), true);
+    }),
+  );
+
   it.effect(
-    "the sweep's release removes a lapsed lease, and leaves one the developer took up again after it was read",
+    "a lease whose stop failed waits behind the leases not yet tried, and typing since keeps the developer's lease",
     () =>
       Effect.gen(function* () {
-        const released = yield* openAgent();
+        const failed = yield* openAgent();
+        const untried = yield* openAgent();
         const retaken = yield* openAgent();
-        yield* holdSandbox(released.conversationId, at(1));
+        yield* holdSandbox(failed.conversationId, at(1));
+        yield* holdSandbox(untried.conversationId, at(2));
         yield* holdSandbox(retaken.conversationId, at(1));
-        // Typing again after the sweep read the lease as lapsed before at(3).
-        yield* holdSandbox(retaken.conversationId, at(8));
+        const [failedLease] = yield* lapsedAmong(at(5), [failed.conversationId]);
+        const [retakenLease] = yield* lapsedAmong(at(5), [retaken.conversationId]);
+        assert.ok(failedLease !== undefined && retakenLease !== undefined);
+        yield* claimLapsedLease(failed.conversationId, at(5));
+        yield* claimLapsedLease(retaken.conversationId, at(5));
+        yield* holdSandbox(retaken.conversationId, at(20));
 
-        yield* releaseSandboxLease(released.conversationId, at(3));
-        yield* releaseSandboxLease(retaken.conversationId, at(3));
+        yield* deferLapsedLease(failedLease, at(6));
+        yield* deferLapsedLease(retakenLease, at(6));
 
         assert.deepEqual(
-          yield* lapsedAmong(at(20), [released.conversationId, retaken.conversationId]),
-          [
-            {
-              conversationId: retaken.conversationId,
-              sessionId: retaken.sessionId,
-              turnRunning: false,
-            },
-          ],
+          (yield* lapsedAmong(at(7), [failed.conversationId, untried.conversationId])).map(
+            (lease) => lease.conversationId,
+          ),
+          [untried.conversationId, failed.conversationId],
         );
-        assert.equal(yield* sandboxHeld(retaken.conversationId, at(7)), true);
+        assert.equal(yield* sandboxHeld(retaken.conversationId, at(19)), true);
       }),
   );
 

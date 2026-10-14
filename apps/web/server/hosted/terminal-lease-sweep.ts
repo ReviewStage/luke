@@ -4,21 +4,23 @@
  * A developer typing in a Terminal tab holds the agent's sandbox: the
  * terminal relay moves the conversation's lease on with each keystroke, and
  * the agent's turn-end stop leaves a held sandbox running
- * (`sandbox-terminal-lease.ts`). Once the lease has lapsed past a short
- * grace, which covers a terminal reconnecting, the sweep takes it: a sandbox
- * whose agent still runs a turn is left to that turn's own end, which now
- * finds it unheld and stops it; any other is stopped here, its filesystem
- * kept for a later resume; and either way the lease goes. A stop Vercel did
- * not confirm keeps the lease, and the next sweep tries again. What is asked
- * of Vercel is a session's tag, and what is logged of a failure is its
- * status.
+ * (`sandbox-terminal-lease.ts`). Once a lease has lapsed past a short grace,
+ * which covers a terminal reconnecting, and no turn of its agent runs, the
+ * sweep claims it, so a keystroke that landed after the read keeps the
+ * sandbox, and stops the sandbox, its filesystem kept for a later resume. A
+ * lease whose agent still runs a turn is left for that turn's own end, and
+ * for a later sweep once the turn is over however it ended. A stop Vercel did
+ * not confirm puts the lease back behind the ones not yet tried, and a later
+ * sweep tries again. What is asked of Vercel is a session's tag, and what is
+ * logged of a failure is its status.
  */
 
 import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import {
+  claimLapsedLease,
+  deferLapsedLease,
   type LapsedSandboxLease,
   lapsedSandboxLeases,
-  releaseSandboxLease,
 } from "@sidecar/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Result, type Schema } from "effect";
 import { SessionSandboxes } from "./session-sandboxes.js";
@@ -31,38 +33,43 @@ export const TERMINAL_LEASE_SWEEP = {
   CONCURRENCY: 5,
 } as const;
 
-/** What one sweep of the lapsed leases came to: sandboxes stopped, leases let go with nothing to stop, and leases kept for a later sweep. */
+/** What one sweep of the lapsed leases came to: sandboxes stopped, leases let go with nothing to stop, and leases put back for a later sweep. */
 export interface TerminalLeaseSweepOutcome {
   stopped: number;
   released: number;
   pending: number;
 }
 
-const LEASE_ENDING = { STOPPED: "stopped", RELEASED: "released", PENDING: "pending" } as const;
+const LEASE_ENDING = {
+  STOPPED: "stopped",
+  RELEASED: "released",
+  PENDING: "pending",
+  /** The developer typed again after the read, so the lease and its sandbox stand. */
+  RETAKEN: "retaken",
+} as const;
 
 type LeaseEnding = (typeof LEASE_ENDING)[keyof typeof LEASE_ENDING];
 
-/** One lapsed lease dealt with: its sandbox stopped where no turn needs it, then the lease let go; kept where Vercel did not confirm the stop. */
+/** One lapsed lease dealt with: claimed, then its sandbox stopped, or the lease put back where Vercel did not confirm the stop. */
 const endLease = /* @__PURE__ */ Effect.fnUntraced(function* (
   lease: LapsedSandboxLease,
   lapsedBefore: Date,
+  now: Date,
 ): Effect.fn.Return<
   LeaseEnding,
   QueryError | Schema.SchemaError,
   SessionSandboxes | DatabaseServices
 > {
-  // A running turn's own end stops the sandbox, and a conversation that never opened one has none to stop.
-  if (lease.turnRunning || lease.sessionId === null) {
-    yield* releaseSandboxLease(lease.conversationId, lapsedBefore);
-    return LEASE_ENDING.RELEASED;
-  }
+  if (!(yield* claimLapsedLease(lease.conversationId, lapsedBefore))) return LEASE_ENDING.RETAKEN;
+  // A conversation that never opened a sandbox has none to stop.
+  if (lease.sessionId === null) return LEASE_ENDING.RELEASED;
   const sandboxes = yield* SessionSandboxes;
   const stopped = yield* Effect.result(sandboxes.stopFor(lease.sessionId));
   if (Result.isFailure(stopped)) {
     yield* Effect.logWarning(`a held sandbox was not stopped: ${stopped.failure.message}`);
+    yield* deferLapsedLease(lease, now);
     return LEASE_ENDING.PENDING;
   }
-  yield* releaseSandboxLease(lease.conversationId, lapsedBefore);
   return LEASE_ENDING.STOPPED;
 });
 
@@ -76,7 +83,7 @@ export const sweepTerminalLeases = /* @__PURE__ */ Effect.fn("web/sweepTerminalL
 > {
   const lapsedBefore = new Date(now.getTime() - Duration.toMillis(TERMINAL_LEASE_SWEEP.GRACE));
   const leases = yield* lapsedSandboxLeases(lapsedBefore, TERMINAL_LEASE_SWEEP.MAX_LEASES);
-  const endings = yield* Effect.forEach(leases, (lease) => endLease(lease, lapsedBefore), {
+  const endings = yield* Effect.forEach(leases, (lease) => endLease(lease, lapsedBefore, now), {
     concurrency: TERMINAL_LEASE_SWEEP.CONCURRENCY,
   });
   return {

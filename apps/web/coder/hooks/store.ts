@@ -134,10 +134,10 @@ export default defineHook({
         sandbox.update((held) => ({ ...held, openedAt: seams.now() }));
       }
       // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay, and the policy decides whether it is stopped after.
-      const opened = endsTurn(event) && sandbox.get().openedAt !== undefined;
-      const held = opened ? await terminalHolds(ctx) : false;
-      const stops = stopsAtTurnEnd(AGENT_ROLE.CODER, event, sandbox.get(), held);
-      const ending = opened ? await ctx.getSandbox() : undefined;
+      const ending =
+        endsTurn(event) && sandbox.get().openedAt !== undefined
+          ? await ctx.getSandbox()
+          : undefined;
       if (ending !== undefined) await recordBranch(ctx, ending);
       await runWeb(
         Effect.gen(function* () {
@@ -159,7 +159,13 @@ export default defineHook({
       if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
         await renewCredential(ctx, sandbox, now);
       }
-      if (ending !== undefined && stops) await ending.stop();
+      // Whether a terminal holds the sandbox is read last, just before the stop, so a developer who typed during the turn's end keeps it.
+      if (
+        ending !== undefined &&
+        stopsAtTurnEnd(AGENT_ROLE.CODER, event, sandbox.get(), await terminalHolds(ctx))
+      ) {
+        await ending.stop();
+      }
     },
   },
 });

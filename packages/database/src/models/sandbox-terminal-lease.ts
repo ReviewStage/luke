@@ -1,14 +1,20 @@
 /**
- * sandbox-terminal-lease.ts -- the lease a developer's typing holds on a coding agent's sandbox, and the reads its two readers take.
+ * sandbox-terminal-lease.ts -- the lease a developer's typing holds on a coding agent's sandbox, and the reads and claims its two readers take.
  *
  * The terminal relay moves a conversation's lease on as the developer types,
- * never back, so two relays writing at once leave the later instant. The
- * coding agent's turn-end stop asks whether the lease still holds, and leaves
- * a held sandbox running; the scheduled sweep takes the leases that lapsed
- * past a grace, a bounded batch at a time, with the session each sandbox is
- * tagged with and whether a turn of the agent is running, stops what no turn
- * still needs, and removes the lease. Nothing here reads a word of the
- * account: a lease is a conversation and an instant.
+ * never back, so two relays writing at once leave the later instant, and a
+ * keystroke clears a failed stop's stamp. The coding agent's turn-end stop
+ * asks whether the lease still holds, and leaves a held sandbox running.
+ * The scheduled sweep reads the leases that lapsed past a grace while no
+ * turn of their agent runs, the ones never tried first, and claims each one
+ * before it stops anything: the claim is the lease's removal on the
+ * condition it is still lapsed, so a keystroke that landed after the read
+ * keeps the lease and its sandbox both. A stop Vercel did not confirm puts
+ * the lease back stamped, behind the rest, unless the developer has typed
+ * since. A lease whose agent still runs a turn stays for that turn's own end
+ * to stop the sandbox, and for the sweep to take up once the turn is over,
+ * however it ends. Nothing here reads a word of the account: a lease is a
+ * conversation and its instants.
  */
 
 import { TURN_STATUS } from "@sidecar/wire";
@@ -23,18 +29,18 @@ type LeaseFailure = QueryError | Schema.SchemaError;
 
 type LeaseEffect<A> = Effect.Effect<A, LeaseFailure, DatabaseServices>;
 
-/** A lapsed lease as the sweep reads it: whose it is, the session its sandbox is tagged with, and whether a turn still runs there. */
+/** A lapsed lease as the sweep reads it: whose it is, the session its sandbox is tagged with, and the instant it lapsed at. */
 export interface LapsedSandboxLease {
   readonly conversationId: string;
   /** The eve session the sandbox carries as its tag; null for a conversation that never opened one. */
   readonly sessionId: string | null;
-  readonly turnRunning: boolean;
+  readonly heldUntil: Date;
 }
 
 const LapsedLeaseSchema = Schema.Struct({
   conversationId: Schema.String,
   sessionId: Schema.NullOr(Schema.String),
-  turnRunning: Schema.Boolean,
+  heldUntil: Schema.Date,
 });
 
 const upsertLease = SqlSchema.void({
@@ -46,9 +52,10 @@ const upsertLease = SqlSchema.void({
         .values({ conversationId, heldUntil })
         .onConflictDoUpdate({
           target: sandboxTerminalLease.conversationId,
-          // The later of the two, so a slower writer never moves the lease back.
+          // The later of the two, so a slower writer never moves the lease back; typing clears a failed stop's stamp.
           set: {
             heldUntil: sql`greatest(${sandboxTerminalLease.heldUntil}, excluded.held_until)`,
+            triedAt: null,
           },
         }),
     ),
@@ -80,31 +87,59 @@ const findLapsed = SqlSchema.findAll({
         .select({
           conversationId: sandboxTerminalLease.conversationId,
           sessionId: conversations.runtimeSessionId,
-          turnRunning: sql<boolean>`exists (
-            select 1 from ${turns}
-            where ${turns.conversationId} = ${sandboxTerminalLease.conversationId}
-              and ${turns.status} = ${TURN_STATUS.RUNNING}
-          )`,
+          heldUntil: sandboxTerminalLease.heldUntil,
         })
         .from(sandboxTerminalLease)
         .innerJoin(conversations, eq(conversations.id, sandboxTerminalLease.conversationId))
-        .where(lt(sandboxTerminalLease.heldUntil, lapsedBefore))
-        .orderBy(asc(sandboxTerminalLease.heldUntil))
+        .where(
+          and(
+            lt(sandboxTerminalLease.heldUntil, lapsedBefore),
+            // A running turn's own end stops its sandbox; the lease waits for that turn to be over.
+            sql`not exists (
+              select 1 from ${turns}
+              where ${turns.conversationId} = ${sandboxTerminalLease.conversationId}
+                and ${turns.status} = ${TURN_STATUS.RUNNING}
+            )`,
+          ),
+        )
+        .orderBy(
+          sql`${sandboxTerminalLease.triedAt} asc nulls first`,
+          asc(sandboxTerminalLease.heldUntil),
+        )
         .limit(limit),
     ),
 });
 
-const removeLease = SqlSchema.void({
+const deleteLapsed = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, lapsedBefore: Schema.Date }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
   execute: ({ conversationId, lapsedBefore }) =>
     Database.use((db) =>
-      db.delete(sandboxTerminalLease).where(
-        and(
-          eq(sandboxTerminalLease.conversationId, conversationId),
-          // A lease the developer took up again since it was read stays.
-          lt(sandboxTerminalLease.heldUntil, lapsedBefore),
-        ),
-      ),
+      db
+        .delete(sandboxTerminalLease)
+        .where(
+          and(
+            eq(sandboxTerminalLease.conversationId, conversationId),
+            lt(sandboxTerminalLease.heldUntil, lapsedBefore),
+          ),
+        )
+        .returning({ conversationId: sandboxTerminalLease.conversationId }),
+    ),
+});
+
+const insertDeferred = SqlSchema.void({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    heldUntil: Schema.Date,
+    triedAt: Schema.Date,
+  }),
+  execute: ({ conversationId, heldUntil, triedAt }) =>
+    Database.use((db) =>
+      db
+        .insert(sandboxTerminalLease)
+        .values({ conversationId, heldUntil, triedAt })
+        // A lease the developer took up again since the claim stands as it is.
+        .onConflictDoNothing({ target: sandboxTerminalLease.conversationId }),
     ),
 });
 
@@ -118,7 +153,7 @@ export function sandboxHeld(conversationId: string, now: Date): LeaseEffect<bool
   return Effect.map(findHeld({ conversationId, now }), (rows) => rows.length > 0);
 }
 
-/** The leases that lapsed before the instant given, longest lapsed first, at most `limit`. */
+/** The leases that lapsed before the instant given while no turn of their agent runs, never tried first and then longest lapsed, at most `limit`. */
 export function lapsedSandboxLeases(
   lapsedBefore: Date,
   limit: number,
@@ -126,7 +161,16 @@ export function lapsedSandboxLeases(
   return findLapsed({ lapsedBefore, limit });
 }
 
-/** Removes a lease the sweep has dealt with, unless the developer took it up again after the instant it was read as lapsed by. */
-export function releaseSandboxLease(conversationId: string, lapsedBefore: Date): LeaseEffect<void> {
-  return removeLease({ conversationId, lapsedBefore });
+/** Takes a lapsed lease off the table for the sweep to act on, answering whether it was still lapsed; one the developer took up again stays, and nothing is to be stopped. */
+export function claimLapsedLease(conversationId: string, lapsedBefore: Date): LeaseEffect<boolean> {
+  return Effect.map(deleteLapsed({ conversationId, lapsedBefore }), (rows) => rows.length > 0);
+}
+
+/** Puts back a claimed lease whose stop Vercel did not confirm, stamped so it waits behind the leases not yet tried; one the developer took up again since stands as it is. */
+export function deferLapsedLease(lease: LapsedSandboxLease, triedAt: Date): LeaseEffect<void> {
+  return insertDeferred({
+    conversationId: lease.conversationId,
+    heldUntil: lease.heldUntil,
+    triedAt,
+  });
 }
