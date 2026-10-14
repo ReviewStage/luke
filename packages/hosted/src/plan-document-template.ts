@@ -56,7 +56,6 @@ const DEFAULT_SECTIONS = [
   ["Alternatives", "Optional: each other approach that was weighed, and why it lost."],
   ["Hard parts", "Each tricky case, and exactly what the change does in it."],
   ["Not doing", "What is out of scope on purpose, and why."],
-  ["Plan of attack", "Optional: the steps the work lands in, in order, and why the order matters."],
   [
     "Testing",
     'The cases that prove the change, each as "When …, then …" with an exact result, then the end-to-end check.',

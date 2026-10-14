@@ -843,7 +843,6 @@ rather than judging it.
 | Alternatives | What else could we do, and why not that? |
 | Hard parts | What is tricky? Each case as the situation and exactly what the change does: edge cases, failure, cancellation, retry, concurrency, permission, privacy, and performance, and risks. |
 | Not doing | What are we leaving out on purpose, and why? |
-| Plan of attack | How does the work split, and in what order does it land? Migration and rollout where they apply. |
 | Testing | How do we know it works? Each case as "When <situation>, then <exact result>", covering every goal and hard part, then the end-to-end check. |
 | Open questions | What do we still need to find out, including a question a coding agent met while implementing, with the assumption it went on under? |
 | Assumptions | What Luke proposed and the developer had no preference on. |
@@ -878,6 +877,13 @@ rather than judging it.
   as, since a stack is a line: each pull request on main starts a chain on
   main, and at each pull request its lowest-numbered child goes on up the
   chain while every other child starts a chain based on it.
+- **Steps are the rollout's.** The default template once held a Plan of
+  attack section for the steps the work lands in and their order; new plans
+  start without it, and both prompts tell their model the steps are the
+  rollout's (`STEPS_ARE_THE_ROLLOUT` in `brain-host/planning.ts`). A plan
+  written before keeps the section in its text, since the text is the
+  developer's, and a note an older coding agent took into it still reads
+  (`RETIRED_PLAN_FIELD` in `plan-template.ts`).
 
 The template replaced one built for the coding agent alone (requirements as
 rules with Given/When/Then examples, a change map, contracts, a decision log,
