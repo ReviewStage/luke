@@ -115,10 +115,18 @@ interface AppCodingAgentsSlice {
   unseen: readonly string[];
 }
 
-/** One plan with inbox items waiting on the developer: the plan, and its open items by id, the latest changed first. */
+/** One inbox item waiting on the developer: the item, the agent that posted it, what it asks, and when the agent first posted it, by the service's clock. */
+export interface AppInboxWaitingItem {
+  id: string;
+  agentId: string;
+  title: string;
+  postedAt: number;
+}
+
+/** One plan with inbox items waiting on the developer: the plan, and its open items, the latest changed first. */
 export interface AppInboxPlan {
   planId: string;
-  items: readonly string[];
+  items: readonly AppInboxWaitingItem[];
 }
 
 /** One plan holding inbox items, waiting or settled: the plan, how many, and when the latest changed, by the service's clock. */

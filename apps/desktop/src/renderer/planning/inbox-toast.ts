@@ -63,7 +63,7 @@ export function useInboxToasts(
   // so only a word that came after the toast and lacks the item says it no
   // longer waits; an older one may be drawn after the toast was said.
   useEffect(() => {
-    const now = new Set(waiting.flatMap((plan) => plan.items));
+    const now = new Set(waiting.flatMap((plan) => plan.items.map((item) => item.id)));
     for (const [itemId, { planId, heard }] of told.current) {
       const gone = version > heard && !now.has(itemId);
       if (!gone && planId !== shownInbox) continue;
