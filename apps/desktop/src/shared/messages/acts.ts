@@ -159,6 +159,19 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
+import {
+  type TerminalCreatedActAnswer,
+  type TerminalResumedActAnswer,
+  type TerminalsActAnswer,
+  terminalAgentParamsSchema,
+  terminalAttachParamsSchema,
+  terminalCreatedActAnswerSchema,
+  terminalCreateParamsSchema,
+  terminalRenameParamsSchema,
+  terminalResumedActAnswerSchema,
+  terminalShellParamsSchema,
+  terminalsActAnswerSchema,
+} from "./terminal";
 import type { UpdateSnapshot } from "./update";
 import { VOICE_COMMAND } from "./voice-view";
 import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./wire-guard";
@@ -350,6 +363,20 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  /**
+   * A coding agent's Terminal tab (`messages/terminal.ts`): its shells
+   * listed, started, named, and ended, its sandbox resumed on the
+   * developer's click, and a shell attached and detached. What a shell
+   * prints travels on the port an attach posts to the asking panel, never on
+   * an act.
+   */
+  TERMINAL_LIST: "terminal.list",
+  TERMINAL_CREATE: "terminal.create",
+  TERMINAL_RENAME: "terminal.rename",
+  TERMINAL_KILL: "terminal.kill",
+  TERMINAL_RESUME: "terminal.resume",
+  TERMINAL_ATTACH: "terminal.attach",
+  TERMINAL_DETACH: "terminal.detach",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
@@ -1032,6 +1059,41 @@ export const ACT = {
       isReadable(codingAgentInboxAttachmentViewSchema),
     ),
     refusal: "Could not read the inbox item's image on this system.",
+  },
+  [ACT_KIND.TERMINAL_LIST]: {
+    payload: actSchema(terminalAgentParamsSchema),
+    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
+    refusal: "Could not reach this agent's sandbox.",
+  },
+  [ACT_KIND.TERMINAL_CREATE]: {
+    payload: actSchema(terminalCreateParamsSchema),
+    result: wireResult<TerminalCreatedActAnswer>(isReadable(terminalCreatedActAnswerSchema)),
+    refusal: "Could not start a shell in this agent's sandbox.",
+  },
+  [ACT_KIND.TERMINAL_RENAME]: {
+    payload: actSchema(terminalRenameParamsSchema),
+    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
+    refusal: "Could not rename that shell.",
+  },
+  [ACT_KIND.TERMINAL_KILL]: {
+    payload: actSchema(terminalShellParamsSchema),
+    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
+    refusal: "Could not end that shell.",
+  },
+  [ACT_KIND.TERMINAL_RESUME]: {
+    payload: actSchema(terminalAgentParamsSchema),
+    result: wireResult<TerminalResumedActAnswer>(isReadable(terminalResumedActAnswerSchema)),
+    refusal: "Could not resume this agent's sandbox.",
+  },
+  [ACT_KIND.TERMINAL_ATTACH]: {
+    payload: actSchema(terminalAttachParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open that shell.",
+  },
+  [ACT_KIND.TERMINAL_DETACH]: {
+    payload: actSchema(terminalShellParamsSchema),
+    result: answersNothing,
+    refusal: "Could not close that shell.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
