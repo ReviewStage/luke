@@ -1,8 +1,8 @@
 {
-  "id": "0b731559-cf11-4306-8497-610a53ddaba1",
-  "prevIds": ["34caf4ec-5ae9-4433-a655-953cc777917b"],
   "version": "8",
   "dialect": "postgres",
+  "id": "5d0aae55-28d2-4301-b93c-f2951c39143c",
+  "prevIds": ["8d99604a-bc94-44c0-b67c-ec0f016336f4"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -4551,6 +4551,19 @@
       "table": "plan_revision"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_revision"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": false,
@@ -8221,6 +8234,19 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "plan_revision_plan_id_plan_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_revision"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "plan_revision_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "plan_revision"
