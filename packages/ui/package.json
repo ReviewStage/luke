@@ -42,7 +42,8 @@
     "./call-card-model": "./src/call-card-model.js",
     "./avatar-session-contract": "./src/avatar-session-contract.js",
     "./avatar-session": "./src/avatar-session.js",
-    "./person-page-model": "./src/person-page-model.js"
+    "./person-page-model": "./src/person-page-model.js",
+    "./chat-model": "./src/chat-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {

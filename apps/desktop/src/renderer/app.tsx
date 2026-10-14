@@ -392,7 +392,7 @@ export function App(): React.JSX.Element {
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
     historyOpen: tasks.history.open,
-    inboxOpen: tasks.inboxView.open,
+    inboxOpen: tasks.inboxView.open || tasks.chatView.open,
     agentPageOpen: tasks.agentView.agentId !== undefined,
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
     activeTaskId: state?.tasks.activeTaskId,
@@ -546,6 +546,8 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.INBOX_LIST) || tasks.inboxView.open) return;
+      // Chat is the Inbox's like: Escape stops at it rather than reaching the plan beneath.
+      if (tasks.chatView.open) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
@@ -562,6 +564,7 @@ export function App(): React.JSX.Element {
     listening,
     tasks.back,
     tasks.inboxView.open,
+    tasks.chatView.open,
     speaking,
     stopSpeaking,
   ]);

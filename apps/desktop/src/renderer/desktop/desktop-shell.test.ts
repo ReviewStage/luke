@@ -5,6 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { RUN_PROFILE } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -18,7 +19,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { handState } from "#testing/app-state";
+import { handState, stateWith } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
@@ -28,6 +29,7 @@ import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
+import { fixtureChat } from "../tasks/chat-fixture";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { HISTORY_READ } from "../tasks/use-plan-history";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
@@ -995,4 +997,69 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
 
   const card = document.querySelector(".tooltip-card [data-task-card]");
   assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
+});
+
+/** The sidebar's Chat row, where one stands. */
+function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
+  return [...page.querySelectorAll<HTMLButtonElement>("button.sidebar-inbox")].find((button) =>
+    button.textContent?.startsWith("Chat"),
+  );
+}
+
+test("the sidebar's Chat row stands only while the account has Chat on and a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  assert.equal(chatRow(mount(false)), undefined, "no chat is read");
+  act(() => root?.unmount());
+
+  let opened = 0;
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...tasksControl().chatView, chat, onOpen: () => (opened += 1) };
+  const page = mount(false, false, { chatView: view });
+  await settle();
+  const row = chatRow(page);
+  assert.equal(row?.textContent, "Chat4 waiting on you");
+  assert.equal(row?.getAttribute("aria-current"), null);
+  act(() => row?.click());
+  assert.equal(opened, 1);
+  act(() => root?.unmount());
+
+  const open = mount(false, false, { chatView: { ...view, open: true } });
+  await settle();
+  assert.equal(chatRow(open)?.getAttribute("aria-current"), "page");
+  assert.equal(homeRow(open).getAttribute("aria-current"), null);
+  assert.ok(open.querySelector(".desktop-main > .chat-view"), "Chat stands in the plan's place");
+});
+
+test("with Chat off for the account, its row stands nowhere, and Chat standing in the plan's place gives it back", async () => {
+  handState({});
+  const closed: string[] = [];
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...tasksControl().chatView, chat, onClose: () => closed.push("closed") };
+  const off = mount(false, false, { chatView: view });
+  await settle();
+  assert.equal(chatRow(off), undefined);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const standing = mount(false, false, { chatView: { ...view, open: true } });
+  await settle();
+  assert.equal(standing.querySelector(".chat-view"), null, "Chat is not drawn");
+  assert.deepEqual(closed, ["closed"]);
+});
+
+test("a fixture run staged on Chat offers it with no account to turn its experiment on, where any other run does not", async () => {
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...tasksControl().chatView, chat };
+  const run = { ...stateWith({}, {}).run, fixtureMode: true };
+  handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
+  const staged = mount(false, false, { chatView: view });
+  await settle();
+  assert.ok(chatRow(staged), "the chat profile's run offers Chat");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({}, { run: { ...run, profile: RUN_PROFILE.TASKS } });
+  const other = mount(false, false, { chatView: view });
+  await settle();
+  assert.equal(chatRow(other), undefined, "another fixture run does not");
 });

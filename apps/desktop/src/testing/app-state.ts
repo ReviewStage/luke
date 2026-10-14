@@ -70,9 +70,12 @@ export function signedInAs(account: {
   return { ...snapshot, account: { ...snapshot.account, ...account } };
 }
 
-/** Hands the window main's document with the account's experiments as given, beside whatever else the bridge already holds. */
-export function handState(experiments: ExperimentChoices): void {
-  const snapshot = snapshotWith(experiments);
+/** Hands the window main's document with the account's experiments as given and the slices patched, beside whatever else the bridge already holds. */
+export function handState(
+  experiments: ExperimentChoices,
+  patch: Partial<AppStateSnapshot> = {},
+): void {
+  const snapshot = stateWith(experiments, patch);
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {

@@ -15,6 +15,7 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
+import { useChatOn } from "../tasks/chat-gate";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
 import { MentionedAgents } from "../tasks/mentioned-agent-card";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
@@ -25,6 +26,7 @@ import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
+import { DesktopChat } from "./desktop-chat";
 import { DesktopFactory } from "./desktop-factory";
 import { DesktopInbox } from "./desktop-inbox";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -248,7 +250,7 @@ function transcriptStreaming(tasks: TasksControl): boolean {
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; Factory and the Automations page in the listed workspace; the plan on screen in its own workspace, or alone while that is not
+ * from; Factory, the Automations page, and Chat in the listed workspace; the plan on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -269,6 +271,7 @@ function titleSubject(
   if (tasks.automationsView.open) {
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
+  if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -347,21 +350,28 @@ export function DesktopShell({
   useEffect(() => {
     if (automationsShown && !automationsOn) closeAutomations();
   }, [automationsShown, automationsOn, closeAutomations]);
+  // Chat is an experiment on the same terms: turned off while it stands, it puts itself away.
+  const chatOn = useChatOn();
+  const { open: chatShown, onClose: closeChat } = tasks.chatView;
+  useEffect(() => {
+    if (chatShown && !chatOn) closeChat();
+  }, [chatShown, chatOn, closeChat]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's or a person's page, Factory, or the Automations page standing in its place is not the plan.
+  // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
   const standingIn =
     tasks.inboxView.open ||
     tasks.agentView.agentId !== undefined ||
     tasks.personView.userId !== undefined ||
     tasks.factoryView.open ||
-    tasks.automationsView.open;
+    tasks.automationsView.open ||
+    tasks.chatView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -449,13 +459,14 @@ export function DesktopShell({
   }
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The Inbox,
-  // Factory, and the Automations page stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own.
+  // Factory, the Automations page, and Chat stand in the plan's place, so they
+  // draw no panel to toggle; an agent's page draws the agent's own.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open && automationsOn;
+  const chatOpen = tasks.chatView.open && chatOn;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle = planToggle || pageAgent !== undefined;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
@@ -489,7 +500,12 @@ export function DesktopShell({
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
-            {inboxOpen ? (
+            {chatOpen ? (
+              <DesktopChat
+                tasks={tasks}
+                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
+              />
+            ) : inboxOpen ? (
               <PageFind page={FIND_PAGE.INBOX} active={tasks.shown}>
                 <DesktopInbox tasks={tasks} />
               </PageFind>

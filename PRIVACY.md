@@ -795,7 +795,7 @@ whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
-are viewing; an Inbox item's body and pictures; each coding agent's and
+are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's

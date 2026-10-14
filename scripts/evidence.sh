@@ -81,6 +81,10 @@ capture_evidence tasks-transcript --profile tasks-transcript --capture-evidence 
 # The same plan mid-call on its work: an earlier turn folded to its answer,
 # and the turn standing now with the worker running beside its reads.
 capture_evidence tasks-work --profile tasks-work --capture-evidence "$LUKE_TASKS_WORK_EVIDENCE_PATH"
+# The window's Chat over the fixture's synthetic chat: For you with the open
+# asks first, then a direct message and a mention, beside the rail of
+# channels and direct messages with their unread counts.
+capture_evidence chat --profile chat --capture-evidence "$LUKE_CHAT_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -127,7 +131,8 @@ for evidence_path in \
     "$LUKE_TASKS_EVIDENCE_PATH" \
     "$LUKE_TASKS_BOARD_EVIDENCE_PATH" \
     "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH" \
-    "$LUKE_TASKS_WORK_EVIDENCE_PATH"; do
+    "$LUKE_TASKS_WORK_EVIDENCE_PATH" \
+    "$LUKE_CHAT_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
 done
 
@@ -139,3 +144,4 @@ printf 'Tasks visual evidence: %s\n' "$LUKE_TASKS_EVIDENCE_PATH"
 printf 'Tasks board visual evidence: %s\n' "$LUKE_TASKS_BOARD_EVIDENCE_PATH"
 printf 'Tasks transcript visual evidence: %s\n' "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
 printf 'Tasks work visual evidence: %s\n' "$LUKE_TASKS_WORK_EVIDENCE_PATH"
+printf 'Chat visual evidence: %s\n' "$LUKE_CHAT_EVIDENCE_PATH"
