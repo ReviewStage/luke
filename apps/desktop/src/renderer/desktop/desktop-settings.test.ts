@@ -11,7 +11,9 @@ import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { runAppCommand } from "../app-commands";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopSettings } from "./desktop-settings";
@@ -19,7 +21,10 @@ import { DesktopSettings } from "./desktop-settings";
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
  * Account first, and every option moved by the one-home layout is drawn on
- * its new page and on no other, as the search finds it there too.
+ * its new page and on no other, as the search finds it there too. The
+ * Integrations page's own search stands beside the sidebar's: Command-F
+ * lands in the nearer one, and a sidebar result that opens an integration
+ * hands its query down.
  */
 
 const ignore = () => undefined;
@@ -222,4 +227,73 @@ test("a page turned to opens at its top, not where the last page was scrolled", 
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
   openPage(page, "Coding agents");
   assert.equal(page.querySelector<HTMLElement>(".settings-page-scroll")?.scrollTop, 0);
+});
+
+/** Types `words` over whatever the field holds, as the developer would. */
+function typeInto(field: HTMLInputElement, words: string): void {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The field labelled `label`. */
+function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
+  return page.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+}
+
+const SIDEBAR_SEARCH = "Search settings";
+const PAGE_SEARCH = "Search integrations and tools";
+
+/** Presses the sidebar's result named `name` under the Integrations page's heading. */
+function openIntegrationResult(page: HTMLElement, name: string): void {
+  const result = [
+    ...page.querySelectorAll<HTMLButtonElement>('nav section[aria-label="Integrations"] button'),
+  ].find((button) => button.textContent === name);
+  assert.ok(result, `the search finds ${name} under Integrations`);
+  act(() => result.click());
+}
+
+test("Command-F lands in the Integrations page's own search while it shows, and in the sidebar's elsewhere", () => {
+  const page = mount(createElement(SettingsHarness));
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  assert.equal(document.activeElement, fieldNamed(page, SIDEBAR_SEARCH));
+
+  openPage(page, "Integrations");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  assert.equal(document.activeElement, fieldNamed(page, PAGE_SEARCH));
+  assert.equal(fieldNamed(page, SIDEBAR_SEARCH)?.hasAttribute("aria-keyshortcuts"), false);
+});
+
+test("a sidebar result that opens an integration hands its query to the page's search where it finds that integration there, and clears it where not", () => {
+  const page = mount(createElement(SettingsHarness));
+  const sidebar = fieldNamed(page, SIDEBAR_SEARCH);
+  assert.ok(sidebar, "the sidebar's search is drawn");
+
+  typeInto(sidebar, "postgres");
+  openIntegrationResult(page, "Neon");
+  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Integrations");
+  assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "postgres");
+
+  // Note that "mcp" finds every integration's row in the sidebar but none by
+  // the page's own words, so it stays behind and the page's search is
+  // cleared, so the row the landing seeks is drawn.
+  typeInto(sidebar, "mcp");
+  openIntegrationResult(page, "Linear");
+  assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
+});
+
+test("the Integrations page's search is cleared when another page is turned to", () => {
+  const page = mount(createElement(SettingsHarness));
+  openPage(page, "Integrations");
+  typeInto(fieldNamed(page, PAGE_SEARCH) ?? assert.fail("the page's search"), "deploy");
+
+  openPage(page, "Voice");
+  openPage(page, "Integrations");
+
+  assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });

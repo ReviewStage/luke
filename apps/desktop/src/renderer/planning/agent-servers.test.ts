@@ -177,7 +177,7 @@ test("pressing a connected server opens its tools in place, each badged only as 
   ]);
 });
 
-test("a search finds a tool, Enter opens its server's page filtered to it, and Escape goes back before it closes", async () => {
+test("a search finds a server and its tools, Enter opens its page filtered to them, and Escape goes back before it closes", async () => {
   const { container, key, type, field } = await opened();
 
   type("deploy");

@@ -108,25 +108,3 @@ test("searching GitHub while signed in finds Integrations' GitHub row and nothin
     false,
   );
 });
-
-test("an integration is found by its tools' names and descriptions once the Integrations page has handed them up", () => {
-  const input: SettingsSearchInput = {
-    settings: settingsView(),
-    voiceControlsDrawn: true,
-    accountDrawn: true,
-    integrationTools: new Map([
-      [
-        INTEGRATION_PROVIDER.VERCEL,
-        [{ name: "get_deployment_build_logs", description: "Reads a build's output." }],
-      ],
-    ]),
-  };
-  const integrationsFound = (query: string, from: SettingsSearchInput) =>
-    (searchSettings(settingsSearchEntries(from), query)?.groups ?? [])
-      .filter((group) => group.page === SETTINGS_VIEW.INTEGRATIONS)
-      .flatMap((group) => group.items.map((entry) => entry.id));
-
-  assert.deepEqual(integrationsFound("build_logs", input), [INTEGRATION_PROVIDER.VERCEL]);
-  assert.deepEqual(integrationsFound("build's output", input), [INTEGRATION_PROVIDER.VERCEL]);
-  assert.deepEqual(integrationsFound("build_logs", { ...input, integrationTools: undefined }), []);
-});

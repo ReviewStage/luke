@@ -32,9 +32,6 @@ export interface IntegrationTool {
   readonly annotations?: IntegrationToolAnnotations;
 }
 
-/** The tools each connected provider's server listed, as a surface that read them hands them on. */
-export type IntegrationToolIndex = ReadonlyMap<IntegrationProvider, readonly IntegrationTool[]>;
-
 /** How far a connected provider's server is known to work. */
 export const CONNECTION_HEALTH = {
   /** Its server answered with its tools. */

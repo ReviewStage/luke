@@ -1,12 +1,13 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
 import { BackIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
-import type { IntegrationToolIndex } from "../integration-health";
+import { integrationNamed } from "../integration-search";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { settingsPageOf } from "../settings/pages";
@@ -51,9 +52,12 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * pressing a result opens the page beside the results and leaves them
  * standing, so the next result is one press away, and clearing the field
  * brings the list back. The query lives here, so it lasts as long as Settings
- * stays open. It is Settings' one search: the Integrations page hands up the
- * tools its integrations' servers listed, so the query finds an integration
- * by its tools too, and opens the page's rows onto the tools it found.
+ * stays open. The Integrations page has a search of its own, for its
+ * integrations and their tools, whose query is held here too: a result of
+ * the sidebar's that opens one of its rows hands the query down to it where
+ * it finds that integration there, so the page opens on what was asked
+ * for, and turning to another page clears it. Command-F lands in the page's
+ * field while it shows, and in the sidebar's otherwise.
  *
  * The list is as wide as the plans' sidebar and resizes it from its own edge,
  * but never folds: a drag past the least width holds there, because Settings
@@ -78,11 +82,15 @@ export function DesktopSettings({
   onExit: () => void;
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
-  const [integrationTools, setIntegrationTools] = useState<IntegrationToolIndex>();
+  const [integrationsQuery, setIntegrationsQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
   // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
+  // The Integrations page's search is the page's, so turning to another page leaves it.
+  if (integrationsQuery !== "" && settings.view !== SETTINGS_VIEW.INTEGRATIONS) {
+    setIntegrationsQuery("");
+  }
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const shown = settingsPageOf(settings.view);
@@ -92,9 +100,7 @@ export function DesktopSettings({
   const rows = settingsRowsInput(settings);
   // Built only while a query stands: an empty field searches nothing.
   const search =
-    rows && query !== ""
-      ? searchSettings(settingsSearchEntries({ ...rows, integrationTools }), query)
-      : undefined;
+    rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
   const open = (view: SettingsView) => {
     window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
@@ -113,6 +119,13 @@ export function DesktopSettings({
   useEffect(() => () => landing.current?.(), []);
   const openResult = (entry: SettingsSearchEntry) => {
     setOpened(entry);
+    // An integration opens with the query handed down where the page's own
+    // search finds it by those words, else with that search cleared, so the
+    // row the landing seeks is drawn either way.
+    const provider = INTEGRATION_PROVIDER_LIST.find((each) => each === entry.id);
+    if (entry.page === SETTINGS_VIEW.INTEGRATIONS && provider) {
+      setIntegrationsQuery(integrationNamed(provider, query) ? query : "");
+    }
     settings.onViewChange(entry.page);
     landing.current?.();
     landing.current = landOnSettingsRow(entry.id);
@@ -122,6 +135,10 @@ export function DesktopSettings({
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
   const edge = useSidebarEdge(sidebar);
+  // The page with a search of its own takes Command-F while it shows.
+  const pageSearched =
+    settings.view === SETTINGS_VIEW.INTEGRATIONS &&
+    settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
 
   // The template's version history takes the whole window as a plan's does, and leaves for the template.
   // Note that the call card floats while it does, as over a plan's history, since the page list it rides is gone.
@@ -158,6 +175,7 @@ export function DesktopSettings({
         </button>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
+          find={!pageSearched}
           query={query}
           onQueryChange={changeQuery}
           onSubmit={() => {
@@ -213,7 +231,7 @@ export function DesktopSettings({
             </header>
             <SettingsPanel
               {...settings}
-              integrationsSearch={{ query, onTools: setIntegrationTools }}
+              integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
             />
           </div>
         </section>

@@ -1,10 +1,5 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
-import {
-  INTEGRATION_NAME,
-  INTEGRATION_PROVIDER,
-  INTEGRATION_PROVIDER_LIST,
-  type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
 import type { Workspace } from "@sidecar/hosted/workspace-wire";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import {
@@ -18,7 +13,7 @@ import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
-import type { IntegrationToolIndex } from "./integration-health";
+import { integrationLines } from "./integration-search";
 import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { settingsPageOf } from "./settings/pages";
@@ -80,14 +75,12 @@ export interface SettingsSearchEntry {
  * record the rows themselves are drawn from. The settings' own half is the
  * schema's — each entry says whether its row is drawn right now, judged from
  * this same record — so nothing here restates a condition a page branches on.
- * Beside it, the workspace the Workspace page shows, absent while it draws none,
- * and the tools each connected integration's server listed, once the
- * Integrations page has read them, so an integration is found by its tools'
- * names and descriptions as well as by its own.
+ * Beside it, the workspace the Workspace page shows, absent while it draws none.
+ * An integration's tools are not here: the Integrations page's own filter
+ * finds them (`settings/integrations-page.tsx`).
  */
 export type SettingsSearchInput = SettingsRowsInput & {
   workspace?: Workspace | undefined;
-  integrationTools?: IntegrationToolIndex | undefined;
 };
 
 /**
@@ -104,24 +97,6 @@ const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete 
 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
-
-/** What each integration is for, in the words someone looking for it would type. */
-const INTEGRATION_KEYWORDS = {
-  [INTEGRATION_PROVIDER.EXECUTOR]:
-    "executor.sh gateway apps tools automations skills openapi graphql",
-  [INTEGRATION_PROVIDER.GITHUB]: "git repositories issues pull requests actions code",
-  [INTEGRATION_PROVIDER.GRANOLA]: "meetings notes transcripts calls",
-  [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
-  [INTEGRATION_PROVIDER.MERCURY]: "bank banking accounts transactions payments finance",
-  [INTEGRATION_PROVIDER.NEON]: "postgres database sql branches",
-  [INTEGRATION_PROVIDER.NOTION]: "pages docs wiki databases notes",
-  [INTEGRATION_PROVIDER.POSTHOG]: "analytics events feature flags experiments insights",
-  [INTEGRATION_PROVIDER.SENTRY]: "errors crashes exceptions monitoring traces issues",
-  [INTEGRATION_PROVIDER.SLACK]: "chat messages channels threads team",
-  [INTEGRATION_PROVIDER.SUPABASE]: "postgres database sql auth storage edge functions",
-  [INTEGRATION_PROVIDER.VERCEL]: "deployments hosting logs domains projects",
-  [INTEGRATION_PROVIDER.YCOMBINATOR]: "yc bookface startups founders investors hiring",
-} as const satisfies Record<IntegrationProvider, string>;
 
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
@@ -160,15 +135,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
             id: provider,
             label: INTEGRATION_NAME[provider],
             page: SETTINGS_VIEW.INTEGRATIONS,
-            haystack: [
-              INTEGRATION_NAME[provider],
-              INTEGRATION_WORDS,
-              INTEGRATION_KEYWORDS[provider],
-              ...(input.integrationTools?.get(provider) ?? []).flatMap((tool) => [
-                tool.name,
-                tool.description,
-              ]),
-            ],
+            haystack: [...integrationLines(provider), INTEGRATION_WORDS],
           }
         : undefined,
     ),
@@ -420,20 +387,28 @@ export function landOnSettingsRow(id: string): () => void {
  * window: a held query is cleared first, and only an empty field lets go of
  * the caret — both stopped here, so neither press falls through and turns the
  * page or the tab behind the field. Return opens the first result, so a
- * query someone is sure of needs no pointer.
+ * query someone is sure of needs no pointer. Command-F lands here unless the
+ * page beside it has a search of its own, as Integrations does, which is
+ * the nearer question; the chord is printed in whichever field it lands in.
  */
 export function SettingsSearchField({
   query,
   onQueryChange,
   onSubmit,
+  find = true,
 }: {
   query: string;
   onQueryChange: (query: string) => void;
   /** Return pressed in the field: the first result is the answer. */
   onSubmit: () => void;
+  /** Whether Command-F lands here: not while the page shows a search of its own. */
+  find?: boolean;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
-  useAppCommand(APP_COMMAND.FIND, () => focusSearchField(SETTINGS_SEARCH_INPUT_ID));
+  useAppCommand(
+    APP_COMMAND.FIND,
+    find ? () => focusSearchField(SETTINGS_SEARCH_INPUT_ID) : undefined,
+  );
   return (
     <search className="settings-search">
       {/* The label is the whole well, so a press on the magnifier or the
@@ -445,7 +420,7 @@ export function SettingsSearchField({
           id={SETTINGS_SEARCH_INPUT_ID}
           className="settings-search-input"
           aria-label="Search settings"
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FIND)}
+          aria-keyshortcuts={find ? commandKeyshortcuts(APP_COMMAND.FIND) : undefined}
           placeholder="Search"
           autoComplete="off"
           spellCheck={false}
@@ -486,12 +461,12 @@ export function SettingsSearchField({
           >
             <CloseIcon />
           </button>
-        ) : (
+        ) : find ? (
           <Shortcut
             chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord}
             className="settings-search-shortcut"
           />
-        )}
+        ) : null}
       </label>
     </search>
   );

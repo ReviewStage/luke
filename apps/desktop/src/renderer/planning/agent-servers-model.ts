@@ -10,9 +10,9 @@ import {
   type ConnectionHealth,
   type IntegrationTool,
 } from "../integration-health";
+import { matchIntegration } from "../integration-search";
 import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
-import { byName } from "../integration-tool-model";
-import { matchesTokens, searchTokens } from "../search-tokens";
+import { searchTokens } from "../search-tokens";
 
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
@@ -39,7 +39,9 @@ import { matchesTokens, searchTokens } from "../search-tokens";
  * under Connected, a lapsed connection among them, and Not connected, a
  * sign-in under way or one that did not finish among the latter; one whose
  * standing is unread stands first under no heading. A search finds servers
- * by name and every connected server's tools by name or description.
+ * by name or what they are for, and every connected server's tools by name
+ * or description, as Settings › Integrations' filter does
+ * (`../integration-search.ts`).
  */
 
 /** The kinds of row the popover draws. */
@@ -222,28 +224,29 @@ export interface ToolHit {
   readonly tool: IntegrationTool;
 }
 
-/** What a search of the popover finds: the servers whose names hold every word, and every tool whose name or description does. */
+/** What a search of the popover finds: the servers it names, and the tools it finds (`../integration-search.ts`). */
 export interface ServerSearch {
   readonly rows: readonly ServerRow[];
   readonly tools: readonly ToolHit[];
 }
 
 /**
- * The servers and tools a query finds; a blank query is every server and no
- * tool. Note that the tools found stay together by server, in the provider
- * list's order and alphabetical within each, because a server's tools read
- * best beside each other and each names its server once in the same place.
+ * The servers and tools a query finds, as Settings › Integrations' filter
+ * finds them; a blank query is every server and no tool. Note that the
+ * tools found stay together by server, in the provider list's order and
+ * alphabetical within each, because a server's tools read best beside each
+ * other and each names its server once in the same place.
  */
 export function searchServers(rows: readonly ServerRow[], query: string): ServerSearch {
   const tokens = searchTokens(query);
   if (tokens.length === 0) return { rows, tools: [] };
+  const found = rows.map((row) => ({
+    row,
+    match: matchIntegration(row.provider, row.tools ?? [], tokens),
+  }));
   return {
-    rows: rows.filter((row) => matchesTokens([row.name], tokens)),
-    tools: rows.flatMap((row) =>
-      byName(row.tools ?? [])
-        .filter((tool) => matchesTokens([tool.name, tool.description], tokens))
-        .map((tool) => ({ row, tool })),
-    ),
+    rows: found.flatMap(({ row, match }) => (match?.named ? [row] : [])),
+    tools: found.flatMap(({ row, match }) => (match?.tools ?? []).map((tool) => ({ row, tool }))),
   };
 }
 

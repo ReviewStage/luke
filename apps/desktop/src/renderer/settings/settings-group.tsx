@@ -16,7 +16,7 @@ export function SettingsGroup({
   anchor,
   children,
 }: {
-  title?: string;
+  title?: string | undefined;
   /** The id a Settings link or a search result lands on: worn by the whole group. */
   anchor?: string;
   children: React.ReactNode;

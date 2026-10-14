@@ -668,10 +668,3 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-
-.integration-tools-found {
-  margin: 0;
-  padding: var(--space-4) var(--row-inset) var(--space-2);
-  color: var(--text-tertiary);
-  font-size: 12px;
-}

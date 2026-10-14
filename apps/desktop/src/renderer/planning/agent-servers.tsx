@@ -252,12 +252,18 @@ function ServersPopover({
     setFilter("");
   };
 
-  /** What a pick does when chosen: a server opens or connects, and a tool opens its server's page, filtered to the search. */
+  /**
+   * What a pick does when chosen: a server opens or connects, and a tool
+   * opens its server's page, filtered to the search, as does a server the
+   * search found tools of, as Settings › Integrations opens its row onto them.
+   */
   const choose = (pick: Pick | undefined) => {
     if (pick === undefined) return;
     const { row } = pick;
     if (pick.tool !== undefined) return open(row, query);
-    if (opensTools(row)) return open(row);
+    if (opensTools(row)) {
+      return open(row, found.tools.some((hit) => hit.row === row) ? query : "");
+    }
     // Note that Enter on a sign-in under way reopens it, its first press, as Try again begins it again.
     if (
       row.kind === SERVER_ROW.CONNECT ||
