@@ -470,6 +470,19 @@ function IntegrationRows({
     onTools(index);
   }, [reads, onTools]);
 
+  // Note that the tools go with the page, because a connection changed on
+  // another page, which this one no longer hears, must not leave its old
+  // tools findable.
+  useEffect(() => {
+    if (onTools === undefined) return;
+    return () => onTools(new Map());
+  }, [onTools]);
+
+  // A turn belongs to the search it was made in: a query that changes, even back to an earlier one, starts afresh.
+  useEffect(() => {
+    setTurnedInSearch({ query, providers: new Set() });
+  }, [query]);
+
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
   const offered = INTEGRATION_PROVIDER_LIST.filter(

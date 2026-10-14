@@ -534,3 +534,50 @@ test("a query that finds an integration by its own name opens nothing by itself,
   );
   assert.equal(shownTools(page).length, 3);
 });
+
+test("leaving the page takes its tools out of Settings' search, so a connection changed elsewhere leaves none behind", async () => {
+  connectVercelAndLinear();
+  const handed: IntegrationToolIndex[] = [];
+  await mount(undefined, { query: "", onTools: (tools) => handed.push(tools) });
+  assert.ok((handed.at(-1)?.size ?? 0) > 0);
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  assert.equal(handed.at(-1)?.size, 0);
+});
+
+test("a row closed under one query opens again when that query comes back after another", async () => {
+  connectVercelAndLinear();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  // Settings' query as the sidebar would change it, the page drawn under it each time.
+  const searchFor = (query: string) =>
+    act(() =>
+      root.render(
+        createElement(IntegrationsSection, {
+          signedIn: true,
+          search: { query, onTools: () => undefined },
+        }),
+      ),
+    );
+  searchFor("deploy");
+  await settle();
+  assert.deepEqual(shownTools(container), [["get_deployment", undefined]]);
+
+  act(() =>
+    (
+      rowNamed(container, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      assert.fail("Vercel's row closes")
+    ).click(),
+  );
+  assert.deepEqual(shownTools(container), []);
+
+  searchFor("logs");
+  await settle();
+  searchFor("deploy");
+  await settle();
+
+  assert.deepEqual(shownTools(container), [["get_deployment", undefined]]);
+});
