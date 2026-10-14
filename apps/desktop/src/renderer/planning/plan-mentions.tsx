@@ -1,4 +1,11 @@
-import { createContext, type ReactNode, useContext } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useEffect,
+  useRef,
+} from "react";
 import type { MentionDoors } from "./mention-chip";
 
 /**
@@ -17,13 +24,24 @@ import type { MentionDoors } from "./mention-chip";
 export interface PlanMentionsValue {
   readonly planId: string;
   readonly planName: string;
+  /** The plan's repository, `owner/name`; null before one is chosen. */
+  readonly repository: string | null;
   readonly text: () => string;
   readonly doors: MentionDoors;
 }
 
-const PlanMentionsContext = createContext<PlanMentionsValue | undefined>(undefined);
+/** The page's mentions as places under it read them, and where the plan's open editor lends its text. */
+interface PlanMentionsPage extends PlanMentionsValue {
+  readonly lent: RefObject<(() => string) | undefined>;
+}
 
-/** Hands every place under it the plan's page's mentions. */
+const PlanMentionsContext = createContext<PlanMentionsPage | undefined>(undefined);
+
+/**
+ * Hands every place under it the plan's page's mentions. Note that the text
+ * is the open editor's where one stands, because its words are saved only
+ * once typing pauses, and a section just written is one to mention.
+ */
 export function PlanMentions({
   value,
   children,
@@ -31,10 +49,27 @@ export function PlanMentions({
   value: PlanMentionsValue;
   children: ReactNode;
 }): React.JSX.Element {
-  return <PlanMentionsContext.Provider value={value}>{children}</PlanMentionsContext.Provider>;
+  const lent = useRef<(() => string) | undefined>(undefined);
+  const page: PlanMentionsPage = { ...value, text: () => lent.current?.() ?? value.text(), lent };
+  return <PlanMentionsContext.Provider value={page}>{children}</PlanMentionsContext.Provider>;
 }
 
 /** The plan's page's mentions; nothing off a plan's page. */
 export function usePlanMentions(): PlanMentionsValue | undefined {
   return useContext(PlanMentionsContext);
+}
+
+/** Lends the page the plan's open editor's text, read before the plan's saved words for as long as the editor stands. */
+export function useLentPlanText(read: () => string): void {
+  const lent = useContext(PlanMentionsContext)?.lent;
+  const latest = useRef(read);
+  latest.current = read;
+  useEffect(() => {
+    if (lent === undefined) return;
+    const lending = () => latest.current();
+    lent.current = lending;
+    return () => {
+      if (lent.current === lending) lent.current = undefined;
+    };
+  }, [lent]);
 }

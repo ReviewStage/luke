@@ -262,6 +262,8 @@ type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE
 export interface MentionSource {
   readonly planId: string;
   readonly planName: string;
+  /** The plan's repository, `owner/name`; null before one is chosen. */
+  readonly repository: string | null;
   readonly text: () => string;
 }
 
@@ -288,9 +290,14 @@ export function useMentionPicker({
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
-  const [paths, setPaths] = useState<{ planId: string; paths: readonly RepositoryPath[] }>();
+  const [paths, setPaths] = useState<{
+    planId: string;
+    repository: string | null;
+    paths: readonly RepositoryPath[];
+  }>();
 
   const planId = source?.planId ?? "";
+  const repository = source?.repository ?? null;
   const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
   // A word closed with Escape stays closed only while the caret is in it.
   const inWord = trigger !== undefined;
@@ -298,8 +305,9 @@ export function useMentionPicker({
     if (!inWord) setClosedAt(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the plan.
-  const read = paths?.planId === planId ? paths.paths : undefined;
+  // The repository's paths are read the first time the list opens on the plan, and again once its repository changes.
+  const read =
+    paths?.planId === planId && paths.repository === repository ? paths.paths : undefined;
   useEffect(() => {
     if (!open || read !== undefined) return;
     let live = true;
@@ -309,6 +317,7 @@ export function useMentionPicker({
         const entries = "folder" in answer ? answer.folder.entries : [];
         setPaths({
           planId,
+          repository,
           paths: entries.map((entry) => ({
             path: entry.name,
             folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
@@ -320,7 +329,7 @@ export function useMentionPicker({
     return () => {
       live = false;
     };
-  }, [open, read, act, planId]);
+  }, [open, read, act, planId, repository]);
 
   const groups = open
     ? groupsFor(trigger.query, read, planRows(planId, source.planName, source.text()))

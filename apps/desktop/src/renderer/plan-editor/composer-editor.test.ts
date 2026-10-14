@@ -354,3 +354,24 @@ test("a box with no mentions reports no @ word", () => {
 
   assert.ok(triggers.every((trigger) => trigger === undefined));
 });
+
+test("an @ in code is the code's: no @ word is reported in a fence or a span", () => {
+  const box = mountedWithMentions("");
+
+  typeInComposer(box.host, "```\n@ses");
+  const inFence = box.reported.at(-1);
+  box.handle.replace("Run `x @ses` now");
+  box.caretAt(1 + "Run `x @ses".length);
+
+  assert.equal(inFence, undefined);
+  assert.equal(box.reported.at(-1), undefined);
+});
+
+test("a box that takes no mentions shows a mention's link as the words it is, never a chip", () => {
+  const box = mounted("");
+
+  box.handle.replace(`See ${STORE_LINK}`);
+
+  assert.equal(composerEditor(box.host).textContent, `See ${STORE_LINK}`);
+  assert.equal(box.drafts.at(-1), `See ${STORE_LINK}`);
+});

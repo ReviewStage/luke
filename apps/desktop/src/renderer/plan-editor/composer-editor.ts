@@ -9,7 +9,13 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import { mentionAt, skillTokens, skillWord, type TextRange } from "../planning/skill-mention";
+import {
+  insideCode,
+  mentionAt,
+  skillTokens,
+  skillWord,
+  type TextRange,
+} from "../planning/skill-mention";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -155,9 +161,19 @@ interface ChipToken {
   readonly node: (schema: Schema) => PmNode;
 }
 
-/** Every chip the words spell, in order: each `/name` of a known skill, and each mention written as its link, none overlapping another. */
-function chipTokens(text: string, skills: ReadonlySet<string>): readonly ChipToken[] {
-  const mentions = mentionTokens(text).map(
+/** What words are made chips of: the skills a `/name` names, and whether the box takes mentions. */
+interface Chipping {
+  readonly skills: ReadonlySet<string>;
+  readonly mentions: boolean;
+}
+
+/** Every chip the words spell, in order: each `/name` of a known skill, and each mention written as its link where the box takes mentions, none overlapping another. */
+function chipTokens(
+  text: string,
+  { skills, mentions: takesMentions }: Chipping,
+): readonly ChipToken[] {
+  // Note that a box that takes no mentions keeps a mention's link as the words it is, which it can edit.
+  const mentions = (takesMentions ? mentionTokens(text) : []).map(
     (token: MentionToken): ChipToken => ({
       start: token.start,
       end: token.end,
@@ -177,8 +193,8 @@ function chipTokens(text: string, skills: ReadonlySet<string>): readonly ChipTok
 }
 
 /** The document the words stand for: a paragraph per line, each `/name` of a known skill and each mention its chip. */
-function documentOf(schema: Schema, text: string, skills: ReadonlySet<string>): PmNode {
-  const tokens = chipTokens(text, skills);
+function documentOf(schema: Schema, text: string, chipping: Chipping): PmNode {
+  const tokens = chipTokens(text, chipping);
   const paragraphs: PmNode[] = [];
   let lineStart = 0;
   for (const line of text.split(NEWLINE)) {
@@ -198,8 +214,8 @@ function documentOf(schema: Schema, text: string, skills: ReadonlySet<string>): 
 }
 
 /** The words as a slice that lays in where a caret or a selection stands, its first and last lines joining the lines around them. */
-function sliceOf(schema: Schema, text: string, skills: ReadonlySet<string>): Slice {
-  return Slice.maxOpen(documentOf(schema, text, skills).content);
+function sliceOf(schema: Schema, text: string, chipping: Chipping): Slice {
+  return Slice.maxOpen(documentOf(schema, text, chipping).content);
 }
 
 /**
@@ -273,14 +289,17 @@ const AT_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,3})?)$/u;
 /** A character of an `@` word, which a pick replaces through to the word's end. */
 const AT_WORD_CHARACTER = /[^\s@[\]()]/u;
 
-/** The `@` word the caret ends, as far as it is typed, through to the word's end. */
+/** The `@` word the caret ends, as far as it is typed, through to the word's end; nothing in code. */
 function atWord(text: string, caret: number): TriggerWord | undefined {
   const match = AT_WORD.exec(text.slice(0, caret));
   if (match === null) return undefined;
   const query = match[2] ?? "";
+  const start = caret - query.length - 1;
+  // An `@` in code is the code's, as a `/` there is, and as the server reads no mention there.
+  if (insideCode(text, start)) return undefined;
   let end = caret;
   while (end < text.length && AT_WORD_CHARACTER.test(text[end] ?? "")) end += 1;
-  return { start: caret - query.length - 1, query, end };
+  return { start, query, end };
 }
 
 /**
@@ -405,6 +424,8 @@ interface ComposerState {
   trigger: ReturnType<typeof triggerAt>;
   mentionReported: ComposerTrigger | undefined;
   mentionTrigger: ReturnType<typeof triggerAt>;
+  /** Whether the box takes mentions, as it was mounted. */
+  readonly mentions: boolean;
   /** Each mark's place, carried through every change the document takes. */
   readonly marks: Map<symbol, number>;
 }
@@ -468,7 +489,7 @@ function pasted(
     props.maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
   if (words.length <= room) return false;
   if (room > 0) {
-    const cut = sliceOf(view.state.schema, words.slice(0, room), state.skills);
+    const cut = sliceOf(view.state.schema, words.slice(0, room), state);
     view.dispatch(view.state.tr.replaceSelection(cut).scrollIntoView());
   }
   return true;
@@ -515,8 +536,7 @@ function composerProps(state: ComposerState, props: ComposerEditorProps): Editor
     handlePaste: (view, event, slice) => pasted(view, event, slice, state, props),
     // Note that a drop of files is left to the card around the box, which takes them as a "+" does.
     handleDrop: (_view, event) => event.dataTransfer?.types.includes("Files") === true,
-    clipboardTextParser: (text, _context, _plain, view) =>
-      sliceOf(view.state.schema, text, state.skills),
+    clipboardTextParser: (text, _context, _plain, view) => sliceOf(view.state.schema, text, state),
     clipboardTextSerializer: (slice) => fragmentText(slice.content),
   };
 }
@@ -534,7 +554,7 @@ function laidIn(editor: Editor, state: ComposerState, text: string): void {
   const tr = editor.state.tr.replaceWith(
     0,
     doc.content.size,
-    documentOf(schema, text, state.skills).content,
+    documentOf(schema, text, state).content,
   );
   commanded(editor, tr.setSelection(TextSelection.atEnd(tr.doc)).setMeta(CHIPPED_META, true));
 }
@@ -555,11 +575,7 @@ function insertedAt(
   const room = Math.max(0, maxLength - text.length - lead.length - trail.length);
   const fitting = words.slice(0, room).trim();
   if (fitting === "") return false;
-  const tr = editor.state.tr.replace(
-    pos,
-    pos,
-    sliceOf(schema, `${lead}${fitting}${trail}`, state.skills),
-  );
+  const tr = editor.state.tr.replace(pos, pos, sliceOf(schema, `${lead}${fitting}${trail}`, state));
   commanded(
     editor,
     tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(pos) - trail.length)),
@@ -643,6 +659,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     trigger: undefined,
     mentionReported: undefined,
     mentionTrigger: undefined,
+    mentions: props.mentions !== undefined,
     marks: new Map(),
   };
   const guard = guardPlugin(state, props);

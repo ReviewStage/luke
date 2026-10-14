@@ -426,6 +426,7 @@ function PlanDocument({
   const mentions: PlanMentionsValue = {
     planId: plan.id,
     planName: plan.name,
+    repository: plan.repository,
     text: () => plan.document.body,
     doors: {
       planId: plan.id,
