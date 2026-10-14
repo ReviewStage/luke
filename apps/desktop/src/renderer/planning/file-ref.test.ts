@@ -136,7 +136,11 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   const row = [...document.querySelectorAll('.tab-add-menu [role="option"]')].find(
     (each) => each.querySelector(".plan-compose-menu-name")?.textContent === "accept.ts",
   );
-  assert.equal(row?.firstElementChild?.outerHTML, icon, 'the "+" row wears the tab\'s icon');
+  assert.equal(
+    row?.querySelector(".menu-item-glyph")?.innerHTML,
+    icon,
+    'the "+" row wears the tab\'s icon',
+  );
   act(() => add.click());
 
   assert.deepEqual(cardOn(tab), [PATH, NOTE]);

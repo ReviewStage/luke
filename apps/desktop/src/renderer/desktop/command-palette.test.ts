@@ -411,9 +411,9 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
     files: shownFiles([showing]),
   });
   assert.ok(plus, 'the "+" offers the file');
-  const row = document.querySelector<HTMLElement>(".command-palette-row");
+  const row = document.querySelector<HTMLElement>(".menu-item");
   assert.equal(
-    row?.querySelector(".command-palette-icon")?.innerHTML,
+    row?.querySelector(".menu-item-glyph")?.innerHTML,
     renderToStaticMarkup(plus.row.icon),
     'the row wears the icon the "+" row does',
   );
