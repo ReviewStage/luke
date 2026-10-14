@@ -1,10 +1,11 @@
+import type { IntegrationToolsView } from "@sidecar/hosted/integration-view";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { GearIcon, McpIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { IntegrationMark } from "../integration-marks";
 import type { IntegrationStatuses } from "../integration-statuses";
-import { type IntegrationTool, useIntegrationTools } from "../integration-tools";
+import { useIntegrationTools } from "../integration-tools";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
@@ -37,6 +38,13 @@ import {
  * there so the panel behind stays open, on a second press of the button,
  * and on focus leaving it for another part of the window.
  */
+/** One tool a server offers, as its read answered it. */
+type IntegrationTool = Extract<IntegrationToolsView, { tools: unknown }>["tools"][number];
+
+/** The tools a read answered, where it answered tools; nothing for a failure or a server's own problem. */
+function toolsOf(read: IntegrationToolsView | undefined): readonly IntegrationTool[] | undefined {
+  return read !== undefined && "tools" in read ? read.tools : undefined;
+}
 
 /** The servers an agent is handed, as the button changes them. */
 export interface AgentServersControl {
@@ -143,8 +151,8 @@ function ServersPopover({
       case SERVER_ROW.SWITCH:
         return (
           <>
-            {tools[row.provider] !== undefined ? (
-              <ToolsCount name={row.name} tools={tools[row.provider] ?? []} />
+            {toolsOf(tools[row.provider]) !== undefined ? (
+              <ToolsCount name={row.name} tools={toolsOf(tools[row.provider]) ?? []} />
             ) : null}
             <button
               type="button"
