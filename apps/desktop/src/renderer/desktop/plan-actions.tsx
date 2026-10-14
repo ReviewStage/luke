@@ -11,7 +11,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@sidecar/panel";
-import { HistoryIcon } from "lucide-react";
+import { HistoryIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -141,7 +141,8 @@ function SidebarPlanMarks({
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
  * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
- * changed from any plan and opened on GitHub where there is one; Permanently
+ * changed from any plan and opened on GitHub where there is one, whose
+ * automations open in their page from a plan with one; Permanently
  * delete is last and alone. An archived plan takes nothing until it is
  * brought back, so it offers neither Rename nor Change repository, only
  * what reads it, its version history (which restores nothing), Unarchive,
@@ -173,10 +174,20 @@ function planActionGroups(
     icon: <ExternalIcon />,
     onSelect: () => plans.onOpenOnGitHub(planId),
   };
+  const automations: MenuAction = {
+    label: "Automations",
+    icon: <ZapIcon />,
+    onSelect: () => plans.automationsView.onOpen(planId),
+  };
+  const hasRepository = (plan?.repository ?? null) !== null;
   const groups: MenuAction[][] = [
     [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
-    [...(archived ? [] : [change]), ...((plan?.repository ?? null) === null ? [] : [open])],
+    [
+      ...(archived ? [] : [change]),
+      ...(hasRepository ? [open] : []),
+      ...(hasRepository && !archived ? [automations] : []),
+    ],
     [
       {
         label: "Permanently delete",

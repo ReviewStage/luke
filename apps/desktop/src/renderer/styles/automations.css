@@ -945,3 +945,23 @@
 .sidebar-automations:disabled {
   opacity: 0.45;
 }
+
+/* The plan a list was opened from, as a chip that widens it again. */
+.automation-filter {
+  display: flex;
+  max-width: var(--settings-width);
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-24) auto 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.automation-filter + .automation-list {
+  padding-top: var(--space-12);
+}
+
+.automation-filter svg {
+  width: 12px;
+  height: 12px;
+}

@@ -121,8 +121,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page mounted over the scripted host, the list read. */
-async function mount(): Promise<HTMLElement> {
+/** The page mounted over the scripted host, the list read; narrowed to a plan where one is named, its widening recorded. */
+async function mount(narrowed?: {
+  readonly plan: string;
+  readonly widened: string[];
+}): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -131,8 +134,8 @@ async function mount(): Promise<HTMLElement> {
     automationsView: {
       open: true,
       chosen: undefined,
-      plan: undefined,
-      onOpen: () => undefined,
+      plan: narrowed?.plan,
+      onOpen: (plan) => narrowed?.widened.push(plan ?? "every plan"),
       onClose: () => undefined,
       onChoose: () => undefined,
       deleted: new Set(),
@@ -260,4 +263,16 @@ test("a GitHub trigger keeps only the filters its event reads, so labels left fr
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: GITHUB_TRIGGER_EVENT.PUSH,
   });
+});
+
+test("opened from a plan, it lists that plan's automations under a chip that widens the list again", async () => {
+  script([SCHEDULED]);
+  const widened: string[] = [];
+  const page = await mount({ plan: PLAN.id, widened });
+
+  assert.deepEqual(asked[0], { kind: ACT_KIND.AUTOMATIONS_LIST, payload: { planId: PLAN.id } });
+  const chip = page.querySelector<HTMLButtonElement>(".automation-filter button");
+  assert.equal(chip?.textContent, PLAN.name);
+  await act(async () => chip?.click());
+  assert.deepEqual(widened, ["every plan"]);
 });

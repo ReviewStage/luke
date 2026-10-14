@@ -243,3 +243,23 @@ test("the plan's name reaches the recording only as masked text, never in an att
     }
   }
 });
+
+test("a plan with a repository offers its automations, which open their page narrowed to that plan, and one without offers none", () => {
+  const { plans, asked } = openTab({ [PLAN.id]: "acme/relay" });
+  const openedFor: (string | undefined)[] = [];
+  const withAutomations: PlansControl = {
+    ...plans,
+    automationsView: { ...plans.automationsView, onOpen: (plan) => openedFor.push(plan) },
+  };
+
+  openMenu(mountToolbar(withAutomations));
+  choose("Automations");
+  rightClick(mountSidebarPlan(withAutomations, OTHER, asked), 10, 10);
+
+  assert.deepEqual(openedFor, [PLAN.id]);
+  assert.equal(
+    menuItems().some((item) => item.textContent === "Automations"),
+    false,
+    "a plan with no repository has no agent to start",
+  );
+});

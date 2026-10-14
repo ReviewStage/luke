@@ -24,6 +24,7 @@ import {
   SkipForwardIcon,
   Trash2Icon,
   WebhookIcon,
+  XIcon,
   ZapIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -63,7 +64,8 @@ import { type AutomationWrite, useAutomationRuns, useAutomations } from "./use-a
  * It stands in the plan's place beside the sidebar, whose Automations row
  * is marked while it does, as the Inbox does. The list says each
  * automation's trigger, plan, next run, and newest run, with its switch; a
- * press reads one: its runs first, since what it did is what is looked for,
+ * page opened from a plan's ⋯ menu lists that plan's alone, under a chip
+ * that lets the list widen again. A press reads one: its runs first, since what it did is what is looked for,
  * each opening to say what fired it, when, and how it went, with the
  * agent's tab a press away, then how it is set up. An automation the
  * service paused after its starts kept failing says so in a banner over
@@ -729,6 +731,20 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
           ) : null}
           {read !== undefined && "automations" in read && automations.length === 0 ? (
             <EmptyAutomations onNew={openNew} />
+          ) : null}
+          {chosen === undefined && view.plan !== undefined ? (
+            <div className="automation-filter">
+              <span>Automations on</span>
+              <button
+                type="button"
+                className="plan-compose-chip"
+                aria-label="Show every plan's automations"
+                onClick={() => view.onOpen(undefined)}
+              >
+                {planOf(view.plan)?.name ?? "this plan"}
+                <XIcon />
+              </button>
+            </div>
           ) : null}
           {chosen === undefined && automations.length > 0 ? (
             <div className="settings automation-list">
