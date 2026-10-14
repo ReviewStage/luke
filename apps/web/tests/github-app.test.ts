@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
 import { account } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { eq } from "drizzle-orm";
@@ -27,7 +27,6 @@ import {
   openGithubUser,
   standingGithubRow,
 } from "./support/github-app-fake";
-import { openWorkspace } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the

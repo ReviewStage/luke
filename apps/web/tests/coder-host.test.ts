@@ -11,7 +11,7 @@ import { openPlanConversation, readPlan } from "@luke/database/models/plan-store
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { turns } from "@luke/database/schemas/storage";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { planSections } from "@luke/features/plan-document";
@@ -44,7 +44,6 @@ import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalo
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent host through the same functions the coder project's

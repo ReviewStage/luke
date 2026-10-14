@@ -251,8 +251,8 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `apps/web/tests/support/no-database.ts`,
-  `apps/web/tests/support/hosted-store-database.ts`,
+  `packages/database/src/testing/no-database.ts`,
+  `packages/database/src/testing/hosted-store-database.ts`,
   `apps/web/eve/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every

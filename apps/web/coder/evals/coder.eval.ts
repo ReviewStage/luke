@@ -5,6 +5,12 @@ import { type CodingAgent, createCodingAgent } from "@luke/database/models/codin
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
+import {
+  readMessagesByConversationTyped,
+  readTurnById,
+  readTurnsByConversation,
+  startPlan,
+} from "@luke/database/testing";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
 import { EXCESS_KEYS } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -25,12 +31,6 @@ import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-ho
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
 import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
-import {
-  readMessagesByConversationTyped,
-  readTurnById,
-  readTurnsByConversation,
-} from "../../tests/support/store-rows";
-import { startPlan } from "../../tests/support/workspaces";
 import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,

@@ -16,6 +16,7 @@ import {
 import { storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
@@ -37,8 +38,6 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The ask door over the real store on PGlite. The ownership refusals here

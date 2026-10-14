@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { unparsedWire } from "@luke/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -20,7 +20,6 @@ import {
   type SentToGitHub,
 } from "./support/github-app-fake";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's shell, run in the session's sandbox on a checkout of

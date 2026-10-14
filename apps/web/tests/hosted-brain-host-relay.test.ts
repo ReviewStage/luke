@@ -4,6 +4,12 @@ import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
 import { hostTurnId } from "@luke/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import {
+  insertConversation,
+  openHostedStoreTestDatabase,
+  readMessagesByConversationTyped,
+  readTurnsByConversation,
+} from "@luke/database/testing";
 import { isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -29,12 +35,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  insertConversation,
-  readMessagesByConversationTyped,
-  readTurnsByConversation,
-} from "./support/store-rows";
 
 /**
  * The relay from eve's stream into the store writer, over the real

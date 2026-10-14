@@ -4,7 +4,12 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import {
+  fakeWorkspaceSeams,
+  getTestDB,
+  openInstallationWorkspace,
+  openWorkspace,
+} from "@luke/database/testing";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@luke/features";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -19,7 +24,6 @@ import {
   githubReaching,
   openGithubUser,
 } from "./support/github-app-fake";
-import { fakeWorkspaceSeams, openInstallationWorkspace, openWorkspace } from "./support/workspaces";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test

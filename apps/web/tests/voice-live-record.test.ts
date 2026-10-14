@@ -12,6 +12,13 @@ import {
   STORE_WRITE_EFFECT,
   storeWriter,
 } from "@luke/database/models/writer";
+import {
+  insertConversation,
+  openHostedStoreTestDatabase,
+  readMessagesByConversation,
+  readVoiceSessionByLiveSessionId,
+  readVoiceTranscriptSegmentsBySession,
+} from "@luke/database/testing";
 import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import {
   LIVE_CLIENT_EVENT,
@@ -48,15 +55,8 @@ import {
 } from "../server/core";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 import { settled } from "./support/settle";
-import {
-  insertConversation,
-  readMessagesByConversation,
-  readVoiceSessionByLiveSessionId,
-  readVoiceTranscriptSegmentsBySession,
-} from "./support/store-rows";
 
 /**
  * The live session service over the hosted record, on the real migrations in

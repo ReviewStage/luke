@@ -6,6 +6,14 @@ import { askRecord } from "@luke/database/models/asks";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type VoiceTarget, voiceWriter } from "@luke/database/models/voice-writer";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import {
+  insertConversation,
+  type MessageRowFull,
+  openHostedStoreTestDatabase,
+  readMessagesByConversationTyped,
+  readVoiceSessionByLiveSessionId,
+  readVoiceTranscriptSegmentsBySession,
+} from "@luke/database/testing";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@luke/database/voice-vocabulary";
 import {
   LIVE_CLIENT_EVENT,
@@ -48,15 +56,7 @@ import {
 } from "../server/core";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
-import {
-  insertConversation,
-  type MessageRowFull,
-  readMessagesByConversationTyped,
-  readVoiceSessionByLiveSessionId,
-  readVoiceTranscriptSegmentsBySession,
-} from "./support/store-rows";
 
 /**
  * The segments-to-rows word invariant, which is the property that failed on

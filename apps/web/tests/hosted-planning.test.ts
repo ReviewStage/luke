@@ -6,7 +6,7 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { openPlanConversation, readPlan, savePlanText } from "@luke/database/models/plan-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
@@ -53,7 +53,6 @@ import {
 } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { sandboxDouble } from "./support/repository-sandbox";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model as the hosted brain runs it, end to end in one process:

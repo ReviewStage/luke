@@ -5,10 +5,10 @@ import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
 import { Effect, Schema } from "effect";
 import { afterAll } from "vitest";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
  * The ask record over the real migrations, and the two compositions that

@@ -11,6 +11,13 @@ import {
 } from "@luke/database/models/writer";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import {
+  insertConversation,
+  openHostedStoreTestDatabase,
+  readMessagesByConversationTyped,
+  readTurnById,
+  setConversationDeletedAt,
+} from "@luke/database/testing";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
 import { Option, Result, Schema } from "effect";
@@ -45,13 +52,6 @@ import {
   type UserMessageMetadata,
   unparsedWire,
 } from "../server/core";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  insertConversation,
-  readMessagesByConversationTyped,
-  readTurnById,
-  setConversationDeletedAt,
-} from "./support/store-rows";
 
 /**
  * The store writer over the real migrations on PGlite. Synthetic fixtures

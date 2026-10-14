@@ -3,6 +3,14 @@ import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
+  countRowsWhere,
+  deleteUser,
+  insertConversation,
+  insertMessage,
+  insertTurn,
+  openHostedStoreTestDatabase,
+} from "@luke/database/testing";
+import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -13,14 +21,6 @@ import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  countRowsWhere,
-  deleteUser,
-  insertConversation,
-  insertMessage,
-  insertTurn,
-} from "./support/store-rows";
 
 /**
  * What these tests hold to is the shape the migrations built: every row

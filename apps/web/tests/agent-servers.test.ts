@@ -5,7 +5,7 @@ import {
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -29,7 +29,6 @@ import {
   integrationConnectOver,
 } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under

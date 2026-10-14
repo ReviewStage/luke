@@ -692,7 +692,7 @@ so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-p
 `pg`, which is external on the same terms and already was.
 
 A test reads the same client through `@luke/database/testing`, which
-chooses its dialect the way `tests/support/hosted-store-database.ts` does:
+chooses its dialect the way its `hosted-store-database.ts` does:
 PGlite in process, so `check.sh` needs no service, or the Postgres named by
 `LUKE_STORE_TEST_DATABASE_URL`, which the CI job points at its service
 container. The Postgres half is the production layer's own client; the PGlite
@@ -2490,8 +2490,9 @@ database itself after `db:migrate`, so a statement a test forgets to scope by
 account or conversation reaches its own file's rows and no other file's.
 Which files `test:store` runs is read from the files, not kept
 in a list: `scripts/store-tests.ts` selects every `tests/**/*.test.ts` whose
-source imports one of the two doors, `tests/support/hosted-store-database`
-or `@luke/database/testing` (whose `getTestDB()` is the bare one), because
+source imports the one door, `@luke/database/testing` (whose
+`openHostedStoreTestDatabase()` is the hosted store's and `getTestDB()` the
+bare one), because
 `LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
 door cannot meet a Postgres whatever it does. A new store test is therefore
 in the set the moment it imports its harness, and `package.json` is not

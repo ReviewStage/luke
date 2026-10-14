@@ -4,13 +4,12 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeDrawing, writeScene } from "@luke/database/models/board-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { unparsedWire } from "@luke/wire";
 import { Effect } from "effect";
 import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "../server/hosted/board-look";
 import { driven, forkClockDriven } from "./support/clock-driven";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's look at its latest drawing: the Mac's first save of

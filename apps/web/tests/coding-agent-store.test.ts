@@ -20,7 +20,7 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
@@ -28,7 +28,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding agents of an account's plans, through the store's public

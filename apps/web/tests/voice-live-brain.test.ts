@@ -6,6 +6,12 @@ import { childConversationId } from "@luke/database/models/ids";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import {
+  insertConversation,
+  joinWorkspace,
+  openHostedStoreTestDatabase,
+  startPlan,
+} from "@luke/database/testing";
 import type { PlanWorkTurn } from "@luke/features/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -54,9 +60,6 @@ import {
 } from "../server/voice/live-brain";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation } from "./support/store-rows";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:

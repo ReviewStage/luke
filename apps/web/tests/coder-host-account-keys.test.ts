@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
+import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
@@ -14,7 +15,6 @@ import { afterAll, test } from "vitest";
 import { accountProviderKeys } from "../server/hosted/coder-host/account-keys";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { coderModel, type LukeKeys } from "../server/hosted/coder-host/model";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
  * The key a coding agent's step runs on, read from the account's rows over a

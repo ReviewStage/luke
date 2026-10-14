@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { archiveCodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   SANDBOX_STATE,
@@ -22,7 +22,6 @@ import {
 } from "../server/hosted/terminal/agent-sandbox";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { startPlan } from "./support/workspaces";
 
 /**
  * A coding agent's terminals as its tab reaches them, over a real dialect and

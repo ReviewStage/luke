@@ -6,6 +6,7 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { openPlanConversation, readPlan, savePlanText } from "@luke/database/models/plan-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
+import { readMessagesByConversationTyped, readTurnById, startPlan } from "@luke/database/testing";
 import { EXCESS_KEYS } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
@@ -27,8 +28,6 @@ import {
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
-import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { startPlan } from "../../tests/support/workspaces";
 import {
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,

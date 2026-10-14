@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { askRecord } from "@luke/database/models/asks";
 import { hostTurnId } from "@luke/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@luke/features";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -18,8 +19,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { projectTurnEvents } from "../server/hosted/turn-events";
 import { stampedEveEvent } from "./support/eve-events";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation } from "./support/store-rows";
 
 /**
  * A turn's events over the real migrations on PGlite, with the turn written

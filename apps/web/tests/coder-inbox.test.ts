@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Duration, Effect, Option } from "effect";
@@ -13,7 +13,6 @@ import { ACTION_RESULT_STATUS } from "../server/core";
 import { closeInInbox, type PostingAgent, postToInbox } from "../server/hosted/coder-host/inbox";
 import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image";
 import { answerInboxItem, planInboxItems } from "../server/hosted/inbox-store";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The coding agent's inbox tools, through their public functions against a

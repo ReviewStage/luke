@@ -5,10 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { writePlanTemplate } from "@luke/database/models/account-store";
 import { readPlan } from "@luke/database/models/plan-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan } from "@luke/database/testing";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { Effect, Option } from "effect";
-import { startPlan } from "./support/workspaces";
 
 /**
  * A plan as one document: a new plan is a copy of its account's template,
