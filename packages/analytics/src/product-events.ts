@@ -1,4 +1,3 @@
-import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
 import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
 import {
   isRecord,
@@ -8,6 +7,12 @@ import {
   type RatingWord,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import {
+  APP_PANEL_TAB,
+  APP_SETTING_ID,
+  type AppPanelTab,
+  type AppSettingId,
+} from "@sidecar/wire/app-settings";
 import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 

@@ -1,6 +1,6 @@
-import { APP_SETTING_ID, isAppSettingId } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import { APP_SETTING_ID, isAppSettingId } from "@sidecar/wire/app-settings";
 import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,

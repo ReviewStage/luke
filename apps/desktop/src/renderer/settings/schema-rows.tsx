@@ -1,4 +1,3 @@
-import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
 import {
   isAppSettingId,
   type SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
@@ -8,6 +7,7 @@ import {
   settingFromOption,
   settingRowsForPage,
 } from "@sidecar/settings";
+import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/wire/app-settings";
 import { SelectRow } from "./select-row";
 import { SwitchRow } from "./switch-row";
 import type { SettingsWrites } from "./writes";
