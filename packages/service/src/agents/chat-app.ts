@@ -38,22 +38,8 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { GitHubApp } from "../github/github-app.js";
-import {
-  EVE_MOUNT,
-  type EveSessions,
-  eveSessionsComposer,
-} from "./brain-host/eve-sessions.js";
-import {
-  type ChatTelling,
-  HELD_DOORS,
-  HOSTED_OF_CHAT_REFUSAL,
-  postChat,
-  tellMessage,
-} from "./coder-host/chat-notify.js";
-import { messageOnWire, workspaceChatPast } from "./coder-host/chat-page.js";
-import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { HostedEnvironment } from "../environment.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -66,6 +52,16 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
+import {
+  type ChatTelling,
+  HELD_DOORS,
+  HOSTED_OF_CHAT_REFUSAL,
+  postChat,
+  tellMessage,
+} from "./coder-host/chat-notify.js";
+import { messageOnWire, workspaceChatPast } from "./coder-host/chat-page.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
  * chat-app.ts -- a workspace's chat as the window reads it and writes to it.

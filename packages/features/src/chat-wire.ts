@@ -8,6 +8,7 @@ import {
   chatReadResponseSchema,
   chatReplySchema,
   chatResponseSchema,
+  chatWordBlockSchema,
 } from "./chat-blocks.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
