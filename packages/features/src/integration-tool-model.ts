@@ -1,5 +1,5 @@
-import type { IntegrationTool } from "@luke/features/integration-health";
-import type { IntegrationToolAnnotations } from "@luke/features/integration-wire";
+import type { IntegrationTool } from "./integration-health.js";
+import type { IntegrationToolAnnotations } from "./integration-wire.js";
 
 /**
  * integration-tool-model.ts -- how a list of an integration's tools orders them and badges each, in the MCP popover and Settings alike.

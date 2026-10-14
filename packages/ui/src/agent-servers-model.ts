@@ -11,8 +11,8 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { searchTokens } from "@luke/ui/search-tokens";
-import { matchIntegration } from "../integration-search";
+import { matchIntegration } from "./integration-search.js";
+import { searchTokens } from "./search-tokens.js";
 
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
@@ -26,13 +26,13 @@ import { matchIntegration } from "../integration-search";
  * opens the list of them. A server not
  * connected offers to connect it, there and then; one whose sign-in expired,
  * or connected but whose server refused it or answered an error of its own
- * (`../integration-health.ts`), offers to reconnect, the latter with the
+ * (`@luke/features/integration-health`), offers to reconnect, the latter with the
  * server's reason beside its name; one whose server could not be reached
  * keeps its switch, with that said beside its name; one whose sign-in the
  * window waits on offers to reopen or cancel it, and one whose sign-in
  * failed or never finished says so and offers to try again, as Settings
- * does (`../integration-sign-in.ts`); one this deployment
- * does not offer the account is not drawn at all, as the agent is never
+ * does (`@luke/features/integration-sign-in`); one this
+ * deployment does not offer the account is not drawn at all, as the agent is never
  * handed it. No other row says where it stands in words: the switch, the
  * count, and the buttons are what say it. A read of the connections that
  * failed is the one error, offered as a way to read again. The rows stand
@@ -41,7 +41,7 @@ import { matchIntegration } from "../integration-search";
  * standing is unread stands first under no heading. A search finds servers
  * by name or what they are for, and every connected server's tools by name
  * or description, as Settings › Integrations' filter does
- * (`../integration-search.ts`).
+ * (`integration-search.ts`).
  */
 
 /** The kinds of row the popover draws. */
@@ -224,7 +224,7 @@ export interface ToolHit {
   readonly tool: IntegrationTool;
 }
 
-/** What a search of the popover finds: the servers it names, and the tools it finds (`../integration-search.ts`). */
+/** What a search of the popover finds: the servers it names, and the tools it finds (`integration-search.ts`). */
 export interface ServerSearch {
   readonly rows: readonly ServerRow[];
   readonly tools: readonly ToolHit[];

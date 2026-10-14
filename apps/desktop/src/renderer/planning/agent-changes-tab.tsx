@@ -9,6 +9,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { CopyIcon, DownloadIcon } from "@luke/ui";
+import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -33,7 +34,6 @@ import {
   STATUS_WORDS,
 } from "./changes-model";
 import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
-import { fileName } from "./code-pane-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";

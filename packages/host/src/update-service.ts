@@ -1,4 +1,3 @@
-import { reportToStderr } from "@luke/host/stderr-report";
 import { scheduleOnce } from "@luke/runtime/effect";
 import {
   UPDATE_STATUS,
@@ -7,6 +6,7 @@ import {
   type UpdateStatus,
 } from "@luke/settings/update";
 import { type Context, Duration, Effect, type Fiber, Schedule, Scope } from "effect";
+import { reportToStderr } from "./stderr-report.js";
 
 /**
  * The addresses updating ever touches, fixed here rather than passed in,

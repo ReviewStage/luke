@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
+import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, test, vi } from "vitest";
-import type { SessionReplayBootstrap } from "#shared/messages/session";
 import { SESSION_RECORDER_ASSET } from "./session-recorder/contract";
 import { applySessionReplay } from "./session-replay";
 

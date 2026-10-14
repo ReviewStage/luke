@@ -1,9 +1,9 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
-import { WINDOW_ROLE } from "#shared/messages/session";
 import { App } from "./app";
 import { CallWindowCard } from "./call/call-card";
 import { rendererRegistry } from "./renderer-runtime";

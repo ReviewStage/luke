@@ -11,12 +11,12 @@
  * an isolated world, and the page reads it back by that channel.
  */
 
+import { Schema as EffectSchema } from "effect";
 import {
   sandboxResumedAnswerSchema,
   terminalCreatedAnswerSchema,
   terminalsAnswerSchema,
-} from "@luke/features/terminal-wire";
-import { Schema as EffectSchema } from "effect";
+} from "./terminal-wire.js";
 
 /** The channel each attached shell's port is posted on. */
 export const TERMINAL_PORT_CHANNEL = "terminal:port";

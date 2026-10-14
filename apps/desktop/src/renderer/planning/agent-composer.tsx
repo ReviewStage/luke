@@ -13,6 +13,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { PlusIcon } from "@luke/ui";
+import { lapsedServer } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";
 import {
@@ -34,7 +35,6 @@ import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
 import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
-import { lapsedServer } from "./agent-servers-model";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";

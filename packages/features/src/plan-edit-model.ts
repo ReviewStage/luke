@@ -1,15 +1,11 @@
-import {
-  PLAN_EDIT_REFUSAL,
-  type PlanEditRequest,
-  type PlanEditValue,
-} from "@luke/features/plan-edit";
-import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import { Schema } from "effect";
+import { PLAN_EDIT_REFUSAL, type PlanEditRequest, type PlanEditValue } from "./plan-edit.js";
+import { PLAN_BOUNDS } from "./plan-wire.js";
 import {
   PLAN_CALL_FAILURE,
   type PlanningEditAnswer,
   type PlanningEditFailure,
-} from "@luke/features/planning-view";
-import { Schema } from "effect";
+} from "./planning-view.js";
 
 /**
  * plan-edit-model.ts -- the open plan's text in its editor: what the developer typed, what the service holds of theirs, and when to save.

@@ -1,6 +1,14 @@
 import type { CodeRef } from "@luke/features/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
 import { cssCustomProperties } from "@luke/ui";
+import {
+  type CodeFeedCall,
+  type CodeFeedCallSource,
+  codeFeedCalls,
+  copiedLines,
+  fileRefText,
+  isPointed,
+} from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import {
@@ -12,14 +20,6 @@ import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches";
 import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
-import {
-  type CodeFeedCall,
-  type CodeFeedCallSource,
-  codeFeedCalls,
-  copiedLines,
-  fileRefText,
-  isPointed,
-} from "./code-pane-model";
 import { FileRef } from "./file-ref";
 
 /**

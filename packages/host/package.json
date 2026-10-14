@@ -12,7 +12,10 @@
     "./desktop-service": "./src/desktop-service.js",
     "./quit": "./src/quit.js",
     "./host-operator": "./src/host-operator.js",
-    "./appearance": "./src/appearance.js"
+    "./appearance": "./src/appearance.js",
+    "./build-commit": "./src/build-commit.js",
+    "./service-layer": "./src/service-layer.js",
+    "./update-service": "./src/update-service.js"
   },
   "types": "./src/index.ts",
   "scripts": {

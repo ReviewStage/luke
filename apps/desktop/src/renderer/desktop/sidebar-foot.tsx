@@ -1,7 +1,9 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { UPDATE_STATUS } from "@luke/settings/update";
+import { updateInSidebar } from "@luke/settings/update-row";
 import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon, UserIcon } from "@luke/ui";
+import type { UpdateControl } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   LifeBuoyIcon,
@@ -17,9 +19,7 @@ import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { PersonAvatar } from "../person-avatar";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
-import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";
-import { updateInSidebar } from "../update-row";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
 
 /**

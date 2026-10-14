@@ -9,9 +9,9 @@ import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
   VOICE_KEYLESS_NOTE,
-} from "../microphone-access";
+} from "@luke/voice/microphone-access";
+import type { MicrophoneControl } from "@luke/voice/settings-controls";
 import { Tooltip } from "../tooltip";
-import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
 import { SettingsGroup } from "./settings-group";

@@ -21,9 +21,9 @@ import {
   TAB_WORDS,
   viewedLast,
 } from "@luke/ui/tab-strip-model";
+import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fileName } from "./code-pane-model";
 import { MAIN_TAB } from "./use-main-tabs";
 
 /**

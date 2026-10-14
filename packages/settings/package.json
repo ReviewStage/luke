@@ -10,7 +10,8 @@
     "./wire": "./src/wire.js",
     "./settings-views": "./src/settings-views.js",
     "./settings-anchors": "./src/settings-anchors.js",
-    "./update": "./src/update.js"
+    "./update": "./src/update.js",
+    "./update-row": "./src/update-row.js"
   },
   "types": "./src/index.ts",
   "scripts": {

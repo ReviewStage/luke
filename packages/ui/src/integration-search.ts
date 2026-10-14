@@ -1,11 +1,11 @@
 import type { IntegrationTool } from "@luke/features/integration-health";
+import { byName } from "@luke/features/integration-tool-model";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
-import { byName } from "./integration-tool-model";
+import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
  * integration-search.ts -- what a query finds among the integrations and their tools, in Settings › Integrations' filter and the MCP popover's search alike.
@@ -18,7 +18,7 @@ import { byName } from "./integration-tool-model";
  * than the tools that happen to repeat its name, so it finds no tool by
  * itself. Settings' own search finds an integration's row by these same
  * lines, and by a few words naming every integration alike
- * (`settings-search.tsx`).
+ * (the desktop's `renderer/settings-search.tsx`).
  */
 
 /** What each integration is for, in the words someone looking for it would type. */

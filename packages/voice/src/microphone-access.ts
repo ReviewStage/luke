@@ -1,5 +1,5 @@
 import { LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@luke/live";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "./audio.js";
 
 /**
  * Why voice as a whole is off: nothing it can run on stands, which since

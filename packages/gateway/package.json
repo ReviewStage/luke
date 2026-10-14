@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.js",
     "./devtrace": "./src/devtrace.js",
-    "./protocol": "./src/protocol.js"
+    "./protocol": "./src/protocol.js",
+    "./window-session": "./src/window-session.js"
   },
   "types": "./src/index.ts",
   "scripts": {

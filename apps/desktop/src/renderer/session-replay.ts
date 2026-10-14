@@ -1,10 +1,10 @@
+import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { Properties } from "posthog-js";
 // The "no-external" client: the full build without the surveys, product
 // tours, web vitals, and the rest Luke never turns on, and without the
 // recorder, which is a bundle of its own (`session-recorder/contract.ts`).
 import posthog from "posthog-js/dist/module.no-external";
-import type { SessionReplayBootstrap } from "#shared/messages/session";
 import { appendBundle } from "./bundle-loader";
 import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorder/contract";
 

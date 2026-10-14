@@ -1,7 +1,7 @@
 import { ChevronDownIcon, WingFace } from "@luke/ui";
+import { lineRangeText } from "@luke/voice/code-pane-model";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
-import { lineRangeText } from "./code-pane-model";
 import type { FileNote } from "./file-tab-model";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";

@@ -20,6 +20,8 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ChevronRightIcon, CloseIcon, ProviderMark, SearchIcon, TrashIcon } from "@luke/ui";
+import { serverGroups, serverRows } from "@luke/ui/agent-servers-model";
+import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { RefreshCwIcon } from "lucide-react";
@@ -30,11 +32,9 @@ import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
-import { matchIntegration, shownTools } from "../integration-search";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
-import { serverGroups, serverRows } from "../planning/agent-servers-model";
 import { focusSearchField, Highlighted } from "../search-field";
 import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";

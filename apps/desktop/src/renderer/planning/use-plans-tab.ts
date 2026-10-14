@@ -24,6 +24,14 @@ import {
   sameTab,
 } from "@luke/ui/tab-strip-model";
 import type { MicrophoneStatus } from "@luke/voice/audio";
+import { shownFiles } from "@luke/voice/code-pane-model";
+import {
+  type HeardCall,
+  heardCalls,
+  TRANSCRIPT_REGION,
+  type TranscriptRegion,
+  transcriptRegion,
+} from "@luke/voice/transcript-model";
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,7 +56,6 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "./closed-tabs";
-import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
 import {
@@ -92,13 +99,6 @@ import {
   unsettledRepositoryPins,
 } from "./planning-model";
 import type { RepositoryChooser } from "./repository-chip";
-import {
-  type HeardCall,
-  heardCalls,
-  TRANSCRIPT_REGION,
-  type TranscriptRegion,
-  transcriptRegion,
-} from "./transcript-model";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { useLastPlan } from "./use-last-plan";

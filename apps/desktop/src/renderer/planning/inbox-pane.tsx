@@ -20,6 +20,7 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef, PlanSummary } from "@luke/features/plan-wire";
 import { ChevronRightIcon } from "@luke/ui";
+import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -41,7 +42,6 @@ import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
-import { copiedLines, fileRefText } from "./code-pane-model";
 import type { ReadFileWindow } from "./file-tab";
 import {
   CODE_READ,

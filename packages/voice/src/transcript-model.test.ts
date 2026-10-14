@@ -14,7 +14,7 @@ import {
   messageText,
   TRANSCRIPT_REGION,
   transcriptRegion,
-} from "./transcript-model";
+} from "./transcript-model.js";
 
 /** Synthetic plan, calls, and words throughout. */
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

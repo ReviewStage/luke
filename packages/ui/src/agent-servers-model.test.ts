@@ -17,7 +17,7 @@ import {
   searchServers,
   serverGroups,
   serverRows,
-} from "./agent-servers-model";
+} from "./agent-servers-model.js";
 
 /**
  * What the MCP servers popover draws of a connected integration, from what

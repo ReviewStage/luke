@@ -1,5 +1,9 @@
+import {
+  UPDATE_ENDPOINT,
+  type UpdaterEngine,
+  type UpdaterEngineEvents,
+} from "@luke/host/update-service";
 import { autoUpdater, type UpdateCheckResult } from "electron-updater";
-import { UPDATE_ENDPOINT, type UpdaterEngine, type UpdaterEngineEvents } from "./update-service";
 
 /** electron-updater emits progress per chunk; the broadcast needs far less. */
 const PROGRESS_EMIT_INTERVAL_MS = 500;
