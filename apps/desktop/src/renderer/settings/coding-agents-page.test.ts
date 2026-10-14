@@ -87,6 +87,11 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done({ models }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
+    case ACT_KIND.PROVIDER_KEYS_SAVE:
+      // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
+      keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1", addedAt: OWN_ANTHROPIC.addedAt + 60_000 }];
+      models = [OPUS, OPUS_FAST];
+      return Promise.resolve(done({ keys }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
@@ -262,4 +267,34 @@ test("on Luke's key the resting Fast row says the same and links nowhere, since 
     /Fast isn't enabled for this key's Anthropic organization\./u,
   );
   assert.equal(note.querySelector("a"), null);
+});
+
+test("replacing the account's own Anthropic key reads the models again, so Fast follows the new key's organization", async () => {
+  models = [{ ...OPUS, fastNotEnabled: true }];
+  keys = [OWN_ANTHROPIC];
+  const page = await mount();
+  assert.equal(fastSwitch(page).disabled, true);
+
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('[aria-label="Anthropic key actions"]') ??
+      assert.fail("no Anthropic key actions")
+    ).click(),
+  );
+  const edit =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === "Edit key",
+    ) ?? assert.fail("no Edit key");
+  act(() => edit.click());
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    assert.fail("no Anthropic field");
+  act(() => {
+    field.value = "sk-ant-api03-synthetic-0000000000000000new1";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => field.form?.requestSubmit());
+  await settle();
+
+  assert.equal(fastSwitch(page).disabled, false);
 });
