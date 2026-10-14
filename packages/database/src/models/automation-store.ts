@@ -17,6 +17,7 @@ import {
   automationRunReasonSchema,
   automationRunStatusSchema,
   automationTriggerSchema,
+  type GitHubTriggerEvent,
 } from "@sidecar/hosted/automation-wire";
 import {
   and,
@@ -31,6 +32,7 @@ import {
   ne,
   or,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -69,6 +71,8 @@ const AutomationRowSchema = Schema.Struct({
   userId: Schema.String,
   planId: Schema.String,
   planName: Schema.String,
+  /** The plan's repository as `owner/name`, or null where it names none. */
+  planRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
   pausedReason: Schema.NullOr(automationPauseSchema),
@@ -88,6 +92,7 @@ const AUTOMATION_COLUMNS = {
   userId: automation.userId,
   planId: automation.planId,
   planName: plan.name,
+  planRepository: plan.repository,
   name: automation.name,
   enabled: automation.enabled,
   pausedReason: automation.pausedReason,
@@ -706,6 +711,39 @@ const findStranded = SqlSchema.findAll({
     ),
 });
 
+const ListeningRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  trigger: automationTriggerSchema,
+});
+
+/** One automation a repository's event may fire: its id, its owner, and what fires it. */
+export type ListeningAutomation = typeof ListeningRowSchema.Type;
+
+const findGithubAutomations = SqlSchema.findAll({
+  Request: Schema.Struct({ repository: Schema.String, event: Schema.String, limit: Schema.Int }),
+  Result: ListeningRowSchema,
+  execute: ({ repository, event, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
+        .from(automation)
+        .innerJoin(plan, eq(plan.id, automation.planId))
+        .where(
+          and(
+            eq(automation.enabled, true),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.GITHUB),
+            // GitHub folds a repository's name; a plan keeps it as GitHub spelled it when it was named.
+            sql`lower(${plan.repository}) = lower(${repository})`,
+            sql`${automation.trigger}->>'event' = ${event}`,
+            OWNER_REACHES_PLAN,
+          ),
+        )
+        .orderBy(asc(automation.createdAt), asc(automation.id))
+        .limit(limit),
+    ),
+});
+
 const writePause = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
   execute: ({ id, reason, now }) =>
@@ -975,4 +1013,18 @@ export function strandedAutomationRuns(
   limit: number,
 ): PlanStoreEffect<readonly StrandedRun[]> {
   return findStranded({ before, limit });
+}
+
+/**
+ * The enabled automations listening for the GitHub event on plans of the
+ * repository, whoever owns them, of owners who still reach those plans,
+ * oldest first, at most `limit`: what a delivery about the repository may
+ * fire, its filters still to read.
+ */
+export function githubAutomationsOn(
+  repository: string,
+  event: GitHubTriggerEvent,
+  limit: number,
+): PlanStoreEffect<readonly ListeningAutomation[]> {
+  return findGithubAutomations({ repository, event, limit });
 }

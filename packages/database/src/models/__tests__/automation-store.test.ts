@@ -20,6 +20,7 @@ import {
   claimDueAutomations,
   createAutomation,
   deleteAutomation,
+  githubAutomationsOn,
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
@@ -277,6 +278,47 @@ it.layer(getTestDB())("the automation store", (it) => {
         yield* updateAutomation(owner, due.id, { nextRunAt: due.nextRunAt });
         assert.deepEqual(yield* claimDueAutomations(claim), []);
         assert.equal((yield* listAutomationRuns(owner, due.id)).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a repository's event finds the enabled GitHub automations listening for it on its plans, however its name is cased, and no other",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const github = {
+          kind: AUTOMATION_TRIGGER.GITHUB,
+          event: "issue-opened",
+          labels: ["bug"],
+        } as const;
+        const listening = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), trigger: github, nextRunAt: null }),
+        );
+        const paused = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), trigger: github, nextRunAt: null }),
+        );
+        yield* updateAutomation(owner, paused.id, { enabled: false });
+        yield* createAutomation(owner, nightly(planId));
+
+        const found = yield* githubAutomationsOn("ACME/api", "issue-opened", 10);
+        assert.deepEqual(
+          found.filter((each) => each.userId === owner).map((each) => [each.id, each.trigger]),
+          [[listening.id, github]],
+        );
+        assert.deepEqual(
+          (yield* githubAutomationsOn("acme/other", "issue-opened", 10)).filter(
+            (each) => each.userId === owner,
+          ),
+          [],
+        );
+        assert.deepEqual(
+          (yield* githubAutomationsOn("acme/api", "push", 10)).filter(
+            (each) => each.userId === owner,
+          ),
+          [],
+          "nor an automation listening for another event",
+        );
       }),
   );
 });

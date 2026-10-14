@@ -2936,3 +2936,28 @@ workspace the account left, is `not-found`:
 `@sidecar/hosted/automation-wire` declares every body and `service-paths.ts`
 the addresses; `tests/automations-app.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
+
+A GitHub trigger fires on the Luke App's own webhook
+(`server/github-webhook-app.ts`, through `hosted/automation-github.ts`): a
+pull request opened or labelled, an issue opened or labelled, a check suite
+that completed as `failure` or `timed_out`, and a push to a branch, each in
+the repository of the automation's plan (matched the way GitHub folds a
+name's case), filtered by the trigger's labels (the label just applied, or
+any label of what was opened) and branches (a pull request's base, a check
+suite's or a push's branch). Only the repository, the number, title, and
+address of the issue or pull request, the branch, and a failed check's
+commit by its address are read; never a body. A run whose plan has moved to
+another repository by the time the sweep acts on it is skipped as
+`repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
+redelivery carries again, so each automation records one run per
+delivery, and the sweep starts its agent within the minute rather than
+inside GitHub's ten seconds. An automation cannot fire itself: a pull
+request, issue, or push whose sender is a bot, the App's own installation
+token among them, fires nothing, and neither does a failed check on a
+`luke/` branch, where a coding agent works and already watches its checks.
+The agent is handed the event by number, address, and branch, its title
+fenced as the event's own text to read as data, its angle brackets spelled
+as entities so it cannot close the fence, and reads the rest with `gh`. The App must subscribe to the Issues and Push events beside the pull
+request and check events it already reads, a setting of the App on GitHub
+rather than of this repository; until it does, those two triggers never
+fire.

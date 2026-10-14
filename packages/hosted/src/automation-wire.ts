@@ -56,7 +56,7 @@ export const AUTOMATION_TRIGGER = {
 export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER)[keyof typeof AUTOMATION_TRIGGER];
 
 /** The repository events a GitHub trigger listens for. */
-const GITHUB_TRIGGER_EVENT = {
+export const GITHUB_TRIGGER_EVENT = {
   PULL_REQUEST_OPENED: "pull-request-opened",
   PULL_REQUEST_LABELED: "pull-request-labeled",
   ISSUE_OPENED: "issue-opened",
@@ -66,6 +66,8 @@ const GITHUB_TRIGGER_EVENT = {
   /** Commits pushed to a branch. */
   PUSH: "push",
 } as const;
+
+export type GitHubTriggerEvent = (typeof GITHUB_TRIGGER_EVENT)[keyof typeof GITHUB_TRIGGER_EVENT];
 
 /** What an automation starts when it fires. */
 export const AUTOMATION_ACTION = {
@@ -247,6 +249,8 @@ export const AUTOMATION_RUN_REASON = {
   MODEL: "model",
   /** The coding agents' service could not be reached. */
   UNAVAILABLE: "unavailable",
+  /** The plan moved to another repository after this run's GitHub event was queued. */
+  REPOSITORY_CHANGED: "repository-changed",
   /** The automation was paused after this run was queued and before it was acted on. */
   PAUSED: "paused",
   /** It waited queued past the hour it could still be started in, the sweep down or failing all that while. */
