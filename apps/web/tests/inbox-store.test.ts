@@ -35,8 +35,9 @@ import {
  * is taken only at the revision it names while the item is open and can be
  * withdrawn under its key, a read keeps every open item however many others
  * changed, every member of the plan's workspace reads and answers the items
- * of an agent any of them started, and nothing of a workspace the account
- * is not in is read or written.
+ * of an agent any of them started, an agent with no plan posts to its
+ * workspace's members as one on a plan does to its plan's, and nothing of
+ * a workspace the account is not in is read or written.
  *
  * Synthetic accounts, plans, and words throughout.
  */
@@ -62,7 +63,7 @@ const openAgentIn = Effect.gen(function* () {
     task: null,
   });
   assert.ok(Option.isSome(started));
-  const agent: InboxAgent = { userId, planId: plan.id, agentId: started.value.agent.id };
+  const agent = { userId, planId: plan.id, agentId: started.value.agent.id };
   return { agent, workspaceId: plan.workspaceId };
 });
 
@@ -75,7 +76,54 @@ const SETTINGS: InboxPost = {
   needsReply: false,
 };
 
+/** The reply a task takes: done. */
+const DONE = { reply: INBOX_REPLY.DONE } as const;
+
+/** An account's workspace with one agent started in it on no plan, as an automation's run starts one. */
+const openPlanlessAgent = Effect.gen(function* () {
+  const userId = yield* openUser;
+  const workspaceId = yield* openWorkspace(userId);
+  const started = yield* createCodingAgent(userId, {
+    planId: null,
+    organizationId: workspaceId,
+    idempotencyKey: randomUUID(),
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    repository: "acme/relay",
+    planSnapshot: null,
+    task: "Sweep the flaky tests.",
+  });
+  assert.ok(Option.isSome(started));
+  const agent: InboxAgent = { userId, planId: null, agentId: started.value.agent.id };
+  return { agent, workspaceId };
+});
+
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "an agent with no plan posts to its workspace: a member who did not start it reads and answers the item, and an account outside the workspace does neither",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openPlanlessAgent;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+
+        const posted = yield* postInboxItem(agent, SETTINGS);
+
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        assert.ok(Option.isNone(yield* readInboxItem(outsider, id)));
+        assert.ok(Option.isNone(yield* answerInboxItem(outsider, id, 1, DONE, randomUUID())));
+        assert.equal(
+          Option.getOrThrow(yield* readInboxItem(teammate, id)).item.agentId,
+          agent.agentId,
+        );
+        const answered = yield* answerInboxItem(teammate, id, 1, DONE, randomUUID());
+        assert.equal(Option.getOrUndefined(answered)?.status, INBOX_STATUS.ANSWERED);
+      }),
+  );
+
   it.effect(
     "a plan moved to another workspace takes its agents and their items along, so deleting the workspace it left keeps them",
     () =>

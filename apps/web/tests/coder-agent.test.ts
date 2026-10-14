@@ -16,6 +16,7 @@ import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
+import { CODER_TOOL } from "../server/hosted/coder-host/tool-set";
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
@@ -121,6 +122,22 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
+});
+
+test("an agent on a plan is told of the plan's links and pages, and one an automation started with no plan of neither", () => {
+  const PLAN_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names the plan";
+  const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const onPlan = coderInstructions("Acme/Relay", brief, true);
+    const planless = coderInstructions("Acme/Relay", brief, true, false);
+    assert.deepEqual([onPlan.includes(PLAN_LINK), onPlan.includes(PAGES)], [true, true], brief);
+    assert.deepEqual(
+      [planless.includes(PLAN_LINK), planless.includes(PAGES)],
+      [false, false],
+      brief,
+    );
+    assert.ok(planless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
+  }
 });
 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {

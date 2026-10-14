@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import {
-  Database,
-  type DatabaseServices,
-  type QueryError,
-  queryBuilder,
-} from "@luke/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
 import { InstantColumnSchema } from "@luke/database/models/columns";
-import { planReachableBy } from "@luke/database/models/workspace-store";
+import {
+  AGENT_WORKSPACE,
+  agentReachableBy,
+  planReachableBy,
+  workspaceReachableBy,
+} from "@luke/database/models/workspace-store";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
@@ -28,19 +28,7 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@luke/features/inbox-wire";
-import {
-  and,
-  count,
-  desc,
-  eq,
-  exists,
-  isNull,
-  max,
-  ne,
-  notInArray,
-  type SQL,
-  sql,
-} from "drizzle-orm";
+import { and, count, desc, eq, isNull, max, ne, notInArray, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -82,10 +70,10 @@ type InboxStoreFailure = QueryError | Schema.SchemaError;
 /** What an inbox store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type InboxStoreEffect<A> = Effect.Effect<A, InboxStoreFailure, DatabaseServices>;
 
-/** The agent an item belongs to, as every write of the agent's names it. */
+/** The agent an item belongs to, as every write of the agent's names it: the plan it works on, or none for an agent an automation started with no plan. */
 export interface InboxAgent {
   readonly userId: string;
-  readonly planId: string;
+  readonly planId: string | null;
   readonly agentId: string;
 }
 
@@ -183,34 +171,31 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** The condition that the account is a member of the workspace of the plan the item a statement reads was posted on. */
+/** An item row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
+const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${inboxItem.planId}))`;
+
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no plan as much as one on a plan. */
 function itemReachableBy(userId: string): SQL {
-  return exists(
-    queryBuilder
-      .select({ id: plan.id })
-      .from(plan)
-      .where(and(eq(plan.id, inboxItem.planId), planReachableBy(userId))),
-  );
+  return workspaceReachableBy(userId, ITEM_WORKSPACE);
 }
 
-/** The agent's row under its own lock, where the account started it and still reaches its plan, which serializes one agent's posts. */
+/** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({
-          id: codingAgent.id,
-          // An agent the backfill has not reached yet is its plan's workspace's.
-          organizationId: sql<string>`coalesce(${codingAgent.organizationId}, ${plan.organizationId})`,
-        })
+        .select({ id: codingAgent.id, organizationId: AGENT_WORKSPACE })
         .from(codingAgent)
-        .innerJoin(plan, eq(plan.id, codingAgent.planId))
         .where(
-          and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), planReachableBy(userId)),
+          and(
+            eq(codingAgent.id, agentId),
+            eq(codingAgent.userId, userId),
+            agentReachableBy(userId),
+          ),
         )
-        .for("update", { of: codingAgent }),
+        .for("update"),
     ),
 });
 
@@ -236,7 +221,7 @@ const countOpenBesides = SqlSchema.findOne({
 
 const PostWriteSchema = Schema.Struct({
   userId: Schema.String,
-  planId: Schema.String,
+  planId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   agentId: Schema.String,
   key: Schema.String,
@@ -250,7 +235,7 @@ const PostWriteSchema = Schema.Struct({
 const AttachmentWriteSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  planId: Schema.String,
+  planId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   itemId: Schema.String,
   contentType: inboxImageTypeSchema,
