@@ -5,6 +5,13 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import {
+  insertConversation,
+  joinWorkspace,
+  leaveWorkspace,
+  openHostedStoreTestDatabase,
+  startPlan,
+} from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
@@ -34,9 +41,6 @@ import {
   SESSION_STANDING,
 } from "../server/hosted/brain-host/conversation";
 import { ownedAuth, type SessionOwnership } from "../server/hosted/brain-host/door";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation } from "./support/store-rows";
-import { joinWorkspace, leaveWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The host's own check of who a session is for: the conversation a request

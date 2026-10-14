@@ -6,7 +6,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import {
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
@@ -15,7 +15,6 @@ import {
 import { LIVE_DEFAULTS } from "@luke/live";
 import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The live session row as the record now writes it: five effects over the

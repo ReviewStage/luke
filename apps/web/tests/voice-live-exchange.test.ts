@@ -6,6 +6,13 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import {
+  openHostedStoreTestDatabase,
+  readMessagesByConversationTyped,
+  readVoiceSessionByLiveSessionId,
+  readVoiceTranscriptSegmentsBySession,
+  startPlan,
+} from "@luke/database/testing";
 import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
   LIVE_CLIENT_EVENT,
@@ -40,17 +47,10 @@ import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
-import {
-  readMessagesByConversationTyped,
-  readVoiceSessionByLiveSessionId,
-  readVoiceTranscriptSegmentsBySession,
-} from "./support/store-rows";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The hosted live exchange composed whole over the real store on PGlite: a

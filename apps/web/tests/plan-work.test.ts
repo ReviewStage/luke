@@ -8,6 +8,13 @@ import { listJournals } from "@luke/database/models/message-reads";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { turns } from "@luke/database/schemas/storage";
+import {
+  insertConversation,
+  insertTurn,
+  joinWorkspace,
+  openHostedStoreTestDatabase,
+  startPlan,
+} from "@luke/database/testing";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_BOUNDS,
@@ -58,9 +65,6 @@ import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN } from "./support/eve-turns";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertTurn } from "./support/store-rows";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * One planning turn's work as the Work tab is sent it, over the real

@@ -8,7 +8,12 @@ import { createPlan } from "@luke/database/models/plan-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { getTestDB } from "@luke/database/testing";
+import {
+  fakeWorkspaceSeams,
+  getTestDB,
+  joinWorkspace,
+  openWorkspace,
+} from "@luke/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -75,7 +80,6 @@ import {
   makeSavedDocumentPlan,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
-import { fakeWorkspaceSeams, joinWorkspace, openWorkspace } from "./support/workspaces";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a

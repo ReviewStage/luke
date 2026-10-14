@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { readPlan } from "@luke/database/models/plan-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, startPlan, type TestPlan } from "@luke/database/testing";
 import { NOTE_KIND, PLAN_HEADING } from "@luke/features/plan-template";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -12,7 +12,6 @@ import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-sc
 import { heard, said } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
-import { startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The planning call's notetaker over a real plan row: a scripted model stands

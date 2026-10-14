@@ -14,7 +14,7 @@ import {
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, leaveWorkspace, startPlan } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -45,7 +45,6 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "./support/github-app-fake";
-import { leaveWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts

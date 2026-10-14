@@ -5,6 +5,7 @@ import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -51,8 +52,6 @@ import {
   type InstallationFixture,
   NO_GITHUB,
 } from "./support/github-app-fake";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the

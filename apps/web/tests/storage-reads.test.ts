@@ -4,6 +4,19 @@ import { listRecentMessages, type StoredMessageRecord } from "@luke/database/mod
 import { CLEARED_CONVERSATION_RETENTION_MS } from "@luke/database/models/soft-delete";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
+  type ConversationRow,
+  insertConversation as insertConversationRow,
+  insertMessage as insertMessageRow,
+  insertTurn as insertTurnRow,
+  type MessageRow as MessageInsertRow,
+  openHostedStoreTestDatabase,
+  readConversationById,
+  readMessagesByConversation,
+  readTurnsByConversation,
+  setConversationDeletedAt,
+  type TurnInsertRow,
+} from "@luke/database/testing";
+import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -13,19 +26,6 @@ import {
 import { type ToolSet, tool } from "ai";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  type ConversationRow,
-  insertConversation as insertConversationRow,
-  insertMessage as insertMessageRow,
-  insertTurn as insertTurnRow,
-  type MessageRow as MessageInsertRow,
-  readConversationById,
-  readMessagesByConversation,
-  readTurnsByConversation,
-  setConversationDeletedAt,
-  type TurnInsertRow,
-} from "./support/store-rows";
 
 /**
  * The conversation reads the brain and the voice make, against the real

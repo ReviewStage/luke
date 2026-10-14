@@ -4,7 +4,7 @@ import { Database } from "@luke/database/core/query";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
@@ -38,7 +38,6 @@ import {
 import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The one connection per integration all four agents register, through the

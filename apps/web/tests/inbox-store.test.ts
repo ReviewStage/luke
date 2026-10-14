@@ -7,7 +7,7 @@ import { updatePlan } from "@luke/database/models/plan-store";
 import { organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace, startPlan } from "@luke/database/testing";
 import {
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -27,7 +27,6 @@ import {
   readInboxItem,
   withdrawInboxAnswer,
 } from "../server/hosted/inbox-store";
-import { joinWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions

@@ -1,17 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
-import { runWebMigrations } from "@luke/database/core/migrator";
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
-import { sqlClientOverUrl } from "@luke/database/core/sql-client";
-import { type HostedStore, hostedStore } from "@luke/database/models/hosted-store";
-import { user } from "@luke/database/schemas/auth";
-import {
-  cloneStoreTestPostgres,
-  STORE_TEST_DATABASE_ENVIRONMENT,
-  sqlClientOverPglite,
-} from "@luke/database/testing";
 import { atInstant } from "@luke/wire/testing";
 import { Effect, type Layer, ManagedRuntime } from "effect";
+import { runWebMigrations } from "../core/migrator.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { sqlClientOverUrl } from "../core/sql-client.js";
+import { type HostedStore, hostedStore } from "../models/hosted-store.js";
+import { user } from "../schemas/auth.js";
+import { sqlClientOverPglite } from "./sql-client.js";
+import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
 /**
  * The store's tests run against the real generated migrations on a real

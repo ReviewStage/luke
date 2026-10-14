@@ -1,15 +1,15 @@
-import { Database } from "@luke/database/core/query";
-import { EpochMillisColumnSchema, InstantColumnSchema } from "@luke/database/models/columns";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { MessageRoleSchema } from "@luke/wire";
+import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { count, eq, getColumnTable } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
-import type { StoredUIMessage } from "../../server/core";
-import type { HostedStoreTestRun } from "./hosted-store-database";
+import { Database } from "../core/query.js";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "../models/columns.js";
+import { user } from "../schemas/auth.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
+import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import type { HostedStoreTestRun } from "./hosted-store-database.js";
 
 /**
  * Rows over the ambient `SqlClient`, for the setup and assertions a test

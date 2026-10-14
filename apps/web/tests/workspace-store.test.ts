@@ -10,11 +10,15 @@ import {
 } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { getTestDB } from "@luke/database/testing";
+import {
+  fakeWorkspaceSeams,
+  getTestDB,
+  joinWorkspace,
+  WORKSPACE_ROLE,
+} from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option } from "effect";
 import { openWorkspacePlugin } from "./support/workspace-plugin";
-import { fakeWorkspaceSeams, joinWorkspace, WORKSPACE_ROLE } from "./support/workspaces";
 
 /**
  * An account's workspaces over a real dialect: its first one is made the
@@ -23,7 +27,7 @@ import { fakeWorkspaceSeams, joinWorkspace, WORKSPACE_ROLE } from "./support/wor
  * else made under the account's slug is never adopted, and a list puts the
  * account's own first workspace first and no teammate's.
  *
- * The plugin's write is a fake over the same tables (`support/workspaces.ts`),
+ * The plugin's write is a fake over the same tables (`@luke/database/testing`'s `workspaces.ts`),
  * refusing a slug that is taken as the plugin does, on both dialects, and Better Auth's own plugin
  * over PGlite in the last case. Synthetic accounts throughout.
  */

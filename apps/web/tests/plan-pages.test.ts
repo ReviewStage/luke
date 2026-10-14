@@ -4,9 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { listPages, readPageVersion, writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { Effect, Option } from "effect";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * A plan's pages, through the store's write and reads: a write is a page's

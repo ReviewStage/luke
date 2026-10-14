@@ -12,7 +12,13 @@ import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/m
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { conversations } from "@luke/database/schemas/storage";
-import { getTestDB } from "@luke/database/testing";
+import {
+  fakeWorkspaceSeams,
+  getTestDB,
+  joinWorkspace,
+  openWorkspace,
+  startPlan,
+} from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
@@ -96,7 +102,6 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
-import { fakeWorkspaceSeams, joinWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers

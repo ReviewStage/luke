@@ -1,11 +1,11 @@
 import { PgClient } from "@effect/sql-pg";
-import { databaseOverPgClient } from "@luke/database/core/query";
 import { Effect, Layer, Stream } from "effect";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as SqlConnection from "effect/sql/SqlConnection";
 import { SqlError, UnknownError } from "effect/sql/SqlError";
-import type { HostedStoreTestRun } from "./hosted-store-database";
+import { databaseOverPgClient } from "../core/query.js";
+import type { HostedStoreTestRun } from "./hosted-store-database.js";
 
 const refused = () =>
   Effect.fail(

@@ -6,7 +6,13 @@ import { createPlan } from "@luke/database/models/plan-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { getTestDB } from "@luke/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  leaveWorkspace,
+  openWorkspace,
+  startPlan,
+} from "@luke/database/testing";
 import {
   automationPath,
   automationRunPath,
@@ -54,7 +60,6 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "./support/github-app-fake";
-import { joinWorkspace, leaveWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The automation routes, answered by the group the way a function answers

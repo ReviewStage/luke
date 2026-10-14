@@ -10,7 +10,7 @@ import {
 } from "@luke/database/models/plan-revisions";
 import { readPlan } from "@luke/database/models/plan-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/plan-wire";
 import { eq } from "drizzle-orm";
@@ -23,7 +23,6 @@ import {
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { added } from "./support/plan-contents";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * A plan's history, through the plan's one write and the store's reads:

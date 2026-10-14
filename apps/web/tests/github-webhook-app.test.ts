@@ -16,7 +16,7 @@ import {
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { getTestDB } from "@luke/database/testing";
+import { fakeWorkspaceSeams, getTestDB, startPlan } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -43,7 +43,6 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function

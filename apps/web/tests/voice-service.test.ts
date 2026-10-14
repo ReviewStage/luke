@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runWithoutDatabase } from "@luke/database/testing/no-database";
 import {
   HOSTED_API_ERROR,
   hostedErrorSchema,
@@ -32,7 +33,6 @@ import {
   voiceServer,
 } from "../server/voice/service";
 import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
-import { runWithoutDatabase } from "./support/no-database";
 import {
   connect,
   FAKE_BEARER,

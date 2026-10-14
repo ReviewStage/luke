@@ -14,7 +14,14 @@ import {
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  openWorkspace,
+  startPlan,
+  type TestPlan,
+} from "@luke/database/testing";
+import { noDatabase } from "@luke/database/testing/no-database";
 import { planSections } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
@@ -28,10 +35,8 @@ import {
   type PlanSaveResult,
   saveNotes,
 } from "../server/hosted/plan-notes";
-import { noDatabase } from "./support/no-database";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
-import { joinWorkspace, openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The named plans and their one document, through the store's public

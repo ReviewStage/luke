@@ -71,6 +71,7 @@
     "./schemas/voice": "./src/schemas/voice.js",
     "./storage-vocabulary": "./src/storage-vocabulary.js",
     "./testing": "./src/testing/index.js",
+    "./testing/no-database": "./src/testing/no-database.js",
     "./voice-vocabulary": "./src/voice-vocabulary.js"
   },
   "types": "./src/schemas/index.ts",

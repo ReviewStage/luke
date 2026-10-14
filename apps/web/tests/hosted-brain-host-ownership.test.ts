@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { hostTurnId } from "@luke/database/models/ids";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import {
+  insertConversation,
+  joinWorkspace,
+  openHostedStoreTestDatabase,
+  setConversationDeletedAt,
+  startPlan,
+} from "@luke/database/testing";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -32,9 +39,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { NO_GITHUB } from "./support/github-app-fake";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, setConversationDeletedAt } from "./support/store-rows";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and

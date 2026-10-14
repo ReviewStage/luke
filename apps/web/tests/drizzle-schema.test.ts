@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
 import * as schema from "@luke/database/schemas";
+import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { getColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
  * The drift check between the schema modules and the database the

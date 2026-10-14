@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { openPlanConversation, savePlanText } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { insertMessage, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -13,9 +14,6 @@ import {
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertMessage } from "./support/store-rows";
-import { startPlan } from "./support/workspaces";
 
 /**
  * The standing context as the host answers it to the eve project's prompt

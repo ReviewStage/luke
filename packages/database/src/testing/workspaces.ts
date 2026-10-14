@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { Database } from "@luke/database/core/query";
-import {
-  GITHUB_ACCOUNT_TYPE,
-  GITHUB_INSTALLATION_STATUS,
-} from "@luke/database/github-installation-vocabulary";
-import { createPlan, type NewPlan } from "@luke/database/models/plan-store";
-import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
-import { member, organization } from "@luke/database/schemas/auth";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
+import { Database } from "../core/query.js";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "../github-installation-vocabulary.js";
+import { createPlan, type NewPlan } from "../models/plan-store.js";
+import type { WorkspaceSeams } from "../models/workspace-seams.js";
+import { member, organization } from "../schemas/auth.js";
+import { githubInstallation } from "../schemas/github-installation.js";
 
 /**
  * workspaces.ts -- workspaces for a test, the plugin's write faked over them, and a plan started in one.
