@@ -4,7 +4,7 @@ The throwaway patch every release's pictures were taken with, applied to that
 release's tag (`git apply` on a clean checkout of it), and how each picture was
 captured and framed. A redo starts here: apply the patch, adjust what needs
 adjusting, and capture with the same profile, zoom, and crop.
-0.12.0's staging lives one level up, as `shots/` and `hooks-0.12.0.patch`.
+0.12.0's staging lives one level up, as `shots/` and `hooks-0.12.0.patch`; 0.13.0's patch is that module carried onto `v0.13.0`, with its hooks moved to where 0.13.0 keeps them.
 
 | Release | Tag | Picture | Profile | Zoom | Crop (`x,y,width,height` points) |
 | --- | --- | --- | --- | --- | --- |
@@ -30,6 +30,9 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.12.0 | `6d47d20f` | `skills.png` | `shot-skills` | 2 | `30,230,860,830` |
 | 0.12.0 | `6d47d20f` | `integrations.png` | `shot-integrations` | 2 | `560,30,740,491` |
 | 0.12.0 | `6d47d20f` | `pin-archive-and-group-plans.png` | `shot-plans` | 1 | `-70,-70,720,1140` |
+| 0.13.0 | `v0.13.0` | `workspaces.png`, `home.png`, `the-inbox-one-item-at-a-time.png` | `shot-workspaces`, `shot-home`, `shot-inbox` | 1 | whole window |
+| 0.13.0 | `v0.13.0` | `eight-more-integrations.png` | `shot-integrations` | 2 | `588,64,688,834` |
+| 0.13.0 | `v0.13.0` | `the-mcp-popover.png` | `shot-mcp` | 2 | `370,346,800,654` |
 
 0.12.0 was shot from `6d47d20f`, the head of its version pull request (#2421), before the tag existed; `v0.12.0` itself is `0dec8cda`.
 

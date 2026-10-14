@@ -22,6 +22,15 @@ outlive any one release's code.
   with teal `#0f766e` as its one accent. The product is called Relay
   (`acme.relay.dev`).
 
+## Workspaces
+
+Since 0.13.0 plans live in workspaces. Dean owns **acme**, where every plan
+here lives, its GitHub organization `acme` connected, and his own
+**Dean's workspace** beside it. acme is listed first, since a fixture run
+lists the first workspace. acme's members are Dean (owner), Dana Moreno
+(admin), Jordan Lee, Priya Raman (`priya@acme.dev`), and Theo Walsh
+(`theo@acme.dev`), with sam@acme.dev invited.
+
 ## Repositories
 
 | Repository | What it is | Plans in it |
@@ -58,6 +67,12 @@ shot that opens a plan other than this one.
 | Add teammate invitations | Claude Opus 5.5, high | Finished after 19 minutes | #214 "Add teammate invitations", open, checks passing, 9 files +412 −38 |
 | Invite emails | GPT-6.1 Sol, high | Running | #216 "Send invite emails through Postmark", draft, +96 −4 |
 
+Other plans' agents, from 0.13.0: "Meter API calls per workspace" (Usage-based
+billing, Claude Sonnet 5.5; its PR is #88 "Record usage events per
+workspace" on acme/ledger), "Retry failed webhook deliveries" (Webhook retries,
+Claude Opus 5.5; PR #209, merged), and "Build the onboarding checklist"
+(Onboarding checklist, GPT-6.1 Sol; PR #131 on acme/web).
+
 Subagents: "Find unfiltered membership reads" (Claude Sonnet 5.5, medium),
 and Luke's own "Invite link expiry". The next pull request in this world is
 #217. Model ids come from the release's own model catalog, never invented.
@@ -70,7 +85,11 @@ are initials on soft pastels (`#f2b880`, `#9fd8b4`, `#c7b4f5`).
 
 ## Integrations
 
-Linear, Notion, Sentry, and Slack, all connected.
+All twelve of 0.13.0's integrations connected: GitHub 56 tools, Granola 7,
+Linear 34, Mercury 9, Neon 27, Notion 14, PostHog 36, Sentry 19, Slack 12,
+Supabase 29, Vercel 12, Y Combinator 8 (`shots/integrations-tools.ts` in
+`staging/releases/v0.13.0.patch`). An agent's MCP popover may leave a server
+switched off or not connected where that is the point.
 
 ## Time
 
