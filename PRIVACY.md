@@ -608,7 +608,10 @@ servers, and the files you attach there; code drawn in a transcript; the API
 keys and Plan template pages of Settings; and the cards that open over a row
 on hover. The whiteboard draws its words as pixels, which the masking cannot
 reach, so leaving it out is its only line, and recording what a canvas draws
-is switched off. Luke does not report what you clicked.
+is switched off. A mention drawn as a chip carries what it names, such as a
+plan section's heading, only in its words, never in an attribute the masking
+leaves, so the recording keeps its shape alone. Luke does not report what you
+clicked.
 
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -220,21 +220,16 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  * control: the renderer refuses every navigation and has no door for opening
  * an arbitrary address, and a message's words must not become an action by
  * being pressed. Only HTTP and HTTPS destinations survive `urlTransform`
- * below, so anything else arrives here as words alone.
+ * below, so anything else arrives here as words alone. The one exception is
+ * a place that draws its own links (`LinkDrawer`): a plan's page draws a
+ * mention as the chip that opens what it names.
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
  * to draw in a caption, so its alternative words stand in for it.
  */
 const COMPONENTS: Components = {
-  a: ({ href, children }) =>
-    href !== undefined && SAFE_LINK.test(href) ? (
-      <span className="markdown-link" title={href}>
-        {children}
-      </span>
-    ) : (
-      children
-    ),
+  a: ({ href, children }) => plainLink(href, children),
   h1: ({ children }) => heading(1, children),
   h2: ({ children }) => heading(2, children),
   h3: ({ children }) => heading(3, children),
@@ -243,6 +238,35 @@ const COMPONENTS: Components = {
   h6: ({ children }) => heading(6, children),
   img: ({ alt }) => <>{alt ?? ""}</>,
 };
+
+/** A link as words drawn as one, naming a web destination on hover; anything else as its words alone. */
+function plainLink(href: string | undefined, children: ReactNode): ReactNode {
+  if (href === undefined || !SAFE_LINK.test(href)) return children;
+  return (
+    <span className="markdown-link" title={href}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Draws a link the place showing the words knows better than as words, a
+ * mention's chip (`planning/mention-chip.tsx`) say, from its destination
+ * and its label's words; nothing for one it leaves drawn as any link is.
+ */
+export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
+
+/** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */
+function wordsOf(node: HastParent | HastNode): string {
+  if (node.type === "text") return node.value;
+  if (!("children" in node)) return "";
+  return node.children.map((child) => wordsOf(child)).join("");
+}
+
+/** A link's label as its words. */
+function labelOf(link: HastParent | undefined): string {
+  return link === undefined ? "" : wordsOf(link);
+}
 
 function heading(level: number, children: ReactNode): React.JSX.Element {
   return (
@@ -254,6 +278,10 @@ function heading(level: number, children: ReactNode): React.JSX.Element {
 
 function safeUrl(url: string): string {
   return SAFE_LINK.test(url) ? url : "";
+}
+
+function keptUrl(url: string): string {
+  return url;
 }
 
 /**
@@ -268,21 +296,39 @@ export function MarkdownMessage({
   words,
   className,
   edit,
+  link,
 }: {
   words: string;
   className?: string;
   /** The edit the words are drawn partway through; drawn whole without one. */
   edit?: MarkdownEdit | undefined;
+  /** Draws the links the place knows better, a mention's chip say; every link is drawn as words without one. */
+  link?: LinkDrawer | undefined;
 }): React.JSX.Element {
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
+  // Note that a place drawing its own links is handed every destination,
+  // since only it knows which it draws; any it leaves is drawn as above,
+  // so a destination that is not the web's is still words alone.
+  const components = useMemo<Components>(
+    () =>
+      link === undefined
+        ? COMPONENTS
+        : {
+            ...COMPONENTS,
+            a: ({ href, children, node }) =>
+              (href === undefined ? undefined : link(href, labelOf(node))) ??
+              plainLink(href, children),
+          },
+    [link],
+  );
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
       <Markdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={rehypePlugins}
-        components={COMPONENTS}
-        urlTransform={safeUrl}
+        components={components}
+        urlTransform={link === undefined ? safeUrl : keptUrl}
       >
         {words}
       </Markdown>

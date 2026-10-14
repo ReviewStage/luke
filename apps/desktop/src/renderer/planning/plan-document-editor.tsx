@@ -129,6 +129,9 @@ export function DocumentBlock({
         editing.select(host);
       }}
       onClick={(event) => {
+        // Note that a click on a menu or a card portaled out of the block still
+        // bubbles here through React's tree, and opens no editor.
+        if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) return;
         if (editsOnClick(event.target)) editing.open({ x: event.clientX, y: event.clientY });
       }}
       onKeyDown={(event) => {
