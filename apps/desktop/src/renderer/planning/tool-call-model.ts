@@ -19,6 +19,7 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/w
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
+import { skillWord } from "./skill-mention";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
 
 /**
@@ -166,6 +167,12 @@ function wordsOutput(output: WireValue, key: string): ToolBlock {
 /** A loaded skill's answer, which is its instructions as words; anything else as its JSON. */
 function skillOutput(output: WireValue): ToolBlock {
   return isWireString(output) ? textBlock(output) : jsonBlock(output);
+}
+
+/** The name of the skill a skill load asked for; nothing while its input has not said it. */
+export function loadedSkill(input: WireValue | undefined): string | undefined {
+  const name = stringAt(input, "skill");
+  return name === "" ? undefined : name;
 }
 
 /**
@@ -421,13 +428,16 @@ function knownToolView(
         input: textBlock(stringAt(input, "query") ?? ""),
         output: output === undefined ? undefined : jsonBlock(output),
       };
-    case AGENT_TOOL.LOAD_SKILL:
+    case AGENT_TOOL.LOAD_SKILL: {
+      const skillName = loadedSkill(input);
       return {
         kind: CALL_KIND.LOAD_SKILL,
-        subject: stringAt(input, "skill") ?? "",
-        input: textBlock(stringAt(input, "skill") ?? ""),
+        // A skill is named as the words that load it wherever it is drawn (`skill-ref.tsx`).
+        subject: skillName === undefined ? "" : skillWord(skillName),
+        input: textBlock(skillName ?? ""),
         output: output === undefined ? undefined : skillOutput(output),
       };
+    }
     case AGENT_TOOL.EDIT_PLAN:
       return {
         kind: CALL_KIND.EDIT_PLAN,

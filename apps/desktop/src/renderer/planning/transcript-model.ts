@@ -57,7 +57,9 @@ export interface TranscriptCallRow {
 }
 
 /** The line a call closes with: none while it stands, and who ended it where this window saw Luke do it. */
-export function callEndedLine(call: TranscriptCallRow): string | undefined {
+export function callEndedLine(
+  call: Pick<TranscriptCallRow, "live" | "lukeEnded">,
+): string | undefined {
   if (call.live) return undefined;
   return call.lukeEnded ? CALL_ENDED_LINE.LUKE_ENDED : CALL_ENDED_LINE.ENDED;
 }

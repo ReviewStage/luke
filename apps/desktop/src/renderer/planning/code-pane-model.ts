@@ -1,20 +1,36 @@
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
-import { callStart, type TranscriptCallRow } from "./transcript-model";
+import {
+  type CallRecord,
+  callEndedLine,
+  callStart,
+  type TranscriptCallRow,
+} from "./transcript-model";
 
 /**
  * code-pane-model.ts -- what the Code tab's feed says, apart from drawing it: which call each code was shown on, its heading's range, the lines lit, and what its copy carries.
  */
 
 /** The calls the feed groups its code under, as the Call tab draws them. */
-export type CodeFeedCallSource = Pick<TranscriptCallRow, "key" | "startedAt" | "live">;
+export type CodeFeedCallSource = Pick<
+  TranscriptCallRow,
+  "key" | "startedAt" | "live" | "lukeEnded" | "record"
+>;
 
-/** One call's run of the feed: the call's key, when it started, whether it stands now, and each code shown on it, oldest first. */
+/**
+ * One call's run of the feed: the call's key, when it started, whether it
+ * stands now, and each code shown on it, oldest first; and once the call
+ * has ended, the line it closes with and what the record says of it, as
+ * the Call tab closes it. A run of code shown on no call the transcript
+ * holds closes on nothing.
+ */
 export interface CodeFeedCall {
   readonly key: string;
   readonly startedAt: number;
   readonly live: boolean;
   readonly showings: readonly PlanCodeShowing[];
+  readonly ended: string | undefined;
+  readonly record: CallRecord | undefined;
 }
 
 /** The lines pointed at, as a card's heading reads them: "Lines 40–58", "Line 7", or nothing for a whole file. */
@@ -39,7 +55,14 @@ export function copiedLines(code: PlanCode): string {
   return kept.map((tokens) => tokens.map((token) => token.text).join("")).join("\n");
 }
 
-/** The call a code was shown on: the latest to start at or before it, or none where no call started before it. */
+/**
+ * The call a code was shown on: the latest to start at or before it, or
+ * none where no call started before it, or where that call's record says
+ * it had ended before the turn that showed the code began. Note that the
+ * ended call does not take it, because the call closes on its end line
+ * (`call-card.tsx`), and code drawn above that line would read as shown
+ * before the call ended.
+ */
 function callOf(
   showing: PlanCodeShowing,
   calls: readonly CodeFeedCallSource[],
@@ -49,7 +72,8 @@ function callOf(
     if (callStart(call) > showing.shownAt) continue;
     if (found === undefined || callStart(call) >= callStart(found)) found = call;
   }
-  return found;
+  const endedAt = found?.record?.endedAt;
+  return endedAt !== undefined && endedAt < showing.shownAt ? undefined : found;
 }
 
 /**
@@ -75,6 +99,8 @@ export function codeFeedCalls(
         key,
         startedAt: call?.startedAt ?? showing.shownAt,
         live: call?.live ?? false,
+        ended: call === undefined ? undefined : callEndedLine(call),
+        record: call?.record,
       },
       showings: [],
     };

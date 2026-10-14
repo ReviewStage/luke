@@ -18,6 +18,7 @@ import {
   type SkillMention,
   type SkillOption,
   skillTokens,
+  skillWord,
   type TextRange,
   withoutTokenBefore,
 } from "./skill-mention";
@@ -291,7 +292,7 @@ function SkillMenu({
             onMouseMove={() => onHover(index)}
             onClick={() => onChoose(skill)}
           >
-            <span className="plan-compose-menu-name">/{skill.name}</span>
+            <span className="plan-compose-menu-name">{skillWord(skill.name)}</span>
             <span className="skill-menu-description">{skill.description}</span>
           </button>
         ))}

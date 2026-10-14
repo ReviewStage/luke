@@ -1,5 +1,7 @@
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@sidecar/live";
+import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Checkpoint } from "../ai-elements/checkpoint";
 import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
 import { callHeading, useMinute } from "./plan-time";
@@ -8,9 +10,13 @@ import { RUN_CARD, RunCard } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 
 /**
- * call-card.tsx -- the quiet line a call that ended closes with on the Call tab, and the card it hangs: how long the call ran and when it ended, then what it ran on, when, how it ended, and what it metered.
+ * call-card.tsx -- a call's span in a plan's logs, the Call tab's and the Code tab's alike: the divider it begins at, and the quiet line it closes with once it has ended, hanging its card.
  *
- * A call closes the way a finished turn does (`working-time.tsx`'s
+ * A call begins at a Checkpoint saying the day and time it started, marked
+ * live at its right while it stands, in the developer's colour beside the
+ * voice mark, and it begins and ends the same in the Call tab's thread and
+ * in the Code tab's feed of what was shown on it. It closes the way a
+ * finished turn does (`working-time.tsx`'s
  * WorkedFor): one line saying it ended, how long it ran, and the day and
  * time it ended, worded as a call's header words it: "Call ended · 12m 34s
  * · Today, 3:04 PM", set at the column's start in the type and colour a
@@ -27,6 +33,9 @@ import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time
  */
 
 const SECOND_MS = 1_000;
+
+/** What a call's checkpoint says at its right while the call stands. */
+const LIVE_LABEL = "Live";
 
 /** What the card's corner says for how a call ended; nothing for a hang-up, from either end. */
 const ENDING_WORD = {
@@ -86,6 +95,33 @@ function CallCard({
       note={undefined}
       figures={figures}
     />
+  );
+}
+
+/** The divider a call begins at: the day and time it started, and while it stands, that it is live. */
+export function CallCheckpoint({
+  startedAt,
+  live,
+  now,
+}: {
+  startedAt: number;
+  live: boolean;
+  /** The moment the log was drawn, which the day is said against. */
+  now: number;
+}): React.JSX.Element {
+  return (
+    <Checkpoint
+      trailing={
+        live ? (
+          <span className="flex items-center gap-1.5 text-developer">
+            <AudioLinesIcon className="size-3.5" aria-hidden="true" />
+            {LIVE_LABEL}
+          </span>
+        ) : null
+      }
+    >
+      {callHeading(startedAt, now)}
+    </Checkpoint>
   );
 }
 

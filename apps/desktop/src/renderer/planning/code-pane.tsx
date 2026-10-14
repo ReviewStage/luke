@@ -1,9 +1,8 @@
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { AudioLinesIcon, FileInputIcon } from "lucide-react";
+import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
-import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
   ConversationContent,
@@ -12,6 +11,7 @@ import {
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches";
 import { Tooltip } from "../tooltip";
+import { CallCheckpoint, CallEnded } from "./call-card";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -22,7 +22,6 @@ import {
   rangeLabel,
 } from "./code-pane-model";
 import { FileTypeIcon } from "./file-type-icon";
-import { callHeading } from "./plan-time";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
@@ -36,16 +35,14 @@ import { callHeading } from "./plan-time";
  * pointed at, so the feed reads as a walkthrough, a step a card. Two
  * snippets of one file are two cards. The cards stand under the call they
  * were shown on, each call opening at the Checkpoint the Call tab
- * opens it at, and the feed keeps to its newest card while it is scrolled
- * there, so code shown on a live call lands at the bottom as the
+ * opens it at and, once it has ended, closing on the line the Call tab
+ * closes it on, its card on hover, and the feed keeps to its newest card
+ * while it is scrolled there, so code shown on a live call lands at the bottom as the
  * transcript's lines do, and scrolling up to read an earlier card leaves
  * it where it is until the developer scrolls back down. Every line here is
  * the repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
-
-/** What a call's checkpoint says while the call stands, as the Call tab says it. */
-const LIVE_LABEL = "Live";
 
 /** What a card's copy is called, which is its accessible name and its hint. */
 const COPY_LABEL = "Copy lines";
@@ -278,7 +275,7 @@ function CodeCardContent({
  */
 const CodeCard = memo(CodeCardContent, (was, now) => was.showing.callId === now.showing.callId);
 
-/** One call's run: the checkpoint it begins at, then each code shown on it. */
+/** One call's run: the checkpoint it begins at, each code shown on it, and once it has ended, the line it closes with, as the Call tab draws them (`call-card.tsx`). */
 function CodeFeedRun({
   call,
   now,
@@ -290,21 +287,13 @@ function CodeFeedRun({
 }): React.JSX.Element {
   return (
     <>
-      <Checkpoint
-        trailing={
-          call.live ? (
-            <span className="flex items-center gap-1.5 text-developer">
-              <AudioLinesIcon className="size-3.5" aria-hidden="true" />
-              {LIVE_LABEL}
-            </span>
-          ) : null
-        }
-      >
-        {callHeading(call.startedAt, now)}
-      </Checkpoint>
+      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} />
       {call.showings.map((showing) => (
         <CodeCard key={showing.callId} showing={showing} onOpenFile={onOpenFile} />
       ))}
+      {call.ended === undefined ? null : (
+        <CallEnded line={call.ended} startedAt={call.startedAt} record={call.record} />
+      )}
     </>
   );
 }

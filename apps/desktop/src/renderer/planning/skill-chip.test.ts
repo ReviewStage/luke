@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentAttachment,
+  type CodingAgentMessage,
+} from "@sidecar/hosted/coding-agent-wire";
+import { MESSAGE_ROLE } from "@sidecar/wire";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
+import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { SentWords, SkillFiles } from "./skill-chip";
 import type { SkillOption } from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
@@ -15,7 +21,9 @@ import type { SkillSource } from "./skill-picker";
  * skill-chip.test.ts -- a skill's chip opens its `SKILL.md`, the composer's
  * on a press as a sent message's does, and a sent chip's hover card is the
  * window's plan card: the skill's name, what it is for, and its file's
- * line, which opens the file too.
+ * line, which opens the file too. A coding agent's row that loaded the
+ * skill names it as the chip does, hangs the same card, and opens the
+ * same file.
  */
 
 const RELEASE: SkillOption = {
@@ -145,4 +153,77 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   assert.equal(line?.textContent, RELEASE.path);
   act(() => line?.click());
   assert.deepEqual(opened, [RELEASE.path]);
+});
+
+/** A coding agent's turn that loaded the skill named, as the service stores it. */
+function loadedTurn(skill: string, state = "output-available"): CodingAgentMessage {
+  return {
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      {
+        type: "tool-load_skill",
+        toolCallId: "call-load",
+        state,
+        input: { skill },
+        ...(state === "output-error" ? { errorText: "No such skill." } : { output: "# Release" }),
+      },
+    ],
+  };
+}
+
+/** The turn drawn as an agent's tab draws it. */
+function agentTurn(message: CodingAgentMessage): ReactNode {
+  return createElement(AgentMessage, {
+    message,
+    plan: false,
+    lead: AGENT_LEAD,
+    moving: false,
+    delegation: undefined,
+  });
+}
+
+/** The skill's card the control hangs as the keyboard reaches it, the newest hung where an earlier one is still on its way out. */
+function cardOf(control: HTMLElement): string | undefined {
+  document.documentElement.dataset.keyboard = "true";
+  act(() => control.focus());
+  const card = [...document.querySelectorAll(".tooltip-card > [data-skill-card]")].at(-1);
+  act(() => control.blur());
+  return card?.outerHTML;
+}
+
+test("a loaded skill's row in the transcript names the skill as its chip does, hangs the chip's card, and opens the same SKILL.md", async () => {
+  const { container, opened } = await mounted(
+    createElement(
+      "div",
+      null,
+      createElement(SentWords, { text: "Cut it with /release now." }),
+      createElement("div", { className: "turn" }, agentTurn(loadedTurn("release"))),
+    ),
+  );
+  const chip = container.querySelector<HTMLButtonElement>("button.skill-chip");
+  const row = container.querySelector<HTMLButtonElement>(".turn button[data-opens]");
+  assert.ok(chip, "the sent message names the skill as its chip");
+  assert.ok(row, "the loaded skill's row is one button");
+  assert.match(row.textContent ?? "", /^Loaded skill \/release$/u);
+  const card = cardOf(row);
+  assert.ok(card, "the row hangs the skill's card");
+  assert.equal(card, cardOf(chip), "the row's card is the chip's");
+  act(() => row.click());
+  act(() => chip.click());
+  assert.deepEqual(opened, [RELEASE.path, RELEASE.path]);
+});
+
+test("a load of a skill the plan does not hold, or one that failed, stays a call's row that folds open, naming the skill as it was asked for", async () => {
+  for (const [message, said] of [
+    [loadedTurn("unheard"), "/unheard"],
+    [loadedTurn("release", "output-error"), "/release"],
+  ] as const) {
+    const { container, opened } = await mounted(agentTurn(message));
+    assert.equal(container.querySelector("button[data-opens]"), null);
+    const row = container.querySelector("summary");
+    assert.ok(row, "the row is a fold's line");
+    assert.match(row.textContent ?? "", new RegExp(`Loaded skill ${said}`, "u"));
+    assert.deepEqual(opened, []);
+  }
 });
