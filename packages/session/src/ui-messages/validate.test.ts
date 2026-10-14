@@ -30,6 +30,7 @@ const FIXTURE = {
   CHILD_TASK: "child-task.json",
   CHILD_COMPLETION: "child-completion.json",
   RECALLED_NOTES: "recalled-notes.json",
+  REPORT: "report.json",
   COMPACTION_UNCOUNTED: "compaction-uncounted.json",
 } as const;
 

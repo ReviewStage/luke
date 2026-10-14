@@ -99,6 +99,8 @@ export const BRAIN_TURN_ORIGIN = {
   CHILD: "child",
   /** A requester's turn opened by a child's completion. */
   CHILD_COMPLETION: "child_completion",
+  /** A rollout worker's report, opened by the deployment on the plan's conversation. */
+  REPORT: "report",
 } as const;
 
 export type BrainTurnOrigin = (typeof BRAIN_TURN_ORIGIN)[keyof typeof BRAIN_TURN_ORIGIN];

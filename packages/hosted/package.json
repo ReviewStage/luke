@@ -32,6 +32,7 @@
     "./plan-wire": "./src/plan-wire.js",
     "./planning-view": "./src/planning-view.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
+    "./rollout-wire": "./src/rollout-wire.js",
     "./transcript-wire": "./src/transcript-wire.js",
     "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
     "./workspace-wire": "./src/workspace-wire.js"
