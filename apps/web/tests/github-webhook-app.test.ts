@@ -13,13 +13,16 @@ import {
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { listWorkspaces } from "@sidecar/database/models/workspace-store";
+import { account, user } from "@sidecar/database/schemas/auth";
 import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { getTestDB } from "@sidecar/database/testing";
 import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
+import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { GITHUB_PROVIDER_ID, GitHubApp } from "../server/github/github-app";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -295,6 +298,98 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         assert.deepEqual(suspended, [{ login, active: false }]);
         assert.deepEqual(unsuspended, [{ login, active: true }]);
         assert.deepEqual(deleted, [{ login, active: false }]);
+      }),
+  );
+
+  it.effect(
+    "a user revoking the App's authorization clears that GitHub user's tokens alone, keeps the row, and a repository read asks for a new sign-in",
+    () =>
+      Effect.gen(function* () {
+        const githubUserIdOf = () => 800_000 + Math.floor(Math.random() * 90_000);
+        const revoked = githubUserIdOf();
+        const kept = revoked + 1;
+        const accountWith = (githubUserId: number) =>
+          Effect.gen(function* () {
+            const userId = `user-${randomUUID()}`;
+            yield* Database.use((db) =>
+              db
+                .insert(user)
+                .values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+            );
+            for (const [providerId, accountId] of [
+              [GITHUB_PROVIDER_ID, String(githubUserId)],
+              ["google", `google-${userId}`],
+            ] as const) {
+              yield* Database.use((db) =>
+                db.insert(account).values({
+                  id: `account-${randomUUID()}`,
+                  accountId,
+                  providerId,
+                  userId,
+                  accessToken: "sealed-fixture-access",
+                  refreshToken: "sealed-fixture-refresh",
+                  accessTokenExpiresAt: new Date(0),
+                  refreshTokenExpiresAt: new Date(0),
+                }),
+              );
+            }
+            return userId;
+          });
+        const providersOf = (userId: string) =>
+          Effect.map(
+            Database.use((db) =>
+              db
+                .select({ providerId: account.providerId })
+                .from(account)
+                .where(eq(account.userId, userId)),
+            ),
+            (rows) => rows.map((row) => row.providerId).sort(),
+          );
+        const githubTokensOf = (userId: string) =>
+          Database.use((db) =>
+            db
+              .select({
+                accessToken: account.accessToken,
+                refreshToken: account.refreshToken,
+                accessTokenExpiresAt: account.accessTokenExpiresAt,
+                refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+              })
+              .from(account)
+              .where(and(eq(account.userId, userId), eq(account.providerId, GITHUB_PROVIDER_ID))),
+          );
+        const revoking = yield* accountWith(revoked);
+        const other = yield* accountWith(kept);
+        const github = githubReaching([]);
+
+        const answered = yield* answer(
+          github,
+          SECRET,
+          delivery("github_app_authorization", {
+            action: "revoked",
+            sender: { id: revoked, login: "octo" },
+          }),
+        );
+
+        const read = yield* Effect.gen(function* () {
+          return yield* (yield* GitHubApp).userRepositories(revoking);
+        }).pipe(Effect.provide(github.layer), Effect.flip);
+
+        assert.equal(answered.status, 200);
+        assert.deepEqual(yield* providersOf(revoking), ["github", "google"]);
+        assert.deepEqual(yield* githubTokensOf(revoking), [
+          {
+            accessToken: null,
+            refreshToken: null,
+            accessTokenExpiresAt: null,
+            refreshTokenExpiresAt: null,
+          },
+        ]);
+        assert.equal(read._tag, "GitHubSignInRequired");
+        assert.deepEqual(yield* providersOf(other), ["github", "google"]);
+        assert.deepEqual(
+          (yield* githubTokensOf(other)).map((row) => row.accessToken),
+          ["sealed-fixture-access"],
+        );
       }),
   );
 });

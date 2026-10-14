@@ -14,7 +14,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { GitHubApp } from "./github/github-app.js";
+import { clearRevokedAuthorization, type GitHubApp } from "./github/github-app.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { setInstallationStatus } from "./hosted/github-installations.js";
@@ -31,7 +31,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, and one about an installation marks its workspace active or not.
+ * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
  *
  * The events read are a pull request's, a check suite's, a check run's once
  * it ends, and a commit status's, since the checks' one word counts the
@@ -55,6 +55,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * (`hosted/github-installations.ts`): removed or suspended marks it
  * inactive, and unsuspended active again. Nothing is deleted, so an installation
  * suspended and brought back keeps its members and its plans.
+ *
+ * A user revoking their authorization of the App, which GitHub also sends
+ * without subscribing (`github_app_authorization`), drops that GitHub user's
+ * account row and its tokens, so no account stands linked to a GitHub that no
+ * longer answers it.
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -82,7 +87,12 @@ const WEBHOOK_EVENT = {
   STATUS: "status",
   /** The App installed, removed, suspended, or brought back on an account. */
   INSTALLATION: "installation",
+  /** A user revoked their authorization of the App. */
+  APP_AUTHORIZATION: "github_app_authorization",
 } as const;
+
+/** The one action an authorization delivery has: the user revoked it. */
+const AUTHORIZATION_REVOKED = "revoked";
 
 /** What each installation action leaves its workspace's status at; any other action moves nothing. */
 const INSTALLATION_ACTION_STATUS: ReadonlyMap<string, GitHubInstallationStatus> = new Map([
@@ -151,6 +161,12 @@ const StatusDeliverySchema = Schema.Struct({
 const InstallationDeliverySchema = Schema.Struct({
   action: Schema.String,
   installation: Schema.Struct({ id: Schema.Number }),
+});
+
+/** An authorization delivery as far as it is read: what happened, and GitHub's own id of the user it happened to. */
+const AuthorizationDeliverySchema = Schema.Struct({
+  action: Schema.String,
+  sender: Schema.Struct({ id: Schema.Number }),
 });
 
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
@@ -243,6 +259,13 @@ function installationTarget(
     : { installationId: read.success.installation.id, status };
 }
 
+/** The GitHub user whose authorization a delivery says was revoked; nothing for any other action. */
+function revokedAuthorization(payload: UnparsedWireValue): number | undefined {
+  const read = readDelivery(AuthorizationDeliverySchema, payload);
+  if (Result.isFailure(read) || read.success.action !== AUTHORIZATION_REVOKED) return undefined;
+  return read.success.sender.id;
+}
+
 /** What the agents on the target's branches published, read again on each owner's token; answers how many reads landed. */
 const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgain")(function* (
   target: DeliveryTarget,
@@ -299,6 +322,13 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
       const moved = installationTarget(payload);
       if (moved !== undefined) {
         yield* hostedStoreOrUnavailable(setInstallationStatus(moved.installationId, moved.status));
+      }
+      return hostedJsonResponse(200, { read: 0 });
+    }
+    if (event === WEBHOOK_EVENT.APP_AUTHORIZATION) {
+      const githubUserId = revokedAuthorization(payload);
+      if (githubUserId !== undefined) {
+        yield* hostedStoreOrUnavailable(clearRevokedAuthorization(githubUserId));
       }
       return hostedJsonResponse(200, { read: 0 });
     }

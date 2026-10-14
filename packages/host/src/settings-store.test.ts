@@ -286,6 +286,25 @@ test("round-trips an encrypted account without exposing either token in snapshot
   assert.equal(settings.includes(TEST_ACCOUNT.refreshToken), false);
 });
 
+test("a stored account that signed in with Google still loads", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const signedInWithGoogle = {
+    ...TEST_ACCOUNT,
+    provider: "google",
+  } as const satisfies StoredAccount;
+  await storeIn(directory).setAccount(signedInWithGoogle);
+
+  const store = storeIn(directory);
+
+  assert.deepEqual(await store.readAccount(), signedInWithGoogle);
+  assert.deepEqual(await store.accountSnapshot(), {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    email: signedInWithGoogle.email,
+    name: signedInWithGoogle.name,
+    provider: "google",
+  });
+});
+
 test("refuses to store an account when encrypted storage is unavailable", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, { cipher: testCipher(false) });

@@ -20,14 +20,24 @@ export const GITHUB_SIGN_IN = {
 } as const;
 
 /**
- * How Better Auth keeps an account's provider rows. Every token is sealed
- * under the session secret. A sign-in refreshes the row it signs in through,
- * which is how an account that signed in through the OAuth App before the
- * GitHub App comes to hold the App's token and refresh token.
+ * How Better Auth keeps and links an account's provider rows. Every token is
+ * sealed under the session secret. A sign-in refreshes the row it signs in
+ * through, which is how an account that signed in through the OAuth App
+ * before the GitHub App comes to hold the App's token and refresh token.
+ *
+ * A signed-in account may link GitHub to itself whatever address GitHub
+ * holds (`allowDifferentEmails`), since an account made with Google and
+ * the GitHub it plans against rarely share one; the link is the account's
+ * own deliberate act, made from its session. Sign-in still links on its own
+ * only where the provider verified the same address, Better Auth's default:
+ * no provider is trusted past that (`trustedProviders`), which the docs warn
+ * risks an account takeover
+ * (https://www.better-auth.com/docs/concepts/users-accounts#account-linking).
  */
 export const ACCOUNT_TOKEN_STORAGE = {
   encryptOAuthTokens: true,
   updateAccountOnSignIn: true,
+  accountLinking: { enabled: true, allowDifferentEmails: true },
 } as const;
 
 /**
