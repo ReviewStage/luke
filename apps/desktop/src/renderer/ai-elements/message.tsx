@@ -1,8 +1,8 @@
+import { cn } from "@luke/ui";
 import type { UIMessage } from "ai";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
 import { type Components, Streamdown } from "streamdown";
 import { Tooltip } from "../tooltip";
-import { cn } from "./utils";
 
 /**
  * message.tsx -- AI Elements' Message: one turn of a conversation, by who said it, and the markdown of a reply.

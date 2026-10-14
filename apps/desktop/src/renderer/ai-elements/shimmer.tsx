@@ -1,5 +1,5 @@
+import { cn } from "@luke/ui";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "./utils";
 
 /**
  * shimmer.tsx -- AI Elements' Shimmer: a line of words with a light passing along it, for work still under way.

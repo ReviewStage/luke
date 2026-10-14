@@ -222,9 +222,6 @@ importers:
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
-      clsx:
-        specifier: 2.1.1
-        version: 2.1.1
       cmdk:
         specifier: 1.1.1
         version: 1.1.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -267,9 +264,6 @@ importers:
       streamdown:
         specifier: 2.7.0
         version: 2.7.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      tailwind-merge:
-        specifier: 3.7.0
-        version: 3.7.0
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
@@ -777,9 +771,18 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      recharts:
+        specifier: 3.8.0
+        version: 3.8.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react-is@19.2.8)(react@19.2.8)(redux@5.0.1)
+      tailwind-merge:
+        specifier: 3.7.0
+        version: 3.7.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

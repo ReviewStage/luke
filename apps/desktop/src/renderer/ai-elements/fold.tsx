@@ -1,3 +1,4 @@
+import { cn } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -12,7 +13,6 @@ import {
 } from "react";
 import { useFindOpen } from "../find-in-tab";
 import { disclosureMotion, useDisclosure } from "../use-disclosure";
-import { cn } from "./utils";
 
 /**
  * fold.tsx -- the one fold the transcript's components fold on: a `details` whose open state is React's, so a closed body is not drawn at all.

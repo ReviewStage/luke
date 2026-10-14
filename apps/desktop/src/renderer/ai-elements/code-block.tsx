@@ -1,5 +1,5 @@
+import { cn } from "@luke/ui";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "./utils";
 
 /**
  * code-block.tsx -- AI Elements' CodeBlock: a run of code or data drawn as it is, in mono, bounded and scrolling past its height.

@@ -1,8 +1,8 @@
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
+import { cn } from "@luke/ui";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
-import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
 import { callHeading, useMinute } from "./plan-time";
 import type { CallRecord } from "./transcript-model";

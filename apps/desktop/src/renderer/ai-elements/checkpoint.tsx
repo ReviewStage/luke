@@ -1,5 +1,5 @@
+import { cn } from "@luke/ui";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "./utils";
 
 /**
  * checkpoint.tsx -- AI Elements' Checkpoint: a quiet line across the conversation marking where one stretch of it ends and the next begins.

@@ -1,3 +1,4 @@
+import { cn } from "@luke/ui";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -8,7 +9,6 @@ import {
   useState,
 } from "react";
 import { SpinnerRing } from "../spinner";
-import { cn } from "./utils";
 
 /**
  * prompt-input.tsx -- AI Elements' PromptInput as Luke's one composer: the card a message is written in, and the row of controls under it.
