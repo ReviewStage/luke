@@ -40,7 +40,7 @@ import type { UpdateControl } from "../settings/controls";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
@@ -374,10 +374,7 @@ function RepositorySection({
         }
         tooltip={repository === null || label === repository ? undefined : repository}
         menuOpen={menu.open !== undefined}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          menu.show(atPointer(event), ellipsis.current ?? event.currentTarget);
-        }}
+        onContextMenu={menu.contextMenu(ellipsis)}
         onToggle={() => folds.toggle(repository)}
         actions={
           <>
@@ -387,15 +384,7 @@ function RepositorySection({
                 type="button"
                 className="sidebar-repository-action"
                 aria-label={`Actions for ${named}`}
-                aria-haspopup="menu"
-                aria-expanded={menu.open !== undefined}
-                onClick={(event) => {
-                  if (menu.open !== undefined) {
-                    menu.close(true);
-                    return;
-                  }
-                  menu.show(dropBelow(event.currentTarget), event.currentTarget);
-                }}
+                {...menu.trigger()}
               >
                 <EllipsisIcon />
               </button>

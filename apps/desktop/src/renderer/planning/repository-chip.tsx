@@ -188,7 +188,7 @@ export function RepositoryChip(props: {
         <p className="plan-compose-menu-note" role="alert">
           {repositoryFailureNote(failure)}
         </p>
-        <button type="button" className="plan-compose-menu-row" onClick={read}>
+        <button type="button" className="menu-item" onClick={read}>
           <RotateCwIcon aria-hidden="true" />
           <span className="plan-compose-menu-name">Retry</span>
         </button>
@@ -200,7 +200,7 @@ export function RepositoryChip(props: {
           <p className="plan-compose-menu-note">{MENU_NOTE.NOT_CONNECTED}</p>
           <button
             type="button"
-            className="plan-compose-menu-row"
+            className="menu-item"
             onClick={() => choose(() => openSettings(workspaceGitHub))}
           >
             <GearIcon />

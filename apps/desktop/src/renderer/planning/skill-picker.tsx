@@ -255,7 +255,7 @@ function SkillMenu({
   onChoose: (skill: SkillOption) => void;
 }): React.JSX.Element {
   return (
-    <div className="plan-compose-menu skill-menu" style={place}>
+    <div className="menu-surface searchable-menu skill-menu" style={place}>
       {/* Note that a press on a row keeps the caret in the box, where the keys are read. */}
       <div
         id={id}
@@ -271,7 +271,7 @@ function SkillMenu({
             type="button"
             role="option"
             tabIndex={-1}
-            className="plan-compose-menu-row"
+            className="menu-item"
             aria-selected={index === at}
             onMouseMove={() => onHover(index)}
             onClick={() => onChoose(skill)}

@@ -1,12 +1,6 @@
 import { EllipsisIcon } from "@sidecar/panel";
 import { useRef } from "react";
-import {
-  ActionMenu,
-  atPointer,
-  dropBelow,
-  type MenuAction,
-  useActionMenu,
-} from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { searchAnchorProps } from "../settings-anchors";
 import { Tooltip } from "../tooltip";
 
@@ -50,11 +44,7 @@ export function MenuRow({
       <div
         className="settings-row menu-row"
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
-        onContextMenu={(event) => {
-          if (!acting) return;
-          event.preventDefault();
-          menu.show(atPointer(event), ellipsis.current ?? event.currentTarget);
-        }}
+        onContextMenu={acting ? menu.contextMenu(ellipsis) : undefined}
       >
         {children}
         {acting ? (
@@ -64,15 +54,7 @@ export function MenuRow({
               type="button"
               className="icon-button"
               aria-label={label}
-              aria-haspopup="menu"
-              aria-expanded={menu.open !== undefined}
-              onClick={(event) => {
-                if (menu.open !== undefined) {
-                  menu.close(true);
-                  return;
-                }
-                menu.show(dropBelow(event.currentTarget), event.currentTarget);
-              }}
+              {...menu.trigger()}
             >
               <EllipsisIcon />
             </button>

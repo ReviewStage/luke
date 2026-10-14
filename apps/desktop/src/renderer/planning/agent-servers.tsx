@@ -420,7 +420,7 @@ function ServersPopover({
       <div
         key={row.provider}
         id={index < 0 ? undefined : `${rowsId}-${index}`}
-        className="plan-compose-menu-row agent-servers-row"
+        className="menu-item agent-servers-row"
         data-highlighted={index === at ? "true" : undefined}
         data-opens={opensTools(row) ? "true" : undefined}
         aria-disabled={row.kind === SERVER_ROW.QUIET ? "true" : undefined}
@@ -467,7 +467,7 @@ function ServersPopover({
       <div
         key={`${row.provider}:${tool.name}`}
         id={`${rowsId}-${index}`}
-        className="plan-compose-menu-row agent-servers-row agent-servers-hit"
+        className="menu-item agent-servers-row agent-servers-hit"
         data-highlighted={index === at ? "true" : undefined}
         onMouseMove={() => index !== at && setHighlight(index)}
         onMouseDown={keepFieldFocus}
@@ -568,7 +568,7 @@ function ServersPopover({
   return (
     <div
       id={id}
-      className="plan-compose-menu searchable-menu agent-servers-menu"
+      className="menu-surface searchable-menu agent-servers-menu"
       role="dialog"
       aria-label={page !== undefined ? `${page.name} tools` : SERVERS_LABEL}
       // Note that the dialog takes the focus a press on its words would
@@ -582,7 +582,7 @@ function ServersPopover({
       <div className="plan-compose-menu-foot">
         <button
           type="button"
-          className="plan-compose-menu-row agent-servers-manage"
+          className="menu-item agent-servers-manage"
           onMouseDown={keepFieldFocus}
           onClick={() => {
             onClose();

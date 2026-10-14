@@ -343,7 +343,7 @@
      menu's own filter hanging from a chip inside the well, which holds the
      caret without ringing the composer around it. */
   :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
-  .field-well:has(:is(textarea, [contenteditable], input):not(.plan-compose-menu *):focus-visible) {
+  .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: calc(var(--focus-ring-width) / -2);
   }

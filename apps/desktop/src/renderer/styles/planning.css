@@ -623,30 +623,13 @@ button.code-card-path:hover {
   height: 12px;
 }
 
-/* A crumb's tree, hung under the crumb over the window as a menu is, and
-   dropping in as one once it is placed (file-breadcrumbs.tsx). */
+/* A crumb's tree, hung under the crumb over the window on a menu's surface
+   (file-breadcrumbs.tsx). */
 .file-crumb-tree {
   position: fixed;
   z-index: var(--z-menu);
-  display: flex;
   max-height: calc(100vh - 16px);
-  flex-direction: column;
-  padding: var(--menu-inset);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
   -webkit-app-region: no-drag;
-}
-
-.file-crumb-tree[data-placed="false"] {
-  visibility: hidden;
-}
-
-.file-crumb-tree[data-placed="true"] {
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 /* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
@@ -1447,22 +1430,15 @@ button.skill-chip:hover,
   cursor: pointer;
 }
 
-/* The list a `/` opens: the window's menu, standing over the caret's line
-   at the left the line put it, inside the box. Named with the menu's own
-   class, since the menu's rule opens it under a trigger and is read later. */
-.plan-compose-menu.skill-menu {
+/* The list a `/` opens: a searchable menu whose field is the composer,
+   standing over the caret's line at the left the line put it, inside the
+   box. Named with the menu's own class, since the menu's rule opens it
+   under a trigger and is read later. */
+.searchable-menu.skill-menu {
   top: auto;
   z-index: 3;
   width: 320px;
   max-width: 100%;
-}
-
-.skill-menu .plan-compose-menu-row:hover {
-  background: none;
-}
-
-.skill-menu .plan-compose-menu-row[aria-selected="true"] {
-  background: var(--raised-strong);
 }
 
 .skill-menu .plan-compose-menu-name {

@@ -3,7 +3,7 @@ import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, dropBelow, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { fileName } from "./code-pane-model";
@@ -67,20 +67,7 @@ export function LinesMenu({
   return (
     <>
       <Tooltip label={label}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={label}
-          aria-haspopup="menu"
-          aria-expanded={menu.open !== undefined}
-          onClick={(event) => {
-            if (menu.open !== undefined) {
-              menu.close(true);
-              return;
-            }
-            menu.show(dropBelow(event.currentTarget), event.currentTarget);
-          }}
-        >
+        <button type="button" className="icon-button" aria-label={label} {...menu.trigger()}>
           <EllipsisIcon />
         </button>
       </Tooltip>

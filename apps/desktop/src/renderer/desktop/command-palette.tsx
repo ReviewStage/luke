@@ -498,8 +498,8 @@ function PaletteItem({
   tokens: readonly string[];
 }): React.JSX.Element {
   const item = (
-    <Command.Item className="command-palette-row" value={value} onSelect={row.onChoose}>
-      {row.icon === undefined ? null : <span className="command-palette-icon">{row.icon}</span>}
+    <Command.Item className="menu-item" value={value} onSelect={row.onChoose}>
+      {row.icon === undefined ? null : <span className="menu-item-glyph">{row.icon}</span>}
       <span className="command-palette-name">
         <Highlighted text={row.label} tokens={tokens} />
       </span>
@@ -508,16 +508,12 @@ function PaletteItem({
           <Highlighted text={row.detail} tokens={tokens} />
         </span>
       )}
+      {/* Spoken, since a palette row is an option, which carries no
+          `aria-keyshortcuts` to say the chord for it. */}
       {row.command === undefined ? null : (
-        <span className="command-palette-hint">
-          {/* Spoken, since a palette row is an option, which carries no
-              `aria-keyshortcuts` to say the chord for it. */}
-          <Shortcut chord={APP_SHORTCUTS[row.command].chord} spoken />
-        </span>
+        <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="menu-item-hint" spoken />
       )}
-      {row.endMark === undefined ? null : (
-        <span className="command-palette-end">{row.endMark}</span>
-      )}
+      {row.endMark === undefined ? null : <span className="menu-item-end">{row.endMark}</span>}
     </Command.Item>
   );
   if (row.card === undefined) return item;

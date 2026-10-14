@@ -14,7 +14,7 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import type { PinnedTab } from "../planning/use-side-panel";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { CardDetail, PullRequestLine, RepositoryDetail } from "./plan-card";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
@@ -258,11 +258,7 @@ export function SidebarPinnedTab({
   const agent = pinAgent(pin, plan, plans);
   // The row is what the menu rings and hands focus back to, even when the
   // right-click lands on Unpin over its end.
-  const showMenu = (event: React.MouseEvent) => {
-    event.preventDefault();
-    if (row.current === null) return;
-    menu.show(atPointer(event), row.current);
-  };
+  const showMenu = menu.contextMenu(row);
   return (
     <li ref={item} className="sidebar-plan-item sidebar-pinned-tab">
       <Tooltip

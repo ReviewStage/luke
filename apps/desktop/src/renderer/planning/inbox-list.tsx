@@ -3,7 +3,7 @@ import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
-import { ActionMenu, dropBelow, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -193,20 +193,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={VIEW_OPTIONS}
-          aria-haspopup="menu"
-          aria-expanded={menu.open !== undefined}
-          onClick={(event) => {
-            if (menu.open !== undefined) {
-              menu.close(true);
-              return;
-            }
-            menu.show(dropBelow(event.currentTarget), event.currentTarget);
-          }}
-        >
+        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
           <SlidersHorizontalIcon className="icon-button-glyph" />
         </button>
       </Tooltip>

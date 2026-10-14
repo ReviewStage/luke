@@ -200,7 +200,7 @@ function rowLooks(column: Element): Map<string, Look> {
   act(() => add.click());
   const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
     const label = row.querySelector(".plan-compose-menu-name")?.textContent ?? "";
-    return [label, { glyph: row.firstElementChild?.outerHTML, label }] as const;
+    return [label, { glyph: row.querySelector(".menu-item-glyph")?.innerHTML, label }] as const;
   });
   act(() => add.click());
   return new Map(rows);

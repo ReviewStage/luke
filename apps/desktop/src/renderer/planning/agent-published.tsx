@@ -7,14 +7,7 @@ import { CopyIcon } from "@sidecar/panel";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
-import {
-  ActionMenu,
-  MENU_ALIGN,
-  MENU_DROP,
-  type MenuAction,
-  type MenuPlacement,
-  useActionMenu,
-} from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import {
@@ -57,15 +50,6 @@ export interface PublishedDoors {
 const MENU_LABEL = "Branch actions";
 const OPEN_HINT = "Open on GitHub";
 const CHECKS_FAILING = "Checks failing";
-
-/** Where the right-click menu hangs: at the pointer, or under the chip where the keyboard asked and said no point of its own. */
-function menuPlacement(event: React.MouseEvent<HTMLElement>): MenuPlacement {
-  if (event.clientX !== 0 || event.clientY !== 0) {
-    return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
-  }
-  const bounds = event.currentTarget.getBoundingClientRect();
-  return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
-}
 
 /** What the chip's right-click offers for a branch: its name and the command that checks it out, each to the clipboard. */
 function branchActions(branch: string, doors: PublishedDoors): MenuAction[][] {
@@ -129,14 +113,7 @@ export function PublishedChip({
             menu.close(false);
             doors.openGitHub(url);
           }}
-          onContextMenu={
-            branch === null
-              ? undefined
-              : (event) => {
-                  event.preventDefault();
-                  menu.show(menuPlacement(event), event.currentTarget);
-                }
-          }
+          onContextMenu={branch === null ? undefined : menu.contextMenu()}
         >
           <PublishedFace published={published} />
         </Chip>

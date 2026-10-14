@@ -7,6 +7,7 @@ import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import {
   ActionMenu,
+  atPointer,
   MENU_ALIGN,
   MENU_DROP,
   type MenuAction,
@@ -416,10 +417,11 @@ export function Tab({
           ? undefined
           : (event) => {
               event.preventDefault();
-              // A menu key the system turned into a right-click says no point of its own.
+              // A menu key the system turned into a right-click says no point
+              // of its own, and hangs the menu under the whole tab.
               const fromKeyboard = event.clientX === 0 && event.clientY === 0;
-              const at = { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
-              onMenu(fromKeyboard ? underTab(event.currentTarget) : at, event.currentTarget);
+              const at = fromKeyboard ? underTab(event.currentTarget) : atPointer(event);
+              onMenu(at, event.currentTarget);
             }
       }
       onKeyDown={(event) => {

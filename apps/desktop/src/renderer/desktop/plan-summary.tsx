@@ -17,7 +17,7 @@ import { workRowsOf } from "../planning/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
+import { ActionMenu, useActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
@@ -495,14 +495,7 @@ function AgentSummaryRow({
   const menu = useActionMenu(shown);
   return (
     <>
-      <SummaryRow
-        entry={entry}
-        onPick={onPick}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          menu.show(atPointer(event), event.currentTarget);
-        }}
-      />
+      <SummaryRow entry={entry} onPick={onPick} onContextMenu={menu.contextMenu()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Agent actions"
