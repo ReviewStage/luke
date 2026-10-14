@@ -3,7 +3,7 @@ import { INBOX_BOUNDS } from "@sidecar/features/inbox-wire";
 import { sql } from "drizzle-orm";
 import { check, customType, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
 import { plan } from "./plan.js";
 
@@ -37,9 +37,12 @@ export const inboxAttachment = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    planId: uuid("plan_id")
-      .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+    /** The item's plan; null for an item of an agent with no plan. */
+    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    /** The item's workspace; null only on rows the backfill has not reached. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
     itemId: uuid("item_id")
       .notNull()
       .references(() => inboxItem.id, { onDelete: "cascade" }),
