@@ -78,6 +78,8 @@ export interface SectionLinks {
   readonly onOpen: (mention: PlanMention) => void;
   readonly onOpenFile?: ((path: string, lines: MentionLines | undefined) => void) | undefined;
   readonly reveal: SectionReveal | undefined;
+  /** The document showed the section `reveal` asked for, so the ask can be let go. */
+  readonly onRevealed?: ((ask: number) => void) | undefined;
 }
 
 /** One ask to show a section by its anchor, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
@@ -659,6 +661,7 @@ export function PlanBody({
           unit.getBoundingClientRect().top -
           element.getBoundingClientRect().top -
           REVEAL_MARGIN;
+    sectionLinks?.onRevealed?.(reveal.ask);
   });
 
   // A pause in the typing hands the view back: the next burst is followed again.

@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
+import type { PlanMention } from "@luke/features/mention-link";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
@@ -50,6 +51,7 @@ import { useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { PLANS_PAGE } from "./planning/planning-model";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
+import { OpenPlanProvider } from "./planning/use-open-link";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
@@ -490,118 +492,126 @@ export function App(): React.JSX.Element {
     movePlan: plans.onMovePlan,
   };
 
+  // A Luke link pressed anywhere in the window opens its plan on the Plans tab, scrolled to its section.
+  const openPlan = (mention: PlanMention) => {
+    changeTab(PANEL_TAB.PLANS);
+    plans.onShowMention(mention);
+  };
+
   return (
     <OpenSettingsProvider value={openSettings}>
-      <RepositoryRemedyProvider value={repositoryRemedies}>
-        <GitHubConnectProvider
-          value={{
-            connection: plans.github,
-            connect: plans.onConnectAccountGitHub,
-            disconnect: plans.onDisconnectAccountGitHub,
-          }}
-        >
-          <div
-            className="app-stage"
-            data-capture={String(state.run.captureMode)}
-            // The panel is drawn as an ordinary app window's content; desktop.css
-            // lays it out.
-            data-surface="desktop"
-            // The sidebar's width lays out the shell and Settings' page list, and
-            // places the captions over the work column beside it.
-            style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+      <OpenPlanProvider value={openPlan}>
+        <RepositoryRemedyProvider value={repositoryRemedies}>
+          <GitHubConnectProvider
+            value={{
+              connection: plans.github,
+              connect: plans.onConnectAccountGitHub,
+              disconnect: plans.onDisconnectAccountGitHub,
+            }}
           >
-            {/* The window's content. */}
-            <div className="desktop-stage">
-              <DesktopShell
-                gates={{
-                  accountRequired: state.run.accountRequired,
-                  signInWait: signIn.signInWait,
-                  signInFailure: signIn.signInFailure,
-                  lastSignIn,
-                  onBeginSignIn: signIn.beginSignIn,
-                  onCancelSignIn: signIn.cancelSignIn,
-                  signInFace,
-                }}
+            <div
+              className="app-stage"
+              data-capture={String(state.run.captureMode)}
+              // The panel is drawn as an ordinary app window's content; desktop.css
+              // lays it out.
+              data-surface="desktop"
+              // The sidebar's width lays out the shell and Settings' page list, and
+              // places the captions over the work column beside it.
+              style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+            >
+              {/* The window's content. */}
+              <div className="desktop-stage">
+                <DesktopShell
+                  gates={{
+                    accountRequired: state.run.accountRequired,
+                    signInWait: signIn.signInWait,
+                    signInFailure: signIn.signInFailure,
+                    lastSignIn,
+                    onBeginSignIn: signIn.beginSignIn,
+                    onCancelSignIn: signIn.cancelSignIn,
+                    signInFace,
+                  }}
+                  tab={tab}
+                  onTabChange={changeTab}
+                  plans={plans}
+                  history={history}
+                  sidebar={sidebar}
+                  call={call}
+                  captions={{
+                    caption,
+                    volumeHint: {
+                      wanted: volumeHintWanted,
+                      text: volumeHintText(outputAudio),
+                      onDismiss: dismissVolumeHint,
+                    },
+                  }}
+                  settings={{
+                    account: state.account,
+                    onSignOut: async () => {
+                      await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+                    },
+                    // The delete happens at the service before anything local moves,
+                    // so a failure resolves to why and the account is still standing.
+                    onDeleteAccount: async () => {
+                      try {
+                        await act(ACT_KIND.ACCOUNT_DELETE);
+                        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+                      } catch {
+                        return {
+                          status: ACTION_RESULT_STATUS.REJECTED,
+                          reason: "Luke could not delete the account. Try again in a moment.",
+                        };
+                      }
+                    },
+                    view: settingsView,
+                    onViewChange: setSettingsView,
+                    microphone,
+                    notifications: {
+                      refused: state.notifications.refused,
+                      onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+                    },
+                    updates,
+                    settings,
+                    shortcuts,
+                    workspace,
+                  }}
+                />
+              </div>
+              {/* A note to the people who make Luke, written in a dialog over the
+          window. */}
+              <FeedbackDialog
+                kind={feedbackKind}
+                account={account}
+                onClose={() => setFeedbackKind(undefined)}
+              />
+              {/* The window's passing notice: the thank-you after a note lands, what
+          came of a change made from a menu, and an update arrived. */}
+              <ToastHost />
+              {/* The plans, the open plan's agents and files, every command the
+          window can run now, and the settings, behind ⌘K, past the sign-in
+          alone. */}
+              <CommandPalette
+                available={!accountGated}
                 tab={tab}
                 onTabChange={changeTab}
                 plans={plans}
-                history={history}
-                sidebar={sidebar}
-                call={call}
-                captions={{
-                  caption,
-                  volumeHint: {
-                    wanted: volumeHintWanted,
-                    text: volumeHintText(outputAudio),
-                    onDismiss: dismissVolumeHint,
-                  },
-                }}
                 settings={{
-                  account: state.account,
-                  onSignOut: async () => {
-                    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-                  },
-                  // The delete happens at the service before anything local moves,
-                  // so a failure resolves to why and the account is still standing.
-                  onDeleteAccount: async () => {
-                    try {
-                      await act(ACT_KIND.ACCOUNT_DELETE);
-                      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                    } catch {
-                      return {
-                        status: ACTION_RESULT_STATUS.REJECTED,
-                        reason: "Luke could not delete the account. Try again in a moment.",
-                      };
-                    }
-                  },
-                  view: settingsView,
+                  rows: settingsRowsInput({
+                    settings,
+                    microphone,
+                    account: state.account,
+                    workspace,
+                  }),
                   onViewChange: setSettingsView,
-                  microphone,
-                  notifications: {
-                    refused: state.notifications.refused,
-                    onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                  },
-                  updates,
-                  settings,
-                  shortcuts,
-                  workspace,
                 }}
+                readFiles={(planId) =>
+                  act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
+                }
               />
             </div>
-            {/* A note to the people who make Luke, written in a dialog over the
-          window. */}
-            <FeedbackDialog
-              kind={feedbackKind}
-              account={account}
-              onClose={() => setFeedbackKind(undefined)}
-            />
-            {/* The window's passing notice: the thank-you after a note lands, what
-          came of a change made from a menu, and an update arrived. */}
-            <ToastHost />
-            {/* The plans, the open plan's agents and files, every command the
-          window can run now, and the settings, behind ⌘K, past the sign-in
-          alone. */}
-            <CommandPalette
-              available={!accountGated}
-              tab={tab}
-              onTabChange={changeTab}
-              plans={plans}
-              settings={{
-                rows: settingsRowsInput({
-                  settings,
-                  microphone,
-                  account: state.account,
-                  workspace,
-                }),
-                onViewChange: setSettingsView,
-              }}
-              readFiles={(planId) =>
-                act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
-              }
-            />
-          </div>
-        </GitHubConnectProvider>
-      </RepositoryRemedyProvider>
+          </GitHubConnectProvider>
+        </RepositoryRemedyProvider>
+      </OpenPlanProvider>
     </OpenSettingsProvider>
   );
 }

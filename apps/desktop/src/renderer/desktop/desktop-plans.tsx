@@ -1,10 +1,5 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
-import {
-  MENTION_KIND,
-  type MentionLines,
-  type PlanMention,
-  sectionAnchors,
-} from "@luke/features/mention-link";
+import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -25,7 +20,7 @@ import {
   NEEDS_YOU,
 } from "../planning/inbox-model";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
-import { PlanBody, type SectionLinks, type SectionReveal } from "../planning/plan-body";
+import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanMentions, type PlanMentionsValue } from "../planning/plan-mentions";
 import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
@@ -287,19 +282,8 @@ function PlanDocument({
   // a hook that only the ready page reached would be one more hook than
   // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
-  // The last ask to show a section, under the plan it was asked of, so a
-  // mention of another plan's section shows it once that plan is drawn.
-  const [revealed, setRevealed] = useState<{ planId: string; reveal: SectionReveal } | undefined>(
-    undefined,
-  );
-  const openMention = (mention: PlanMention) => {
-    plans.onShowPlan(mention.planId);
-    const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
-    setRevealed((last) => ({
-      planId: mention.planId,
-      reveal: { anchor, ask: (last?.reveal.ask ?? 0) + 1 },
-    }));
-  };
+  const openMention = plans.onShowMention;
+  const revealed = plans.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     lines === undefined
@@ -313,6 +297,7 @@ function PlanDocument({
     onOpen: openMention,
     onOpenFile: openMentionedFile,
     reveal: revealed?.planId === shown ? revealed.reveal : undefined,
+    onRevealed: plans.onSectionRevealed,
   });
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
