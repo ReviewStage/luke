@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { LIVE_STATUS } from "@sidecar/live";
 import type { WebContents } from "electron";
 import { describe, it } from "vitest";
-import { AVATAR_STATUS } from "#shared/messages/avatar";
+import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "#shared/messages/avatar";
 import {
   CALL_VIDEO_BOUNDS,
   CALL_WINDOW_BOUNDS,
@@ -12,6 +12,11 @@ import {
 
 const CALLING = { voiceStatus: LIVE_STATUS.LISTENING, callPlanId: "plan_1" } as const;
 const HUNG_UP = { voiceStatus: LIVE_STATUS.IDLE, callPlanId: undefined } as const;
+
+const STARTING = { status: AVATAR_STATUS.STARTING };
+const LIVE = { status: AVATAR_STATUS.LIVE };
+const TURNED_OFF = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER };
+const SERVER_CLOSED = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
 
 /** A surface that keeps what it was last told: whether it stands, and at which size. */
 function surface() {
@@ -42,13 +47,13 @@ describe("the floating call window's presence", () => {
     const s = surface();
     const presence = new CallWindowPresence(s);
     presence.panelFocused(PANEL);
-    presence.voiceChanged(CALLING, AVATAR_STATUS.OFF);
+    presence.voiceChanged(CALLING, AVATAR_OFF);
     assert.equal(s.held.standing, false);
-    presence.voiceChanged(CALLING, AVATAR_STATUS.STARTING);
+    presence.voiceChanged(CALLING, STARTING);
     assert.deepEqual(s.held, { standing: true, video: true, told: ["video", "show"] });
-    presence.voiceChanged(CALLING, AVATAR_STATUS.LIVE);
+    presence.voiceChanged(CALLING, LIVE);
     assert.equal(s.held.told.length, 2);
-    presence.voiceChanged(CALLING, AVATAR_STATUS.ENDED);
+    presence.voiceChanged(CALLING, TURNED_OFF);
     assert.deepEqual(s.held, {
       standing: false,
       video: false,
@@ -56,19 +61,34 @@ describe("the floating call window's presence", () => {
     });
   });
 
-  it("draws the card again once the avatar ends with no panel in front", () => {
+  it("keeps the tile up through an end it offers to restart from, whoever has the keyboard", () => {
     const s = surface();
     const presence = new CallWindowPresence(s);
-    presence.voiceChanged(CALLING, AVATAR_STATUS.LIVE);
-    presence.voiceChanged(CALLING, AVATAR_STATUS.ENDED);
+    presence.panelFocused(PANEL);
+    presence.voiceChanged(CALLING, LIVE);
+    presence.voiceChanged(CALLING, SERVER_CLOSED);
+    assert.deepEqual(s.held, { standing: true, video: true, told: ["video", "show"] });
+    presence.voiceChanged(HUNG_UP, SERVER_CLOSED);
+    assert.deepEqual(s.held, {
+      standing: false,
+      video: false,
+      told: ["video", "show", "hide", "card"],
+    });
+  });
+
+  it("draws the card again once the avatar is turned off with no panel in front", () => {
+    const s = surface();
+    const presence = new CallWindowPresence(s);
+    presence.voiceChanged(CALLING, LIVE);
+    presence.voiceChanged(CALLING, TURNED_OFF);
     assert.deepEqual(s.held, { standing: true, video: false, told: ["video", "show", "card"] });
   });
 
   it("takes the video down with the call", () => {
     const s = surface();
     const presence = new CallWindowPresence(s);
-    presence.voiceChanged(CALLING, AVATAR_STATUS.LIVE);
-    presence.voiceChanged(HUNG_UP, AVATAR_STATUS.LIVE);
+    presence.voiceChanged(CALLING, LIVE);
+    presence.voiceChanged(HUNG_UP, LIVE);
     assert.deepEqual(s.held, {
       standing: false,
       video: false,

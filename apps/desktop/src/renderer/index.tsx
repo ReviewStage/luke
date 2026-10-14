@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
-import { withoutAccessTokens } from "#shared/sentry-breadcrumbs";
+import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 import { App } from "./app";
 import { callAvatarAtom } from "./call/call-avatar";
 import { CallWindowCard } from "./call/call-card";
@@ -12,7 +12,7 @@ import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
 
-Sentry.init({ beforeBreadcrumb: withoutAccessTokens });
+Sentry.init({ beforeBreadcrumb: withoutAccessTokens, beforeSend: eventWithoutAccessTokens });
 
 // The call window's avatar is subscribed to before anything is drawn, because
 // main hands a page the standing grant once it has drawn its first frame. No

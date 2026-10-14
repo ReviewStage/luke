@@ -17,8 +17,8 @@ import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
-import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
+import { AVATAR_OFF, AVATAR_STATUS, avatarTiled } from "#shared/messages/avatar";
+import { callInProgress, VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
@@ -199,18 +199,14 @@ export function CallCardDock({
   );
 }
 
-/** The statuses main stands the window at the tile's size for, which is where the tile is drawn. */
-function videoUp(status: AvatarStatus): boolean {
-  return status === AVATAR_STATUS.STARTING || status === AVATAR_STATUS.LIVE;
-}
-
 /**
  * The floating window's root: the card over the document it is handed, or
- * Luke's avatar in its place while the avatar is starting or live. The tile
- * is drawn in every state, off included, so the avatar's voice element
- * stands for as long as the window does. Video off and Restart video are the
- * call's own setting to change, which no act carries yet (#11 adds it), so
- * here they do nothing.
+ * Luke's avatar in its place while its tile is up: starting, live, or ended
+ * for a reason it offers to restart from, and main stands the window at the
+ * tile's size by the same rule. The tile is drawn in every state, off
+ * included, so the avatar's voice element stands for as long as the window
+ * does. Video off and Restart video ask main to take the avatar down or put
+ * it up again on the call standing.
  */
 export function CallWindowCard(): React.JSX.Element {
   useKeyboardModality();
@@ -226,7 +222,7 @@ export function CallWindowCard(): React.JSX.Element {
   const setAudioElement = useAtomSet(callAvatarAudioElementAtom);
   const controls = callControls(tell, view.speakerMuted);
   const avatar = state?.voice.avatar ?? AVATAR_OFF;
-  const tiled = videoUp(avatar.status);
+  const tiled = callInProgress(view) && avatarTiled(avatar);
   return (
     <>
       <CallVideoTile
@@ -234,8 +230,8 @@ export function CallWindowCard(): React.JSX.Element {
         audio={tracks.audio}
         status={tiled ? avatar.status : AVATAR_STATUS.OFF}
         speakerMuted={view.speakerMuted}
-        onVideoOff={() => undefined}
-        onRestart={() => undefined}
+        onVideoOff={() => tell(ACT_KIND.VOICE_SET_VIDEO, { on: false })}
+        onRestart={() => tell(ACT_KIND.VOICE_SET_VIDEO, { on: true })}
         onHangUp={controls.onEnd}
         onAudioElement={setAudioElement}
       />

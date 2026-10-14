@@ -9,11 +9,13 @@ import {
 import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
+  type AvatarStopReason,
   VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
+import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import { HostedLiveSessionSource } from "@sidecar/voice";
 import {
-  type AvatarGrant,
+  AVATAR_START_BOUND,
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,
   type LiveAvatarState,
@@ -21,6 +23,7 @@ import {
 import { type FakeLiveSocket, scriptedOpenSocket } from "@sidecar/voice/testing";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { Effect, Fiber, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import { composeLive } from "./compose-live.js";
 import { HostKernelTag } from "./effect/kernel.js";
 import { hostKernelOver } from "./host-kernel.js";
@@ -53,23 +56,23 @@ function settle() {
   });
 }
 
-function subject() {
+function subject(options: { videoOnCall?: boolean } = {}) {
   return Effect.gen(function* () {
-    const script = scriptedOpenSocket([
-      (socket) => {
-        socket.onSent((data) => {
-          if (JSON.parse(data).type !== VOICE_SERVICE_FRAME.SESSION_CREATE) return;
-          queueMicrotask(() =>
-            socket.receive({
-              type: VOICE_SERVICE_FRAME.SESSION_CREATED,
-              sessionId: "ls_1",
-              sdpAnswer: SDP_ANSWER,
-            }),
-          );
-        });
-        return undefined;
-      },
-    ]);
+    const answerCreate = (socket: FakeLiveSocket) => {
+      socket.onSent((data) => {
+        if (JSON.parse(data).type !== VOICE_SERVICE_FRAME.SESSION_CREATE) return;
+        queueMicrotask(() =>
+          socket.receive({
+            type: VOICE_SERVICE_FRAME.SESSION_CREATED,
+            sessionId: "ls_1",
+            sdpAnswer: SDP_ANSWER,
+          }),
+        );
+      });
+      return undefined;
+    };
+    // One socket for each call a test opens.
+    const script = scriptedOpenSocket([answerCreate, answerCreate]);
     const source = new HostedLiveSessionSource({
       serviceOrigin: "wss://voice.example.test",
       openSocket: script.openSocket,
@@ -93,7 +96,10 @@ function subject() {
     });
     const live = yield* Effect.provideService(
       composeLive({
-        settings: { recordProductEvent: () => undefined },
+        settings: {
+          recordProductEvent: () => undefined,
+          videoOnCall: Effect.succeed(options.videoOnCall ?? false),
+        },
         account: { agentTrace: undefined, voiceCapabilities: { liveSessions: source } },
         activePlanId: () => PLAN_ID,
         showPlanDraft: () => undefined,
@@ -149,7 +155,7 @@ function subject() {
         const bytes = JSON.stringify(value);
         return bytes.includes(TOKEN) || bytes.includes(SECOND_TOKEN);
       });
-    return { call, refusal, openCall, states, grants, tokenCrossedGateway };
+    return { live, call, refusal, openCall, states, grants, tokenCrossedGateway };
   });
 }
 
@@ -162,6 +168,10 @@ function avatarSends(socket: FakeLiveSocket) {
 
 function start(requestId: string) {
   return { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId };
+}
+
+function stop(requestId: string, reason: AvatarStopReason) {
+  return { type: VOICE_SERVICE_FRAME.AVATAR_STOP, requestId, reason };
 }
 
 /** The service's grant for the start `requestId` names. */
@@ -386,5 +396,137 @@ it.effect("the next call starts with no avatar, whatever the last one's ended as
 
     assert.notEqual(second, first);
     assert.deepEqual(f.states.at(-1), { status: LIVE_AVATAR_STATUS.OFF });
+  }),
+);
+
+it.effect(
+  "a close this side did not start stops the avatar with its reason and asks for it once more on the call",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject();
+      const socket = yield* f.openCall;
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+      grantFor(socket, "request-1");
+      yield* settle();
+
+      assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), true);
+      yield* settle();
+      grantFor(socket, "request-2", SECOND_GRANT);
+      yield* settle();
+      // The second close is not asked for again: the tile offers the restart.
+      assert.equal(f.live.service.closed(AVATAR_STOP_REASON.ERROR), false);
+      yield* settle();
+
+      assert.deepEqual(avatarSends(socket), [
+        start("request-1"),
+        stop("request-1", AVATAR_STOP_REASON.SERVER_CLOSED),
+        start("request-2"),
+        stop("request-2", AVATAR_STOP_REASON.ERROR),
+      ]);
+      assert.deepEqual(f.grants, [GRANT, undefined, SECOND_GRANT, undefined]);
+      assert.deepEqual(f.states.at(-1), {
+        status: LIVE_AVATAR_STATUS.ENDED,
+        end: { by: LIVE_AVATAR_END.STOPPED, reason: AVATAR_STOP_REASON.ERROR },
+      });
+    }),
+);
+
+it.effect("a close reported while no grant stands sends nothing", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const socket = yield* f.openCall;
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+
+    assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), false);
+    assert.deepEqual(avatarSends(socket), [start("request-1")]);
+    assert.equal(f.states.at(-1)?.status, LIVE_AVATAR_STATUS.STARTING);
+  }),
+);
+
+it.effect("each call has a restart of its own", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const first = yield* f.openCall;
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    grantFor(first, "request-1");
+    yield* settle();
+    f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED);
+    first.closeFromServer({ code: 1000 });
+    yield* settle();
+
+    const second = yield* f.openCall;
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    grantFor(second, "request-3");
+    yield* settle();
+
+    assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), true);
+    yield* settle();
+    assert.deepEqual(avatarSends(second), [
+      start("request-3"),
+      stop("request-3", AVATAR_STOP_REASON.SERVER_CLOSED),
+      start("request-4"),
+    ]);
+  }),
+);
+
+it.effect("a call opens with the avatar asked for where video is on for calls", () =>
+  Effect.gen(function* () {
+    const f = yield* subject({ videoOnCall: true });
+    const socket = yield* f.openCall;
+
+    assert.deepEqual(avatarSends(socket), [start("request-1")]);
+    assert.equal(f.states.at(-1)?.status, LIVE_AVATAR_STATUS.STARTING);
+  }),
+);
+
+it.effect("a call opens with no avatar where video is off for calls", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const socket = yield* f.openCall;
+
+    assert.deepEqual(avatarSends(socket), []);
+    assert.deepEqual(statuses(f.states), [LIVE_AVATAR_STATUS.OFF]);
+  }),
+);
+
+it.effect(
+  "a start the service never answers is stopped and ends as unavailable once its bound passes",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject();
+      const socket = yield* f.openCall;
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+
+      yield* TestClock.adjust(AVATAR_START_BOUND);
+      yield* settle();
+
+      assert.deepEqual(avatarSends(socket), [
+        start("request-1"),
+        stop("request-1", AVATAR_STOP_REASON.ERROR),
+      ]);
+      assert.deepEqual(f.states.at(-1), {
+        status: LIVE_AVATAR_STATUS.ENDED,
+        end: { by: LIVE_AVATAR_END.UNAVAILABLE, reason: AVATAR_UNAVAILABLE_REASON.ERROR },
+      });
+      // A grant arriving after the bound is the abandoned start's, and is dropped.
+      grantFor(socket, "request-1");
+      yield* settle();
+      assert.deepEqual(f.grants, []);
+    }),
+);
+
+it.effect("a start answered inside its bound is left standing when the bound passes", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const socket = yield* f.openCall;
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    grantFor(socket, "request-1");
+    yield* settle();
+
+    yield* TestClock.adjust(AVATAR_START_BOUND);
+    yield* settle();
+
+    assert.deepEqual(avatarSends(socket), [start("request-1")]);
+    assert.equal(f.states.at(-1)?.status, LIVE_AVATAR_STATUS.GRANTED);
   }),
 );

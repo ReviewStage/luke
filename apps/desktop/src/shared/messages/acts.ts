@@ -1,6 +1,20 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
 import {
+  type FeedbackResult,
+  type FeedbackSubmission,
+  feedbackSubmission,
+} from "@sidecar/feedback";
+import {
+  type VoiceCreateLiveSessionResult,
+  voiceCreateLiveSessionParamsSchema,
+  voiceCreateLiveSessionResultSchema,
+  voiceEndLiveSessionParamsSchema,
+  voiceReportLiveActivityParamsSchema,
+  voiceReportLiveTransportParamsSchema,
+  voiceSetVideoParamsSchema,
+} from "@sidecar/gateway";
+import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -356,6 +370,8 @@ export const ACT_KIND = {
   CALL_SHOW_PLAN: "call.showPlan",
   /** The call window's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from that window alone. */
   AVATAR_REPORT: "avatar.report",
+  /** The video tile's Video off and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the call window alone. */
+  VOICE_SET_VIDEO: "voice.setVideo",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
    * which creates the one session and answers the SDP; the hang-up it asks
@@ -1096,6 +1112,11 @@ export const ACT = {
     payload: actSchema(avatarStateSchema),
     result: answersNothing,
     refusal: "Could not report the video on this system.",
+  },
+  [ACT_KIND.VOICE_SET_VIDEO]: {
+    payload: actSchema(voiceSetVideoParamsSchema),
+    result: answersNothing,
+    refusal: "Could not turn the video on or off on this system.",
   },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document and a File tab's whole file are copied

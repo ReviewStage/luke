@@ -1,4 +1,14 @@
 import {
+  LIVE_SESSION_PHASE,
+  LIVE_TRANSPORT_STATE,
+  type LivePeerEndReason,
+  type LiveTransportState,
+  type VoiceLiveSessionChanged,
+  type VoiceReportLiveTransportParams,
+} from "@sidecar/gateway";
+import {
+  AVATAR_STOP_REASON,
+  AVATAR_UNAVAILABLE_REASON,
   type AvatarStartedFrame,
   type AvatarStopReason,
   type AvatarUnavailableFrame,
@@ -11,6 +21,7 @@ import {
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@sidecar/features";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -28,7 +39,18 @@ import {
   liveErrorFields,
 } from "@sidecar/live";
 import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
-import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, PubSub, Scope, Stream } from "effect";
+import {
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  PubSub,
+  Scope,
+  Stream,
+} from "effect";
 import {
   createdOf,
   type LiveSessionOpened,
@@ -76,7 +98,10 @@ import {
  * arrives and nothing after, so a start always draws a grant of its own.
  * Each start is asked under a request id of its own, and only the answer
  * echoing the latest is heard, so an answer to an earlier ask, late or
- * lost, is never mistaken for the current one.
+ * lost, is never mistaken for the current one, and a start nobody answers
+ * is given up on after `AVATAR_START_BOUND`. A call opens with the avatar
+ * where `videoOnCall` says so, and a close the call window reports that this
+ * side did not start asks for it once more on that call (`closed`).
  */
 
 /** Where Luke's avatar stands on the call, as the host knows it; whether the call window drew it is the desktop's to say. */
@@ -111,14 +136,23 @@ export type LiveAvatarState =
     }
   | { readonly status: typeof LIVE_AVATAR_STATUS.ENDED; readonly end: LiveAvatarEnd };
 
-/** The service's grant for one start of the avatar: the room, the single-use token that joins it, and the avatar's identity. */
-export type AvatarGrant = Omit<AvatarStartedFrame, "type" | "requestId">;
+/**
+ * How long a start waits on the service's answer before it is given up as
+ * unavailable: an answer lost with a connection would otherwise leave the
+ * tile saying "Connecting" for the rest of the call.
+ */
+export const AVATAR_START_BOUND = Duration.seconds(20);
+
+/** How many times a call's avatar is asked for again after a close this side did not start. */
+const AVATAR_RESTARTS_PER_CALL = 1;
 
 export interface LiveSessionHolderOptions {
   /** Where a session comes from now, or nothing while voice is unavailable. */
   source: () => LiveSessionSource | undefined;
   /** A fresh id for each avatar start, which the service echoes on its answer. */
   createId: () => string;
+  /** Whether a call is to open with Luke's avatar, read as each session comes to stand. */
+  videoOnCall?: Effect.Effect<boolean>;
   emit: (change: VoiceLiveSessionChanged) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
@@ -241,6 +275,8 @@ export class LiveSessionHolder {
   #avatar: LiveAvatarState = { status: LIVE_AVATAR_STATUS.OFF };
   /** The request id of the latest start, while the avatar it asked for is starting or up. */
   #avatarRequest: string | undefined;
+  /** How many times the standing call's avatar was asked for again after a close this side did not start. */
+  #avatarRestarts = 0;
   readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
   /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
   readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
@@ -436,11 +472,14 @@ export class LiveSessionHolder {
       opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
-      // Note that a new call starts with no avatar, because the last call's end is not this one's.
+      // Note that a new call starts with no avatar and no restart spent,
+      // because the last call's end is not this one's.
+      this.#avatarRestarts = 0;
       if (this.#avatar.status !== LIVE_AVATAR_STATUS.OFF) {
         this.#avatarMoved({ status: LIVE_AVATAR_STATUS.OFF });
       }
       this.#options.onSessionCreated?.();
+      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) this.startAvatar();
       return createdOf(opened);
     });
   }
@@ -657,7 +696,28 @@ export class LiveSessionHolder {
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
       this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
     }
+    this.#start(this.#startBound(session, requestId));
     return true;
+  }
+
+  /**
+   * The bound on one start: where the service has not answered it by then,
+   * it is told to close whatever the ask put up and the start ends as
+   * unavailable, which the tile offers to restart. A start answered, stopped,
+   * or superseded meanwhile is left alone.
+   */
+  #startBound(session: HeldSession, requestId: string): Effect.Effect<void> {
+    return Effect.andThen(
+      Effect.sleep(AVATAR_START_BOUND),
+      Effect.sync(() => {
+        if (!this.#answersLatestStart(session, requestId)) return;
+        session.opened.stopAvatar?.(requestId, AVATAR_STOP_REASON.ERROR);
+        this.#avatarEnded({
+          by: LIVE_AVATAR_END.UNAVAILABLE,
+          reason: AVATAR_UNAVAILABLE_REASON.ERROR,
+        });
+      }),
+    );
   }
 
   /**
@@ -675,6 +735,23 @@ export class LiveSessionHolder {
     stop(requestId, reason);
     this.#avatarEnded({ by: LIVE_AVATAR_END.STOPPED, reason });
     return true;
+  }
+
+  /**
+   * The call window's session closed while the avatar was up, and this side
+   * did not close it: Keyframe closed the room, or the session failed. The
+   * service is told so, which closes its row and lets a start be asked
+   * again, and the avatar is asked for once more on each call before it is
+   * left ended, where the tile offers to restart it. Answers whether it was
+   * asked for again.
+   */
+  closed(reason: AvatarStopReason): boolean {
+    if (this.#avatar.status !== LIVE_AVATAR_STATUS.GRANTED || !this.stopAvatar(reason)) {
+      return false;
+    }
+    if (this.#avatarRestarts >= AVATAR_RESTARTS_PER_CALL) return false;
+    this.#avatarRestarts += 1;
+    return this.startAvatar();
   }
 
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
