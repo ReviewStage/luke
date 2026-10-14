@@ -3,9 +3,13 @@
 <!-- Every release adds its entry here before its tag is pushed:
      .github/RELEASE.md describes the step, and scripts/repository-checks.sh
      refuses a desktop version this file does not name. The landing page
-     renders this document at tryluke.dev/changelog, and each release heading
-     is a contract with that page: exactly `## <version> — <YYYY-MM-DD>`,
-     which becomes the release's sticky version-and-date rail.
+     renders this document at tryluke.dev/changelog, ten releases a page, and
+     each release on a page of its own at tryluke.dev/changelog/<version>.
+     Each release heading is a contract with those pages: exactly
+     `## <version> — <YYYY-MM-DD>`, which becomes the release's sticky
+     version-and-date rail and its address. A release's first feature
+     section, its first paragraph, and its first screenshot become the title,
+     description, and image of the card its page shares as.
 
      Style: say what changed for the reader and stop. A big feature gets a
      `###` section of its own, named for the feature and described in a

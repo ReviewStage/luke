@@ -6,7 +6,7 @@
       "framework": "vite",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
       "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md",
       "routes": [
         {
           "src": "/api/auth/(.*)",
@@ -247,6 +247,14 @@
         {
           "src": "/changelog",
           "dest": "/changelog.html"
+        },
+        {
+          "src": "/changelog/page/(\\d+)",
+          "dest": "/changelog/page/$1.html"
+        },
+        {
+          "src": "/changelog/(\\d+\\.\\d+\\.\\d+)",
+          "dest": "/changelog/$1.html"
         },
         {
           "src": "/admin",
