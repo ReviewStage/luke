@@ -331,16 +331,23 @@ export const automationAnswerSchema = EffectSchema.Struct({
   webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
 });
 
+/** The fewest distinct characters a named secret spells; 192 random bits in base64url spell twenty or more. */
+const WEBHOOK_SECRET_MIN_DISTINCT = 12;
+
 /**
  * A webhook trigger's secret as a client names it: at least thirty-two
- * characters, the length of the 192 bits the desktop mints in base64url,
- * so a client cannot name a secret a caller could guess. A client that names
+ * characters of base64url, the length of the 192 bits the desktop mints,
+ * spelled with a dozen distinct characters at least, so a client cannot
+ * name a secret a caller could guess. A client that names
  * one already holds it, so no answer carries it back; one that names none is
  * answered the secret the service minted, once.
  */
 export const webhookSecretSchema = EffectSchema.String.check(
   EffectSchema.isMinLength(32),
   EffectSchema.isMaxLength(256),
+  EffectSchema.isPattern(/^[A-Za-z0-9_-]+$/u),
+  // A run of one character, or a short pattern repeated, is no secret, whatever its length.
+  EffectSchema.makeFilter((secret: string) => new Set(secret).size >= WEBHOOK_SECRET_MIN_DISTINCT),
 );
 
 /** An automation to make (POST): its plan, name, trigger, and action, its guards or the defaults, and a webhook trigger's secret where the client names it. */

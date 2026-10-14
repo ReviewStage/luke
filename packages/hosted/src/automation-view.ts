@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  AUTOMATION_TRIGGER,
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationListAnswerSchema,
@@ -47,8 +48,17 @@ export const automationListParamsSchema = EffectSchema.Struct({
 
 export type AutomationListParams = typeof automationListParamsSchema.Type;
 
-/** An automation to make, its webhook secret the window's own where its trigger is a webhook. */
-export const automationCreateParamsSchema = automationCreateRequestSchema;
+/**
+ * An automation to make, its webhook secret the window's own where its
+ * trigger is a webhook: a webhook made through the window names one, since
+ * no answer the window reads carries a secret the service minted.
+ */
+export const automationCreateParamsSchema = automationCreateRequestSchema.check(
+  EffectSchema.makeFilter(
+    (made: typeof automationCreateRequestSchema.Type) =>
+      made.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK || made.webhookSecret !== undefined,
+  ),
+);
 
 export type AutomationCreateParams = typeof automationCreateParamsSchema.Type;
 

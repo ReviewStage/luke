@@ -30,12 +30,12 @@ import {
   type AutomationRunView,
   type AutomationView,
   type AutomationWebhookSecretParams,
+  automationCreateParamsSchema,
 } from "./automation-view.js";
 import {
   AUTOMATION_LIST_QUERY,
   automationAnswerSchema,
   automationChangeRequestSchema,
-  automationCreateRequestSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
@@ -142,7 +142,7 @@ export class HostedAutomationClient {
   create(
     params: AutomationCreateParams,
   ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(automationCreateRequestSchema)(params));
+    const admitted = Result.getOrUndefined(readEither(automationCreateParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed({ failure: AUTOMATION_CALL_FAILURE.INVALID });
     return Effect.flatMap(
       this.#call.send({

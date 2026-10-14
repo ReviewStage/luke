@@ -562,6 +562,19 @@ it.layer(getTestDB())("the automation routes", (it) => {
           },
         });
         assert.deepEqual(short.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+        const repeated = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+          method: "POST",
+          body: {
+            ...weekdays(plan.id),
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            webhookSecret: "ab".repeat(40),
+          },
+        });
+        assert.deepEqual(
+          repeated.body,
+          { error: HOSTED_API_ERROR.INVALID_REQUEST },
+          "a long run of a short pattern is no secret",
+        );
       }),
   );
 });

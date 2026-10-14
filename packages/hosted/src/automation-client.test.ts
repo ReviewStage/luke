@@ -146,17 +146,26 @@ it.effect(
       const made = {
         planId: PLAN_ID,
         name: SUMMARY.name,
-        trigger: SUMMARY.trigger,
+        trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
         action: SUMMARY.action,
       };
 
       const noRepository = yield* Effect.provide(ask.create(made), api.layer);
       const gone = yield* Effect.provide(ask.runs({ automationId: AUTOMATION_ID }), api.layer);
       const unsendable = yield* Effect.provide(ask.create({ ...made, name: "" }), api.layer);
+      const unnamedSecret = yield* Effect.provide(
+        ask.create({ ...made, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } }),
+        api.layer,
+      );
 
       assert.deepEqual(noRepository, { failure: AUTOMATION_CALL_FAILURE.NO_REPOSITORY });
       assert.deepEqual(gone, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(unsendable, { failure: AUTOMATION_CALL_FAILURE.INVALID });
-      assert.equal(api.requests().length, 2, "the unsendable write never traveled");
+      assert.deepEqual(
+        unnamedSecret,
+        { failure: AUTOMATION_CALL_FAILURE.INVALID },
+        "a webhook made through the window names its own secret",
+      );
+      assert.equal(api.requests().length, 2, "neither unsendable write traveled");
     }),
 );
