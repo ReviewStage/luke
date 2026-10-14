@@ -520,7 +520,8 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * transcript and composer, or the draft's composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
  * `onOpenDelegation`, its Changes chip its pull request's changes,
- * through `onOpenChanges`, and a call about something drawn in a tab of its
+ * through `onOpenChanges`, its Terminal chip its own Terminal tab, through
+ * `onOpenTerminal`, and a call about something drawn in a tab of its
  * own that tab, through `onOpenTarget`, each such row hanging that tab's
  * card (`cards`).
  */
@@ -531,6 +532,7 @@ export function MainTabContent({
   views,
   onOpenDelegation,
   onOpenChanges,
+  onOpenTerminal,
   onOpenTarget,
   cards,
 }: {
@@ -547,6 +549,8 @@ export function MainTabContent({
   ) => void;
   /** Opens the agent's changes in the side panel, by the agent. */
   onOpenChanges: (agentId: string) => void;
+  /** Opens the agent's own Terminal tab in the side panel, by the agent. */
+  onOpenTerminal: (agentId: string) => void;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
@@ -574,6 +578,7 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={() => onOpenChanges(agent.id)}
+      onOpenTerminal={() => onOpenTerminal(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}

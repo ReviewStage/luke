@@ -12,6 +12,7 @@ import type { CodeRef } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
+  agentOfTab,
   type ChangesStripTab,
   inPlanOrder,
   isChangesTab,
@@ -61,7 +62,9 @@ import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
 import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
-import { TerminalCardFoot } from "../planning/terminal-shells";
+import { useOpenTerminal } from "../planning/terminal-commands";
+import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "../planning/terminal-entry";
+import { TerminalCardFoot, TerminalStanding } from "../planning/terminal-shells";
 import { TerminalTab } from "../planning/terminal-tab";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import {
@@ -204,7 +207,15 @@ export const ADD_SECTION = {
   FILES: "Files",
   CHANGES: "Changes",
   PAGES: "Pages",
+  TERMINAL: "Terminal",
 } as const;
+
+/** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
+export interface TerminalOffer {
+  readonly agent: CodingAgentSummary;
+  readonly label: string;
+  readonly showsOnChord: boolean;
+}
 
 /** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, and the pull request the tab draws. */
 export interface ChangesOffer {
@@ -319,6 +330,11 @@ export function panelEntries(input: {
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
   pages?: readonly PageLine[];
+  /** The plan's agents' terminals on offer, and the door a row's pick asks a new shell through; none where the caller offers none. */
+  terminals?: {
+    readonly offers: readonly TerminalOffer[];
+    readonly onNew: (agentId: string) => void;
+  };
 }): AddEntry[] {
   const { panel, workers, files, changes = [], pages = [] } = input;
   const kinds = input.kinds.map((kind) => ({
@@ -372,7 +388,21 @@ export function panelEntries(input: {
     },
     onPick: () => panel.onChoose({ page: page.id }),
   }));
-  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows];
+  // A terminal's row adds a shell to its agent's sandbox, as New terminal
+  // does; its words after the name say how the agent and its sandbox stand.
+  // Note that it is named by the key its tab is drawn under, because the
+  // agent's id names the agent's own row where the summary lists them.
+  const terminalRows = (input.terminals?.offers ?? []).map(({ agent, label, showsOnChord }) => ({
+    row: {
+      id: tabKey({ terminal: agent.id }),
+      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      detail: <TerminalStanding agent={agent} />,
+      command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
+      section: ADD_SECTION.TERMINAL,
+    },
+    onPick: () => input.terminals?.onNew(agent.id),
+  }));
+  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows, ...terminalRows];
 }
 
 /** Every subagent the plan's work holds, with where its session stands, in the order started. */
@@ -389,6 +419,31 @@ function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
   return tabLook({ kind: TAB_KIND.CHANGES, agentName });
 }
+
+/**
+ * The plan's agents as the "+" offers their terminals, each marked where ⌘J
+ * would open its Terminal tab from the panel's own tab (`terminal-entry.ts`).
+ */
+function terminalOffers(
+  agents: CodingAgentsControl,
+  panel: Pick<SidePanelControl, "tab" | "lastTerminal">,
+): readonly TerminalOffer[] {
+  const listed = agents.agents ?? [];
+  const target = terminalTarget(TERMINAL_ASK.SHOW, {
+    here: panel.tab === undefined ? undefined : agentOfTab(panel.tab),
+    agents: listed.map((agent) => agent.id),
+    lastUsed: panel.lastTerminal,
+  });
+  const chord = target.kind === TERMINAL_TARGET.AGENT ? target.agentId : undefined;
+  return listed.map((agent) => ({
+    agent,
+    label: agentTabLabel(agent, agents.models),
+    showsOnChord: agent.id === chord,
+  }));
+}
+
+/** Nothing to move: what the panel opens from its own "+" stands where the keys already are. */
+const noFocusMove = () => undefined;
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
 interface DrawnTab {
@@ -608,6 +663,8 @@ function PanelTabs({
   readWorker: TranscriptReader;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  // The panel's "+" asks for a new shell where the panel already holds the keys.
+  const openTerminal = useOpenTerminal(panel, noFocusMove);
   const kinds = stripTabs({
     panel,
     unread,
@@ -676,6 +733,10 @@ function PanelTabs({
           files: shownFiles,
           changes: changesOffers(agents, changes),
           pages: offeredPages,
+          terminals: {
+            offers: terminalOffers(agents, panel),
+            onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
+          },
         })}
         onOpen={undefined}
         asked={panel.newTabAsked}

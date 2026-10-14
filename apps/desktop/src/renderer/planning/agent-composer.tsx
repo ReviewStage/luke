@@ -33,7 +33,7 @@ import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contra
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
-import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
+import { ChangesChip, PublishedChip, type PublishedDoors, TerminalChip } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
@@ -419,6 +419,7 @@ export function AgentComposer({
                 />
                 <PublishedChip published={published} doors={doors} />
                 <ChangesChip published={published} doors={doors} />
+                <TerminalChip doors={doors} />
               </PromptInputTools>
               <div className="agent-composer-actions">
                 {model === undefined ? null : (

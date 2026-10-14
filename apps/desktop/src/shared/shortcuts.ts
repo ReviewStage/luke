@@ -57,17 +57,21 @@ export const APP_COMMAND = {
   SEND_FEEDBACK: "send-feedback",
   SUGGEST_FEATURE: "suggest-feature",
   COMMAND_PALETTE: "command-palette",
+  SHOW_TERMINAL: "show-terminal",
+  NEW_TERMINAL: "new-terminal",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
 
 /**
  * The commands the menu bar alone offers, by the name it gives them: a
- * dialog reached now and then, which takes none of the window's keys.
+ * dialog reached now and then, or a new shell in an agent's sandbox, which
+ * ⌘K and the panel's "+" reach too; none takes the window's keys.
  */
 export const MENU_COMMAND_LABELS = {
   [APP_COMMAND.SEND_FEEDBACK]: "Send feedback",
   [APP_COMMAND.SUGGEST_FEATURE]: "Suggest a feature",
+  [APP_COMMAND.NEW_TERMINAL]: "New terminal",
 } as const;
 
 export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
@@ -109,6 +113,7 @@ export const SHORTCUT_KEY = {
   T: { accelerator: "T", glyph: "T", key: "t", code: "KeyT" },
   W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
   K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
+  J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
   // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
@@ -203,7 +208,8 @@ export interface AppShortcut {
  * close the window as Chrome and VS Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
- * Raycast have it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
+ * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
+ * panel that holds it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
@@ -310,6 +316,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
+  [APP_COMMAND.SHOW_TERMINAL]: { label: "Show terminal", chord: { key: SHORTCUT_KEY.J } },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -358,6 +365,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
+      APP_COMMAND.SHOW_TERMINAL,
     ],
   },
   {

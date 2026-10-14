@@ -1,7 +1,7 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
-import { sameTab } from "@luke/ui/tab-strip-model";
+import { agentOfTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -27,6 +27,8 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { SkillFiles } from "../planning/skill-chip";
+import { TerminalCommands, useOpenTerminal } from "../planning/terminal-commands";
+import { TERMINAL_ASK } from "../planning/terminal-entry";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
@@ -276,6 +278,10 @@ function PlanDocument({
     if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
   }, [planId, inbox.read, waiting, onInboxRead]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
+  // A terminal shown hands the keys to the side panel, where it stands; an
+  // agent's Terminal chip always opens that agent's own.
+  const showSide = () => setFocus(COLUMN.SIDE);
+  const openTerminal = useOpenTerminal(plans.sidePanel, showSide);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
   // a plan opened from the list is drawn reading before its read lands, and
@@ -363,6 +369,11 @@ function PlanDocument({
   // The panel holds the keys while the focus went into it last, or while it
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The agent a terminal command means from where the developer is: the one
+  // whose own tab, Changes tab, or Terminal tab holds the keys, if any.
+  const terminalHere = agentOfTab(
+    sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
+  );
   const { tab } = mainTabs;
   // Start and the ⋯ button are the plan's, not an agent's, so only the
   // plan's own tab draws them; the plan's chords stand on every tab.
@@ -480,6 +491,12 @@ function PlanDocument({
               </p>
             ) : null}
             <CopyChord copy={plans.copy} />
+            <TerminalCommands
+              here={terminalHere}
+              agents={agents}
+              sidePanel={sidePanel}
+              onShown={showSide}
+            />
             {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
             {plans.history.viewing === undefined ? (
               <NewTabChord onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab} />
@@ -568,6 +585,7 @@ function PlanDocument({
                     views={views}
                     onOpenDelegation={openDelegation}
                     onOpenChanges={openChanges}
+                    onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
                     onOpenTarget={openTarget}
                     cards={cards}
                   />

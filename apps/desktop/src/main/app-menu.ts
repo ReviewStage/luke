@@ -135,6 +135,11 @@ function roleItem(
   return { role, accelerator: shortcutAccelerator(APP_SHORTCUTS[command].chord) };
 }
 
+/** A command with no key that acts at once, named as the window names it. */
+function menuItem(command: MenuCommand): MenuItemConstructorOptions {
+  return { label: menuTitle(MENU_COMMAND_LABELS[command]), click: sendCommand(command) };
+}
+
 /** A command with no key: named with an ellipsis, as an item that opens a dialog is. */
 function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
   return { label: `${menuTitle(MENU_COMMAND_LABELS[command])}…`, click: sendCommand(command) };
@@ -226,6 +231,7 @@ export function appMenuTemplate(
         commandItem(APP_COMMAND.NEW_PLAN),
         SEPARATOR,
         commandItem(APP_COMMAND.NEW_TAB),
+        menuItem(APP_COMMAND.NEW_TERMINAL),
         commandItem(APP_COMMAND.REOPEN_CLOSED_TAB),
         closeTabItem(),
         closeWindowItem(),
@@ -270,6 +276,7 @@ export function appMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.TOGGLE_SIDEBAR),
         commandItem(APP_COMMAND.TOGGLE_SIDE_PANEL),
+        commandItem(APP_COMMAND.SHOW_TERMINAL),
         commandItem(APP_COMMAND.TOGGLE_FULL_SCREEN),
         commandItem(APP_COMMAND.EXIT_FULL_SCREEN),
         SEPARATOR,

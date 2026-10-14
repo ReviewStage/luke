@@ -193,3 +193,14 @@ test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, a
     [shown, found],
   );
 });
+
+test("the agent whose Terminal tab was shown last on a plan is the plan's own, which ⌘J goes to among several", () => {
+  const panel = launch({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
+  assert.equal(panel.control().lastTerminal, undefined);
+  act(() => panel.control().onChoose({ terminal: AGENT }));
+  act(() => panel.control().onChoose({ terminal: OTHER_AGENT }));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+  assert.equal(panel.control().lastTerminal, OTHER_AGENT);
+  panel.render({ plan: OTHER_PLAN, planAgents: [] });
+  assert.equal(panel.control().lastTerminal, undefined);
+});
