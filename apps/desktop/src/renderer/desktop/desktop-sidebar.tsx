@@ -21,6 +21,7 @@ import { runAppCommand, useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import {
   type RepositoryGroup,
@@ -307,9 +308,6 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
 /** Pinned holds tabs as well as plans, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 
-/** The Inbox row counts the items waiting on the developer, as the Inbox's rows do. */
-const WAITING_NOUN: CountNoun = { one: "item waiting", many: "items waiting" };
-
 /**
  * One repository's plans under a header in the headings' voice, which folds
  * and unfolds them, the fold kept across launches. The header is a row like
@@ -523,7 +521,7 @@ function SidebarInboxRow({
           {waiting}
           <span className="visually-hidden">
             {" "}
-            {waiting === 1 ? WAITING_NOUN.one : WAITING_NOUN.many}
+            {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
           </span>
         </span>
       )}

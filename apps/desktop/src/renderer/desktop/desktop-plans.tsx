@@ -10,7 +10,13 @@ import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { InboxList } from "../planning/inbox-list";
-import { firstChoice, INBOX_GROUPING, inboxList, listedItems } from "../planning/inbox-model";
+import {
+  firstChoice,
+  INBOX_GROUPING,
+  inboxList,
+  listedItems,
+  NEEDS_YOU,
+} from "../planning/inbox-model";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody } from "../planning/plan-body";
 import { useMinute } from "../planning/plan-time";
@@ -124,9 +130,6 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
-/** What a plan's Inbox tab says while its read holds nothing. */
-const NOTHING_WAITS = "Nothing is waiting on you.";
-
 /** What the column says while no plan is open. */
 const NO_PLAN_OPEN_LINE = "Choose a plan in the sidebar, or start a new one.";
 
@@ -186,7 +189,7 @@ function PlanInboxTab({
       {chosen === undefined ? (
         <section className="inbox-view-items" aria-label="Inbox">
           {inbox.read && items.length === 0 ? (
-            <EmptyState icon={<InboxIcon />}>{NOTHING_WAITS}</EmptyState>
+            <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null}
         </section>
       ) : (

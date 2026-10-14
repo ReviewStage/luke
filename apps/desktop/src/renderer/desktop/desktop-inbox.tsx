@@ -15,6 +15,7 @@ import {
   type InboxPlanItems,
   inboxList,
   listedItems,
+  NEEDS_YOU,
 } from "../planning/inbox-model";
 import { InboxPane } from "../planning/inbox-pane";
 import { useMinute } from "../planning/plan-time";
@@ -34,11 +35,12 @@ import { PlanCard } from "./plan-card";
  * It stands in the plan's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
  * folders. The list (`inbox-list.tsx`) holds the items of each plan main
- * says holds one, waiting or settled, each plan read whole as main says it
- * changed (`use-inbox-items.ts`), under its plan or newest first, all or
- * only what waits, as the developer last chose; waiting is the Inbox's one
- * word for an item not yet answered, and the sidebar's Inbox row counts
- * the same items. A press on a row chooses it, and the pane beside the
+ * says holds one, needing the developer or settled, each plan read whole
+ * as main says it changed (`use-inbox-items.ts`), under its plan or newest
+ * first, all or only what needs them, as the developer last chose; Needs
+ * you is the Inbox's one name for an item not yet answered
+ * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
+ * same items. A press on a row chooses it, and the pane beside the
  * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
  * plan's own held read, which stands in for the list's read of that plan
  * so an answer shows at once. With nothing chosen, the first item listed
@@ -48,9 +50,6 @@ import { PlanCard } from "./plan-card";
  * glyph (`empty-state.tsx`). Escape leaves it for the plan it stood over,
  * and so does any row of the sidebar.
  */
-
-/** What the Inbox says with no item listed under the filter. */
-const NOTHING_WAITING = "Nothing is waiting on you.";
 
 /** What the list says where a plan's read did not answer. */
 const NOT_READ = "Some items could not be read.";
@@ -85,7 +84,7 @@ function ListNote({
   }
   if (!empty) return null;
   if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
-  return <p className="sidebar-note">{NOTHING_WAITING}</p>;
+  return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
 }
 
 /** The window's Inbox, in the plan's place: every plan's items, and the chosen one read beside them. */
@@ -182,7 +181,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
       {chosen === undefined ? (
         <section className="inbox-view-items" aria-label="Inbox">
           <header className="desktop-toolbar" />
-          {reading ? null : <EmptyState icon={<InboxIcon />}>{NOTHING_WAITING}</EmptyState>}
+          {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
         </section>
       ) : (
         <InboxPane

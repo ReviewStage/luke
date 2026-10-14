@@ -1,7 +1,7 @@
 import { INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
-import { ArrowDownNarrowWideIcon, ListFilterIcon, SlidersHorizontalIcon } from "lucide-react";
+import { ArrowDownNarrowWideIcon, CircleDotIcon, SlidersHorizontalIcon } from "lucide-react";
 import { ActionMenu, dropBelow, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
@@ -10,7 +10,7 @@ import {
   type InboxViewChoices,
   useInboxListWidth,
 } from "../desktop/folded-groups";
-import { type CountNoun, SidebarGroupHeader } from "../desktop/sidebar-group-header";
+import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
@@ -20,6 +20,7 @@ import {
   type InboxGrouping,
   type InboxListed,
   type InboxListView,
+  NEEDS_YOU,
 } from "./inbox-model";
 import { sinceText, useMinute } from "./plan-time";
 import { cardTitle } from "./tool-call-model";
@@ -30,29 +31,28 @@ import { cardTitle } from "./tool-call-model";
  * The list is drawn from the sidebar's own pieces, so it reads as the
  * sidebar does. A plan's items stand under the sidebar's own group header
  * (`sidebar-group-header.tsx`), the plan's glyph giving way to its chevron
- * under the pointer, a press folding the group, a folded group counting
- * its items while hovered, and each fold kept across launches as a
- * sidebar group's is. An item is a sidebar row: the mark of the agent that
- * posted it, as the plan's summary names the agent, its title, in the
- * heavier weight while it waits on the developer, and how long ago it
- * last changed; a press chooses it, for the pane beside the list to show.
- * The head names the Inbox and, at its right, offers two buttons: Waiting
- * only, pressed while the list holds only what waits, the way a mail app
- * shows unread mail only, and one whose menu says how the list groups its
- * items, by plan or newest first, the choice checked; both are kept across
- * launches. The plan page's own Inbox lists one plan's items, so its list
- * has neither head nor groups. Either list is resized from its right edge
- * as the sidebar is, and keeps one width between them across launches.
+ * under the pointer, a press folding the group, and each fold kept across
+ * launches as a sidebar group's is. An item is a sidebar row: the mark of
+ * the agent that posted it, as the plan's summary names the agent, its
+ * title, and how long ago it last changed; a press chooses it, for the
+ * pane beside the list to show. An item that needs the developer's answer
+ * reads as a mail app's unread mail does, its title in the heavier weight
+ * and a blue dot past its time, in either grouping and filtered or not; an
+ * answered one is settled, in the body's weight with no dot. A folded plan
+ * counts what in it needs the developer, at rest, and says nothing where
+ * none does. The head names the Inbox and, at its right, offers two
+ * buttons: Needs you, pressed while the list holds only what needs the
+ * developer, the way a mail app shows unread mail only, its glyph the
+ * rows' dot in a ring, filled blue while pressed; and one whose menu says
+ * how the list groups its items, by plan or newest first, the choice
+ * checked; both are kept across launches. The plan page's own Inbox lists
+ * one plan's items, so its list has neither head nor groups. Either list
+ * is resized from its right edge as the sidebar is, and keeps one width
+ * between them across launches.
  */
-
-/** What a folded plan's count is read as. */
-const ITEM_NOUN: CountNoun = { one: "item", many: "items" };
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
-
-/** What the head's filter button is called. */
-const WAITING_ONLY = "Waiting only";
 
 /**
  * What the list leaves the pane beside it, in CSS pixels: the list is
@@ -78,7 +78,7 @@ function ItemGlyph({ plan, agentId }: { plan: PlanSummary; agentId: string }): R
   return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
 }
 
-/** One item as a sidebar row: the agent's mark, the title, in the heavier weight while it waits, and how long ago it changed. */
+/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the heavier weight with a dot past its time. */
 function ItemRow({
   listed,
   chosen,
@@ -92,6 +92,7 @@ function ItemRow({
 }): React.JSX.Element {
   const { plan, item } = listed;
   const title = cardTitle(item.title);
+  const needsYou = item.status === INBOX_STATUS.OPEN;
   return (
     <li className="sidebar-plan-item inbox-row">
       <Tooltip label={title}>
@@ -99,7 +100,7 @@ function ItemRow({
           type="button"
           className="sidebar-plan"
           aria-current={chosen ? "page" : undefined}
-          data-unread={String(item.status === INBOX_STATUS.OPEN)}
+          data-unread={String(needsYou)}
           data-item-id={item.id}
           onClick={() => onChoose(listed)}
         >
@@ -109,6 +110,11 @@ function ItemRow({
             </span>
             <span className="sidebar-plan-name">{title}</span>
             <span className="sidebar-plan-time">{sinceText(item.updatedAt, now)}</span>
+            {needsYou ? (
+              <span className="inbox-row-dot">
+                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+              </span>
+            ) : null}
           </span>
         </button>
       </Tooltip>
@@ -173,8 +179,8 @@ function ViewOptions({
   );
 }
 
-/** The head's button that lists only what waits while it is pressed. */
-function WaitingOnly({
+/** The head's button that lists only what needs the developer while it is pressed. */
+function NeedsYouOnly({
   waitingOnly,
   onWaitingOnly,
 }: {
@@ -182,22 +188,22 @@ function WaitingOnly({
   onWaitingOnly: (waitingOnly: boolean) => void;
 }): React.JSX.Element {
   return (
-    <Tooltip label={WAITING_ONLY}>
+    <Tooltip label={NEEDS_YOU.LABEL}>
       <button
         type="button"
-        className="icon-button inbox-waiting-only"
-        aria-label={WAITING_ONLY}
+        className="icon-button inbox-needs-you-only"
+        aria-label={NEEDS_YOU.LABEL}
         aria-pressed={waitingOnly}
         onClick={() => onWaitingOnly(!waitingOnly)}
       >
-        <ListFilterIcon className="icon-button-glyph" />
+        <CircleDotIcon className="icon-button-glyph" />
       </button>
     </Tooltip>
   );
 }
 
 /**
- * The window's head: the Inbox's name, and Waiting only and the view's menu
+ * The window's head: the Inbox's name, and Needs you and the view's menu
  * at the list's top right. Its heading and its buttons glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
  * sidebar's toggle, and the buttons keeping to the list's edge.
@@ -215,7 +221,7 @@ function ListHead({
         <h1 className="desktop-toolbar-title">Inbox</h1>
       </div>
       <div className="desktop-toolbar-actions">
-        <WaitingOnly waitingOnly={choices.waitingOnly} onWaitingOnly={choices.onWaitingOnly} />
+        <NeedsYouOnly waitingOnly={choices.waitingOnly} onWaitingOnly={choices.onWaitingOnly} />
         <ViewOptions shown={shown} grouping={choices.grouping} onGrouping={choices.onGrouping} />
       </div>
     </header>
@@ -280,8 +286,9 @@ export function InboxList({
                   glyph={<DocumentIcon />}
                   name={plan.name}
                   folded={folded}
-                  count={items.length}
-                  noun={ITEM_NOUN}
+                  count={items.filter(({ status }) => status === INBOX_STATUS.OPEN).length}
+                  noun={NEEDS_YOU.COUNT}
+                  steady
                   onToggle={() => head?.folds.toggle(plan.id)}
                 />
                 {folded ? null : (

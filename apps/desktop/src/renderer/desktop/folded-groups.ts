@@ -14,7 +14,7 @@ import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
  * its own, since it is no repository. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's plan groups are kept on the same terms, each by its plan's id,
- * and so are its two view choices, Waiting only and how it groups, and its
+ * and so are its two view choices, Needs you and how it groups, and its
  * list's width; a fixture run draws no inbox, so it has nothing staged to
  * keep apart.
  */

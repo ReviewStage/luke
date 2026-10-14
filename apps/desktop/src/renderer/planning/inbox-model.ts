@@ -20,13 +20,14 @@ import {
 import type { PlanFileRequest, PlanSummary } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { isWireString } from "@sidecar/wire";
+import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 
 /**
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan or in one run, and Waiting lists only what waits
+ * first, under its plan or in one run, and Needs you lists only what waits
  * and the item chosen. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
  * wrote. A plan's board, which counts what waits, holds what waits the
@@ -269,6 +270,19 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
   return { by: SETTLED_BY.DEVELOPER, lead, ...(words === undefined ? undefined : { words }) };
 }
 
+/**
+ * The Inbox's one name for an item waiting on the developer's answer, in
+ * each form its surfaces say it: the list's filter, a count's words after
+ * its figure, and the line where nothing is listed. A settled item reads as
+ * answered. Every surface reads its words here, so the name is changed in
+ * this one place.
+ */
+export const NEEDS_YOU = {
+  LABEL: "Needs you",
+  COUNT: { one: "needs you", many: "need you" } satisfies CountNoun,
+  NONE: "Nothing needs you",
+} as const;
+
 /** How the window's Inbox lists its items: under each plan, or in one list. */
 export const INBOX_GROUPING = {
   PLAN: "plan",
@@ -302,7 +316,7 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
 /**
  * The list from every plan's items: each item the latest changed first,
  * under its plan or in one run, the plans in the order their latest item
- * changed. Waiting lists only what waits on the developer, and the item
+ * changed. Needs you lists only what waits on the developer, and the item
  * chosen, so the item answered does not slip away from under them.
  */
 export function inboxList(
