@@ -170,20 +170,19 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every mention in the words, a link whose label starts with `@` and
- * whose target names a mention, to be drawn as its own element. Note that
- * the mark is made on the markdown, before it is drawn, because the
- * drawing's sanitizer keeps no address on a link but the web's, so a
- * mention's target would never reach a link of ours.
+ * Marks every link in the words whose label starts with `@`, which may be a
+ * mention, to be drawn as its own element, which reads what it names
+ * against the plan its page is of. Note that the mark is made on the
+ * markdown, before it is drawn, because the drawing's sanitizer keeps no
+ * address on a link but the web's, so a mention's target would never reach
+ * a link of ours.
  */
 function markMentions(node: MarkdownNode): void {
   if (node.type === "link" && node.url !== undefined && isMentionLabel(wordsOf(node))) {
-    if (decodeMention(node.url) !== undefined) {
-      node.data = {
-        hName: MENTION_ELEMENT.TAG,
-        hProperties: { [MENTION_ELEMENT.TARGET]: node.url },
-      };
-    }
+    node.data = {
+      hName: MENTION_ELEMENT.TAG,
+      hProperties: { [MENTION_ELEMENT.TARGET]: node.url },
+    };
     return;
   }
   for (const child of node.children ?? []) markMentions(child);
@@ -199,7 +198,8 @@ const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () =>
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
   const mentions = usePlanMentions();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
-  const mention = decodeMention(target);
+  const mention =
+    mentions === undefined ? undefined : decodeMention(target, mentions.doors.place.repository);
   if (node === undefined || mention === undefined || mentions === undefined) {
     return <TranscriptLink href={target}>{children}</TranscriptLink>;
   }

@@ -7,7 +7,7 @@ import {
 } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { encodeMention, mentionsIn } from "./mention-link.js";
+import { mentionLinksIn } from "./mention-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
@@ -477,13 +477,15 @@ function applyNoteToText(
  * reword around one, or its name, but one that drops it or breaks its
  * target is not taken, as a note naming a phrase the text does not hold
  * is not; striking the line a mention stands on is a retraction, and is.
+ * A mention is counted by its target as written, whatever it names, so
+ * one of a page this text cannot read, another repository's file among
+ * them, is kept as surely as one it can.
  */
 function keepsMentions(before: string, after: string): boolean {
   // Note that every mention is counted, each copy of one alike, however many the plan holds.
   const counted = (text: string) => {
     const counts = new Map<string, number>();
-    for (const { mention } of mentionsIn(text, Number.POSITIVE_INFINITY)) {
-      const target = encodeMention(mention);
+    for (const { target } of mentionLinksIn(text)) {
       counts.set(target, (counts.get(target) ?? 0) + 1);
     }
     return counts;

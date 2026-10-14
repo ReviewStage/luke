@@ -17,6 +17,8 @@ import type { MentionDoors } from "./mention-chip";
 export interface PlanMentionsValue {
   readonly planId: string;
   readonly planName: string;
+  /** The slug of the plan's workspace, which a mention of it is written under. */
+  readonly workspace: string;
   /** The plan's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
   readonly text: () => string;

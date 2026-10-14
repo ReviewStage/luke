@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import type { ComposerTrigger, MentionNode, PlanEditorMentions } from "./contract";
+import type { ComposerTrigger, HeadingsChange, MentionNode, PlanEditorMentions } from "./contract";
 import { MENTION_NODE } from "./mention-node";
 
 /**
@@ -22,14 +22,16 @@ import { MENTION_NODE } from "./mention-node";
  * after the space. The keys the list takes are the panel's first
  * (`../plan-editor.ts`'s `handleKeyDown`).
  *
- * A section is named by its heading's words, so renaming a heading in the
- * editor would leave the text's own mentions of it naming nothing. Each
- * change that edits a section's heading in place, the heading still the
- * block it was, renames every mention of the old words to the new ones in
- * the same change, which the panel answers target by target (`retarget`),
- * since only it reads a target. A heading whose old words another heading
- * still holds is no rename, and a heading laid in by Luke's merged answer
- * replaces the block whole, so it is none either.
+ * A section is named by its heading's anchor, so renaming a heading in the
+ * editor, or laying in one that a later heading's anchor now has to step
+ * aside for, would leave the text's own mentions of it naming nothing, or
+ * the wrong section. Each change that moves the text's headings hands the
+ * panel the headings before and after it and which section each kept one
+ * is now, its heading still the block it was, and the panel names every
+ * mention of a section whose anchor moved again, target by target
+ * (`retarget`), in the same change, since only it reads a target. A
+ * heading laid in by Luke's merged answer replaces the block whole, so the
+ * section it opened is none the change kept.
  */
 
 /** The heading levels that open a section, as `planSections` counts them. */
@@ -153,41 +155,54 @@ function mappedThrough(transactions: readonly Transaction[], position: number): 
   return at;
 }
 
-/** The sections' headings the changes renamed in place, old words to new; none where they renamed none. */
-function renamedHeadings(
+/**
+ * The headings before the changes and after them, and which section each
+ * kept heading opens now; nothing where the changes left the headings as
+ * they were.
+ */
+function headingsChange(
   manager: MarkdownManager,
   sourceOf: (node: PmNode) => string | undefined,
   transactions: readonly Transaction[],
   before: PmNode,
   after: PmNode,
-): Map<string, string> {
-  const standing = new Set<string>();
-  after.forEach((node) => {
-    if (opensSection(node)) standing.add(headingWords(manager, sourceOf, node));
-  });
-  const renamed = new Map<string, string>();
+): HeadingsChange | undefined {
+  const was: string[] = [];
+  const opened = new Map<number, number>();
   before.forEach((node, offset) => {
-    if (!opensSection(node)) return;
-    const at = mappedThrough(transactions, offset);
-    const now = at === undefined ? null : after.nodeAt(at);
-    if (now === null || !opensSection(now)) return;
-    const was = headingWords(manager, sourceOf, node);
-    const is = headingWords(manager, sourceOf, now);
-    if (was !== is && was !== "" && is !== "" && !standing.has(was)) renamed.set(was, is);
+    if (opensSection(node)) {
+      opened.set(offset, was.length);
+      was.push(headingWords(manager, sourceOf, node));
+    }
   });
-  return renamed;
+  const is: string[] = [];
+  const placed = new Map<number, number>();
+  after.forEach((node, offset) => {
+    if (opensSection(node)) {
+      placed.set(offset, is.length);
+      is.push(headingWords(manager, sourceOf, node));
+    }
+  });
+  if (was.length === is.length && was.every((heading, at) => heading === is[at])) return undefined;
+  const kept = new Map<number, number>();
+  for (const [offset, at] of opened) {
+    const now = mappedThrough(transactions, offset);
+    const place = now === undefined ? undefined : placed.get(now);
+    if (place !== undefined) kept.set(at, place);
+  }
+  return { before: was, after: is, kept };
 }
 
-/** The change naming each mention of a renamed heading again; nothing where none names one. */
+/** The change naming each mention of a section whose anchor moved again; nothing where none names one. */
 function retargeted(
   state: EditorState,
-  renamed: ReadonlyMap<string, string>,
+  change: HeadingsChange,
   mentions: PlanEditorMentions,
 ): Transaction | undefined {
   const tr = state.tr.setMeta(RETARGETED_META, true);
   state.doc.descendants((node, position) => {
     if (node.type.name !== MENTION_NODE) return;
-    const target = mentions.retarget(String(node.attrs.target), renamed);
+    const target = mentions.retarget(String(node.attrs.target), change);
     if (target !== undefined && target !== node.attrs.target) {
       tr.setNodeMarkup(position, undefined, { ...node.attrs, target });
     }
@@ -207,8 +222,8 @@ export function planMentions(
     appendTransaction: (transactions, before, after) => {
       if (!transactions.some((tr) => tr.docChanged)) return undefined;
       if (transactions.some((tr) => tr.getMeta(RETARGETED_META) === true)) return undefined;
-      const renamed = renamedHeadings(manager, sourceOf, transactions, before.doc, after.doc);
-      return renamed.size === 0 ? undefined : retargeted(after, renamed, mentions);
+      const change = headingsChange(manager, sourceOf, transactions, before.doc, after.doc);
+      return change === undefined ? undefined : retargeted(after, change, mentions);
     },
     view: () => ({ update: (view) => reported(view, state, mentions) }),
     props: {

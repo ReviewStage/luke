@@ -50,18 +50,31 @@ export interface MentionNode {
 }
 
 /**
+ * The text's section headings, as `planSections` knows them, before an edit
+ * and after it, and where each section the edit kept, its heading still the
+ * block it was, stands among them now: what the panel reads a section's
+ * anchor moving off, since only it spells anchors.
+ */
+export interface HeadingsChange {
+  readonly before: readonly string[];
+  readonly after: readonly string[];
+  /** A kept section's place among `before`, to its place among `after`. */
+  readonly kept: ReadonlyMap<number, number>;
+}
+
+/**
  * The plan editor's mentions, as the panel draws and picks them: an `@` word
  * the caret ends reported (`onTrigger`), the keys a list over it takes first
  * (`onKey`), each mention the text holds drawn into its node's own element
- * (`drawMention`), and a target named again where a heading of the text it
- * names was renamed in the edit (`retarget`), answering the new target or
- * nothing where the target names no section renamed.
+ * (`drawMention`), and a target named again where the edit changed the
+ * headings of the text (`retarget`), answering the new target or nothing
+ * where the section it names kept its anchor, or names none.
  */
 export interface PlanEditorMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
-  readonly retarget: (target: string, renamed: ReadonlyMap<string, string>) => string | undefined;
+  readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
 }
 
 /** An editor as mounted. */

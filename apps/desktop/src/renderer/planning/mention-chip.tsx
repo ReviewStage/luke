@@ -3,13 +3,16 @@ import {
   encodeMention,
   MENTION_KIND,
   type Mention,
+  type MentionLines,
+  type MentionPlace,
   type PlanMention,
+  sectionAnchors,
 } from "@luke/features/mention-link";
 import { DocumentIcon } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
-import type { MentionNode } from "../plan-editor/contract";
+import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
 import { FileTypeIcon } from "./file-type-icon";
@@ -27,13 +30,15 @@ import { FileTypeIcon } from "./file-type-icon";
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
  * place can open none. Its card, hung while the pointer rests on it, names
- * it whole: a file's is the card every place naming the file hangs.
+ * it whole: a file's is the card every place naming the file hangs, and a
+ * file's lines open at the commit the mention pins them to.
  *
- * A section is known by its heading, so a section of the plan drawn here
- * whose heading the plan no longer holds is gone: its chip keeps the name
- * it was written with, struck through, its card says it is no longer in
- * the plan, and a press opens the plan at its top. A section of another
- * plan is drawn as found, since what that plan holds is not at hand.
+ * A section is known by its heading's anchor, so a section of the plan
+ * drawn here whose anchor no heading of the plan spells any longer is gone:
+ * its chip keeps the name it was written with, struck through, its card
+ * says it is no longer in the plan, and a press opens the plan at its top.
+ * A section of another plan is drawn as found, since what that plan holds
+ * is not at hand.
  *
  * Nothing the mention names rides on the chip's element: no attribute
  * carries its target, its plan, its heading, or its path, because only the
@@ -50,41 +55,48 @@ const MENTION_STATE = {
 
 type MentionState = (typeof MENTION_STATE)[keyof typeof MENTION_STATE];
 
-/** What a place drawing mentions knows and does: the plan it draws and its headings, and what opening a mention does. */
+/** What a place drawing mentions knows and does: the plan it draws, where its mentions are written, its sections' anchors, and what opening a mention does. */
 export interface MentionDoors {
   readonly planId: string;
-  readonly headings: ReadonlySet<string>;
+  readonly place: MentionPlace;
+  readonly anchors: ReadonlySet<string>;
   readonly onOpenPlan: (mention: PlanMention) => void;
-  /** Shows a file's tab; none where no file can be opened from here. */
-  readonly onOpenFile: ((path: string) => void) | undefined;
+  /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
+  readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
 }
 
 /**
- * A mention's target named again where the plan it names had the heading
- * it names renamed in an edit (`../plan-editor/plan-mentions.ts`): the new
- * target, or nothing where the target names no section of the plan, or one
- * of a heading the edit did not rename.
+ * A mention's target named again where an edit of the plan it names moved
+ * the anchor of the section it names (`../plan-editor/plan-mentions.ts`):
+ * the new target, or nothing where the target names no section of the
+ * plan, or one whose anchor the edit left where it was, or one of a
+ * section the edit did not keep.
  */
 export function retargetedMention(
   planId: string,
+  place: MentionPlace,
   target: string,
-  renamed: ReadonlyMap<string, string>,
+  change: HeadingsChange,
 ): string | undefined {
-  const mention = decodeMention(target);
+  const mention = decodeMention(target, place.repository);
   if (mention?.kind !== MENTION_KIND.SECTION || mention.planId !== planId) return undefined;
-  const heading = renamed.get(mention.heading);
-  return heading === undefined ? undefined : encodeMention({ ...mention, heading });
+  const was = sectionAnchors(change.before);
+  const is = sectionAnchors(change.after);
+  const at = was.indexOf(mention.anchor);
+  const now = is[change.kept.get(at) ?? -1];
+  if (now === undefined || now === "" || now === mention.anchor) return undefined;
+  return encodeMention({ ...mention, anchor: now }, place);
 }
 
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
 
-/** Whether what the mention names is there to open: a section of this plan is there while the plan holds its heading. */
+/** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
   if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
     return MENTION_STATE.FOUND;
   }
-  return doors.headings.has(mention.heading) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
+  return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
 }
 
 /** What a press on the chip does, or nothing where it opens nothing from here. */
@@ -96,7 +108,7 @@ function pressOf(
   switch (mention.kind) {
     case MENTION_KIND.FILE: {
       const { onOpenFile } = doors;
-      return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path);
+      return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path, mention.lines);
     }
     case MENTION_KIND.FOLDER:
       return undefined;
@@ -200,7 +212,7 @@ export function MentionNodeChip({
   mention: MentionNode;
   doors: MentionDoors;
 }): React.JSX.Element {
-  const named = decodeMention(mention.target);
+  const named = decodeMention(mention.target, doors.place.repository);
   if (named === undefined) return <>{`@${mention.name}`}</>;
   return <MentionChip mention={named} name={mention.name} doors={doors} />;
 }

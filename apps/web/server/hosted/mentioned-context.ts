@@ -1,5 +1,11 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { MENTION_KIND, mentionsIn, type PlanMention } from "@luke/features/mention-link";
+import {
+  MENTION_KIND,
+  mentionName,
+  mentionsIn,
+  type PlanMention,
+  sectionAnchors,
+} from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
@@ -22,7 +28,9 @@ import type { Plan } from "@luke/features/plan-wire";
  * over all of them, in the order the mentions stand; an excerpt cut short
  * says how much was left out, and a mention the part has no room left for
  * is named with a line saying so, so the model knows to ask rather than
- * guess. A section whose heading the plan no longer holds is named as gone.
+ * guess. A section is found by its anchor (`sectionAnchors`), and one whose
+ * anchor no heading of the plan spells any longer is named as gone, by the
+ * name the mention was written with.
  */
 
 export const MENTIONED_BOUNDS = {
@@ -66,8 +74,14 @@ function headingList(headings: readonly string[]): string {
   return list;
 }
 
+/** A mention of the plan or one of its sections, and the name it was written with. */
+interface NamedMention {
+  readonly mention: PlanMention;
+  readonly name: string;
+}
+
 /** What a mention of the plan or one of its sections is handed as. */
-function excerptOf(mention: PlanMention, plan: Plan): string {
+function excerptOf({ mention, name }: NamedMention, plan: Plan): string {
   if (mention.kind === MENTION_KIND.PLAN) {
     const whole = planMarkdown(plan);
     if (whole.length <= MENTIONED_BOUNDS.PLAN_CHARS) return `The whole plan:\n\n${whole.trimEnd()}`;
@@ -81,11 +95,13 @@ function excerptOf(mention: PlanMention, plan: Plan): string {
     const rest = headings.length === 0 ? "" : `\n\nIts other sections: ${headingList(headings)}.`;
     return `The whole plan, cut short:\n\n${cutOnLine(whole, MENTIONED_BOUNDS.PLAN_CHARS)}${rest}`;
   }
-  const section = planSections(plan.document.body).find((each) => each.heading === mention.heading);
+  const sections = planSections(plan.document.body);
+  const anchors = sectionAnchors(sections.map((section) => section.heading));
+  const section = sections[anchors.indexOf(mention.anchor)];
   if (section === undefined) {
-    return `The section "${mention.heading}": no longer in the plan.`;
+    return `The section "${name}": no longer in the plan.`;
   }
-  return `The plan's section "${mention.heading}":\n\n${cutOnLine(section.text, MENTIONED_BOUNDS.SECTION_CHARS)}`;
+  return `The plan's section "${section.heading}":\n\n${cutOnLine(section.text, MENTIONED_BOUNDS.SECTION_CHARS)}`;
 }
 
 /** The same mention, each named once whatever times the message names it. */
@@ -93,7 +109,7 @@ function sameMention(first: PlanMention, second: PlanMention): boolean {
   if (first.kind === MENTION_KIND.PLAN || second.kind === MENTION_KIND.PLAN) {
     return first.kind === second.kind;
   }
-  return first.heading === second.heading;
+  return first.anchor === second.anchor;
 }
 
 /**
@@ -102,11 +118,13 @@ function sameMention(first: PlanMention, second: PlanMention): boolean {
  * plan as the send read it; nothing where they mention none of it.
  */
 export function mentionedContext(words: string, plan: Plan): string | undefined {
-  const named: PlanMention[] = [];
-  for (const { mention } of mentionsIn(words)) {
+  const named: NamedMention[] = [];
+  for (const { mention, label } of mentionsIn(words, plan.repository)) {
     if (mention.kind !== MENTION_KIND.PLAN && mention.kind !== MENTION_KIND.SECTION) continue;
     if (mention.planId !== plan.id) continue;
-    if (!named.some((each) => sameMention(each, mention))) named.push(mention);
+    if (!named.some((each) => sameMention(each.mention, mention))) {
+      named.push({ mention, name: mentionName(label) });
+    }
   }
   if (named.length === 0) return undefined;
   let part = MENTIONED_HEADING;

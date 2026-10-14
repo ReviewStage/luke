@@ -1,5 +1,10 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
-import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import {
+  MENTION_KIND,
+  type MentionLines,
+  type PlanMention,
+  sectionAnchors,
+} from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -289,15 +294,24 @@ function PlanDocument({
   );
   const openMention = (mention: PlanMention) => {
     plans.onShowPlan(mention.planId);
-    const heading = mention.kind === MENTION_KIND.SECTION ? mention.heading : undefined;
+    const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
     setRevealed((last) => ({
       planId: mention.planId,
-      reveal: { heading, ask: (last?.reveal.ask ?? 0) + 1 },
+      reveal: { anchor, ask: (last?.reveal.ask ?? 0) + 1 },
     }));
   };
-  const sectionLinksOf = (shown: string): SectionLinks => ({
+  // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
+  const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
+    lines === undefined
+      ? plans.sidePanel.onOpenFile({ path })
+      : plans.sidePanel.onOpenFile(
+          { path, startLine: lines.startLine, endLine: lines.endLine },
+          lines.commit,
+        );
+  const sectionLinksOf = (shown: string, workspace: string): SectionLinks => ({
+    workspace,
     onOpen: openMention,
-    onOpenFile: (path) => plans.sidePanel.onOpenFile({ path }),
+    onOpenFile: openMentionedFile,
     reveal: revealed?.planId === shown ? revealed.reveal : undefined,
   });
   if (region.kind !== DOCUMENT_REGION.READY) {
@@ -343,6 +357,9 @@ function PlanDocument({
   }
   const { plan } = region;
   const { mainTabs, sidePanel, agents } = plans;
+  // The slug the plan's links are written under; only the plan's id finds it, so its workspace's id stands in until the workspaces are read.
+  const workspace =
+    plans.workspaces.find((each) => each.id === plan.workspaceId)?.slug ?? plan.workspaceId;
   const archived = plan.archivedAt !== undefined;
   // The plan as the list names it, its agents and pull requests among it, which its card reads.
   const listed = [...plans.plans, ...plans.archived].find((each) => each.id === plan.id) ?? plan;
@@ -426,17 +443,17 @@ function PlanDocument({
   const mentions: PlanMentionsValue = {
     planId: plan.id,
     planName: plan.name,
+    workspace,
     repository: plan.repository,
     text: () => plan.document.body,
     doors: {
       planId: plan.id,
-      headings: new Set(
-        planSections(plan.document.body).flatMap((section) =>
-          section.heading === "" ? [] : [section.heading],
-        ),
+      place: { workspace, repository: plan.repository },
+      anchors: new Set(
+        sectionAnchors(planSections(plan.document.body).map((section) => section.heading)),
       ),
       onOpenPlan: openMention,
-      onOpenFile: (path) => sidePanel.onOpenFile({ path }),
+      onOpenFile: openMentionedFile,
     },
   };
   return (
@@ -533,7 +550,7 @@ function PlanDocument({
                         onDraftName: (name) => plans.onDraftName(plan.id, name),
                       })}
                   looks={looks}
-                  sectionLinks={sectionLinksOf(plan.id)}
+                  sectionLinks={sectionLinksOf(plan.id, workspace)}
                 />
               </section>
               {tab === MAIN_TAB.INBOX ? (

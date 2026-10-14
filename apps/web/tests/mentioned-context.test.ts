@@ -5,7 +5,12 @@ import {
   receivedPartsOf,
 } from "@luke/database/models/attached-file-parts";
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import {
+  MENTION_KIND,
+  type MentionPlace,
+  mentionMarkdown,
+  sectionAnchors,
+} from "@luke/features/mention-link";
 import type { Plan } from "@luke/features/plan-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "../server/hosted/attached-files";
@@ -39,8 +44,16 @@ const PLAN: Plan = {
   },
 };
 
+const PLACE: MentionPlace = { workspace: "acme", repository: PLAN.repository };
+
+const anchorOf = (heading: string) => sectionAnchors([heading])[0] ?? "";
+
 const section = (heading: string) =>
-  mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN.id, heading }, heading);
+  mentionMarkdown(
+    { kind: MENTION_KIND.SECTION, planId: PLAN.id, anchor: anchorOf(heading) },
+    heading,
+    PLACE,
+  );
 
 test("a section the words mention is handed as it stands, under the part's heading", () => {
   const part = mentionedContext(`Do what ${section("Rollout")} says.`, PLAN);
@@ -53,7 +66,7 @@ test("a section the words mention is handed as it stands, under the part's headi
 
 test("the whole plan the words mention is handed as an agent started on it is", () => {
   const part = mentionedContext(
-    `Read ${mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name)} first.`,
+    `Read ${mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name, PLACE)} first.`,
     PLAN,
   );
 
@@ -67,10 +80,32 @@ test("a section the plan no longer holds is named as gone", () => {
   assert.match(part ?? "", /The section "Old flow": no longer in the plan\./u);
 });
 
+test("a section mentioned in the form written before the link was settled is handed as one in the settled form is", () => {
+  const part = mentionedContext(`Do what [@Rollout](luke://plan/${PLAN.id}#Rollout) says.`, PLAN);
+
+  assert.equal(part, mentionedContext(`Do what ${section("Rollout")} says.`, PLAN));
+  assert.match(part ?? "", /The plan's section "Rollout":/u);
+});
+
+test("a heading the plan bears twice is handed by which of them the anchor names", () => {
+  const plan: Plan = {
+    ...PLAN,
+    document: { body: "## Notes\n\nfirst\n\n## Notes\n\nsecond", assumptions: [] },
+  };
+  const second = mentionMarkdown(
+    { kind: MENTION_KIND.SECTION, planId: PLAN.id, anchor: "notes-1" },
+    "Notes",
+    PLACE,
+  );
+
+  assert.match(mentionedContext(`See ${second}.`, plan) ?? "", /## Notes\n\nsecond$/u);
+});
+
 test("words that mention only files, folders, another plan, or nothing are handed nothing more", () => {
   for (const words of [
     "Fix [@a.ts](luke://file/src/a.ts) and look through [@src/](luke://folder/src/).",
-    `See ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: "another-plan", heading: "Goal" }, "Goal")}.`,
+    "Fix [@a.ts](https://github.com/acme/relay/blob/HEAD/src/a.ts) as it stands.",
+    `See ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: "another-plan", anchor: "goal" }, "Goal", PLACE)}.`,
     "No mention here, only [a link](https://example.com).",
     "`[@Rollout](luke://plan/7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d#Rollout)` is code.",
   ]) {
@@ -152,7 +187,7 @@ test("a plan cut short names every section past the cut, one whose heading earli
 
   const part =
     mentionedContext(
-      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name),
+      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name, PLACE),
       plan,
     ) ?? "";
 
@@ -215,7 +250,7 @@ test("a cut plan with many long headings past the cut is still handed, its list 
 
   const part =
     mentionedContext(
-      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name),
+      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name, PLACE),
       plan,
     ) ?? "";
 

@@ -11,17 +11,38 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * What the target looks like is decided here and nowhere else: every
  * caller holds a `Mention`, which names its subject and nothing of the
  * form, and goes through `encodeMention` and `decodeMention` to write and
- * read one. The form is provisional until the link format is settled
- * (`docs/proposals/at-mentions.md`, "Pending: the link format"); changing
- * it changes this file and its tests alone.
+ * read one.
  *
- * A plan is named by its id, and one of its sections by the plan and the
- * heading's own words, as the plan's sections are known by their headings
- * everywhere else (`planSections`): a mention of a heading two sections
- * share names the first, and one of a heading since renamed or deleted
- * names nothing, which its reader says. A file or a folder of the plan's
- * repository is named by its path from the repository's root, which never
- * climbs out of it: no leading `/`, no `..` step, no backslash.
+ * The target is the address the thing has on the web, so a mention copied
+ * out of Luke, into Slack, a pull request or a mail, still leads somewhere
+ * (`docs/proposals/web-and-links.md`):
+ *
+ * - A plan is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
+ *   sections that with `#<anchor>` after it. Only the id finds the plan: the
+ *   workspace's slug reads well and is never trusted, so a slug spelled
+ *   another way later breaks no link. The desktop's own scheme is the same
+ *   address with `tryluke:` for `https:`, which reads as the same mention.
+ * - A section's anchor is its heading as GitHub spells a Markdown heading's
+ *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
+ *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
+ *   anchor names one section, and one of a heading since renamed or
+ *   deleted names nothing, which its reader says.
+ * - A file or a folder of the plan's repository is its GitHub page on the
+ *   default branch, `https://github.com/<owner>/<name>/blob/HEAD/<path>`
+ *   (`/tree/` for a folder), and a file's lines are pinned to the commit
+ *   they were read at, `/blob/<commit>/<path>#L3-L5`, since lines drift and
+ *   a branch's would point at whatever moved into them. Its path is from
+ *   the repository's root and never climbs out of it: no leading `/`, no
+ *   `..` step, no backslash. A GitHub page is a file of the plan only when
+ *   it is of the plan's own repository, which a reader is handed, and is
+ *   read as that before anything else a GitHub address might name.
+ *
+ * The forms written before the link was settled, `luke://plan/<id>`
+ * (`#<heading>` after it, the heading's own words), `luke://file/<path>`,
+ * and `luke://folder/<path>/`, stand in plans and messages already, so
+ * they are read forever, as the same mention the settled form names. A
+ * thing with no page of its own on the web keeps the `luke:` form, which
+ * nothing outside the app opens.
  */
 
 export const MENTION_KIND = {
@@ -45,8 +66,24 @@ const MENTION_BOUNDS = {
 /** What marks a link's label as a mention's. */
 const MENTION_SIGIL = "@";
 
-/** The provisional form: `luke://plan/<planId>` (`#<heading>` after it for a section), `luke://file/<path>`, and `luke://folder/<path>/`, each part percent-encoded. */
+/** The settled form: a plan's address on tryluke.dev, which the desktop's own scheme, `tryluke:`, spells with its scheme swapped. */
 const LINK = {
+  ORIGIN: "https://tryluke.dev",
+  HOST: "tryluke.dev",
+  PROTOCOLS: new Set(["https:", "tryluke:"]),
+  PLAN_STEP: "plan",
+} as const;
+
+/** A file's or a folder's page on GitHub: the default branch for the thing itself, a commit for its lines. */
+const GITHUB = {
+  ORIGIN: "https://github.com",
+  FILE_STEP: "blob",
+  FOLDER_STEP: "tree",
+  DEFAULT_BRANCH: "HEAD",
+} as const;
+
+/** The form written before the link was settled, read forever: `luke://plan/<planId>` (`#<heading>` after it), `luke://file/<path>`, and `luke://folder/<path>/`. */
+const LEGACY = {
   PROTOCOL: "luke:",
   HOST: {
     [MENTION_KIND.PLAN]: "plan",
@@ -55,6 +92,17 @@ const LINK = {
   },
 } as const;
 
+/** An anchor as `sectionAnchors` spells one: letters, marks, digits, underscores, and hyphens. */
+const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
+
+/** What a heading's anchor drops, as GitHub's does: everything but letters, marks, digits, connector punctuation, spaces, and hyphens. */
+const ANCHOR_DROPPED = /[^\p{L}\p{M}\p{N}\p{Pc} -]/gu;
+
+/** A commit as a link pins one: seven to forty hexadecimal digits. */
+const COMMIT = /^[0-9a-f]{7,40}$/u;
+
+/** A GitHub page's lines: `#L3`, or `#L3-L5`. */
+const LINES_FRAGMENT = /^#L(\d{1,9})(?:-L(\d{1,9}))?$/u;
 /** The characters a markdown link's label must escape to stay one label. */
 const LABEL_SPECIAL = /[[\]\\]/gu;
 
@@ -117,6 +165,16 @@ const pathSchema = EffectSchema.String.check(
   ),
 );
 
+/** A line of a file, counted from one. */
+const lineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+
+/** A file's lines, the first through the last, at the commit they were read at, named as a `CodeRef` names them. */
+const linesSchema = EffectSchema.Struct({
+  commit: EffectSchema.String.check(EffectSchema.isPattern(COMMIT)),
+  startLine: lineSchema,
+  endLine: lineSchema,
+}).check(EffectSchema.makeFilter(({ startLine, endLine }) => startLine <= endLine));
+
 const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.PLAN),
@@ -125,12 +183,16 @@ const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.SECTION),
     planId: planIdSchema,
-    heading: EffectSchema.String.check(
-      EffectSchema.isNonEmpty(),
+    anchor: EffectSchema.String.check(
       EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+      EffectSchema.isPattern(ANCHOR),
     ),
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(MENTION_KIND.FILE), path: pathSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.FILE),
+    path: pathSchema,
+    lines: EffectSchema.optionalKey(linesSchema),
+  }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(MENTION_KIND.FOLDER), path: pathSchema }),
 ]);
 
@@ -139,11 +201,25 @@ export type Mention = typeof mentionSchema.Type;
 /** A mention of the plan or one of its sections. */
 export type PlanMention = Extract<Mention, { readonly planId: string }>;
 
-/** A mention written into words: where its link stands, the label it was written with, `@` and all, and what it names. */
-export interface MentionInWords {
+/** A file's lines a mention names, at the commit they were read at. */
+export type MentionLines = typeof linesSchema.Type;
+
+/** Where a mention is written: the plan's workspace, by its slug, and the repository the plan is about, `owner/name`, or null before one is chosen. */
+export interface MentionPlace {
+  readonly workspace: string;
+  readonly repository: string | null;
+}
+
+/** A link whose label starts with `@`, written into words: where it stands, its label, `@` and all, and its target as written. */
+export interface MentionLink {
   readonly start: number;
   readonly end: number;
   readonly label: string;
+  readonly target: string;
+}
+
+/** A mention written into words: its link, and what it names. */
+export interface MentionInWords extends MentionLink {
   readonly mention: Mention;
 }
 
@@ -171,31 +247,94 @@ function decodedPart(part: string): string | undefined {
   }
 }
 
-/** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
-function decodedPath(pathname: string): string | undefined {
-  const steps = pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/").map(decodedPart);
-  return steps.every((step) => step !== undefined) ? steps.join("/") : undefined;
+/** Steps of a path read back and joined, or nothing where one's encoding is broken. */
+function decodedSteps(steps: readonly string[]): string | undefined {
+  const read = steps.map(decodedPart);
+  return read.every((step) => step !== undefined) ? read.join("/") : undefined;
 }
 
-/** The fields a target spells, for the schema to read; nothing where it is no target of this form. */
-function fieldsOf(target: string) {
-  const url = URL.parse(target);
-  if (url === null || url.protocol !== LINK.PROTOCOL) return undefined;
+/** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
+function decodedPath(pathname: string): string | undefined {
+  return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
+}
+
+/** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */
+function headingAnchor(heading: string): string {
+  return heading.toLowerCase().replace(ANCHOR_DROPPED, "").replace(/ /gu, "-");
+}
+
+/** The fields a legacy `luke:` target spells, for the schema to read; nothing where it is none. */
+function legacyFields(url: URL) {
   switch (url.host) {
-    case LINK.HOST[MENTION_KIND.FILE]:
+    case LEGACY.HOST[MENTION_KIND.FILE]:
       return { kind: MENTION_KIND.FILE, path: decodedPath(url.pathname) };
-    case LINK.HOST[MENTION_KIND.FOLDER]:
+    case LEGACY.HOST[MENTION_KIND.FOLDER]:
       return { kind: MENTION_KIND.FOLDER, path: decodedPath(url.pathname) };
-    case LINK.HOST[MENTION_KIND.PLAN]: {
+    case LEGACY.HOST[MENTION_KIND.PLAN]: {
       const planId = decodedPart(url.pathname.replace(/^\//u, ""));
       if (url.hash === "") return { kind: MENTION_KIND.PLAN, planId };
-      return { kind: MENTION_KIND.SECTION, planId, heading: decodedPart(url.hash.slice(1)) };
+      // Note that a heading's words name the first section under them, as its anchor without a suffix does.
+      const heading = decodedPart(url.hash.slice(1));
+      if (heading === undefined || heading === "") return undefined;
+      return { kind: MENTION_KIND.SECTION, planId, anchor: headingAnchor(heading) };
     }
     default:
       return undefined;
   }
 }
 
+/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`. */
+function planFields(url: URL) {
+  const [first, workspace, step, id, ...rest] = url.pathname.split("/");
+  if (first !== "" || workspace === "" || step !== LINK.PLAN_STEP || id === undefined) {
+    return undefined;
+  }
+  if (rest.length > 0) return undefined;
+  const planId = decodedPart(id);
+  if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.PLAN, planId };
+  const anchor = decodedPart(url.hash.slice(1))?.toLowerCase();
+  return { kind: MENTION_KIND.SECTION, planId, anchor };
+}
+
+/** The lines a GitHub page's fragment names at a commit; nothing where it names none, or the page is a branch's. */
+function linesOf(ref: string, hash: string): MentionLines | undefined {
+  const lines = LINES_FRAGMENT.exec(hash);
+  if (lines === null || !COMMIT.test(ref)) return undefined;
+  const startLine = Number(lines[1]);
+  const endLine = lines[2] === undefined ? startLine : Number(lines[2]);
+  return { commit: ref, startLine, endLine };
+}
+
+/** The fields a page of the plan's repository on GitHub spells, a file's or a folder's; nothing for any other page. */
+function repositoryFields(url: URL, repository: string | null) {
+  const [first, owner, name, step, ref, ...path] = url.pathname.split("/");
+  if (first !== "" || repository === null || ref === undefined || ref === "") return undefined;
+  // GitHub reads an owner and a name in any case, so a link spelled in another names the same repository.
+  if (`${owner}/${name}`.toLowerCase() !== repository.toLowerCase()) return undefined;
+  if (step === GITHUB.FOLDER_STEP) {
+    const folder = path.at(-1) === "" ? path.slice(0, -1) : path;
+    return { kind: MENTION_KIND.FOLDER, path: decodedSteps(folder) };
+  }
+  if (step !== GITHUB.FILE_STEP) return undefined;
+  const lines = linesOf(ref, url.hash);
+  const file = { kind: MENTION_KIND.FILE, path: decodedSteps(path) };
+  return lines === undefined ? file : { ...file, lines };
+}
+
+/**
+ * The fields a target spells, for the schema to read; nothing where it is
+ * no target of a mention. A GitHub page is read as a file or a folder of
+ * the plan's repository first, so a page of it is never read as anything
+ * else a GitHub address names.
+ */
+function fieldsOf(target: string, repository: string | null) {
+  const url = URL.parse(target);
+  if (url === null) return undefined;
+  if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
+  if (LINK.PROTOCOLS.has(url.protocol) && url.host === LINK.HOST) return planFields(url);
+  if (url.origin === GITHUB.ORIGIN) return repositoryFields(url, repository);
+  return undefined;
+}
 /** Whether the line holding the index stands inside a fenced block, its fence lines included. */
 function insideFence(text: string, at: number): boolean {
   let open: string | undefined;
@@ -317,25 +456,77 @@ function labelEnd(text: string, open: number): number | undefined {
   return undefined;
 }
 
-/** The target a mention is written with. */
-export function encodeMention(mention: Mention): string {
+/**
+ * Each heading's anchor, in the order the headings stand: GitHub's spelling
+ * of it, with `-1`, `-2` after one an earlier heading already took, so each
+ * names one section. A heading that spells no anchor, the words before the
+ * first heading among them, has an empty one, which names no section.
+ */
+export function sectionAnchors(headings: readonly string[]): readonly string[] {
+  const taken = new Map<string, number>();
+  return headings.map((heading) => {
+    const spelled = headingAnchor(heading);
+    if (spelled === "") return "";
+    let anchor = spelled;
+    while (taken.has(anchor)) {
+      const count = (taken.get(spelled) ?? 0) + 1;
+      taken.set(spelled, count);
+      anchor = `${spelled}-${count}`;
+    }
+    taken.set(anchor, 0);
+    return anchor;
+  });
+}
+
+/** A plan's address, a section's with its anchor; the plan's own where the anchor is empty. */
+function planTarget(planId: string, place: MentionPlace, anchor: string): string {
+  const plan = `${LINK.ORIGIN}/${encodedPart(place.workspace)}/${LINK.PLAN_STEP}/${encodedPart(planId)}`;
+  return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
+}
+
+/** A file's or a folder's page on GitHub, or the legacy form where the plan has no repository to name it under. */
+function repositoryTarget(
+  kind: typeof MENTION_KIND.FILE | typeof MENTION_KIND.FOLDER,
+  path: string,
+  place: MentionPlace,
+  lines: MentionLines | undefined,
+): string {
+  if (place.repository === null) {
+    const folder = kind === MENTION_KIND.FOLDER ? "/" : "";
+    return `${LEGACY.PROTOCOL}//${LEGACY.HOST[kind]}/${encodedPath(path)}${folder}`;
+  }
+  const repository = place.repository.split("/").map(encodedPart).join("/");
+  const step = kind === MENTION_KIND.FOLDER ? GITHUB.FOLDER_STEP : GITHUB.FILE_STEP;
+  const ref = lines === undefined ? GITHUB.DEFAULT_BRANCH : lines.commit;
+  const page = `${GITHUB.ORIGIN}/${repository}/${step}/${ref}/${encodedPath(path)}`;
+  if (lines === undefined) return page;
+  return lines.startLine === lines.endLine
+    ? `${page}#L${lines.startLine}`
+    : `${page}#L${lines.startLine}-L${lines.endLine}`;
+}
+
+/** The target a mention is written with, in the plan's workspace and of its repository. */
+export function encodeMention(mention: Mention, place: MentionPlace): string {
   switch (mention.kind) {
     case MENTION_KIND.FILE:
-      return `${LINK.PROTOCOL}//${LINK.HOST[MENTION_KIND.FILE]}/${encodedPath(mention.path)}`;
+      return repositoryTarget(mention.kind, mention.path, place, mention.lines);
     case MENTION_KIND.FOLDER:
-      return `${LINK.PROTOCOL}//${LINK.HOST[MENTION_KIND.FOLDER]}/${encodedPath(mention.path)}/`;
+      return repositoryTarget(mention.kind, mention.path, place, undefined);
     case MENTION_KIND.PLAN:
-    case MENTION_KIND.SECTION: {
-      const plan = `${LINK.PROTOCOL}//${LINK.HOST[MENTION_KIND.PLAN]}/${encodedPart(mention.planId)}`;
-      return mention.kind === MENTION_KIND.PLAN ? plan : `${plan}#${encodedPart(mention.heading)}`;
-    }
+      return planTarget(mention.planId, place, "");
+    case MENTION_KIND.SECTION:
+      return planTarget(mention.planId, place, mention.anchor);
   }
 }
 
-/** The mention a link's target names; nothing where it names none, or is no target of a mention. */
-export function decodeMention(target: string): Mention | undefined {
+/**
+ * The mention a link's target names, a GitHub page read as a file or a
+ * folder only of `repository`, the plan's; nothing where it names none, or
+ * is no target of a mention.
+ */
+export function decodeMention(target: string, repository: string | null): Mention | undefined {
   if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
-  return Option.getOrUndefined(readMention(fieldsOf(target)));
+  return Option.getOrUndefined(readMention(fieldsOf(target, repository)));
 }
 
 /** Whether a link's label is a mention's: it starts with `@`. */
@@ -349,37 +540,51 @@ export function mentionName(label: string): string {
 }
 
 /** The mention written into markdown as a link: `[@label](target)`, its label's brackets and backslashes escaped. */
-export function mentionMarkdown(mention: Mention, name: string): string {
+export function mentionMarkdown(mention: Mention, name: string, place: MentionPlace): string {
   const label = `${MENTION_SIGIL}${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
-  return `[${label}](${encodeMention(mention)})`;
+  return `[${label}](${encodeMention(mention, place)})`;
 }
 
 /**
- * Every mention written into the words, in order: a link whose label
- * starts with `@`, whose target names a mention, standing outside code,
- * where markdown draws no link. A link of another kind, or one whose target
- * names nothing, is words. At most `limit` are read, a message's
- * `MAX_MENTIONS` unless the caller reads a whole plan; any past them stay
- * words.
+ * Every link whose label starts with `@` written into the words, in order,
+ * standing outside code, where markdown draws no link, whatever its target
+ * names: what a developer placed, which a writer must keep as it stands.
  */
-export function mentionsIn(
-  text: string,
-  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
-): readonly MentionInWords[] {
-  const found: MentionInWords[] = [];
+export function mentionLinksIn(text: string): readonly MentionLink[] {
+  const found: MentionLink[] = [];
   const opener = `[${MENTION_SIGIL}`;
   for (let at = text.indexOf(opener); at !== -1; at = text.indexOf(opener, at + 1)) {
-    if (found.length === limit) break;
     const close = labelEnd(text, at);
     if (close === undefined || text[close + 1] !== "(" || insideCode(text, at)) continue;
     const targetEnd = text.indexOf(")", close + 2);
     if (targetEnd === -1) continue;
     const target = text.slice(close + 2, targetEnd);
-    const mention = /\s/u.test(target) ? undefined : decodeMention(target);
-    if (mention === undefined) continue;
+    if (/\s/u.test(target)) continue;
     const label = text.slice(at + 1, close).replace(LABEL_ESCAPE, "$1");
-    found.push({ start: at, end: targetEnd + 1, label, mention });
+    found.push({ start: at, end: targetEnd + 1, label, target });
     at = targetEnd;
+  }
+  return found;
+}
+
+/**
+ * Every mention written into the words, in order: a link whose label
+ * starts with `@`, whose target names a mention, a GitHub page only as a
+ * file or a folder of `repository`, standing outside code. A link of
+ * another kind, or one whose target names nothing, is words. At most
+ * `limit` are read, a message's `MAX_MENTIONS` unless the caller reads a
+ * whole plan; any past them stay words.
+ */
+export function mentionsIn(
+  text: string,
+  repository: string | null,
+  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
+): readonly MentionInWords[] {
+  const found: MentionInWords[] = [];
+  for (const link of mentionLinksIn(text)) {
+    if (found.length === limit) break;
+    const mention = decodeMention(link.target, repository);
+    if (mention !== undefined) found.push({ ...link, mention });
   }
   return found;
 }

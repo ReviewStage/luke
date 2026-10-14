@@ -2,9 +2,12 @@ import {
   decodeMention,
   isMentionLabel,
   MENTION_KIND,
+  type MentionLines,
+  type MentionPlace,
   mentionMarkdown,
   mentionName,
   type PlanMention,
+  sectionAnchors,
 } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
 import { EllipsisIcon } from "@luke/ui";
@@ -57,7 +60,8 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * last looked at the plan on this Mac wear a still tint, counted under that
  * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
  * The plan's name is drawn as the title over its text (`plan-title.tsx`),
- * and each section is known by its heading.
+ * and each section is known by its heading, and its link by the heading's
+ * anchor (`sectionAnchors`).
  *
  * On a plan's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's mention
@@ -68,17 +72,24 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * around it too; a section the plan no longer holds leaves it at its top.
  */
 
-/** What a plan's own page does with its sections' links and its mentions: opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
+/** What a plan's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
 export interface SectionLinks {
+  readonly workspace: string;
   readonly onOpen: (mention: PlanMention) => void;
-  readonly onOpenFile?: ((path: string) => void) | undefined;
+  readonly onOpenFile?: ((path: string, lines: MentionLines | undefined) => void) | undefined;
   readonly reveal: SectionReveal | undefined;
 }
 
-/** One ask to show a section, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
+/** One ask to show a section by its anchor, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
 export interface SectionReveal {
-  readonly heading: string | undefined;
+  readonly anchor: string | undefined;
   readonly ask: number;
+}
+
+/** The plan a page's sections link to, and where its links are written. */
+interface LinkedPlan {
+  readonly planId: string;
+  readonly place: MentionPlace;
 }
 
 /** What a section's ⋯ and its one item are called. */
@@ -354,37 +365,42 @@ function unitClass(view: UnitView, changed: boolean): string {
 /**
  * What draws the plan's mentions as chips, on a plan's own page: a link
  * whose label starts with `@` and whose destination names a mention, drawn
- * against the plan's headings as they stand; nothing off a plan's page,
- * where mentions stay words. Note that it is made again only when a
- * heading changes, since every unit's words are drawn again when it is,
- * and that what opening one does is read as it is pressed.
+ * against the anchors of the plan's headings as they stand; nothing off a
+ * plan's page, where mentions stay words. Note that it is made again only
+ * when a heading changes, since every unit's words are drawn again when it
+ * is, and that what opening one does is read as it is pressed.
  */
 function useMentionChips(
-  planId: string,
-  views: readonly UnitView[],
+  linked: LinkedPlan | undefined,
+  anchors: readonly string[],
   links: SectionLinks | undefined,
 ): { readonly link: LinkDrawer | undefined; readonly doors: MentionDoors | undefined } {
   const latest = useRef(links);
   latest.current = links;
-  const offered = links !== undefined;
   const opensFiles = links?.onOpenFile !== undefined;
-  const headingKey = views.map((view) => view.heading).join("\n");
+  const planId = linked?.planId;
+  const workspace = linked?.place.workspace ?? "";
+  const repository = linked?.place.repository ?? null;
+  const anchorKey = anchors.join("\n");
   return useMemo(() => {
-    if (!offered) return { link: undefined, doors: undefined };
+    if (planId === undefined) return { link: undefined, doors: undefined };
     const doors: MentionDoors = {
       planId,
-      headings: new Set(headingKey.split("\n").filter((heading) => heading !== "")),
+      place: { workspace, repository },
+      anchors: new Set(anchorKey.split("\n").filter((anchor) => anchor !== "")),
       onOpenPlan: (mention) => latest.current?.onOpen(mention),
-      onOpenFile: opensFiles ? (path) => latest.current?.onOpenFile?.(path) : undefined,
+      onOpenFile: opensFiles
+        ? (path, lines) => latest.current?.onOpenFile?.(path, lines)
+        : undefined,
     };
     const link = (href: string, label: string) => {
       if (!isMentionLabel(label)) return undefined;
-      const mention = decodeMention(href);
+      const mention = decodeMention(href, repository);
       if (mention === undefined) return undefined;
       return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
     };
     return { link, doors };
-  }, [offered, opensFiles, planId, headingKey]);
+  }, [opensFiles, planId, workspace, repository, anchorKey]);
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
@@ -415,11 +431,13 @@ function attributed(
 
 /** A section's ⋯: the window's own menu, holding the one item that copies the section's link. */
 function SectionMenu({
-  planId,
+  linked,
+  anchor,
   heading,
   tabbable,
 }: {
-  planId: string;
+  linked: LinkedPlan;
+  anchor: string;
   heading: string;
   /** Whether it is a Tab stop: only beside the document's one, its section's block. */
   tabbable: boolean;
@@ -429,7 +447,11 @@ function SectionMenu({
   const trigger = menu.trigger();
   const copyLink = () =>
     copy(
-      mentionMarkdown({ kind: MENTION_KIND.SECTION, planId, heading }, heading),
+      mentionMarkdown(
+        { kind: MENTION_KIND.SECTION, planId: linked.planId, anchor },
+        heading,
+        linked.place,
+      ),
       SECTION_MENU.COPIED,
     );
   return (
@@ -479,7 +501,8 @@ function DocumentUnit({
   view,
   marks,
   link,
-  planId,
+  linked,
+  anchor,
   entry,
 }: {
   view: UnitView;
@@ -487,7 +510,9 @@ function DocumentUnit({
   /** Draws the plan's mentions as chips; links are drawn as words without it. */
   link: LinkDrawer | undefined;
   /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
-  planId: string | undefined;
+  linked: LinkedPlan | undefined;
+  /** The section's anchor, empty where its heading spells none. */
+  anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
 }): React.JSX.Element {
@@ -501,8 +526,8 @@ function DocumentUnit({
     />
   );
   const menu =
-    planId === undefined || view.heading === "" ? null : (
-      <SectionMenu planId={planId} heading={view.heading} tabbable={entry} />
+    linked === undefined || anchor === "" ? null : (
+      <SectionMenu linked={linked} anchor={anchor} heading={view.heading} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }
@@ -562,8 +587,15 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
-  const { link, doors: mentionDoors } = useMentionChips(plan.id, views, sectionLinks);
-  const linkedPlan = sectionLinks === undefined ? undefined : plan.id;
+  const anchors = sectionAnchors(views.map((view) => view.heading));
+  const linked: LinkedPlan | undefined =
+    sectionLinks === undefined
+      ? undefined
+      : {
+          planId: plan.id,
+          place: { workspace: sectionLinks.workspace, repository: plan.repository },
+        };
+  const { link, doors: mentionDoors } = useMentionChips(linked, anchors, sectionLinks);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
@@ -617,7 +649,7 @@ export function PlanBody({
     if (reveal === undefined || element === null || revealed.current === reveal.ask) return;
     revealed.current = reveal.ask;
     scrolledAway.current = true;
-    const at = views.findIndex((view) => view.heading !== "" && view.heading === reveal.heading);
+    const at = reveal.anchor === undefined ? -1 : anchors.indexOf(reveal.anchor);
     const unit =
       at === -1 ? undefined : element.querySelectorAll<HTMLElement>(`.${UNIT_CLASS}`)[at];
     element.scrollTop =
@@ -671,7 +703,8 @@ export function PlanBody({
           view={view}
           marks={marks}
           link={link}
-          planId={linkedPlan}
+          linked={linked}
+          anchor={anchors[section] ?? ""}
           entry={entry === view.id}
         />
       </DocumentBlock>
@@ -681,7 +714,8 @@ export function PlanBody({
         view={view}
         marks={marks}
         link={link}
-        planId={linkedPlan}
+        linked={linked}
+        anchor={anchors[section] ?? ""}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry
       />

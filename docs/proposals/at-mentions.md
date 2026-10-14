@@ -3,8 +3,8 @@
 Status: **approved by Dean on 2026-10-14** ("I agree with the @-mentions
 build… I agree with all your recommendations for @-mentions"), and being
 built as the PR order in §8 describes; what has shipped is listed there.
-The link format is approved too (below), and worker 273 is switching
-`mention-link.ts` to it.
+The link format was settled the same day (see "The link format (settled)"
+below).
 
 The design show lives at `docs/proposals/at-mentions/index.html`. It is
 one self-contained file, generated from the desktop renderer's real
@@ -66,33 +66,41 @@ message box.
 15. **The link format is approved** (below): worker 273's canonical https
     links.
 
-## The link format (approved)
+## The link format (settled)
 
-Dean approved worker 273's format (workspace `47fe7a4c`, web-and-links):
+**Settled by Dean on 2026-10-14** (`docs/proposals/web-and-links.md`, Part
+1): a mention stores the thing's address on the web, the pattern Linear,
+Notion, Slack and GitHub use, so a mention copied out of Luke still leads
+somewhere.
 
-- a plan and its sections: `https://tryluke.dev/<workspace>/plan/<id>#<github-style-slug>`,
-  a canonical web link that hands off to the desktop app;
-- the desktop app's own scheme: `tryluke://`;
-- files and folders: GitHub links into the plan's repository.
+| Kind | Stored target |
+|---|---|
+| Plan | `https://tryluke.dev/<workspace slug>/plan/<planId>` |
+| Section | the plan's, then `#<anchor>`: the heading as GitHub spells a heading's anchor, `-1`, `-2` for a heading borne again |
+| File | `https://github.com/<owner>/<name>/blob/HEAD/<path>`; its lines `…/blob/<commit>/<path>#L3-L5` |
+| Folder | `https://github.com/<owner>/<name>/tree/HEAD/<path>` |
+| MCP server, tool | `luke://mcp/<provider>[/<tool>]`, an internal form, since it has no page on the web |
 
-Worker 273's L1 changes `mention-link.ts`'s encode to these forms, and its
-decode keeps reading every provisional `luke://…` form, so every mention
-already written stays one. The rest of the code sees only `Mention`
-values, through `encodeMention` and `decodeMention`:
+The desktop app's own scheme is `tryluke://`, the plan's address with its
+scheme swapped. Every `luke://plan/…`, `luke://file/…` and
+`luke://folder/…` target this document shows is the provisional form the
+first PRs shipped with. Those stand in plans and messages already, so
+`mention-link`'s `decodeMention` reads them forever, as the same `Mention`
+the settled form names; nothing rewrites them.
 
-- `Mention` is a tagged union with no format in it:
-  `{kind: file, path}`, `{kind: folder, path}`, `{kind: plan, planId}`,
-  `{kind: section, planId, heading}`, `{kind: server, provider}`,
+The rest of the code sees only `Mention` values, through `encodeMention`
+and `decodeMention`:
+
+- `Mention` is a tagged union with no format in it: `{kind: file, path,
+  lines?}`, `{kind: folder, path}`, `{kind: plan, planId}`,
+  `{kind: section, planId, anchor}`, `{kind: server, provider}`,
   `{kind: tool, provider, tool}`, and `{kind: link, provider, url}`.
-- The editor's `mention` node, the composer, the plan's read view, the
-  section opener, "Copy link to section", and the server's
-  `mentionedContext` all go through the two functions.
-- One order matters once files are GitHub links: a GitHub blob or tree
+- A section is named by its anchor rather than its heading's words, so
+  §5.6's "gone" state and the editor's rename rewrite follow anchors.
+- One order matters now that files are GitHub links: a GitHub blob or tree
   address of the plan's repository reads as a file or a folder first, and
-  any other GitHub page as a `link`.
-
-The `luke://…` targets elsewhere in this document are the provisional
-forms the first PRs shipped with.
+  any other GitHub page as a `link`. Every reader is handed the plan's
+  repository for that.
 
 ## Still open
 
@@ -520,8 +528,8 @@ it fixes [@LUKE-142 Token refresh fails after the Mac sleeps](https://linear.app
 - **The `@` at the start of a label is what makes a link a mention.** It is
   drawn as a chip, and every other link stays a link. An integration
   object's chip takes its glyph from its URL's host.
-- **The targets above are placeholders** until worker 273's Part 1
-  settles them (see "Pending: the link format"). Only `mention-link`'s
+- **The targets above are the provisional forms**, still read; what is
+  written now is in "The link format (settled)". Only `mention-link`'s
   encoder and decoder know them.
 - **One Schema,** in `packages/features/src/mention-link.ts`, decodes a
   target into a tagged `Mention` and encodes one back. `mentionsIn(text)`
@@ -719,8 +727,8 @@ a mentioned issue on a switched-off server can't be read, while a mention of
 the server can be. Dean decided it (decision 13).
 
 **The stored text** is a mention like any other, through `mention-link`.
-Its form is pending worker 273's Part 1, and these targets are
-placeholders:
+It keeps the internal `luke://mcp/…` form, since a server has no page on
+the web ("The link format (settled)"):
 - `{kind: mcpServer, provider}` — e.g.
   `[@Linear](luke://mcp/linear)`;
 - `{kind: mcpTool, provider, tool}` — e.g.
