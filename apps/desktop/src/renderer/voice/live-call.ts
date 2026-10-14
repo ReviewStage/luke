@@ -124,7 +124,7 @@ interface LiveCallActs {
   reportActivity: (idle: boolean) => void;
 }
 
-/** Where the voice window's avatar feed goes: main, for the call window. Its binding is #11's. */
+/** Where the voice window's avatar feed goes: main, for the call window (`voice-host.tsx`). */
 export interface AvatarFeedActs {
   feed: (feed: AvatarFeed) => void;
 }

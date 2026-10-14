@@ -143,6 +143,17 @@ export const BRIDGE = {
     channel: "app:record-agent-trace",
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
+  /**
+   * One message of Luke's voice feed for his avatar, from the voice window
+   * alone, which main relays to the call window while the avatar is starting
+   * or live. A send rather than an act: it is 25 messages a second, and
+   * nothing reads an answer.
+   */
+  feedAvatar: entry({
+    kind: "send",
+    channel: "app:feed-avatar",
+    args: args<[AvatarFeed]>((v) => v.length === 1 && avatarFeedFromWire(v[0]) !== undefined),
+  }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({
     kind: "send",

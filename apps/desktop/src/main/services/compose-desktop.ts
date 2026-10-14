@@ -15,6 +15,7 @@ import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
 import { askEndCallAndQuit } from "../window/quit-dialog";
+import { type AvatarLink, linkAvatar } from "./avatar-link";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
@@ -47,6 +48,8 @@ export interface DesktopServices {
   readonly windows: WindowService;
   /** Where every coding-agent answer is noted, and the notification an agent's end is announced in. */
   readonly notices: AgentNotices;
+  /** Luke's avatar as the host holds it, which the call window's acts reach. */
+  readonly avatar: AvatarLink;
   /**
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
@@ -193,6 +196,14 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
+      // The host's avatar, bound from the launch on: its grants to the call
+      // window alone and where it stands to the document.
+      const avatar = yield* linkAvatar({
+        host: host.avatar,
+        state,
+        callWindow: windows.callWindow,
+        setVideo: (on) => operator.host.setVideo(on),
+      });
       // A quit asked for while a call stands asks first, as a call app does,
       // and nothing else holds one.
       quit.holdWhile(
@@ -295,7 +306,18 @@ export function composeDesktop(
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
       });
 
-      return { config, state, telemetry, native, updates, operator, windows, notices, run };
+      return {
+        config,
+        state,
+        telemetry,
+        native,
+        updates,
+        operator,
+        windows,
+        notices,
+        avatar,
+        run,
+      };
     }),
   );
 

@@ -34,7 +34,10 @@ export interface LiveComposer extends Composer {
 }
 
 export interface LiveDependencies {
-  settings: Pick<SettingsComposer, "recordProductEvent">;
+  settings: Pick<SettingsComposer, "recordProductEvent"> & {
+    /** Whether a call opens with Luke's avatar, read as each call comes to stand. */
+    readonly videoOnCall: Effect.Effect<boolean>;
+  };
   account: Pick<AccountComposer, "agentTrace"> & {
     readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
   };
@@ -62,7 +65,8 @@ export interface LiveDependencies {
  * create the session for the peer's offer about the open plan, end it on the
  * peer's hang-up or the drain, and carry the peer's idle, the stop key, and
  * the developer's video toggle to the service. The avatar's grant that toggle
- * draws is the holder's to hand on in process, and no method or event here
+ * draws is the holder's to hand on in process, through the assembly's
+ * `avatar` to the desktop's main process, and no method or event here
  * carries it. It reaches no brain and writes no record, so it needs no seam
  * for either. The holder stands for this composition's own scope, which is
  * the host's, and its graceful close stays a drain step of `compose-host.ts`
@@ -79,6 +83,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
   const service = yield* LiveSessionHolder.make({
     source: () => account.voiceCapabilities.liveSessions,
     createId: kernel.createId,
+    videoOnCall: settings.videoOnCall,
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {

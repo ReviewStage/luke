@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { withoutAccessTokens } from "./sentry-breadcrumbs";
+import { eventWithoutAccessTokens, withoutAccessTokens } from "./sentry-breadcrumbs";
 
 /**
  * sentry-breadcrumbs.test.ts -- a renderer's breadcrumbs as Sentry would carry them: LiveKit's token never among them.
@@ -50,4 +50,34 @@ test("a breadcrumb carrying no token is kept as it was", () => {
     data: { method: "GET", url: "https://luke.example.test/status", status_code: 200 },
   };
   assert.equal(withoutAccessTokens(breadcrumb), breadcrumb);
+});
+
+test("an error whose message carries a failed join's validate URL is dropped", () => {
+  const event = {
+    type: undefined,
+    exception: {
+      values: [
+        {
+          type: "ConnectionError",
+          value: `could not establish signal connection: https://x.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}`,
+        },
+      ],
+    },
+  };
+  assert.equal(eventWithoutAccessTokens(event), null);
+});
+
+test("an event whose request or message names the token is dropped", () => {
+  const url = `https://x.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}`;
+  assert.equal(eventWithoutAccessTokens({ type: undefined, request: { url } }), null);
+  assert.equal(eventWithoutAccessTokens({ type: undefined, message: `join failed: ${url}` }), null);
+});
+
+test("an event carrying no token is sent as it was", () => {
+  const event = {
+    type: undefined,
+    exception: { values: [{ type: "TypeError", value: "x is undefined" }] },
+    request: { url: "app://renderer/call.html" },
+  };
+  assert.equal(eventWithoutAccessTokens(event), event);
 });

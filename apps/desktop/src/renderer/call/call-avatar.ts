@@ -130,8 +130,9 @@ const firstFrame = (track: MediaStreamTrack): Effect.Effect<void> =>
  * starting, opened, fed, its tracks published as each arrives, reported live
  * on the video's first frame, and reported ended once the session closes,
  * for the reason it closed. A session that cannot be opened ends as an
- * error, and a scope closed under it, as main withdrawing the grant does,
- * ends it as the developer's own close.
+ * error, and a scope closed under it ends it as the developer's own close,
+ * which `callAvatar` lets through only while the grant still stands: the
+ * window going away, never main withdrawing the grant, which knows why.
  */
 const runAvatar = Effect.fnUntraced(
   function* (
@@ -180,17 +181,34 @@ const avatarOf = (grant: AvatarGrant, doors: CallAvatarDoors): Stream.Stream<Cal
 /**
  * The call window's avatar over the grants main hands it: each grant runs
  * its own session, and the next grant, or nothing, closes the one before.
+ * A session reports only while its grant is the one standing. Note that a
+ * withdrawn session still closing, which can take as long as Keyframe's
+ * `close()` takes to flush its queued audio, says nothing more, because main
+ * would read its end, or a late `LIVE`, as the next grant's.
  */
 export const callAvatar = (
   grants: Stream.Stream<AvatarGrant | undefined>,
   doors: CallAvatarDoors,
 ): Stream.Stream<CallAvatarTracks> =>
-  grants.pipe(
-    Stream.changesWith(sameGrant),
-    Stream.switchMap((grant) =>
-      grant === undefined ? Stream.make(NO_AVATAR_TRACKS) : avatarOf(grant, doors),
-    ),
-  );
+  Stream.suspend(() => {
+    let standing: AvatarGrant | undefined;
+    const reportingFor = (grant: AvatarGrant): CallAvatarDoors => ({
+      ...doors,
+      report: (avatar) =>
+        Effect.suspend(() => (standing === grant ? doors.report(avatar) : Effect.void)),
+    });
+    return grants.pipe(
+      Stream.changesWith(sameGrant),
+      Stream.tap((grant) =>
+        Effect.sync(() => {
+          standing = grant;
+        }),
+      ),
+      Stream.switchMap((grant) =>
+        grant === undefined ? Stream.make(NO_AVATAR_TRACKS) : avatarOf(grant, reportingFor(grant)),
+      ),
+    );
+  });
 
 /** A bridge subscription as a stream, unsubscribed with the stream's scope. */
 const subscription = <A>(subscribe: (deliver: (value: A) => void) => () => void) =>

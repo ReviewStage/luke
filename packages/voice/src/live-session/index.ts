@@ -21,10 +21,11 @@ export {
 } from "./live-brain.js";
 export type { LiveRecord, SpokenAskAttach } from "./live-record.js";
 export {
-  type AvatarGrant,
+  AVATAR_START_BOUND,
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,
   LIVE_SESSION_END_CAUSE,
+  type LiveAvatarEnd,
   type LiveAvatarState,
   LiveSessionHolder,
 } from "./live-session-holder.js";
