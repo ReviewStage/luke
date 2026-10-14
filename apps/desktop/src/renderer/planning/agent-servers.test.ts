@@ -220,7 +220,7 @@ test("a pointer's press on a server page's switch leaves the focus in the filter
       ?.click(),
   );
   const toggle =
-    container.querySelector<HTMLButtonElement>(".agent-servers-page-head .agent-servers-switch") ??
+    container.querySelector<HTMLButtonElement>('.agent-servers-page-head [role="switch"]') ??
     assert.fail("no switch on the page");
 
   // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.

@@ -9,6 +9,7 @@ import {
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
+  INBOX_FIELD,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -26,6 +27,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -317,6 +319,46 @@ test("a settled choice keeps every option its agent offered with the developer's
     reply.textContent ?? "",
     /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u,
   );
+});
+
+test("a form's select fields are radio groups, an optional one's pick taken back by pressing it again and a required one's kept, and its yes-or-no field a switch", async () => {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      response: {
+        type: INBOX_RESPONSE.FORM,
+        fields: [
+          { type: INBOX_FIELD.SELECT, label: "Channel", options: ["Email", "Slack"] },
+          { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+          { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+        ],
+      },
+    },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("no pane");
+  const channel = () => segmentedGroup(pane, "Channel");
+  const severity = () => segmentedGroup(pane, "Severity");
+  const onCall = () =>
+    pane.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Page on-call"]') ??
+    assert.fail("no Page on-call switch");
+  const unpicked = readSegmented(channel());
+
+  act(() => segment(channel(), "Slack").click());
+  act(() => segment(severity(), "High").click());
+  const picked = [readSegmented(channel()).checked, readSegmented(severity()).checked];
+  act(() => segment(channel(), "Slack").click());
+  act(() => segment(severity(), "High").click());
+  act(() => onCall().click());
+
+  assert.deepEqual(unpicked, { options: ["Email", "Slack"], checked: [], tabStops: ["Email"] });
+  assert.deepEqual(picked, [["Slack"], ["High"]]);
+  assert.deepEqual(readSegmented(channel()).checked, [], "the optional pick is taken back");
+  assert.deepEqual(readSegmented(severity()).checked, ["High"], "the required pick stands");
+  assert.equal(onCall().getAttribute("aria-checked"), "true");
 });
 
 test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {

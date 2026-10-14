@@ -15,6 +15,7 @@ import { useIntegrationTools } from "../integration-tools";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
+import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import {
   opensTools,
@@ -121,22 +122,15 @@ function ServerSwitch({
   servers: AgentServersControl;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="agent-servers-switch"
-      role="switch"
+    <Switch
+      checked={row.on}
+      label={`${row.name} for this agent`}
       onMouseDown={keepFieldFocus}
-      aria-checked={row.on}
-      aria-label={`${row.name} for this agent`}
-      onClick={(event) => {
+      onChange={(on, event) => {
         event.stopPropagation();
-        servers.onSwitch(switchedServers(servers.disabled, row.provider, !row.on));
+        servers.onSwitch(switchedServers(servers.disabled, row.provider, on));
       }}
-    >
-      <span className="switch plan-compose-menu-switch">
-        <span className="switch-thumb" />
-      </span>
-    </button>
+    />
   );
 }
 

@@ -14,6 +14,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { Segmented } from "../segmented";
 import { SETTINGS_SECTION } from "../settings-views";
 import { SpinnerRegion } from "../spinner";
 import { managesWorkspace } from "../workspace-role";
@@ -344,21 +345,13 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
           disabled={busy}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <fieldset className="settings-segments">
-          <legend className="visually-hidden">Role</legend>
-          {INVITATION_ROLES.map((each) => (
-            <button
-              key={each}
-              type="button"
-              className="settings-segment"
-              aria-pressed={each === role}
-              disabled={busy}
-              onClick={() => setRole(each)}
-            >
-              {ROLE_WORDS[each]}
-            </button>
-          ))}
-        </fieldset>
+        <Segmented
+          legend="Role"
+          options={INVITATION_ROLES.map((each) => ({ value: each, label: ROLE_WORDS[each] }))}
+          value={role}
+          disabled={busy}
+          onChange={setRole}
+        />
         <button type="submit" className="toolbar-button bordered-button" disabled={busy}>
           Invite
         </button>

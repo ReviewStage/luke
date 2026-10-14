@@ -803,11 +803,6 @@ button.code-card-path:hover {
   flex: 0 0 auto;
 }
 
-.file-tree-filter[aria-pressed="true"] {
-  background: var(--selected);
-  color: var(--text-primary);
-}
-
 .file-tree-notice {
   display: flex;
   flex-direction: column;
@@ -2067,14 +2062,6 @@ button.agent-ref:hover .agent-ref-name {
   visibility: visible;
 }
 
-.agent-servers-switch {
-  display: flex;
-  flex: none;
-  padding: 0;
-  border-radius: var(--menu-row-radius);
-  background: none;
-}
-
 .agent-servers-connect {
   height: 22px;
   padding: 0 var(--space-6);
@@ -2599,7 +2586,7 @@ button.subagent-line:hover {
 
 /* A choice's option on the Inbox (`inbox-pane.tsx`): a row the width of
    its card, its label over its trade-off, picked the way Settings' segments
-   are (`.settings-segment`), the fill of a chosen segment once pressed, ringed
+   are (`.segment`), the fill of a chosen segment once pressed, ringed
    so it reads apart from the hover that shares the fill. The
    one control of the tab with no kin elsewhere, since no other pick-one
    carries a line of detail. */

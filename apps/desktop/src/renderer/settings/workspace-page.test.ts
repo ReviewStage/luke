@@ -21,6 +21,7 @@ import {
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
@@ -523,6 +524,39 @@ test("an admin invites an address as a role, sees it pending with its link to co
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
       ],
     ],
+  );
+});
+
+test("an invitation's Role is a radio group, Member checked and the one stop for Tab, and an arrow chooses Admin, which the invitation is sent as", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const role = segmentedGroup(form, "Role");
+  const before = readSegmented(role);
+  const address = form.querySelector("input") ?? assert.fail("no address field");
+
+  pressKeyIn(role, "ArrowRight");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      address,
+      "alan@example.com",
+    );
+    address.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const moved = focusedSegment();
+  act(() => form.requestSubmit());
+  await settle();
+
+  assert.deepEqual(before, {
+    options: ["Member", "Admin"],
+    checked: ["Member"],
+    tabStops: ["Member"],
+  });
+  assert.equal(moved, "Admin");
+  assert.deepEqual(
+    sent.flatMap((request) =>
+      request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.role] : [],
+    ),
+    [WORKSPACE_ROLE.ADMIN],
   );
 });
 
