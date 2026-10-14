@@ -87,7 +87,7 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
       { userId, provider: providerId },
       Redacted.make(key),
     );
-    await database.run(saveProviderKey(userId, providerId, sealed, "sk-…test", new Date(0)));
+    await database.run(saveProviderKey(userId, providerId, sealed, "sk-…test", null, new Date(0)));
   }
   return userId;
 }

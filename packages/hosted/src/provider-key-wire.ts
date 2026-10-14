@@ -36,6 +36,21 @@ export const PROVIDER_KEY_STATUS = {
 
 export type ProviderKeyStatus = (typeof PROVIDER_KEY_STATUS)[keyof typeof PROVIDER_KEY_STATUS];
 
+/**
+ * Whether the organization behind a stored Anthropic key may run Anthropic's
+ * fast mode, a research preview it grants organization by organization, as
+ * the provider last answered a fast request on the key. A key no fast
+ * request has settled has none.
+ */
+export const FAST_ACCESS = {
+  /** The provider ran a fast request on the key. */
+  ENABLED: "enabled",
+  /** The provider refused a fast request on the key against a fast limit of 0: its organization was never granted fast mode. */
+  NOT_ENABLED: "not_enabled",
+} as const;
+
+export type FastAccess = (typeof FAST_ACCESS)[keyof typeof FAST_ACCESS];
+
 /** Why a save kept nothing. */
 export const PROVIDER_KEY_REJECTION = {
   /** The provider refused the key. */

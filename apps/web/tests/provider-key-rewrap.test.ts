@@ -49,6 +49,7 @@ const storeKey = (keys: KeyRing, userId: string, provider: ProviderKeyProvider, 
     provider,
     sealProviderKey(keys, { userId, provider }, Redacted.make(key)),
     "sk-…test",
+    null,
     new Date(0),
   );
 
