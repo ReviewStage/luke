@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, type SQL, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
@@ -40,6 +40,8 @@ export interface OpenAvatarSessionsClosing {
   readonly voiceSessionId: string;
   readonly endedAt: Date;
   readonly reason: AvatarEndReason;
+  /** Only the sessions started at or before this instant; every open one where absent. */
+  readonly startedBy?: Date | undefined;
 }
 
 /** A voice session as the account that owns it names it. */
@@ -63,7 +65,11 @@ const SecondsRowSchema = Schema.Struct({ seconds: Schema.Number });
 
 /** Whole seconds from start to the instant given, rounded up and never below zero. */
 function elapsedSeconds(endedAt: Date) {
-  const end = sql`${endedAt.toISOString()}::timestamptz`;
+  return elapsedSecondsTo(sql`${endedAt.toISOString()}::timestamptz`);
+}
+
+/** The same seconds, up to an instant the statement reads. */
+function elapsedSecondsTo(end: SQL) {
   return sql`greatest(0, ceil(extract(epoch from (${end} - ${voiceAvatarSessions.startedAt}))))::integer`;
 }
 
@@ -146,6 +152,7 @@ const writeClosingOf = SqlSchema.findAll({
     voiceSessionId: Schema.String,
     endedAt: Schema.Date,
     reason: ReasonSchema,
+    startedBy: Schema.optional(Schema.Date),
   }),
   Result: IdRowSchema,
   execute: (closing) =>
@@ -160,6 +167,38 @@ const writeClosingOf = SqlSchema.findAll({
         .where(
           and(
             eq(voiceAvatarSessions.voiceSessionId, closing.voiceSessionId),
+            isNull(voiceAvatarSessions.endedAt),
+            closing.startedBy === undefined
+              ? undefined
+              : lte(voiceAvatarSessions.startedAt, closing.startedBy),
+          ),
+        )
+        .returning({ id: voiceAvatarSessions.id }),
+    ),
+});
+
+/**
+ * Note that the close is the voice session's own instant, read in the same
+ * statement, so a row closed late says when the call ended rather than when
+ * it was found.
+ */
+const writeClosingOfEndedCalls = SqlSchema.findAll({
+  Request: Schema.Void,
+  Result: IdRowSchema,
+  execute: () =>
+    Database.use((db) =>
+      db
+        .update(voiceAvatarSessions)
+        .set({
+          endedAt: sql`${voiceSessions.closedAt}`,
+          endReason: AVATAR_END_REASON.CALL_ENDED,
+          seconds: elapsedSecondsTo(sql`${voiceSessions.closedAt}`),
+        })
+        .from(voiceSessions)
+        .where(
+          and(
+            eq(voiceSessions.id, voiceAvatarSessions.voiceSessionId),
+            isNotNull(voiceSessions.closedAt),
             isNull(voiceAvatarSessions.endedAt),
           ),
         )
@@ -232,6 +271,15 @@ export function closeOpenAvatarSessionsOf(
   closing: OpenAvatarSessionsClosing,
 ): AvatarSessionEffect<number> {
   return Effect.map(writeClosingOf(closing), (rows) => rows.length);
+}
+
+/**
+ * Closes every avatar session still open on a voice session that has itself
+ * closed, as of that close and as the call's end, and answers how many: the
+ * sweep's repair for a close that landed on the voice row and not behind it.
+ */
+export function closeAvatarSessionsOfEndedCalls(): AvatarSessionEffect<number> {
+  return Effect.map(writeClosingOfEndedCalls(undefined), (rows) => rows.length);
 }
 
 /** The avatar sessions still open on the account's voice session, oldest first. */
