@@ -5,39 +5,41 @@ import { Database } from "@sidecar/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { account } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
+import { generateCodeChallenge } from "better-auth/oauth2";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
+import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "../server/github/github-app";
 import {
-  GITHUB_REPOSITORY_SELECTION,
-  GitHubApp,
-  SIGN_IN_REQUIRED,
-} from "../server/github/github-app";
-import {
+  connectWorkspaceGitHub,
   fakeGitHub,
   GITHUB_APP_PUBLIC_KEY,
   GITHUB_APP_SETTINGS,
   GITHUB_FIXTURE,
+  GITHUB_FIXTURE_AUTHORIZED_TOKEN,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  GITHUB_FIXTURE_REFUSED_CODE,
   githubReaching,
+  type InstallationFixture,
   openGithubUser,
   standingGithubRow,
 } from "./support/github-app-fake";
+import { openWorkspace } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the
- * `HttpClient` and the account rows on a real Postgres dialect. What is held
- * here: the App speaks as itself with a JWT its own key signed; an
- * installation is confirmed as the App's own or not at all; a signed-in
- * user's token comes off the account row unsealed, refreshed on GitHub's
- * terms before it expires, and re-sealed in place, with every failure
- * carrying a kind or a status and never a token; and what the user reaches
- * through the App is every installation's repositories, paged, and a
- * repository is reachable only through the installation on its owner, which
- * is also what admits the one token the App mints, for that repository
- * alone with contents read.
+ * `HttpClient` and the rows on a real Postgres dialect. What is held here:
+ * the App speaks as itself with a JWT its own key signed; an installation is
+ * confirmed as the App's own or not at all; a workspace's repositories are
+ * those of the installation connected to it, and none where nothing is
+ * connected; a repository outside that installation is unreachable, and only
+ * one inside it admits the one token the App mints, for that repository
+ * alone with contents read; a connect's one-time code is exchanged with its
+ * PKCE verifier, read for the installations it sees, and revoked; and a
+ * signed-in user's token stays sealed on its row. Every failure carries a
+ * kind or a status and never a token.
  *
  * Synthetic keys, secrets, and tokens throughout (`support/github-app-fake.ts`).
  */
@@ -121,108 +123,69 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
-  it.effect("the row stays sealed: what the table holds is not the token", () =>
-    Effect.gen(function* () {
-      const db = yield* Database;
-      const now = yield* Clock.currentTimeMillis;
-      const userId = yield* openGithubUser(standingGithubRow(now));
-      const [row] = yield* db
-        .select({ accessToken: account.accessToken, refreshToken: account.refreshToken })
-        .from(account)
-        .where(eq(account.userId, userId));
-      assert.ok(row);
-      assert.notEqual(row.accessToken, standingGithubRow(0).accessToken);
-      assert.notEqual(row.refreshToken, standingGithubRow(0).refreshToken);
-    }),
-  );
+/** The octo-org installation under the id given, since one installation connects to one workspace and the suite's tests share a database. */
+const relayInstallation = (id: number): InstallationFixture => ({
+  id,
+  login: "octo-org",
+  repositories: [
+    { owner: "octo-org", name: "relay", defaultBranch: "trunk", updatedAt: "2026-10-02T00:00:00Z" },
+    { owner: "octo-org", name: "ledger", updatedAt: "2026-10-03T00:00:00Z" },
+  ],
+});
 
-  it.effect("the user's installations are read on the user's own token", () =>
-    Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
-      const fake = fakeGitHub((sent) =>
-        new URL(sent.url).pathname === "/user/installations"
-          ? Response.json({
-              total_count: 1,
-              installations: [
-                {
-                  id: INSTALLATION_ID,
-                  account: { login: "octocat", id: 583_231, type: "User" },
-                  repository_selection: GITHUB_REPOSITORY_SELECTION.ALL,
-                },
-              ],
-            })
-          : new Response(null, { status: 500 }),
-      );
-      const userId = yield* openGithubUser(standingGithubRow(now));
-      const app = yield* GitHubApp;
+const OTHER_INSTALLATION: InstallationFixture = {
+  id: 3,
+  login: "octocat",
+  repositories: [{ owner: "octocat", name: "dotfiles" }],
+};
 
-      const installations = yield* app.userInstallations(userId).pipe(Effect.provide(fake.layer));
-
-      assert.deepEqual(installations, [
-        {
-          id: INSTALLATION_ID,
-          accountLogin: "octocat",
-          accountId: 583_231,
-          accountType: GITHUB_ACCOUNT_TYPE.USER,
-          repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL,
-          ciReadable: false,
-        },
-      ]);
-      const [read] = fake.sent;
-      assert.equal(
-        read?.headers.get("authorization"),
-        `Bearer ${standingGithubRow(0).accessToken}`,
-      );
-    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
-  );
-
+it.layer(getTestDB())("a workspace's repositories through its installation", (it) => {
   it.effect(
-    "a revoked token calls for a new sign-in from the repository reads too, and leaks no token",
+    "a workspace's repositories are its installation's, listed on a token minted for the listing alone, and a workspace with nothing connected has none",
     () =>
       Effect.gen(function* () {
-        const fake = fakeGitHub(() =>
-          Response.json({ message: "Bad credentials" }, { status: 401 }),
-        );
-        const userId = yield* openGithubUser();
+        const relay = relayInstallation(2);
+        const fake = githubReaching([relay, OTHER_INSTALLATION]);
+        const owner = yield* openGithubUser();
+        const connected = yield* openWorkspace(owner);
+        const bare = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(connected, relay);
         const app = yield* GitHubApp;
 
-        const listing = yield* app
-          .userRepositories(userId)
-          .pipe(Effect.provide(fake.layer), Effect.flip);
-        const check = yield* app
-          .userRepository(userId, "octocat/dotfiles")
-          .pipe(Effect.provide(fake.layer), Effect.flip);
+        const listed = yield* app.workspaceRepositories(connected).pipe(Effect.provide(fake.layer));
+        const none = yield* app.workspaceRepositories(bare).pipe(Effect.provide(fake.layer));
 
-        for (const failure of [listing, check]) {
-          assert.deepEqual(
-            [failure._tag, "reason" in failure ? failure.reason : undefined],
-            ["GitHubSignInRequired", SIGN_IN_REQUIRED.TOKEN_REVOKED],
-          );
-        }
-        assert.equal(JSON.stringify([listing, check]).includes("ghu_"), false);
+        assert.deepEqual(
+          Option.map(listed, (repositories) => repositories.map((one) => one.fullName)),
+          Option.some(["octo-org/ledger", "octo-org/relay"]),
+        );
+        assert.ok(Option.isNone(none));
+        const [mint] = fake.sent.filter((sent) => sent.url.endsWith("/access_tokens"));
+        assert.ok(mint);
+        assert.equal(mint.url, "https://api.github.com/app/installations/2/access_tokens");
+        assert.deepEqual(JSON.parse(mint.body), { permissions: { metadata: "read" } });
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect(
-    "a read token is minted as the App for the one repository the user reaches, with contents read, and for no other",
+    "a read token is minted as the App for one repository of the workspace's installation, with contents read, and none for a repository outside it",
     () =>
       Effect.gen(function* () {
-        const fake = githubReaching([
-          {
-            id: 2,
-            login: "octo-org",
-            repositories: [{ owner: "octo-org", name: "relay", defaultBranch: "trunk" }],
-          },
-        ]);
-        const userId = yield* openGithubUser();
+        const relay = relayInstallation(4);
+        const fake = githubReaching([relay, OTHER_INSTALLATION]);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, relay);
         const app = yield* GitHubApp;
 
         const minted = yield* app
-          .repositoryReadToken(userId, "Octo-Org/Relay")
+          .repositoryReadToken(workspace, "Octo-Org/Relay")
           .pipe(Effect.provide(fake.layer));
-        const unreached = yield* app
-          .repositoryReadToken(userId, "octo-org/ledger")
+        const missing = yield* app
+          .repositoryReadToken(workspace, "octo-org/absent")
+          .pipe(Effect.provide(fake.layer));
+        const elsewhere = yield* app
+          .repositoryReadToken(workspace, "octocat/dotfiles")
           .pipe(Effect.provide(fake.layer));
 
         assert.ok(Option.isSome(minted));
@@ -230,14 +193,17 @@ it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
         assert.equal(minted.value.repository.defaultBranch, "trunk");
         assert.equal(Redacted.value(minted.value.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
         assert.equal(String(minted.value.token).includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
-        assert.ok(Option.isNone(unreached));
-        // The mint is the App's own request, under its JWT, naming the one repository and contents read.
-        const mints = fake.sent.filter((sent) => sent.url.endsWith("/access_tokens"));
+        assert.ok(Option.isNone(missing));
+        assert.ok(Option.isNone(elsewhere));
+        // The repository's mint is the App's own request, under its JWT, naming the one repository and contents read.
+        const mints = fake.sent.filter(
+          (sent) => sent.url.endsWith("/access_tokens") && "repositories" in JSON.parse(sent.body),
+        );
         assert.equal(mints.length, 1);
         const [mint] = mints;
         assert.ok(mint);
         assert.equal(mint.method, "POST");
-        assert.equal(mint.url, "https://api.github.com/app/installations/2/access_tokens");
+        assert.equal(mint.url, "https://api.github.com/app/installations/4/access_tokens");
         assert.deepEqual(JSON.parse(mint.body), {
           repositories: ["relay"],
           permissions: { contents: "read" },
@@ -251,43 +217,110 @@ it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
 
   it.effect("a mint GitHub refuses is unavailable by status, never a token", () =>
     Effect.gen(function* () {
-      const refusing = fakeGitHub((sent) => {
-        const { pathname } = new URL(sent.url);
-        if (pathname.endsWith("/access_tokens")) {
-          return Response.json(
-            { message: "Resource not accessible by integration" },
-            { status: 403 },
-          );
-        }
-        if (pathname === "/user/installations") {
-          return Response.json({
-            installations: [
-              { id: 2, account: { login: "octo-org" }, repository_selection: "selected" },
-            ],
-          });
-        }
-        return Response.json({
-          repositories: [
-            {
-              name: "relay",
-              full_name: "octo-org/relay",
-              owner: { login: "octo-org" },
-              private: true,
-              default_branch: "main",
-              updated_at: null,
-            },
-          ],
-        });
-      });
-      const userId = yield* openGithubUser();
+      const relay = relayInstallation(6);
+      const refusing = githubReaching([relay], undefined, {}, (sent) =>
+        sent.url.endsWith("/access_tokens") && "repositories" in JSON.parse(sent.body)
+          ? Response.json({ message: "Resource not accessible by integration" }, { status: 403 })
+          : undefined,
+      );
+      const owner = yield* openGithubUser();
+      const workspace = yield* openWorkspace(owner);
+      yield* connectWorkspaceGitHub(workspace, relay);
       const app = yield* GitHubApp;
 
       const failure = yield* app
-        .repositoryReadToken(userId, "octo-org/relay")
+        .repositoryReadToken(workspace, "octo-org/relay")
         .pipe(Effect.provide(refusing.layer), Effect.flip);
 
       assert.ok(failure._tag === "GitHubUnavailable");
       assert.equal(failure.status, 403);
     }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
+
+  it.effect(
+    "the sign-in's token stays sealed on its row: what the table holds is not the token",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const now = yield* Clock.currentTimeMillis;
+        const userId = yield* openGithubUser(standingGithubRow(now));
+        const [row] = yield* db
+          .select({ accessToken: account.accessToken, refreshToken: account.refreshToken })
+          .from(account)
+          .where(eq(account.userId, userId));
+        assert.ok(row);
+        assert.notEqual(row.accessToken, standingGithubRow(0).accessToken);
+        assert.notEqual(row.refreshToken, standingGithubRow(0).refreshToken);
+      }),
+  );
 });
+
+const CALLBACK = "https://tryluke.dev/api/github/installed/authorized";
+const VERIFIER = "fixture-code-verifier-of-enough-length-for-pkce-0123456789abcdef";
+
+it.effect(
+  "a connect is authorized on GitHub's web flow with the verifier's S256 challenge, and its code is exchanged with that verifier, read once for its installations, and revoked",
+  () =>
+    Effect.gen(function* () {
+      const relay = relayInstallation(8);
+      const fake = githubReaching([relay]);
+      const app = yield* GitHubApp;
+
+      const address = new URL(
+        yield* app.authorizeUrl({
+          redirectUri: CALLBACK,
+          state: "intent-state",
+          codeVerifier: VERIFIER,
+        }),
+      );
+      const seen = yield* app
+        .authorizedInstallations({
+          code: "one-time",
+          codeVerifier: VERIFIER,
+          redirectUri: CALLBACK,
+        })
+        .pipe(Effect.provide(fake.layer));
+      const refused = yield* app
+        .authorizedInstallations({
+          code: GITHUB_FIXTURE_REFUSED_CODE,
+          codeVerifier: VERIFIER,
+          redirectUri: CALLBACK,
+        })
+        .pipe(Effect.provide(fake.layer));
+
+      assert.equal(
+        `${address.origin}${address.pathname}`,
+        "https://github.com/login/oauth/authorize",
+      );
+      assert.deepEqual(Object.fromEntries(address.searchParams), {
+        client_id: GITHUB_FIXTURE.CLIENT_ID,
+        redirect_uri: CALLBACK,
+        state: "intent-state",
+        code_challenge: yield* Effect.promise(() => generateCodeChallenge(VERIFIER)),
+        code_challenge_method: "S256",
+      });
+      assert.deepEqual(
+        Option.map(seen, (installations) => installations.map((one) => one.id)),
+        Option.some([relayInstallation(8).id]),
+      );
+      assert.ok(Option.isNone(refused));
+      const [exchange] = fake.sent;
+      assert.ok(exchange);
+      assert.equal(exchange.url, "https://github.com/login/oauth/access_token");
+      const asked = new URLSearchParams(exchange.body);
+      assert.equal(asked.get("code"), "one-time");
+      assert.equal(asked.get("code_verifier"), VERIFIER);
+      assert.equal(asked.get("redirect_uri"), CALLBACK);
+      const read = fake.sent.find((sent) => sent.url.includes("/user/installations"));
+      assert.equal(read?.headers.get("authorization"), `Bearer ${GITHUB_FIXTURE_AUTHORIZED_TOKEN}`);
+      const revoked = fake.sent.filter((sent) => sent.method === "DELETE");
+      assert.equal(revoked.length, 1);
+      assert.equal(
+        revoked[0]?.url,
+        `https://api.github.com/applications/${GITHUB_FIXTURE.CLIENT_ID}/token`,
+      );
+      assert.deepEqual(JSON.parse(revoked[0]?.body ?? ""), {
+        access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN,
+      });
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+);

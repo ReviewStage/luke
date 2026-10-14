@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
@@ -18,15 +19,14 @@ import {
   githubReaching,
   openGithubUser,
 } from "./support/github-app-fake";
-
-import { openInstallationWorkspace, openWorkspace } from "./support/workspaces";
+import { fakeWorkspaceSeams, openInstallationWorkspace, openWorkspace } from "./support/workspaces";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test
- * scripts, and the account rows on a real dialect: the bearer names the
- * account whose token reads GitHub, the answer is what the App reaches for
- * that account with where to install it, and an account that must sign in
- * again or a GitHub that could not be read are each refused by name.
+ * scripts, and the account and workspace rows on a real dialect: the bearer
+ * names the account, the workspace named (or the account's personal one) is
+ * whose installation is listed, with where to install the App, and a
+ * workspace the account is not in is refused by name.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
@@ -65,7 +65,7 @@ const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, reques
     return { status: response.status, body } satisfies Answer;
   });
 
-/** The owner signed in with GitHub through the App; the other signed in with Google alone. */
+/** The owner signed in with GitHub through the App, which reaches nothing on its own; the other signed in with Google alone. */
 const openAccounts = (github: FakeGitHub) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -103,12 +103,12 @@ function listed(answered: Answer) {
 
 it.layer(getTestDB())("the repositories route", (it) => {
   it.effect(
-    "lists what the bearer's account reaches through the App, most recently updated first",
+    "a workspace lists its connected installation's repositories, most recently updated first",
     () =>
       Effect.gen(function* () {
         const github = githubReaching([
           {
-            id: 1,
+            id: 7101,
             login: "octocat",
             repositories: [
               { owner: "octocat", name: "dotfiles", updatedAt: "2026-09-01T00:00:00Z" },
@@ -117,8 +117,13 @@ it.layer(getTestDB())("the repositories route", (it) => {
           },
         ]);
         const { owner, ask } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7101,
+          accountId: 9101,
+          accountLogin: "octocat",
+        });
 
-        const reached = listed(yield* ask(owner));
+        const reached = listed(yield* ask(owner, "GET", [workspace]));
 
         assert.deepEqual(reached, {
           installed: true,
@@ -142,7 +147,9 @@ it.layer(getTestDB())("the repositories route", (it) => {
           ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
         });
+        // Note that neither the account's own token nor the App's are in the answer.
         assert.equal(JSON.stringify(reached).includes("ghu_"), false);
+        assert.equal(JSON.stringify(reached).includes("ghs_"), false);
       }),
   );
 
@@ -164,9 +171,10 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a workspace of an installation lists that installation's repositories alone, and a workspace of none, or none named, lists everything",
+    "a workspace of an installation lists that installation's alone, and a workspace with nothing connected, the personal one named or by default, lists none, uninstalled, as does a first read ahead of the personal workspace",
     () =>
       Effect.gen(function* () {
+        // Note that the account's own GitHub sign-in reaches both installations: none of it is listed but the workspace's.
         const github = githubReaching([
           { id: 7201, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
           { id: 7202, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
@@ -177,18 +185,20 @@ it.layer(getTestDB())("the repositories route", (it) => {
           accountId: 9201,
           accountLogin: "acme",
         });
-        const personal = yield* openWorkspace(owner);
+        const bare = yield* openWorkspace(owner);
+        const ahead = yield* ask(owner);
+        const personal = yield* ensurePersonalWorkspace(owner, yield* fakeWorkspaceSeams);
+        assert.ok(Option.isSome(personal));
         const names = (answered: Answer) => {
           const reached = listed(answered);
           return [reached.installed, reached.repositories.map((repository) => repository.fullName)];
         };
 
         assert.deepEqual(names(yield* ask(owner, "GET", [acme])), [true, ["acme/relay"]]);
-        assert.deepEqual(names(yield* ask(owner, "GET", [personal])), [
-          true,
-          ["acme/relay", "octocat/dotfiles"],
-        ]);
-        assert.deepEqual(names(yield* ask(owner)), [true, ["acme/relay", "octocat/dotfiles"]]);
+        assert.deepEqual(names(yield* ask(owner, "GET", [bare])), [false, []]);
+        assert.deepEqual(names(yield* ask(owner, "GET", [personal.value])), [false, []]);
+        assert.deepEqual(names(yield* ask(owner)), [false, []]);
+        assert.deepEqual(names(ahead), [false, []]);
       }),
   );
 

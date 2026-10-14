@@ -1,13 +1,12 @@
 /**
  * pull-requests.ts -- what a coding agent published, as GitHub holds it: a pull request by number or by its branch, a branch, the checks on a head, and a pull request's changed files.
  *
- * Every read runs on the developer's own GitHub App token
- * (`github-app.ts`'s `userToken`), the same reach that admits the agent's
- * checkout: the App's own permissions bound it, and a repository the
- * developer does not reach answers not found rather than refused. The
- * requests compose over the App module's own kit (`githubRead`,
- * `sendAsUser`, `readBody`) so a token leaves this module no more than it
- * leaves that one. The checks are read as one word for a dot: GitHub's
+ * Every read runs on an installation token the App minted for the agent's
+ * one repository on its workspace's installation (`github-app.ts`'s
+ * `repositoryPullRequestToken`), the same reach that admits the agent's
+ * checkout: the installation's own permissions bound it. The requests
+ * compose over the App module's own kit (`githubRead`, `send`, `readBody`)
+ * so a token leaves this module no more than it leaves that one. The checks are read as one word for a dot: GitHub's
  * check runs and its older commit statuses together, since a workflow
  * reports as the one and a deployment may report as the other, and a
  * repository where the App may read neither reads as having none, with a
@@ -35,11 +34,10 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
   GITHUB_HTTP_STATUS,
-  type GitHubSignInRequired,
   type GitHubUnavailable,
   githubRead,
   readBody,
-  sendAsUser,
+  send,
 } from "./github-app.js";
 
 /** A pull request as much as the agent's pill and its summary row draw: where it stands, its head, and its size. */
@@ -55,8 +53,8 @@ export interface GitHubPullRequest {
   readonly changedFiles: number;
 }
 
-/** What a read on the user's token fails with: GitHub unreachable or a sign-in owed. */
-export type PullRequestReadFailure = GitHubUnavailable | GitHubSignInRequired;
+/** What a read fails with: GitHub unreachable or answering off its shape. */
+export type PullRequestReadFailure = GitHubUnavailable;
 
 type Read<A> = Effect.Effect<A, PullRequestReadFailure, HttpClient.HttpClient>;
 
@@ -154,7 +152,7 @@ function readOptional<A>(
 ): Read<Option.Option<A>> {
   return Effect.scoped(
     Effect.flatMap(
-      sendAsUser(request),
+      send(request),
       (response): Effect.Effect<Option.Option<A>, GitHubUnavailable> =>
         response.status === GITHUB_HTTP_STATUS.NOT_FOUND
           ? Effect.succeed(Option.none())
@@ -264,7 +262,7 @@ function readChecks<A>(
 ): Read<CheckTally> {
   const none: CheckTally = { failing: false, pending: false, any: false };
   return Effect.scoped(
-    Effect.flatMap(sendAsUser(request), (response: HttpClientResponse.HttpClientResponse) => {
+    Effect.flatMap(send(request), (response: HttpClientResponse.HttpClientResponse) => {
       if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Effect.succeed(none);
       if (response.status === GITHUB_HTTP_STATUS.FORBIDDEN) {
         return Effect.as(

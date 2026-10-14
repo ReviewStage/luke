@@ -1,30 +1,43 @@
 /**
- * github-app.ts -- the Luke GitHub App as the server speaks for it: its own JWT, its installations, and a signed-in user's token.
+ * github-app.ts -- the Luke GitHub App as the server speaks for it: its own JWT, the installation a workspace connected, and the tokens it mints there.
  *
- * Signing in with GitHub is a user's authorization of the App, so the token
- * Better Auth leaves on the `account` row is a GitHub App user token: it
- * reaches only the repositories where the App is installed and the user has
- * access, and it expires in hours, with a refresh token that lasts months.
- * This is the one place either token is read back. The App itself speaks
- * with a JWT signed by its private key, which is how an installation GitHub
- * hands the Setup URL is confirmed as this App's own. What the user token
- * reads is the user's installations and the repositories each reaches,
- * which is both the list the desktop offers and the check a plan's
- * repository passes before it is kept: a repository is reachable only
- * through an installation, and a public repository the token could read
- * without one is deliberately not. The tokens the App mints are
- * installation tokens for one repository: with contents read alone for the
- * planning sandbox's checkout, and with contents and pull requests write for
- * a coding agent's branch and pull request, plus what reads its pull
- * request's CI where the installation has granted it; each is minted only
- * where that check passes. The user token also reads the user's own record
- * and the App's bot's, which is what a coding agent's commits are attributed
- * under.
+ * A workspace's repositories are the repositories of the one installation of
+ * the App connected to it (`hosted/github-installations.ts`), and nothing
+ * else: nobody's own GitHub account is asked what it reaches. The App speaks
+ * with a JWT signed by its private key, which reads an installation
+ * (`GET /app/installations/{id}`) and mints its tokens (`POST
+ * /app/installations/{id}/access_tokens`). A listing is read on a token
+ * minted for the listing alone (`GET /installation/repositories`); a
+ * repository is the workspace's only where that listing holds it, and only
+ * then is a token minted for it: contents read for a checkout or a file,
+ * contents and pull requests read for what a coding agent published, and
+ * contents and pull requests write for its branch and pull request, with
+ * what reads its pull request's CI beside the last two where the
+ * installation grants it. So what a member of the workspace reaches through
+ * Luke is what the installation reaches, whoever they are on GitHub, and
+ * what an agent commits and opens is the App's own.
+ *
+ * A connect is confirmed once on the installer's own say: GitHub's guidance
+ * for the Setup URL is that its `installation_id` is not to be trusted
+ * alone, and that the installation is to be checked against the user who
+ * installed it on a user access token
+ * (https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url).
+ * That token comes from GitHub's web application flow with PKCE
+ * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app):
+ * the code is exchanged, `GET /user/installations` read on the token once,
+ * and the token revoked (`DELETE /applications/{client_id}/token`,
+ * https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token);
+ * nothing of it is stored.
+ *
+ * Signing in with GitHub is also an authorization of the App, and the token
+ * Better Auth leaves on the `account` row is read here for one reader alone,
+ * GitHub's MCP server (`hosted/github-integration.ts`): refreshed when it is
+ * about to expire and re-sealed in place. No repository read takes it.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
- * `HttpClient` and the account row is read on the ambient `SqlClient`, so a
- * test stands a fake at the GitHub boundary and a throwaway database beneath
- * it, and the edge serving a request is the one place either is provided. A
+ * `HttpClient` and the rows are read on the ambient `SqlClient`, so a test
+ * stands a fake at the GitHub boundary and a throwaway database beneath it,
+ * and the edge serving a request is the one place either is provided. A
  * token leaves only as a `Redacted`, and a failure carries a status or a
  * kind and never the request that carried the bearer.
  */
@@ -38,6 +51,7 @@ import {
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { account } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";
 import {
   Clock,
@@ -58,10 +72,12 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { type GitHubRepository, text } from "../core.js";
+import { installationOfWorkspace } from "../hosted/github-installations.js";
 import type { StoreFailure } from "../hosted/store-failure.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
+const GITHUB_AUTHORIZE_ENDPOINT = "https://github.com/login/oauth/authorize";
 const GITHUB_APPS = "https://github.com/apps";
 const GITHUB_HEADERS = {
   accept: "application/vnd.github+json",
@@ -93,6 +109,9 @@ export const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
 
+/** PKCE as GitHub's web flow takes it: the SHA-256 of the verifier, base64url. */
+const PKCE_METHOD = "S256";
+
 /**
  * What reads a pull request's CI: its check runs, its commit statuses, and
  * the workflow runs behind them. An installation grants a permission the App
@@ -104,12 +123,17 @@ const CI_READ_PERMISSIONS = { checks: "read", statuses: "read", actions: "read" 
 
 /**
  * What the App asks of an installation token, by what the token is for:
- * contents read alone, which is what a checkout needs, or contents and pull
- * requests write, which is what a coding agent's push and pull request need,
- * with CI read beside them where the installation grants it.
+ * metadata alone, which lists the installation's repositories; contents read
+ * alone, which is what a checkout needs; contents and pull requests read,
+ * which reads what a coding agent published; or contents and pull requests
+ * write, which is what its push and pull request need. CI read stands beside
+ * the last two where the installation grants it.
  */
 const INSTALLATION_TOKEN_PERMISSIONS = {
+  LIST: { metadata: "read" },
   READ: { contents: "read" },
+  PULL_REQUESTS: { contents: "read", pull_requests: "read" },
+  PULL_REQUESTS_READING_CI: { contents: "read", pull_requests: "read", ...CI_READ_PERMISSIONS },
   WRITE: { contents: "write", pull_requests: "write" },
   WRITE_READING_CI: { contents: "write", pull_requests: "write", ...CI_READ_PERMISSIONS },
 } as const;
@@ -117,9 +141,9 @@ const INSTALLATION_TOKEN_PERMISSIONS = {
 type InstallationTokenPermissions =
   (typeof INSTALLATION_TOKEN_PERMISSIONS)[keyof typeof INSTALLATION_TOKEN_PERMISSIONS];
 
-/** The mint as GitHub takes it: the repositories by name, and the permissions the token is cut to. */
+/** The mint as GitHub takes it: the repositories by name, none for every one, and the permissions the token is cut to. */
 interface InstallationTokenRequest {
-  readonly repositories: readonly string[];
+  readonly repositories?: readonly string[];
   readonly permissions: InstallationTokenPermissions;
 }
 
@@ -227,7 +251,7 @@ export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
 }
 
 /** Why a user token could not be had, every case of which the user mends by signing in with GitHub again. */
-export const SIGN_IN_REQUIRED = {
+const SIGN_IN_REQUIRED = {
   /** The user holds no GitHub authorization: they signed in with Google alone, or revoked the App's and has not signed in with GitHub since. */
   NO_GITHUB_ACCOUNT: "no-github-account",
   /** The row holds the OAuth App's token from before the GitHub App, which reaches no installation and cannot be refreshed. */
@@ -236,12 +260,10 @@ export const SIGN_IN_REQUIRED = {
   REFRESH_REFUSED: "refresh-refused",
   /** The sealed token would not open under this deployment's secret. */
   UNREADABLE_TOKEN: "unreadable-token",
-  /** GitHub refused a token that had not reached its expiry: the user revoked the App's authorization. */
-  TOKEN_REVOKED: "token-revoked",
 } as const;
 type SignInRequiredReason = (typeof SIGN_IN_REQUIRED)[keyof typeof SIGN_IN_REQUIRED];
 
-export class GitHubSignInRequired extends Data.TaggedError("GitHubSignInRequired")<{
+class GitHubSignInRequired extends Data.TaggedError("GitHubSignInRequired")<{
   readonly reason: SignInRequiredReason;
 }> {
   override get message(): string {
@@ -249,30 +271,35 @@ export class GitHubSignInRequired extends Data.TaggedError("GitHubSignInRequired
   }
 }
 
-/** What a read of GitHub can fail with, apart from the account row. */
+/** What a read of GitHub can fail with, apart from the store. */
 export type GitHubReadFailure = GitHubAppNotConfigured | GitHubUnavailable;
+/** What a read of a workspace's installation can fail with: GitHub, or the store that names the installation. */
+export type GitHubWorkspaceReadFailure = GitHubReadFailure | StoreFailure;
 /** What a read on the user's own token can fail with. */
 export type GitHubUserReadFailure = GitHubReadFailure | GitHubSignInRequired | StoreFailure;
-
-/** What the App reaches for a user, read on the user's own token. */
-interface GitHubUserRepositories {
-  /** Whether the user reaches any installation of the App at all; false is "Install Luke on GitHub". */
-  readonly installed: boolean;
-  /** Every repository those installations reach for the user, most recently updated first. */
-  readonly repositories: readonly GitHubRepository[];
-}
-
-/** A repository the user reaches, and GitHub's id for the installation it is reached through. */
-interface GitHubReachedRepository {
-  readonly repository: GitHubRepository;
-  readonly installationId: number;
-}
 
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
 export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
   /** An installation token limited to this one repository, good for an hour from its mint. */
   readonly token: Redacted.Redacted;
+}
+
+/** What the browser is sent to GitHub with to authorize the App once, so the installer is confirmed. */
+interface GitHubAuthorizeRequest {
+  /** The callback GitHub returns the browser to, one of the App's registered callback URLs. */
+  readonly redirectUri: string;
+  /** What GitHub hands back unchanged. */
+  readonly state: string;
+  /** The PKCE code verifier, whose S256 challenge the address carries. */
+  readonly codeVerifier: string;
+}
+
+/** What the callback exchanges: GitHub's one-time code, with the verifier and callback the authorization was asked with. */
+export interface GitHubAuthorizeReturn {
+  readonly code: string;
+  readonly codeVerifier: string;
+  readonly redirectUri: string;
 }
 
 export interface GitHubAppService {
@@ -284,130 +311,109 @@ export interface GitHubAppService {
   readonly installation: (
     installationId: number,
   ) => Effect.Effect<Option.Option<GitHubInstallation>, GitHubReadFailure, HttpClient.HttpClient>;
-  /** The installations the signed-in user can reach, read on the user's own token. */
-  readonly userInstallations: (
-    userId: string,
+  /**
+   * Where the browser authorizes the App once, on GitHub's web flow with
+   * PKCE S256, so the installer of a connect can be confirmed.
+   */
+  readonly authorizeUrl: (
+    request: GitHubAuthorizeRequest,
+  ) => Effect.Effect<string, GitHubAppNotConfigured>;
+  /**
+   * The installations the user who authorized can reach: the code exchanged
+   * for a user access token, `GET /user/installations` read on it, and the
+   * token revoked; none where GitHub will not exchange the code.
+   */
+  readonly authorizedInstallations: (
+    returned: GitHubAuthorizeReturn,
   ) => Effect.Effect<
-    readonly GitHubInstallation[],
-    GitHubUserReadFailure,
-    HttpClient.HttpClient | DatabaseServices
+    Option.Option<readonly GitHubInstallation[]>,
+    GitHubReadFailure,
+    HttpClient.HttpClient
   >;
-  /** The repositories the signed-in user reaches through the App, read on the user's own token: every installation they reach, each paged through. */
-  readonly userRepositories: (
-    userId: string,
+  /**
+   * The repositories of the installation connected to the workspace, most
+   * recently updated first; none where it has no active installation.
+   */
+  readonly workspaceRepositories: (
+    organizationId: string,
   ) => Effect.Effect<
-    GitHubUserRepositories,
-    GitHubUserReadFailure,
+    Option.Option<readonly GitHubRepository[]>,
+    GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
-   * One repository by `owner/name`, where the user reaches it through the
-   * App, spelled as GitHub spells it; none where they do not, which is also
-   * what an App installed nowhere answers. Only the installation on the
-   * owner can reach it, so only that one is read, and only as far as the
-   * repository.
+   * One repository by `owner/name`, where the workspace's installation
+   * reaches it, spelled as GitHub spells it; none where it does not, which is
+   * also what a workspace with nothing connected answers. Only an
+   * installation on the owner can reach it, and the listing is read only as
+   * far as the repository.
    */
-  readonly userRepository: (
-    userId: string,
+  readonly workspaceRepository: (
+    organizationId: string,
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepository>,
-    GitHubUserReadFailure,
+    GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
-   * One repository by `owner/name` as `userRepository` reads it, with the id
-   * of the installation it is reached through: the installation on the
-   * owner, the only one that can reach it.
-   */
-  readonly userRepositoryInstallation: (
-    userId: string,
-    fullName: string,
-  ) => Effect.Effect<
-    Option.Option<GitHubReachedRepository>,
-    GitHubUserReadFailure,
-    HttpClient.HttpClient | DatabaseServices
-  >;
-  /**
-   * The repositories one installation reaches for the signed-in user, read on
-   * the user's own token and paged through, most recently updated first;
-   * none for an installation the token does not reach.
-   */
-  readonly userInstallationRepositories: (
-    userId: string,
-    installationId: number,
-  ) => Effect.Effect<
-    readonly GitHubRepository[],
-    GitHubUserReadFailure,
-    HttpClient.HttpClient | DatabaseServices
-  >;
-  /**
-   * A token for one repository the user reaches through the App, minted by
-   * the App itself for that installation (`POST
-   * /app/installations/{id}/access_tokens`), limited to the one repository
-   * and to contents read; none where the user does not reach it, on the same
-   * terms as `userRepository`. The user's own reach is what admits the mint,
-   * and the token is the App's, so what the checkout reads is bounded by
-   * both.
+   * A token for one repository of the workspace's installation, limited to
+   * that repository and to contents read; none where the installation does
+   * not reach it, on the same terms as `workspaceRepository`.
    */
   readonly repositoryReadToken: (
-    userId: string,
+    organizationId: string,
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
-    GitHubUserReadFailure,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /** The same mint with contents and pull requests read, and CI read where the installation grants it: what reads a coding agent's pull request. */
+  readonly repositoryPullRequestToken: (
+    organizationId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubRepositoryToken>,
+    GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * Whether a write token for the repository will read its pull requests'
-   * CI: the installation the user reaches it through grants the App
-   * `CI_READ_PERMISSIONS` whole; false where the user does not reach it.
+   * CI: the workspace's installation grants the App `CI_READ_PERMISSIONS`
+   * whole and reaches the repository.
    */
   readonly repositoryCiReadable: (
-    userId: string,
+    organizationId: string,
     fullName: string,
-  ) => Effect.Effect<boolean, GitHubUserReadFailure, HttpClient.HttpClient | DatabaseServices>;
+  ) => Effect.Effect<boolean, GitHubWorkspaceReadFailure, HttpClient.HttpClient | DatabaseServices>;
   /**
    * The same mint with contents and pull requests write, which is what a
    * coding agent's push to its branch and its pull request need, and with CI
-   * read beside them where the installation grants it, on the same terms:
-   * the user's own reach admits it, and the token reaches that one
-   * repository and no other.
+   * read beside them where the installation grants it.
    */
   readonly repositoryWriteToken: (
-    userId: string,
+    organizationId: string,
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
-    GitHubUserReadFailure,
+    GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
-  /**
-   * The signed-in user as GitHub records them, read on their own token
-   * (`GET /user`): what a commit of theirs is authored as.
-   */
-  readonly signedInUser: (
-    userId: string,
-  ) => Effect.Effect<GitHubUser, GitHubUserReadFailure, HttpClient.HttpClient | DatabaseServices>;
   /**
    * The App's own bot user, the account GitHub attributes the App's actions
-   * to, read on the signed-in user's token (`GET /users/<slug>[bot]`) since
-   * the App's JWT reaches no user endpoint; none where GitHub knows no bot
-   * by the App's slug, which is a deployment whose slug is mis-set.
+   * to, read on an installation token the caller holds (`GET
+   * /users/<slug>[bot]`) since the App's JWT reaches no user endpoint.
    */
   readonly appBot: (
-    userId: string,
-  ) => Effect.Effect<
-    Option.Option<GitHubUser>,
-    GitHubUserReadFailure,
-    HttpClient.HttpClient | DatabaseServices
-  >;
+    token: Redacted.Redacted,
+  ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
   /**
-   * The user's GitHub App token, refreshed and re-sealed on its row when it
-   * is about to expire. The read and the refresh run under a lock on the
-   * row, because GitHub retires a refresh token the moment it is used: two
-   * requests refreshing at once would leave the second holding a token
-   * GitHub no longer knows.
+   * The user's GitHub App token off their sign-in, refreshed and re-sealed on
+   * its row when it is about to expire; read for GitHub's MCP server alone.
+   * The read and the refresh run under a lock on the row, because GitHub
+   * retires a refresh token the moment it is used: two requests refreshing at
+   * once would leave the second holding a token GitHub no longer knows.
    */
   readonly userToken: (
     userId: string,
@@ -473,6 +479,10 @@ const RefreshedTokensSchema = Schema.Struct({
 });
 const TokenRefusalSchema = Schema.Struct({ error: Schema.String });
 const RefreshAnswerSchema = Schema.Union([RefreshedTokensSchema, TokenRefusalSchema]);
+
+/** GitHub's answer to a code exchange, read for the token alone; a refusal arrives with status 200 too. */
+const ExchangedTokenSchema = Schema.Struct({ access_token: Schema.String });
+const ExchangeAnswerSchema = Schema.Union([ExchangedTokenSchema, TokenRefusalSchema]);
 
 /** GitHub's answer to a token mint, read for the token alone. */
 const InstallationTokenSchema = Schema.Struct({ token: Schema.String });
@@ -709,31 +719,11 @@ function githubMintAsApp(
 }
 
 /** One request sent, its answer still open for the caller to read and close. */
-function send(
+export function send(
   request: HttpClientRequest.HttpClientRequest,
 ): Effect.Effect<HttpClientResponse.HttpClientResponse, GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.flatMap(HttpClient.HttpClient, (client) =>
     Effect.mapError(client.execute(request), unavailable),
-  );
-}
-
-/**
- * A read on the user's token sent, its answer still open for the caller to
- * read and close. A 401 here is not an outage: the token has not reached its
- * stored expiry, so GitHub refusing it means the user revoked the App's
- * authorization, which a new sign-in mends.
- */
-export function sendAsUser(
-  request: HttpClientRequest.HttpClientRequest,
-): Effect.Effect<
-  HttpClientResponse.HttpClientResponse,
-  GitHubUnavailable | GitHubSignInRequired,
-  HttpClient.HttpClient
-> {
-  return Effect.flatMap(send(request), (response) =>
-    response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED
-      ? Effect.fail(new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.TOKEN_REVOKED }))
-      : Effect.succeed(response),
   );
 }
 
@@ -743,7 +733,7 @@ type Enough<A> = (items: readonly A[]) => boolean;
 const WHOLE_LISTING: Enough<unknown> = () => false;
 
 /**
- * A paged listing on the user's token, read a hundred at a time until a
+ * A paged listing under the bearer given, read a hundred at a time until a
  * page comes back short or the items read are enough, and never past
  * `PAGING.MAX_PAGES`, where a listing still going is unbounded. Each page's
  * answer is read and closed before the next is asked for.
@@ -753,16 +743,16 @@ function readPages<A>(
   token: Redacted.Redacted,
   readPage: (
     response: HttpClientResponse.HttpClientResponse,
-  ) => Effect.Effect<readonly A[], GitHubUnavailable | GitHubSignInRequired>,
+  ) => Effect.Effect<readonly A[], GitHubUnavailable>,
   enough: Enough<A> = WHOLE_LISTING,
-): Effect.Effect<readonly A[], GitHubUnavailable | GitHubSignInRequired, HttpClient.HttpClient> {
+): Effect.Effect<readonly A[], GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const items: A[] = [];
     for (let page = 1; page <= PAGING.MAX_PAGES; page += 1) {
       const request = githubRead(path, token).pipe(
         HttpClientRequest.setUrlParams({ per_page: String(PAGING.PER_PAGE), page: String(page) }),
       );
-      const read = yield* Effect.scoped(Effect.flatMap(sendAsUser(request), readPage));
+      const read = yield* Effect.scoped(Effect.flatMap(send(request), readPage));
       items.push(...read);
       if (read.length < PAGING.PER_PAGE || enough(items)) return items;
     }
@@ -770,14 +760,10 @@ function readPages<A>(
   });
 }
 
-/** The installations the token reaches, every page of them. */
+/** The installations a user access token reaches, every page of them. */
 function installationsOnToken(
   token: Redacted.Redacted,
-): Effect.Effect<
-  readonly GitHubInstallation[],
-  GitHubUnavailable | GitHubSignInRequired,
-  HttpClient.HttpClient
-> {
+): Effect.Effect<readonly GitHubInstallation[], GitHubUnavailable, HttpClient.HttpClient> {
   return readPages("/user/installations", token, (response) =>
     Effect.map(readBody(response, UserInstallationsSchema), (answer) =>
       answer.installations.map(installationOf),
@@ -785,30 +771,18 @@ function installationsOnToken(
   );
 }
 
-/**
- * The repositories one installation reaches for the token's user, every page
- * of them or as many as are enough. An installation GitHub no longer knows,
- * uninstalled between the listing that named it and this read, reaches
- * nothing rather than failing the whole.
- */
-function repositoriesOfInstallation(
+/** The repositories an installation token reaches, every page of them or as many as are enough. */
+function repositoriesOnInstallationToken(
   token: Redacted.Redacted,
-  installationId: number,
   enough: Enough<GitHubRepository> = WHOLE_LISTING,
-): Effect.Effect<
-  readonly GitHubRepository[],
-  GitHubUnavailable | GitHubSignInRequired,
-  HttpClient.HttpClient
-> {
+): Effect.Effect<readonly GitHubRepository[], GitHubUnavailable, HttpClient.HttpClient> {
   return readPages(
-    `/user/installations/${installationId}/repositories`,
+    "/installation/repositories",
     token,
     (response) =>
-      response.status === GITHUB_HTTP_STATUS.NOT_FOUND
-        ? Effect.succeed([])
-        : Effect.map(readBody(response, InstallationRepositoriesSchema), (answer) =>
-            answer.repositories.map(repositoryOf),
-          ),
+      Effect.map(readBody(response, InstallationRepositoriesSchema), (answer) =>
+        answer.repositories.map(repositoryOf),
+      ),
     enough,
   );
 }
@@ -955,129 +929,188 @@ function githubAppService(
       );
     });
 
+  const installation = (installationId: number) =>
+    Effect.gen(function* () {
+      const jwt = yield* appJwt;
+      const response = yield* send(githubRead(`/app/installations/${installationId}`, jwt));
+      if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Option.none();
+      const record = yield* readBody(response, InstallationSchema);
+      return Option.some(installationOf(record));
+    }).pipe(Effect.scoped);
+
+  /** A token minted as the App on the installation, cut as asked. */
+  const mint = (installationId: number, request: InstallationTokenRequest) =>
+    Effect.gen(function* () {
+      const jwt = yield* appJwt;
+      const minted = yield* Effect.scoped(
+        Effect.flatMap(
+          send(githubMintAsApp(`/app/installations/${installationId}/access_tokens`, jwt, request)),
+          (response) => readBody(response, InstallationTokenSchema),
+        ),
+      );
+      return Redacted.make(minted.token);
+    });
+
+  /**
+   * The installation connected to the workspace as GitHub holds it now; none
+   * where none active is connected, or GitHub no longer knows the one that is.
+   */
+  const workspaceInstallation = (organizationId: string) =>
+    Effect.gen(function* () {
+      const connected = yield* installationOfWorkspace(organizationId);
+      if (Option.isNone(connected)) return Option.none<GitHubInstallation>();
+      return yield* installation(connected.value);
+    });
+
+  /** The installation's repositories, every one or as many as are enough, read on a token minted for the listing alone. */
+  const repositoriesOf = (
+    reached: GitHubInstallation,
+    enough: Enough<GitHubRepository> = WHOLE_LISTING,
+  ) =>
+    Effect.flatMap(
+      mint(reached.id, { permissions: INSTALLATION_TOKEN_PERMISSIONS.LIST }),
+      (token) => repositoriesOnInstallationToken(token, enough),
+    );
+
   /**
    * The repository and the installation it is reached through, where the
-   * user reaches it: only the installation on the owner can, so only that
-   * one is read, and only as far as the page the repository is on.
+   * workspace's installation reaches it: only an installation on the owner
+   * can, and the listing is read only as far as the page the repository is
+   * on.
    */
-  const reachableRepository = (userId: string, fullName: string) =>
+  const reachableRepository = (organizationId: string, fullName: string) =>
     Effect.gen(function* () {
       const [owner] = fullName.split("/");
-      const token = yield* userToken(userId);
-      const installations = yield* installationsOnToken(token);
-      const onOwner = installations.find(
-        (installation) =>
-          installation.accountLogin !== undefined &&
-          sameName(installation.accountLogin, owner ?? ""),
-      );
-      if (onOwner === undefined) return Option.none();
+      const reached = yield* workspaceInstallation(organizationId);
+      if (Option.isNone(reached)) return Option.none();
+      const onOwner = reached.value;
+      if (onOwner.accountLogin === undefined || !sameName(onOwner.accountLogin, owner ?? "")) {
+        return Option.none();
+      }
       const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
-      const repositories = yield* repositoriesOfInstallation(token, onOwner.id, (read) =>
-        read.some(isNamed),
-      );
+      const repositories = yield* repositoriesOf(onOwner, (read) => read.some(isNamed));
       return Option.map(Option.fromNullishOr(repositories.find(isNamed)), (repository) => ({
         installation: onOwner,
         repository,
       }));
     });
 
-  /** A token minted as the App for the one repository the user reaches, cut to the permissions chosen for its installation; none where they do not reach it. */
+  /** A token minted as the App for the one repository the workspace reaches, cut to the permissions chosen for its installation; none where it does not reach it. */
   const repositoryToken = (
-    userId: string,
+    organizationId: string,
     fullName: string,
     permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions,
   ) =>
     Effect.gen(function* () {
-      const reached = yield* reachableRepository(userId, fullName);
+      const reached = yield* reachableRepository(organizationId, fullName);
       if (Option.isNone(reached)) return Option.none();
-      const { installation, repository } = reached.value;
-      const jwt = yield* appJwt;
-      const minted = yield* Effect.scoped(
-        Effect.flatMap(
-          send(
-            githubMintAsApp(`/app/installations/${installation.id}/access_tokens`, jwt, {
-              repositories: [repository.name],
-              permissions: permissionsOn(installation),
-            }),
-          ),
-          (response) => readBody(response, InstallationTokenSchema),
-        ),
-      );
-      return Option.some({ repository, token: Redacted.make(minted.token) });
+      const { installation: on, repository } = reached.value;
+      const token = yield* mint(on.id, {
+        repositories: [repository.name],
+        permissions: permissionsOn(on),
+      });
+      return Option.some({ repository, token });
     });
+
+  /**
+   * GitHub's token endpoint asked to exchange a web flow's code, on the same
+   * terms as a refresh: the answer is 200 either way, so a refusal is read
+   * out of the body, and is none.
+   */
+  const exchangeCode = (app: ReadySettings, returned: GitHubAuthorizeReturn) =>
+    Effect.gen(function* () {
+      const request = HttpClientRequest.post(GITHUB_TOKEN_ENDPOINT).pipe(
+        HttpClientRequest.acceptJson,
+        HttpClientRequest.bodyUrlParams({
+          client_id: app.clientId,
+          client_secret: Redacted.value(app.clientSecret),
+          code: returned.code,
+          redirect_uri: returned.redirectUri,
+          code_verifier: returned.codeVerifier,
+        }),
+      );
+      const answer = yield* Effect.scoped(
+        Effect.flatMap(send(request), (response) => readBody(response, ExchangeAnswerSchema)),
+      );
+      return "error" in answer ? Option.none() : Option.some(Redacted.make(answer.access_token));
+    });
+
+  /** The user access token revoked, under the App's client credentials. */
+  const revokeToken = (app: ReadySettings, token: Redacted.Redacted) =>
+    Effect.scoped(
+      Effect.flatMap(
+        send(
+          HttpClientRequest.delete(`${GITHUB_API}/applications/${app.clientId}/token`).pipe(
+            HttpClientRequest.basicAuth(app.clientId, Redacted.value(app.clientSecret)),
+            HttpClientRequest.setHeaders(GITHUB_HEADERS),
+            HttpClientRequest.bodyJsonUnsafe({ access_token: Redacted.value(token) }),
+          ),
+        ),
+        (response) => Effect.mapError(HttpClientResponse.filterStatusOk(response), unavailable),
+      ),
+    );
 
   return {
     installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
     appJwt,
-    installation: (installationId) =>
+    installation,
+    authorizeUrl: (request) =>
       Effect.gen(function* () {
-        const jwt = yield* appJwt;
-        const response = yield* send(githubRead(`/app/installations/${installationId}`, jwt));
-        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Option.none();
-        const record = yield* readBody(response, InstallationSchema);
-        return Option.some(installationOf(record));
-      }).pipe(Effect.scoped),
-    userInstallations: (userId) => Effect.flatMap(userToken(userId), installationsOnToken),
-    userRepositories: (userId) =>
-      Effect.gen(function* () {
-        const token = yield* userToken(userId);
-        const installations = yield* installationsOnToken(token);
-        const repositories: GitHubRepository[] = [];
-        for (const installation of installations) {
-          repositories.push(...(yield* repositoriesOfInstallation(token, installation.id)));
-        }
-        return {
-          installed: installations.length > 0,
-          repositories: repositories.sort(byMostRecentlyUpdated),
-        };
+        const app = yield* ready;
+        const challenge = yield* Effect.promise(() => generateCodeChallenge(request.codeVerifier));
+        const url = new URL(GITHUB_AUTHORIZE_ENDPOINT);
+        url.searchParams.set("client_id", app.clientId);
+        url.searchParams.set("redirect_uri", request.redirectUri);
+        url.searchParams.set("state", request.state);
+        url.searchParams.set("code_challenge", challenge);
+        url.searchParams.set("code_challenge_method", PKCE_METHOD);
+        return url.toString();
       }),
-    userRepository: (userId, fullName) =>
+    authorizedInstallations: (returned) =>
+      Effect.gen(function* () {
+        const app = yield* ready;
+        const token = yield* exchangeCode(app, returned);
+        if (Option.isNone(token)) return Option.none();
+        const installations = yield* installationsOnToken(token.value);
+        yield* revokeToken(app, token.value);
+        return Option.some(installations);
+      }),
+    workspaceRepositories: (organizationId) =>
+      Effect.gen(function* () {
+        const reached = yield* workspaceInstallation(organizationId);
+        if (Option.isNone(reached)) return Option.none();
+        const repositories = yield* repositoriesOf(reached.value);
+        return Option.some([...repositories].sort(byMostRecentlyUpdated));
+      }),
+    workspaceRepository: (organizationId, fullName) =>
       Effect.map(
-        reachableRepository(userId, fullName),
+        reachableRepository(organizationId, fullName),
         Option.map((reached) => reached.repository),
       ),
-    userRepositoryInstallation: (userId, fullName) =>
-      Effect.map(
-        reachableRepository(userId, fullName),
-        Option.map((reached) => ({
-          repository: reached.repository,
-          installationId: reached.installation.id,
-        })),
+    repositoryReadToken: (organizationId, fullName) =>
+      repositoryToken(organizationId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
+    repositoryPullRequestToken: (organizationId, fullName) =>
+      repositoryToken(organizationId, fullName, (on) =>
+        on.ciReadable
+          ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
+          : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS,
       ),
-    userInstallationRepositories: (userId, installationId) =>
-      Effect.gen(function* () {
-        const token = yield* userToken(userId);
-        const repositories = yield* repositoriesOfInstallation(token, installationId);
-        return [...repositories].sort(byMostRecentlyUpdated);
-      }),
-    repositoryReadToken: (userId, fullName) =>
-      repositoryToken(userId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
-    repositoryCiReadable: (userId, fullName) =>
+    repositoryCiReadable: (organizationId, fullName) =>
       Effect.map(
-        reachableRepository(userId, fullName),
+        reachableRepository(organizationId, fullName),
         (reached) => Option.isSome(reached) && reached.value.installation.ciReadable,
       ),
-    repositoryWriteToken: (userId, fullName) =>
-      repositoryToken(userId, fullName, (installation) =>
-        installation.ciReadable
+    repositoryWriteToken: (organizationId, fullName) =>
+      repositoryToken(organizationId, fullName, (on) =>
+        on.ciReadable
           ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
           : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
       ),
-    signedInUser: (userId) =>
-      Effect.gen(function* () {
-        const token = yield* userToken(userId);
-        const response = yield* sendAsUser(githubRead("/user", token));
-        return userOf(yield* readBody(response, UserSchema));
-      }).pipe(Effect.scoped),
-    appBot: (userId) =>
+    appBot: (token) =>
       Effect.gen(function* () {
         const app = yield* ready;
-        const token = yield* userToken(userId);
-        const response = yield* sendAsUser(
-          githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token),
-        );
-        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Option.none();
-        return Option.some(userOf(yield* readBody(response, UserSchema)));
+        const response = yield* send(githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token));
+        return userOf(yield* readBody(response, UserSchema));
       }).pipe(Effect.scoped),
     userToken,
   };

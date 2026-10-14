@@ -6,7 +6,7 @@
  * names it or the work matches it; it never looks in a checkout for skills
  * of its own. So a repository's skills are read from GitHub as a session
  * starts (`../repository-skills.ts`), on a read token for that one
- * repository, and handed to eve as skills of the session, each one's body
+ * repository minted on the installation of the plan's workspace, and handed to eve as skills of the session, each one's body
  * told where the skill stands in the agent's own view of the repository, so
  * the files it names can be found. A skill's body is handed as markdown
  * alone, so eve writes nothing into a sandbox and opens none for it. Which
@@ -22,6 +22,7 @@ import type { HttpClient } from "effect/http";
 import { defineSkill } from "eve/skills";
 import { GitHubApp } from "../../github/github-app.js";
 import { type RepositorySkill, readRepositorySkills } from "../repository-skills.js";
+import { planWorkspace } from "../workspace-repository.js";
 
 /** One skill as eve is handed it: its name, the description it routes on, and the body `load_skill` answers. */
 export interface AgentSkill {
@@ -33,11 +34,12 @@ export interface AgentSkill {
 /**
  * The skills the repository keeps on its default branch, as eve is handed
  * them, each body led by where it stands for the agent reading it; none
- * where the App does not reach the repository or GitHub could not be read,
- * which is logged.
+ * where the installation of the plan's workspace does not reach the
+ * repository or GitHub could not be read, which is logged.
  */
 export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills")(function* (
   target: ConversationTarget,
+  planId: string,
   repository: string,
   loaded: (skill: RepositorySkill) => string,
 ): Effect.fn.Return<
@@ -47,7 +49,9 @@ export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills"
 > {
   const app = yield* GitHubApp;
   const read = Effect.gen(function* () {
-    const reached = yield* app.repositoryReadToken(target.userId, repository);
+    const workspace = yield* planWorkspace(target.userId, planId);
+    if (Option.isNone(workspace)) return [];
+    const reached = yield* app.repositoryReadToken(workspace.value, repository);
     if (Option.isNone(reached)) return [];
     return yield* readRepositorySkills(reached.value.token, reached.value.repository);
   });

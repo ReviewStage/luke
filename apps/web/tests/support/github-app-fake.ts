@@ -1,10 +1,12 @@
 /**
- * github-app-fake.ts -- the Luke GitHub App over a GitHub that answers from a test's own script, and the account rows a sign-in leaves.
+ * github-app-fake.ts -- the Luke GitHub App over a GitHub that answers from a test's own script, a workspace's connected installation, and the account rows a sign-in leaves.
  *
  * A suite stands the real `GitHubApp` over fixed settings and a fake
  * `HttpClient`, so what it holds is what the service asks GitHub and what it
- * makes of the answer. The account rows are the ones Better Auth leaves on
- * a sign-in through the App: tokens sealed under the session secret, with
+ * makes of the answer. A workspace reaches repositories only through the
+ * installation connected to it, which `connectWorkspaceGitHub` links as a
+ * finished connect would. The account rows are the ones Better Auth leaves
+ * on a sign-in through the App: tokens sealed under the session secret, with
  * their expiries beside them. A row's instants hang off the test clock as it
  * stands rather than off a clock the test moved: under a real Postgres pool
  * a `TestClock.setTime` jump left every later statement waiting, which
@@ -24,6 +26,7 @@ import {
   GitHubApp,
   type GitHubAppSettings,
 } from "../../server/github/github-app";
+import { linkInstallation } from "../../server/hosted/github-installations";
 
 export const GITHUB_FIXTURE = {
   HOUR_MS: 60 * 60 * 1000,
@@ -68,15 +71,23 @@ const GITHUB_APP_LAYER: Layer.Layer<GitHubApp> = GitHubApp.layer(GITHUB_APP_SETT
 /** The token the fake App mints for a repository, which is what a test reads for at the sandbox's firewall. */
 export const GITHUB_FIXTURE_INSTALLATION_TOKEN = "ghs_fixture_installation_token";
 
+/** The token the fake App mints for listing one installation's repositories, naming the installation so the listing knows whose it is. */
+function listingTokenOf(installationId: number): string {
+  return `ghs_fixture_listing_${installationId}`;
+}
+
+/** The user access token GitHub's web flow hands the fake for any code but the refused one. */
+export const GITHUB_FIXTURE_AUTHORIZED_TOKEN = "ghu_fixture_authorized";
+
+/** A code the fake's token endpoint refuses, as GitHub refuses one spent or expired. */
+export const GITHUB_FIXTURE_REFUSED_CODE = "refused-code";
+
 /** One account as GitHub records it, as far as a commit identity reads: the name null where the account set none. */
 export interface UserFixture {
   readonly id: number;
   readonly login: string;
   readonly name?: string | null;
 }
-
-/** The signed-in developer GitHub answers `GET /user` with; the id is the one `openGithubUser` leaves on the account row. */
-export const GITHUB_FIXTURE_USER: UserFixture = { id: 4242, login: "octo-dev", name: "Octo Dev" };
 
 /** The fixture App's own bot user, under the login GitHub gives an App's bot. */
 export const GITHUB_FIXTURE_BOT: UserFixture = {
@@ -85,9 +96,8 @@ export const GITHUB_FIXTURE_BOT: UserFixture = {
   name: null,
 };
 
-/** Whom GitHub knows, beside the installations: the signed-in developer, and the App's bot, or none under the App's slug. */
+/** Whom GitHub knows, beside the installations: the App's bot, or none under the App's slug. */
 export interface GitHubPeople {
-  readonly user?: UserFixture;
   readonly bot?: UserFixture | null;
 }
 
@@ -173,8 +183,10 @@ function sliceOf<A>(items: readonly A[], url: string): readonly A[] {
   return items.slice((page - 1) * perPage, page * perPage);
 }
 
-const INSTALLATION_REPOSITORIES = /^\/user\/installations\/(\d+)\/repositories$/u;
+const INSTALLATION = /^\/app\/installations\/(\d+)$/u;
 const INSTALLATION_ACCESS_TOKENS = /^\/app\/installations\/(\d+)\/access_tokens$/u;
+const APP_TOKEN = /^\/applications\/[^/]+\/token$/u;
+const TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
 const USER_BY_LOGIN = /^\/users\/([^/]+)$/u;
 
 /** GitHub's own record of a user, as much of it as the service reads and a little it does not. */
@@ -191,12 +203,30 @@ function userJson(fixture: UserFixture) {
 /** What a repository answers on its own paths, where a test scripts one; nothing hands the request on to not found. */
 export type RepositoryScript = (sent: SentToGitHub) => Response | undefined;
 
+/** GitHub's own record of an installation, as `GET /app/installations/{id}` and `GET /user/installations` answer it. */
+function installationJson(installation: InstallationFixture) {
+  return {
+    id: installation.id,
+    account: {
+      login: installation.login,
+      id: installation.accountId ?? 50_000 + installation.id,
+      type: installation.accountType ?? "User",
+    },
+    repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+    permissions: installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS,
+    app_id: Number(GITHUB_FIXTURE.APP_ID),
+  };
+}
+
 /**
- * A GitHub on which the user reaches the installations given, paged the way
- * GitHub pages them, the App mints a token for any of those installations,
- * the developer and the App's bot are the people given, the fixture's own
- * when unsaid, and a repository answers from the script given where a test
- * hands one; nothing else: any other request fails.
+ * A GitHub on which the App is installed as given, each installation's
+ * repositories listed on a token minted for the listing and paged the way
+ * GitHub pages them; the App mints a token for any of those installations;
+ * GitHub's web flow exchanges any code but the refused one for a user
+ * access token that sees every installation given, and revokes it; the App's
+ * bot is the one given, the fixture's own when unsaid; and a repository
+ * answers from the script given where a test hands one. Nothing else: any
+ * other request fails.
  */
 export function githubReaching(
   installations: readonly InstallationFixture[],
@@ -204,61 +234,81 @@ export function githubReaching(
   people: GitHubPeople = {},
   repository: RepositoryScript = () => undefined,
 ): FakeGitHub {
-  const user = people.user ?? GITHUB_FIXTURE_USER;
   const bot = people.bot === undefined ? GITHUB_FIXTURE_BOT : people.bot;
+  const notFound = () => Response.json({ message: "Not Found" }, { status: 404 });
   return fakeGitHub((sent) => {
+    if (sent.url === TOKEN_ENDPOINT) {
+      return new URLSearchParams(sent.body).get("code") === GITHUB_FIXTURE_REFUSED_CODE
+        ? Response.json({ error: "bad_verification_code" })
+        : Response.json({ access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN, token_type: "bearer" });
+    }
     const { pathname } = new URL(sent.url);
     const scripted = repository(sent);
     if (scripted !== undefined) return scripted;
-    if (pathname === "/user") return Response.json(userJson(user));
+    if (APP_TOKEN.test(pathname) && sent.method === "DELETE") {
+      return new Response(null, { status: 204 });
+    }
     const byLogin = USER_BY_LOGIN.exec(pathname);
     if (byLogin !== null) {
       return bot !== null && decodeURIComponent(byLogin[1] ?? "") === bot.login
         ? Response.json(userJson(bot))
-        : Response.json({ message: "Not Found" }, { status: 404 });
+        : notFound();
+    }
+    const named = INSTALLATION.exec(pathname);
+    if (named !== null) {
+      const installation = installations.find((candidate) => String(candidate.id) === named[1]);
+      return installation === undefined
+        ? notFound()
+        : Response.json(installationJson(installation));
     }
     const minting = INSTALLATION_ACCESS_TOKENS.exec(pathname);
     if (minting !== null) {
-      return installations.some((candidate) => String(candidate.id) === minting[1])
-        ? Response.json(
-            {
-              token: GITHUB_FIXTURE_INSTALLATION_TOKEN,
-              expires_at: "2026-10-01T01:00:00Z",
-              permissions: { contents: "read" },
-              repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
-            },
-            { status: 201 },
-          )
-        : Response.json({ message: "Not Found" }, { status: 404 });
+      const installation = installations.find((candidate) => String(candidate.id) === minting[1]);
+      if (installation === undefined) return notFound();
+      const forRepositories = "repositories" in JSON.parse(sent.body);
+      return Response.json(
+        {
+          token: forRepositories
+            ? GITHUB_FIXTURE_INSTALLATION_TOKEN
+            : listingTokenOf(installation.id),
+          expires_at: "2026-10-01T01:00:00Z",
+          repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+        },
+        { status: 201 },
+      );
     }
     if (pathname === "/user/installations") {
       return Response.json({
         total_count: installations.length,
-        installations: sliceOf(installations, sent.url).map((installation) => ({
-          id: installation.id,
-          account: {
-            login: installation.login,
-            id: installation.accountId ?? 50_000 + installation.id,
-            type: installation.accountType ?? "User",
-          },
-          repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
-          permissions: installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS,
-          app_id: Number(GITHUB_FIXTURE.APP_ID),
-        })),
+        installations: sliceOf(installations, sent.url).map(installationJson),
       });
     }
-    const match = INSTALLATION_REPOSITORIES.exec(pathname);
-    const installation = installations.find((candidate) => String(candidate.id) === match?.[1]);
-    if (installation === undefined) {
-      return Response.json({ message: "Not Found" }, { status: 404 });
+    if (pathname === "/installation/repositories") {
+      const bearer = sent.headers.get("authorization");
+      const installation = installations.find(
+        (candidate) => bearer === `Bearer ${listingTokenOf(candidate.id)}`,
+      );
+      if (installation === undefined) {
+        return Response.json({ message: "Bad credentials" }, { status: 401 });
+      }
+      return Response.json({
+        total_count: installation.repositories.length,
+        repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+        repositories: sliceOf(installation.repositories, sent.url).map(repositoryJson),
+      });
     }
-    return Response.json({
-      total_count: installation.repositories.length,
-      repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
-      repositories: sliceOf(installation.repositories, sent.url).map(repositoryJson),
-    });
+    return notFound();
   }, app);
 }
+
+/** The installation connected to the workspace, as a finished connect links it. */
+export const connectWorkspaceGitHub = (organizationId: string, installation: InstallationFixture) =>
+  linkInstallation(organizationId, {
+    installationId: installation.id,
+    accountId: installation.accountId ?? 50_000 + installation.id,
+    accountLogin: installation.login,
+    accountType: installation.accountType ?? "User",
+  });
 
 /** A sealed token as Better Auth writes one on the account row. */
 const sealed = (token: string): Effect.Effect<string> =>

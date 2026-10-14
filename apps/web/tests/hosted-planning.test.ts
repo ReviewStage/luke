@@ -45,6 +45,7 @@ import { modelCatalogOf } from "../server/hosted/model-catalog";
 import type { RepositorySandboxDoor } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
 import {
+  connectWorkspaceGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   NO_GITHUB,
@@ -84,7 +85,7 @@ const SAVED: PlanDocument = { body: SAVED_TEXT, assumptions: [] };
 
 const CORRECTION = "Any member should be able to invite, not only admins.";
 
-/** The repository the reading scenarios' plan is about, and the installation the developer reaches it through. */
+/** The repository the reading scenarios' plan is about, and the installation connected to the plan's workspace that reaches it. */
 const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const RELAY_INSTALLATION = { id: 11, login: RELAY.owner, repositories: [RELAY] } as const;
@@ -445,6 +446,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         const userId = yield* openGithubUser();
         const host = yield* planningHost();
         const started = yield* startPlan(userId, { ...RELAY_PLAN, repository: RELAY_FULL_NAME });
+        yield* connectWorkspaceGitHub(started.workspaceId, RELAY_INSTALLATION);
         const conversationId = Option.getOrThrow(
           yield* openPlanConversation(userId, started.id),
         ).conversationId;

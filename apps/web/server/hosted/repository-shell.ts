@@ -9,6 +9,7 @@ import { GitHubApp } from "../github/github-app.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
+import { planWorkspace } from "./workspace-repository.js";
 
 /**
  * repository-shell.ts -- the planning model's one source read: a shell command run in the planning session's sandbox, on a checkout of the plan's GitHub repository.
@@ -37,12 +38,9 @@ export const REPOSITORY_REFUSAL = {
   NO_REPOSITORY:
     "this plan has no repository yet; the developer picks one in the app. " +
     "Nothing of the code has been read.",
-  SIGN_IN_REQUIRED:
-    "the developer must sign in with GitHub again before the repository can be read. " +
-    "Nothing of the code has been read.",
   NOT_REACHABLE:
-    "the plan's repository is not reachable for the developer through the Luke GitHub App: " +
-    "the App may have been removed from it, or the developer's access revoked. " +
+    "the plan's repository is not reachable through the GitHub installation connected to the plan's workspace: " +
+    "the App may have been removed from it, or the workspace's GitHub disconnected. " +
     "The developer picks a reachable repository in the app. Nothing of the code has been read.",
   GITHUB_UNAVAILABLE:
     "GitHub could not be read to confirm the repository. The call may be made again.",
@@ -118,11 +116,9 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     /** The first and last line of the window `show_code` reads, counted from one. */
     FIRST_LINE: "LUKE_FIRST_LINE",
     LAST_LINE: "LUKE_LAST_LINE",
-    /** Who a coding agent's commits are by: the developer's name and noreply address, set in the checkout's own config. */
+    /** Who a coding agent's commits are by: the Luke GitHub App's bot and its noreply address, set in the checkout's own config. */
     GIT_NAME: "LUKE_GIT_NAME",
     GIT_EMAIL: "LUKE_GIT_EMAIL",
-    /** The trailer each of the agent's commit messages ends with; unset, none is added. */
-    COMMIT_TRAILER: "LUKE_COMMIT_TRAILER",
   },
 } as const;
 
@@ -188,30 +184,12 @@ const CHECKOUT_SCRIPT = [
 
 /**
  * The commit identity set in the checkout's own config, so the agent's
- * commits are the developer's wherever git reads them, and the trailer each
- * commit message ends with: kept in the config under Luke's own key and
- * appended by a `prepare-commit-msg` hook where the message does not carry
- * it already. Note that the hook is written to the repository's hooks
- * directory as it stands at checkout, so a repository whose install sets
- * `core.hooksPath` to hooks of its own leaves the trailer to the agent's
- * instructions alone.
+ * commits are the Luke GitHub App's wherever git reads them.
  */
 const IDENTITY_SCRIPT = [
   "set -e",
   `git config user.name "$${SANDBOX_VARIABLE.GIT_NAME}"`,
   `git config user.email "$${SANDBOX_VARIABLE.GIT_EMAIL}"`,
-  `if [ -n "\${${SANDBOX_VARIABLE.COMMIT_TRAILER}:-}" ]; then`,
-  `  git config luke.commitTrailer "$${SANDBOX_VARIABLE.COMMIT_TRAILER}"`,
-  '  hooks="$(git rev-parse --git-path hooks)"',
-  '  mkdir -p "$hooks"',
-  `  cat > "$hooks/prepare-commit-msg" <<'LUKE_HOOK'`,
-  "#!/bin/sh",
-  "# Luke's co-author trailer, appended once to each commit message; the checkout set it in the repository's config.",
-  'trailer="$(git config --get luke.commitTrailer 2>/dev/null)" || exit 0',
-  'grep -qF -- "$trailer" "$1" || git interpret-trailers --in-place --trailer "$trailer" "$1"',
-  "LUKE_HOOK",
-  '  chmod +x "$hooks/prepare-commit-msg"',
-  "fi",
 ].join("\n");
 
 /** The model's command, run by its own bash under the time bound and the clean environment, from the checkout root. Note that the variable is read by the outer bash, ahead of `env -i`, so the command reaches the inner bash as an argument and no variable. */
@@ -406,19 +384,16 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
   if (cloned.exitCode !== 0) return yield* gitRefusal(cloned);
 });
 
-/** Who a checkout's commits are by, and the trailer each carries; a git identity is a name and an address as git takes them. */
+/** Who a checkout's commits are by; a git identity is a name and an address as git takes them. */
 export interface CheckoutIdentity {
   readonly name: string;
   readonly email: string;
-  /** The trailer line each commit message ends with, `Co-authored-by: ...`; absent, none is added. */
-  readonly trailer?: string;
 }
 
 /**
  * The commit identity set in the standing checkout's own config, never the
- * sandbox's global one, with the trailer's hook beside it. What a coding
- * agent commits is then the developer's work on GitHub, with Luke's help
- * shown, and the agent's instructions tell it to leave both alone.
+ * sandbox's global one. What a coding agent commits is then the Luke GitHub
+ * App's on GitHub, and the agent's instructions tell it to leave it alone.
  */
 export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIdentity")(function* (
   sandbox: RepositorySandbox,
@@ -433,9 +408,6 @@ export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIde
         ...COMMAND_ENVIRONMENT,
         [SANDBOX_VARIABLE.GIT_NAME]: identity.name,
         [SANDBOX_VARIABLE.GIT_EMAIL]: identity.email,
-        ...(identity.trailer === undefined
-          ? undefined
-          : { [SANDBOX_VARIABLE.COMMIT_TRAILER]: identity.trailer }),
       },
     },
     REPOSITORY_REFUSAL.CHECKOUT_FAILED,
@@ -456,15 +428,13 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
   sandbox: RepositorySandbox,
 ): Effect.fn.Return<void, RepositoryRefusal, RepositoryShellServices> {
   const app = yield* GitHubApp;
-  const reached = yield* app
-    .repositoryReadToken(call.plan.userId, repository)
-    .pipe(
-      Effect.mapError((failure) =>
-        failure._tag === "GitHubSignInRequired"
-          ? new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SIGN_IN_REQUIRED })
-          : new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE }),
-      ),
-    );
+  const reached = yield* Effect.gen(function* () {
+    const workspace = yield* planWorkspace(call.plan.userId, call.plan.planId);
+    if (Option.isNone(workspace)) return Option.none();
+    return yield* app.repositoryReadToken(workspace.value, repository);
+  }).pipe(
+    Effect.mapError(() => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE })),
+  );
   if (Option.isNone(reached))
     return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
   const { repository: confirmed, token } = reached.value;

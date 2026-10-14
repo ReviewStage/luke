@@ -73,7 +73,7 @@ export function readPlanTree(
     const repository = stored.value.plan.repository;
     if (repository === null) return Option.some(refused(PLAN_FILE_REFUSAL.NO_REPOSITORY));
     if (withinSecret(request.path)) return Option.some(refused(PLAN_FILE_REFUSAL.SECRET));
-    const answer = yield* readFolder(userId, repository, request).pipe(
+    const answer = yield* readFolder(stored.value.plan.workspaceId, repository, request).pipe(
       Effect.catchTag("GitHubUnavailable", (failure) =>
         Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
       ),
@@ -84,11 +84,11 @@ export function readPlanTree(
 
 /** The folder listed through the App's reach, or the refusal the reach answers. */
 const readFolder = /* @__PURE__ */ Effect.fn("web/planTreeFolder")(function* (
-  userId: string,
+  organizationId: string,
   repository: string,
   request: PlanTreeRequest,
 ) {
-  const reach = yield* reachPlanRepository(userId, repository);
+  const reach = yield* reachPlanRepository(organizationId, repository);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
   const recursive = request.recursive === true;

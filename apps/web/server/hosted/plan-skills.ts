@@ -27,10 +27,10 @@ import { readRepositorySkills, skillFilePath } from "./repository-skills.js";
 
 /** The skills read through the App's reach, or the refusal the reach answers. */
 const readSkills = /* @__PURE__ */ Effect.fn("web/planSkillsRead")(function* (
-  userId: string,
+  organizationId: string,
   repository: string,
 ) {
-  const reach = yield* reachPlanRepository(userId, repository);
+  const reach = yield* reachPlanRepository(organizationId, repository);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
   const skills = yield* readRepositorySkills(token, confirmed);
@@ -67,7 +67,7 @@ export function readPlanSkills(
     if (Option.isNone(stored)) return Option.none();
     const repository = stored.value.plan.repository;
     if (repository === null) return Option.some(refused(PLAN_FILE_REFUSAL.NO_REPOSITORY));
-    const answer = yield* readSkills(userId, repository).pipe(
+    const answer = yield* readSkills(stored.value.plan.workspaceId, repository).pipe(
       Effect.catchTag("GitHubUnavailable", (failure) =>
         Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
       ),
