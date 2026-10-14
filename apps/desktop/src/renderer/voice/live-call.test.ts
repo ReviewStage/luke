@@ -734,3 +734,22 @@ it.effect(
       assert.deepEqual(f.fed, [AUDIO]);
     }),
 );
+
+it.effect(
+  "a tee standing in the pause after Luke's last word meets no turn, and feeds his next one",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* standingWithAvatar;
+      f.call.reportRemoteAudioLevel(true);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(500);
+      // Still speaking by the status's hangover, but quiet on the meter.
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      yield* settle;
+      assert.equal(f.avatarVoiced(), true);
+      f.tee.emit(AUDIO);
+      f.tee.emit(TURN_END);
+      assert.deepEqual(f.fed, [AUDIO, TURN_END]);
+    }),
+);

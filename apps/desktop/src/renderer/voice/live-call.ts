@@ -248,6 +248,11 @@ export class LiveCall implements LiveVoiceCall {
   /** The tee's fiber, holding its scope for as long as the avatar is starting or live. */
   #tee: Fiber.Fiber<void> | undefined;
   #talkKeyDown = false;
+  /**
+   * Whether the meter hears Luke's track now, on its own short hangover rather
+   * than the status's: a tee standing up in the status's long tail meets no turn.
+   */
+  #directActive = false;
   /** Whether Luke's track has been quiet for the barge-in's bound, which it has before he first speaks. */
   #directQuietLong = true;
   #directQuiet: Fiber.Fiber<void> | undefined;
@@ -849,7 +854,7 @@ export class LiveCall implements LiveVoiceCall {
 
   /** The tee up: the status is applied again, now that the avatar can be fed. */
   #onTeeStanding(): void {
-    const standing = handoverOnTee(this.#handover, true, this.#lukeSpeaking);
+    const standing = handoverOnTee(this.#handover, true, this.#directActive);
     this.#route(handoverOnStatus(standing, this.#avatarStatus));
   }
 
@@ -880,6 +885,7 @@ export class LiveCall implements LiveVoiceCall {
     if (this.#directQuiet !== undefined) this.#disarm(this.#directQuiet);
     this.#directQuiet = undefined;
     this.#directQuietLong = false;
+    this.#directActive = active;
     if (active) return;
     this.#directQuiet = this.#arm(BARGE_IN_WAIT_MS, () => {
       this.#directQuiet = undefined;
