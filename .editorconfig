@@ -1,0 +1,19 @@
+# https://editorconfig.org -- the whitespace every editor agrees on before
+# Biome formats a file.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# The shell scripts and the Swift helpers are indented four spaces.
+[*.{sh,swift}]
+indent_size = 4
+
+# Two trailing spaces are a Markdown line break.
+[*.md]
+trim_trailing_whitespace = false

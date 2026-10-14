@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ReviewStage/luke/blob/main/SECURITY.md
+    about: Email founders@stagereview.app rather than opening a public issue.
