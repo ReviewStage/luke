@@ -54,6 +54,8 @@ interface DrawnChip {
 export interface ComposerFieldMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly chip: (mention: MentionNode) => ReactNode;
+  /** The mention words pasted whole stand for; nothing for words that paste as words. */
+  readonly pasted: (words: string) => MentionNode | undefined;
 }
 
 export function ComposerField({
@@ -153,6 +155,7 @@ export function ComposerField({
           : {
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
               drawMention: (element, mention) => draw(element, { mention }),
+              pasted: (words) => latest.current.mentions?.pasted(words),
             },
     });
     editor.current = mounted;

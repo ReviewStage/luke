@@ -169,7 +169,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const dispatch = dispatchMentioningServers(
     userId,
     agent.id,
-    mentionedServers(line.text),
+    mentionedServers(line.text, plan?.plan.repository ?? null),
     handOver,
   ).pipe(
     Effect.catchCause((cause) =>

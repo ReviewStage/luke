@@ -295,10 +295,16 @@ function mountedWithMentions(text: string) {
         drawn.push(`${mention.name} ${mention.target}`);
         return () => undefined;
       },
+      // The panel reads the one page of an integration's this box is pasted.
+      pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
   });
   return { ...box, reported, drawn };
 }
+
+/** A page of an integration's, as the panel names it. */
+const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+const ISSUE = { name: "LUKE-142/fix-the-thing", target: ISSUE_URL };
 
 const STORE_LINK = "[@session-store.ts](luke://file/apps/web/session-store.ts)";
 
@@ -374,4 +380,36 @@ test("a box that takes no mentions shows a mention's link as the words it is, ne
 
   assert.equal(composerEditor(box.host).textContent, `See ${STORE_LINK}`);
   assert.equal(box.drafts.at(-1), `See ${STORE_LINK}`);
+});
+
+test("a page of an integration's pasted whole is laid in as its mention, a space after it, and other words paste as words", () => {
+  const box = mountedWithMentions("");
+
+  typeInComposer(box.host, "See ");
+  paste(box.host, ` ${ISSUE_URL} `);
+  typeInComposer(box.host, "first.");
+
+  assert.equal(box.drafts.at(-1), `See [@LUKE-142/fix-the-thing](${ISSUE_URL}) first.`);
+  assert.deepEqual(box.drawn, [`LUKE-142/fix-the-thing ${ISSUE_URL}`]);
+});
+
+test("a page's address pasted inside a code span stays the code's words", () => {
+  const box = mountedWithMentions("");
+  box.handle.replace("Run `x` now");
+
+  box.caretAt(1 + "Run `x".length);
+  paste(box.host, ISSUE_URL);
+
+  assert.deepEqual(box.drawn, []);
+  const draft = box.drafts.at(-1) ?? "";
+  assert.ok(!draft.includes("[@"), draft);
+});
+
+test("a page's address pasted on the line after a closing fence is laid in as its mention", () => {
+  const box = mountedWithMentions("");
+  box.handle.replace("```\ncode\n```\n");
+
+  paste(box.host, ISSUE_URL);
+
+  assert.deepEqual(box.drawn, [`LUKE-142/fix-the-thing ${ISSUE_URL}`]);
 });

@@ -35,7 +35,8 @@ import { CONNECTION_TOOL } from "./connection-tools.js";
  * guess. A section is found by its anchor (`sectionAnchors`), and one whose
  * anchor no heading of the plan spells any longer is named as gone, by the
  * name the mention was written with. *
- * An MCP server, or one of its tools, is the agent's to reach through its
+ * An MCP server, one of its tools, or a page of its integration's (a Linear
+ * issue's address), is the agent's to reach through its
  * connections, whose tools it finds by search; a mention says which the
  * developer pointed it at, so it uses that one without hunting for it. The
  * turn the message opens is handed the server whatever the agent's switches
@@ -129,6 +130,9 @@ function noteOf(mention: ServerMention): string {
   if (mention.kind === MENTION_KIND.SERVER) {
     return `The developer pointed you at ${server} for this message: find its tools with \`${CONNECTION_TOOL.SEARCH}\` on that connection and run them with \`${CONNECTION_TOOL.EXECUTE}\` before reaching for anything else. ${joins}`;
   }
+  if (mention.kind === MENTION_KIND.LINK) {
+    return `The developer pointed you at ${mention.url}, a page of ${server}, for this message: read it through that connection's tools rather than the web. ${joins}`;
+  }
   return `The developer pointed you at the tool \`${mention.tool}\` of ${server} for this message: run it with \`${CONNECTION_TOOL.EXECUTE}\` in preference to other tools. ${joins}`;
 }
 
@@ -143,6 +147,7 @@ function handedMention(
       return mention.planId === plan?.id ? mention : undefined;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
+    case MENTION_KIND.LINK:
       return mention;
     case MENTION_KIND.FILE:
     case MENTION_KIND.FOLDER:
@@ -168,22 +173,29 @@ function sameMention(
         first.provider === second.provider &&
         first.tool === second.tool
       );
+    case MENTION_KIND.LINK:
+      return second.kind === MENTION_KIND.LINK && first.url === second.url;
   }
 }
 
 /** What the part hands for one mention; a mention of the plan only where the agent has one (`handedMention`). */
 function handedAs({ mention, name }: HandedMention, plan: Plan | undefined): string {
-  if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
-    return noteOf(mention);
+  if (mention.kind === MENTION_KIND.PLAN || mention.kind === MENTION_KIND.SECTION) {
+    return plan === undefined ? "" : excerptOf({ mention, name }, plan);
   }
-  return plan === undefined ? "" : excerptOf({ mention, name }, plan);
+  return noteOf(mention);
 }
 
-/** The MCP servers the words mention, by themselves or by one of their tools, each once: the ones the turn the words open is handed whatever the agent's switches say. */
-export function mentionedServers(words: string): readonly IntegrationProvider[] {
-  // Note that no repository is handed, since a server's mention names no file of one.
-  const providers = mentionsIn(words, null).flatMap(({ mention }) =>
-    mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL
+/** The MCP servers the words mention, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
+export function mentionedServers(
+  words: string,
+  repository: string | null,
+): readonly IntegrationProvider[] {
+  // Note that the plan's repository is handed, so a page that is a file of it brings in no server.
+  const providers = mentionsIn(words, repository).flatMap(({ mention }) =>
+    mention.kind === MENTION_KIND.SERVER ||
+    mention.kind === MENTION_KIND.TOOL ||
+    mention.kind === MENTION_KIND.LINK
       ? [mention.provider]
       : [],
   );

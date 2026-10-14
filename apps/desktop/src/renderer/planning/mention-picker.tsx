@@ -257,6 +257,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       return <DocumentIcon />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
+    case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
   }
 }

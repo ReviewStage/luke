@@ -41,6 +41,8 @@ export interface PlanEditorProps {
 interface ComposerMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
+  /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
+  readonly pasted: (words: string) => MentionNode | undefined;
 }
 
 /** A mention the plan's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
@@ -75,6 +77,8 @@ export interface PlanEditorMentions {
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
   readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
+  /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
+  readonly pasted: (words: string) => MentionNode | undefined;
 }
 
 /** An editor as mounted. */

@@ -1,5 +1,5 @@
 import { Schema as EffectSchema, Option } from "effect";
-import { integrationProviderSchema } from "./integration-wire.js";
+import { integrationOfHost, integrationProviderSchema } from "./integration-wire.js";
 import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 
 /**
@@ -48,6 +48,13 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * nothing outside the app opens: an MCP server, `luke://mcp/<provider>`,
  * and one of its tools, `luke://mcp/<provider>/<tool>`, the tool's own name
  * as the server lists it.
+ *
+ * A page of one of the integrations, a Linear issue or a pull request, is
+ * named by its own web address, which a host of the integration's
+ * (`INTEGRATION_HOSTS`) says it is the integration's. It is read last, after
+ * every form above, so a GitHub page that is a file of the plan stays one;
+ * a link to any other page is a link, never a mention, whatever its label
+ * says.
  */
 
 export const MENTION_KIND = {
@@ -57,6 +64,7 @@ export const MENTION_KIND = {
   FOLDER: "folder",
   SERVER: "server",
   TOOL: "tool",
+  LINK: "link",
 } as const;
 
 const MENTION_BOUNDS = {
@@ -68,6 +76,10 @@ const MENTION_BOUNDS = {
   MAX_PLAN_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
   MAX_PATH_CHARS: 1_000,
+  /** The most characters a page's web address may spell. */
+  MAX_URL_CHARS: 2_000,
+  /** The most characters of a page's address its readable name keeps, from its end. */
+  MAX_LINK_NAME_CHARS: 60,
   /** The most mentions one message is read for; any past them stay words. */
   MAX_MENTIONS: 20,
 } as const;
@@ -110,6 +122,15 @@ const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
 
 /** A path's steps an address resolves away, which no tool's name can be, since its link would lose it. */
 const DOT_STEPS: ReadonlySet<string> = new Set([".", ".."]);
+
+/** The schemes a page of an integration's is addressed by. */
+const WEB_PROTOCOLS: ReadonlySet<string> = new Set(["https:", "http:"]);
+
+/** A query parameter whose name says it may carry a credential, which a page's address is never kept with. */
+const SECRET_PARAM = /token|secret|key|sig|auth|pass|code|session|credential/iu;
+
+/** A step of a page's path that says what kind of page the next one is (`pull`, `issues`), read with the step before it. */
+const KIND_STEP = /^[a-z]{1,8}$/u;
 
 /** An anchor as `sectionAnchors` spells one: letters, marks, digits, underscores, and hyphens. */
 const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
@@ -223,6 +244,14 @@ const mentionSchema = EffectSchema.Union([
     tool: EffectSchema.String.check(
       EffectSchema.isPattern(TOOL_NAME),
       EffectSchema.makeFilter((name) => !DOT_STEPS.has(name)),
+    ),
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.LINK),
+    provider: integrationProviderSchema,
+    url: EffectSchema.String.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_URL_CHARS),
     ),
   }),
 ]);
@@ -383,6 +412,35 @@ function repositoryFields(url: URL, repository: string | null) {
 }
 
 /**
+ * A page's address with nothing in it that may be a credential: no user or
+ * password before its host, and no query parameter whose name says it holds
+ * one. Note that the rest of the query stays, since a thread or a view is
+ * often named there (`?thread_ts=`).
+ */
+function withoutCredentials(url: URL): string {
+  const kept = new URL(url.href);
+  kept.username = "";
+  kept.password = "";
+  for (const name of [...kept.searchParams.keys()]) {
+    if (SECRET_PARAM.test(name)) kept.searchParams.delete(name);
+  }
+  return kept.href;
+}
+
+/** A page's address as a mention holds it: a parenthesis it keeps encoded, so it stays one markdown link's target, and reads back the same. */
+function linkAddress(href: string): string {
+  return href.replace(/[()]/gu, (special) => (special === "(" ? "%28" : "%29"));
+}
+
+/** The fields a page of an integration's spells, its address kept without credentials; nothing for a page of no integration's. */
+function linkFields(url: URL) {
+  if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
+  const provider = integrationOfHost(url.hostname);
+  if (provider === undefined) return undefined;
+  return { kind: MENTION_KIND.LINK, provider, url: linkAddress(withoutCredentials(url)) };
+}
+
+/**
  * The fields a target spells, for the schema to read; nothing where it is
  * no target of a mention. A GitHub page is read as a file or a folder of
  * the plan's repository first, so a page of it is never read as anything
@@ -393,8 +451,9 @@ function fieldsOf(target: string, repository: string | null) {
   if (url === undefined) return undefined;
   if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
   if (LINK.PROTOCOLS.has(url.protocol) && url.host === LINK.HOST) return planFields(url);
-  if (url.origin === GITHUB.ORIGIN) return repositoryFields(url, repository);
-  return undefined;
+  // Note that a page of an integration's is read last, so a GitHub page that is a file of the plan stays one.
+  const fields = url.origin === GITHUB.ORIGIN ? repositoryFields(url, repository) : undefined;
+  return fields ?? linkFields(url);
 }
 /** Whether the line holding the index stands inside a fenced block, its fence lines included. */
 function insideFence(text: string, at: number): boolean {
@@ -582,6 +641,8 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}`;
     case MENTION_KIND.TOOL:
       return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}/${encodedPart(mention.tool)}`;
+    case MENTION_KIND.LINK:
+      return linkAddress(mention.url);
   }
 }
 
@@ -613,6 +674,53 @@ export function appLinkOf(target: string): string | undefined {
   if (mention.kind !== MENTION_KIND.PLAN && mention.kind !== MENTION_KIND.SECTION) return undefined;
   const address = encodeMention(mention, { workspace, repository: null });
   return `${LUKE_APP_PROTOCOL}${address.slice(address.indexOf("//"))}`;
+}
+
+/** Words with each control character, a line break among them, made a space, so a name stays one line of a link's label. */
+function withoutControls(words: string): string {
+  return [...words]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < SPACE_CODE || code === DELETE_CODE ? " " : character;
+    })
+    .join("");
+}
+
+/**
+ * A page's web address as a mention's name reads it: the last steps of its
+ * path, the step before a kind's word kept with it (`relay/pull/123`,
+ * `LUKE-142/fix-the-thing`), cut from the front to its bound; the host
+ * where the path has no step. Note that the name is read off the address
+ * alone, since the page's own title is the provider's to answer and no
+ * search here asks it.
+ */
+function readableLink(href: string): string {
+  const url = new URL(href);
+  const steps = url.pathname
+    .split("/")
+    .filter((step) => step !== "")
+    .map((step) => withoutControls(decodedPart(step) ?? step));
+  const kind = steps.length >= 3 && KIND_STEP.test(steps.at(-2) ?? "");
+  const kept = steps.slice(kind ? -3 : -2);
+  const name = kept.length === 0 ? url.hostname : kept.join("/");
+  const bound = MENTION_BOUNDS.MAX_LINK_NAME_CHARS;
+  return name.length <= bound ? name : `…${name.slice(-(bound - 1))}`;
+}
+
+/**
+ * Words pasted whole that are one page of an integration's, as the mention
+ * they become and its readable name; nothing for any other words, a file of
+ * the plan's repository among them, which `repository` names.
+ */
+export function pastedLinkMention(
+  words: string,
+  repository: string | null,
+): { readonly mention: Mention; readonly name: string } | undefined {
+  const address = words.trim();
+  if (address === "" || /\s/u.test(address)) return undefined;
+  const mention = decodeMention(address, repository);
+  if (mention?.kind !== MENTION_KIND.LINK) return undefined;
+  return { mention, name: readableLink(mention.url) };
 }
 
 /** Whether a link's label is a mention's: it starts with `@`. */

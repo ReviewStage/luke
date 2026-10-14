@@ -92,6 +92,36 @@ export const INTEGRATION_GRANT_OF = {
   [INTEGRATION_PROVIDER.YCOMBINATOR]: INTEGRATION_GRANT.CONNECT,
 } as const satisfies Record<IntegrationProvider, IntegrationGrant>;
 
+/**
+ * The web hosts each provider's own pages stand on, which a link is known to
+ * be the provider's by: the host itself or any host under it
+ * (`acme.slack.com`, `us.posthog.com`). A provider whose pages have no host
+ * of their own has none.
+ */
+const INTEGRATION_HOSTS = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: [],
+  [INTEGRATION_PROVIDER.GITHUB]: ["github.com"],
+  [INTEGRATION_PROVIDER.GRANOLA]: ["granola.ai"],
+  [INTEGRATION_PROVIDER.LINEAR]: ["linear.app"],
+  [INTEGRATION_PROVIDER.MERCURY]: ["mercury.com"],
+  [INTEGRATION_PROVIDER.NEON]: ["neon.tech"],
+  [INTEGRATION_PROVIDER.NOTION]: ["notion.so", "notion.site"],
+  [INTEGRATION_PROVIDER.POSTHOG]: ["posthog.com"],
+  [INTEGRATION_PROVIDER.SENTRY]: ["sentry.io"],
+  [INTEGRATION_PROVIDER.SLACK]: ["slack.com"],
+  [INTEGRATION_PROVIDER.SUPABASE]: ["supabase.com"],
+  [INTEGRATION_PROVIDER.VERCEL]: ["vercel.com"],
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: ["ycombinator.com"],
+} as const satisfies Record<IntegrationProvider, readonly string[]>;
+
+/** The provider whose pages the host stands among; nothing for a host no provider's. */
+export function integrationOfHost(host: string): IntegrationProvider | undefined {
+  const asked = host.toLowerCase();
+  return INTEGRATION_PROVIDER_LIST.find((provider) =>
+    INTEGRATION_HOSTS[provider].some((own) => asked === own || asked.endsWith(`.${own}`)),
+  );
+}
+
 const PROVIDERS: ReadonlySet<string> = new Set(INTEGRATION_PROVIDER_LIST);
 
 /** A provider as an address or a query spells it; anything else is no provider. */

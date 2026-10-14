@@ -31,6 +31,7 @@ import {
   mentionLink,
   mentionNode,
   mentionTokens,
+  pastedMention,
 } from "./mention-node";
 
 /**
@@ -472,6 +473,17 @@ function guardPlugin(state: ComposerState, props: ComposerEditorProps): Plugin {
   });
 }
 
+/**
+ * Whether a caret stands in code: the character after it is code's, or the
+ * one before it on its own line is, as a caret just inside a span's closing
+ * backtick is. Note that the line before is never read, because a fence's
+ * closing line is code and the line after it is not.
+ */
+function caretInCode(text: string, caret: number): boolean {
+  if (insideCode(text, caret)) return true;
+  return caret > 0 && text[caret - 1] !== NEWLINE && insideCode(text, caret - 1);
+}
+
 /** A paste taken: files the owner takes kept out of the words, and words past the bound cut to the room left. */
 function pasted(
   view: EditorView,
@@ -487,6 +499,15 @@ function pasted(
   const words = fragmentText(slice.content);
   const room =
     props.maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
+  // A page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
+  const mention = props.mentions?.pasted(words);
+  if (
+    mention !== undefined &&
+    mentionLink(mention).length + SPACE.length <= room &&
+    !caretInCode(textOf(doc), offsetAt(doc, selection.from))
+  ) {
+    return pastedMention(view, event, () => mention);
+  }
   if (words.length <= room) return false;
   if (room > 0) {
     const cut = sliceOf(view.state.schema, words.slice(0, room), state);

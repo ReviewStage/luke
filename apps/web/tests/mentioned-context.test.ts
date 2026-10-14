@@ -296,10 +296,11 @@ test("a server or a tool the words mention is handed as one note naming its conn
 });
 
 test("the servers the words mention, by themselves or by a tool, are named each once, and nothing else is", () => {
-  assert.deepEqual(mentionedServers(`See ${LIST_ISSUES}, ${LINEAR}, and ${section("Rollout")}.`), [
-    INTEGRATION_PROVIDER.LINEAR,
-  ]);
-  assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`), []);
+  assert.deepEqual(
+    mentionedServers(`See ${LIST_ISSUES}, ${LINEAR}, and ${section("Rollout")}.`, PLAN.repository),
+    [INTEGRATION_PROVIDER.LINEAR],
+  );
+  assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`, PLAN.repository), []);
 });
 
 test("an agent with no plan is handed a server's note, and nothing for a mention of a plan", () => {
@@ -307,4 +308,29 @@ test("an agent with no plan is handed a server's note, and nothing for a mention
 
   assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
   assert.ok(!part.includes("The plan's section"), part);
+});
+
+const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+
+const ISSUE = mentionMarkdown(
+  { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL },
+  "LUKE-142/fix-the-thing",
+  PLACE,
+);
+
+test("a page of an integration's the words mention is handed as a note naming its address and its connection, and brings its server in", () => {
+  const part = mentionedContext(`Fix ${ISSUE}, then ${ISSUE} again.`, PLAN) ?? "";
+
+  assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
+  assert.match(part, /pointed you at https:\/\/linear\.app\/acme\/issue\/LUKE-142\/fix-the-thing/u);
+  assert.match(part, /the Linear MCP server \(connection `linear`\)/u);
+  assert.deepEqual(mentionedServers(`Fix ${ISSUE}.`, PLAN.repository), [
+    INTEGRATION_PROVIDER.LINEAR,
+  ]);
+});
+
+test("a GitHub page that is a file of the plan's repository brings in no server", () => {
+  const file = `[@app.ts](https://github.com/${PLAN.repository}/blob/HEAD/src/app.ts)`;
+
+  assert.deepEqual(mentionedServers(`See ${file}.`, PLAN.repository), []);
 });
