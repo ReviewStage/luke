@@ -251,6 +251,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onClose: ignore,
     },
     onLeavePlan: ignore,
+    onGoHome: ignore,
     onRenamePlan: () => Promise.resolve(true),
     onDraftName: ignore,
     onMarkPlan: ignore,

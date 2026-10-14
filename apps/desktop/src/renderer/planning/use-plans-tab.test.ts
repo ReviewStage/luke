@@ -1098,3 +1098,21 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   tab.stand({ planning: listRead([listed()]) });
   assert.deepEqual(selected(tab), [PLAN.id]);
 });
+
+test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve() },
+  );
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().onGoHome());
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_CLOSE);
+  assert.equal(tab.control().boundFor, undefined);
+
+  const home = mount({ shown: true, planning: listRead([]) });
+  act(() => home.control().inboxView.onOpen());
+  act(() => home.control().onGoHome());
+  assert.equal(home.control().inboxView.open, false);
+  assert.ok(!home.told.includes(ACT_KIND.PLANNING_CLOSE));
+});

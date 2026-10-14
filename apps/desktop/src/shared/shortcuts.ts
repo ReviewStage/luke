@@ -49,6 +49,7 @@ export const APP_COMMAND = {
   FIND_PREVIOUS: "find-previous",
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
+  HOME: "home",
   INBOX: "inbox",
   EXIT_INBOX: "exit-inbox",
   BACK: "back",
@@ -195,8 +196,8 @@ export interface AppShortcut {
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
- * Safari have them, ⇧⌘⏎ to fill the window with a pane as iTerm and Warp
- * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
+ * Safari have them, ⇧⌘H for home as Finder has it, ⇧⌘⏎ to fill the window
+ * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
  * close the window as Chrome and VS Code have them,
@@ -300,6 +301,7 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
   [APP_COMMAND.EXIT_INBOX]: {
     label: "Exit inbox",
@@ -339,6 +341,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.ARCHIVE_PLAN,
       APP_COMMAND.DELETE_PLAN,
       APP_COMMAND.EXIT_VERSION_HISTORY,
+      APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.EXIT_INBOX,
     ],

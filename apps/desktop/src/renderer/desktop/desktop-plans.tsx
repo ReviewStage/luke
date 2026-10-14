@@ -1,9 +1,8 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
-import { DocumentIcon } from "@sidecar/panel";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
@@ -35,10 +34,9 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
-import { Shortcut } from "../shortcut";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
-import { commandKeyshortcuts } from "../tooltip";
+import { DesktopHome } from "./desktop-home";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { PlanCard } from "./plan-card";
@@ -52,7 +50,7 @@ import { useTabViews } from "./strip-tabs";
  * The work column while Plans is chosen: the open plan's column, its
  * toolbar above and the call bar below, and the side panel beside it, the
  * window's full height, while that is open (or over it, while it fills the
- * window); or, with none open, the home page, which offers New plan.
+ * window); or, with none open, the home page (`desktop-home.tsx`).
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions: Start, which
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
@@ -131,9 +129,6 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   useAppCommand(APP_COMMAND.NEW_TAB, onNewTab);
   return null;
 }
-
-/** What the column says while no plan is open. */
-const NO_PLAN_OPEN_LINE = "Choose a plan in the sidebar, or start a new one.";
 
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
@@ -590,8 +585,11 @@ export function DesktopPlans({
   looks,
   captions,
   summary,
+  accountName,
 }: {
   plans: PlansControl;
+  /** The signed-in account's name, which the home page greets. */
+  accountName?: string | undefined;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
@@ -626,21 +624,8 @@ export function DesktopPlans({
       return (
         <>
           <div className="desktop-drag-strip" />
-          <section className="desktop-empty" aria-label="No plan open">
-            <span className="empty-state-icon" aria-hidden="true">
-              <DocumentIcon />
-            </span>
-            <p>{NO_PLAN_OPEN_LINE}</p>
-            <button
-              type="button"
-              className="primary-button"
-              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
-              disabled={!plans.signedIn}
-              onClick={plans.onNewPlan}
-            >
-              New plan
-              <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} />
-            </button>
+          <section className="home" aria-label="Home">
+            <DesktopHome plans={plans} accountName={accountName} />
           </section>
           {secondCall}
         </>
