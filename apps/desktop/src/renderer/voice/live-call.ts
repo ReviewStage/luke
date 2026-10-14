@@ -44,7 +44,7 @@ import {
   Result,
   type Scope,
 } from "effect";
-import { AVATAR_STATUS, type AvatarFeed, type AvatarState } from "#shared/messages/avatar";
+import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "#shared/messages/avatar";
 import {
   AVATAR_HANDOVER_DIRECT,
   type AvatarHandover,
@@ -243,7 +243,7 @@ export class LiveCall implements LiveVoiceCall {
   #idleReported = false;
   #speakingHangover: Fiber.Fiber<void> | undefined;
   #captionTick: Fiber.Fiber<void> | undefined;
-  #avatarStatus: AvatarState["status"] = AVATAR_STATUS.OFF;
+  #avatarStatus: AvatarStatus = AVATAR_STATUS.OFF;
   #handover: AvatarHandover = AVATAR_HANDOVER_DIRECT;
   /** The tee's fiber, holding its scope for as long as the avatar is starting or live. */
   #tee: Fiber.Fiber<void> | undefined;
@@ -398,7 +398,7 @@ export class LiveCall implements LiveVoiceCall {
    * known to be, and is left to finish on the element; Luke's voice stays on
    * the element until the tee stands.
    */
-  reportAvatarStatus(status: AvatarState["status"]): void {
+  reportAvatarStatus(status: AvatarStatus): void {
     this.#avatarStatus = status;
     this.#route(handoverOnStatus(this.#handover, status));
     this.#syncTee();

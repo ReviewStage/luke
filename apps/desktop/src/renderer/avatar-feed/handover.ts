@@ -18,7 +18,7 @@ import {
   AVATAR_FEED_KIND,
   AVATAR_STATUS,
   type AvatarFeed,
-  type AvatarState,
+  type AvatarStatus,
 } from "#shared/messages/avatar";
 
 /** Where Luke is heard: the element, the element until its turn ends, or the avatar. */
@@ -59,10 +59,7 @@ export function avatarVoiced(handover: AvatarHandover): boolean {
 }
 
 /** The avatar's status as the document moved it. */
-export function handoverOnStatus(
-  handover: AvatarHandover,
-  status: AvatarState["status"],
-): AvatarHandover {
+export function handoverOnStatus(handover: AvatarHandover, status: AvatarStatus): AvatarHandover {
   if (status !== AVATAR_STATUS.LIVE) {
     return { ...handover, route: AVATAR_ROUTE.DIRECT, fedSinceInterrupt: false };
   }
