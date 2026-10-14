@@ -34,7 +34,7 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
  * invites by address and role and copies or cancels what is pending, and
- * every workspace's GitHub repositories, the personal one's too, are an
+ * every workspace's GitHub repositories, the first one's too, are an
  * owner's or an admin's to connect or disconnect and a member's to read.
  * Synthetic accounts.
  */
@@ -55,14 +55,12 @@ const MEMBER: WorkspaceMember = {
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
-  personal: false,
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
-const PERSONAL: Workspace = {
+const FIRST: Workspace = {
   id: "workspace-personal",
-  name: "Personal",
-  personal: true,
+  name: "Dana",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -191,10 +189,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The page over `workspace` beside the personal one, its picker choosing for itself, and how often a leave asked to fall back. */
+/** The page over `workspace` beside the account's first one, its picker choosing for itself, and how often a leave asked to fall back. */
 async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
   const pressed = { left: 0 };
-  const workspaces = [PERSONAL, workspace, ...others].filter(
+  const workspaces = [FIRST, workspace, ...others].filter(
     (each, at, all) => all.findIndex((other) => other.id === each.id) === at,
   );
   const container = document.createElement("div");
@@ -282,7 +280,7 @@ async function confirm(verb: string): Promise<void> {
   await settle();
 }
 
-/** What the Workspace picker says under its name: the account's role, or that the workspace is personal. */
+/** What the Workspace picker says under its name: the account's role. */
 const pickerLine = (page: HTMLElement) =>
   rowNamed(page, "Workspace").querySelector("small")?.textContent;
 
@@ -311,7 +309,7 @@ test("while the members are being read the page holds itself back, and a read th
   const root = createRoot(container);
   roots.push(root);
   const control: WorkspaceSettingsControl = {
-    workspaces: [PERSONAL, ACME],
+    workspaces: [FIRST, ACME],
     workspaceId: ACME.id,
     onChooseWorkspace: () => undefined,
     onLeft: () => undefined,
@@ -368,7 +366,7 @@ test("a removal the account's role does not allow says so in the dialog that ask
   );
 });
 
-test("a member leaves after confirming, which lists the personal workspace again, and an owner is offered no Leave", async () => {
+test("a member leaves after confirming, which asks to list another workspace, and an owner is offered no Leave", async () => {
   const member = await mount(ACME);
   const leaveRow = button(member.page, "Leave").closest(".settings-row") ?? assert.fail();
   act(() => button(leaveRow, "Leave").click());
@@ -386,25 +384,23 @@ test("a member leaves after confirming, which lists the personal workspace again
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the personal workspace says it is yours, lists no members, and offers its owner Connect for its GitHub repositories", async () => {
-  const { page } = await mount(PERSONAL);
+test("the account's first workspace reads like any other: its role, its members with the invite form, and Connect for its GitHub repositories", async () => {
+  stored = [OWNER];
+  const { page } = await mount(FIRST);
   const row = rowNamed(page, "GitHub");
   act(() => button(row, "Connect").click());
   await settle();
 
-  assert.equal(pickerLine(page), "Your personal workspace. Its plans are yours alone.");
-  assert.equal(page.querySelector(".workspace-invite"), null);
-  assert.deepEqual(
-    [...page.querySelectorAll(".settings-row strong")].map((each) => each.textContent),
-    ["Workspace", "GitHub"],
-  );
+  assert.equal(pickerLine(page), "Your role: Owner");
+  assert.ok(page.querySelector(".workspace-invite"));
   assert.equal(
-    row.querySelector("small")?.textContent,
-    "Not connected. Connect one to use its repositories in this workspace.",
+    rowNamed(page, "Dana").querySelector("small")?.textContent,
+    "dana@example.com · Owner",
   );
-  assert.deepEqual(sent, [
-    { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: PERSONAL.id } },
-  ]);
+  assert.deepEqual(
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT),
+    [{ kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: FIRST.id } }],
+  );
 });
 
 test("an admin sees whose repositories the workspace has, led by GitHub's mark, and disconnects them from the row's ⋯ after confirming", async () => {

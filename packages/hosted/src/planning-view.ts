@@ -379,7 +379,7 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
-  /** The workspaces the account is a member of, its personal one first, as the last list read answered; none before the first lands. */
+  /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
   /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
   github: EffectSchema.optionalKey(githubConnectionSchema),

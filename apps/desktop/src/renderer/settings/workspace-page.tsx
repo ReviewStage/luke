@@ -30,13 +30,12 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  *
  * A picker at the page's head chooses the workspace, the one the sidebar
  * lists until another is chosen or a link names one, and says the account's
- * role in it. A team's workspace then lists its members as the service holds
+ * role in it. The workspace then lists its members as the service holds
  * them now, each with its email and role. An owner or an admin invites
  * people by address and role, sees the invitations still pending with each
  * one's accept link to copy and send, and cancels one; removes a member who
  * is not an owner; and anyone but an owner leaves. GitHub repositories, the
- * one place a workspace's repositories are set, the personal one's too,
- * connects one GitHub account's installation of the Luke GitHub App to the
+ * one place a workspace's repositories are set, connects one GitHub account's installation of the Luke GitHub App to the
  * workspace for an owner or an admin, or names the connected account with
  * Choose repositories on GitHub, the App's page there, and Disconnect; a
  * member sees which account is connected, or is told to ask.
@@ -46,8 +45,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * be undone asking first in the confirm dialog, whose refusal is said where
  * it was asked. The page draws whole: while the members or the invitations
  * are being read it holds itself back (`.settings-reading`), and a read that
- * failed says so in red with Retry. The personal workspace has no team, so
- * it draws no members.
+ * failed says so in red with Retry. Every workspace draws the same, the
+ * first one made for the account included.
  */
 
 /** What each role reads as on a member's row. */
@@ -189,7 +188,7 @@ function LeaveRow({ workspace, onLeft }: { workspace: Workspace; onLeft: () => v
   );
 }
 
-/** The chosen team workspace's members and the leave, read afresh whenever the workspace changes. */
+/** The chosen workspace's members and the leave, read afresh whenever the workspace changes. */
 function TeamMembers({
   workspace,
   onLeft,
@@ -509,13 +508,13 @@ function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.
 
 /** What Settings' Workspace page is handed: the workspaces, the one the page shows, the picker, and the fall back after a leave. */
 export interface WorkspaceSettingsControl {
-  /** Every workspace the account is a member of, its personal one first. */
+  /** Every workspace the account is a member of, its first one first. */
   workspaces: readonly Workspace[];
   /** The workspace the page shows, absent before the workspaces are read. */
   workspaceId: string | undefined;
   /** Shows another workspace on the page, as its picker chose it. */
   onChooseWorkspace: (workspaceId: string) => void;
-  /** Lists the personal workspace again where the workspace left was the one listed. */
+  /** Lists the first other workspace where the workspace left was the one listed. */
   onLeft: (workspaceId: string) => void;
   /** Whether the read the workspaces arrive with failed, so none will arrive until it is asked again. */
   listFailed: boolean;
@@ -532,11 +531,6 @@ export function shownWorkspace(
   );
 }
 
-/** What each workspace is called in the page's picker. */
-function pickerLabel(workspace: Workspace): string {
-  return workspace.personal ? `${workspace.name} (personal)` : workspace.name;
-}
-
 /** The page's head: the picker, saying under its name the account's role in the workspace chosen. */
 function WorkspaceHead({
   control,
@@ -549,13 +543,9 @@ function WorkspaceHead({
     <SettingsGroup>
       <SelectRow
         label="Workspace"
-        detail={
-          workspace.personal
-            ? "Your personal workspace. Its plans are yours alone."
-            : `Your role: ${ROLE_WORDS[workspace.role]}`
-        }
+        detail={`Your role: ${ROLE_WORDS[workspace.role]}`}
         value={workspace.id}
-        options={control.workspaces.map((each) => ({ value: each.id, label: pickerLabel(each) }))}
+        options={control.workspaces.map((each) => ({ value: each.id, label: each.name }))}
         parse={(raw) => control.workspaces.find((each) => each.id === raw)?.id}
         onChange={control.onChooseWorkspace}
       />
@@ -564,7 +554,7 @@ function WorkspaceHead({
 }
 
 /**
- * The page for one workspace: its head, a team's members, and its GitHub
+ * The page for one workspace: its head, its members, and its GitHub
  * repositories; held back, as a page still
  * reading is, before the workspaces are read, and Retry where that read failed.
  */
@@ -588,14 +578,12 @@ export function WorkspacePage({
   return (
     <>
       <WorkspaceHead control={control} workspace={workspace} />
-      {workspace.personal ? null : (
-        <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
-          <Fragment key={workspace.id}>
-            {managesWorkspace(workspace) ? <Invitations workspaceId={workspace.id} /> : null}
-            <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
-          </Fragment>
-        </SettingsGroup>
-      )}
+      <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
+        <Fragment key={workspace.id}>
+          {managesWorkspace(workspace) ? <Invitations workspaceId={workspace.id} /> : null}
+          <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
+        </Fragment>
+      </SettingsGroup>
       <SettingsGroup title="GitHub repositories" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <GitHubRepositories key={workspace.id} workspace={workspace} />
       </SettingsGroup>

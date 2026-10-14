@@ -45,8 +45,7 @@ import { openWorkspacePlugin } from "./support/workspace-plugin";
  * one-time authorization after it, over Better Auth's own organization
  * plugin on PGlite and a GitHub the test scripts: the bearer names the
  * account and nothing else does, a workspace a member creates is theirs to
- * own, only an owner or admin connects or disconnects GitHub, a personal
- * workspace like any other, and an installation is linked to a workspace
+ * own, only an owner or admin connects or disconnects GitHub, and an installation is linked to a workspace
  * only through a live intent and only where the user who authorized sees
  * it, one installation to one workspace.
  *
@@ -267,29 +266,30 @@ it.effect("a request without a bearer is refused and makes no workspace", () =>
   }),
 );
 
-it.effect("the first read makes the personal workspace, owned and with no GitHub account", () =>
-  Effect.gen(function* () {
-    const { seams, database } = yield* openWorkspacePlugin;
-    yield* Effect.gen(function* () {
-      const ada = yield* openGithubAccount("Ada Lovelace");
-      const github = githubReaching([ACME]);
+it.effect(
+  "the first read makes the account's first workspace, owned and with no GitHub account",
+  () =>
+    Effect.gen(function* () {
+      const { seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const github = githubReaching([ACME]);
 
-      const first = yield* workspacesOf(seams, github, ada);
-      const second = yield* workspacesOf(seams, github, ada);
+        const first = yield* workspacesOf(seams, github, ada);
+        const second = yield* workspacesOf(seams, github, ada);
 
-      assert.deepEqual(first, [
-        {
-          id: first[0]?.id,
-          name: "Ada Lovelace",
-          personal: true,
-          role: WORKSPACE_ROLE.OWNER,
-          github: null,
-        },
-      ]);
-      assert.deepEqual(second, first);
-      assert.equal(github.sent.length, 0);
-    }).pipe(Effect.provide(database));
-  }),
+        assert.deepEqual(first, [
+          {
+            id: first[0]?.id,
+            name: "Ada Lovelace",
+            role: WORKSPACE_ROLE.OWNER,
+            github: null,
+          },
+        ]);
+        assert.deepEqual(second, first);
+        assert.equal(github.sent.length, 0);
+      }).pipe(Effect.provide(database));
+    }),
 );
 
 it.effect(
@@ -314,7 +314,6 @@ it.effect(
           {
             id: undefined,
             name: "Acme Platform",
-            personal: false,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
@@ -503,23 +502,23 @@ it.effect("an installation connected to one workspace is refused for a second", 
   }),
 );
 
-it.effect("a personal workspace connects GitHub like any other, by its owner", () =>
+it.effect("the account's first workspace connects GitHub like any other, by its owner", () =>
   Effect.gen(function* () {
     const { seams, database } = yield* openWorkspacePlugin;
     yield* Effect.gen(function* () {
       const ada = yield* openGithubAccount("Ada Lovelace");
       const github = githubReaching([ACME]);
-      const [personal] = yield* workspacesOf(seams, github, ada);
-      assert.ok(personal?.personal);
+      const [first] = yield* workspacesOf(seams, github, ada);
+      assert.ok(first);
 
       const landed = yield* landedAt(seams, github, {
         installation_id: String(ACME.id),
         setup_action: "install",
-        state: yield* connectState(seams, github, ada, personal.id),
+        state: yield* connectState(seams, github, ada, first.id),
       });
 
       assert.equal(landed, GITHUB_INSTALL_STATUS.CONNECTED);
-      assert.deepEqual(githubOf(yield* workspacesOf(seams, github, ada), personal.id), {
+      assert.deepEqual(githubOf(yield* workspacesOf(seams, github, ada), first.id), {
         login: "acme",
         active: true,
       });
@@ -601,7 +600,7 @@ it.effect("a connect begun before a disconnect lands as expired after it and lin
   }),
 );
 
-it.effect("a plugin that refuses the personal workspace is answered as unavailable", () =>
+it.effect("a plugin that refuses the account's first workspace is answered as unavailable", () =>
   Effect.gen(function* () {
     const { database } = yield* openWorkspacePlugin;
     const refusing: WorkspaceSeams = {
@@ -825,27 +824,6 @@ it.effect("an owner cannot leave, and a member leaves", () =>
   }),
 );
 
-it.effect("a personal workspace's members are neither read, removed, nor left", () =>
-  Effect.gen(function* () {
-    const plugin = yield* openWorkspacePlugin;
-    const { seams, database } = plugin;
-    yield* Effect.gen(function* () {
-      const ada = yield* openGithubAccount("Ada Lovelace");
-      const personal = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, seams));
-
-      const answers = [
-        yield* readMembers(seams, ada, membersAt(personal)),
-        yield* removing(plugin, ada, personal, ada),
-        yield* leaving(plugin, ada, personal),
-      ];
-
-      const notPermitted = refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED);
-      assert.deepEqual(answers, [notPermitted, notPermitted, notPermitted]);
-      assert.deepEqual(yield* membersOf(personal), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
-    }).pipe(Effect.provide(database));
-  }),
-);
-
 it.effect(
   "a removal or a leaving under the Mac's OAuth token rather than its session is refused as unauthenticated",
   () =>
@@ -995,6 +973,41 @@ it.effect(
 );
 
 it.effect(
+  "the account's first workspace takes invitations and reads its members like any other",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const first = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
+
+        const made = readAs(
+          yield* inviting(plugin, ada, first, "alan@example.com"),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+        const listed = readAs(
+          yield* readInSession(plugin, ada, invitationsAt(first)),
+          workspaceInvitationsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).invitations;
+        const members = yield* readMembers(plugin.seams, ada, membersAt(first));
+
+        assert.equal(made.email, "alan@example.com");
+        assert.deepEqual(listed, [made]);
+        assert.deepEqual(members, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            members: [
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            ],
+          },
+        });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
   "an address already a member or already invited is refused as already invited, and nothing is sent twice",
   () =>
     Effect.gen(function* () {
@@ -1028,7 +1041,7 @@ it.effect(
 );
 
 it.effect(
-  "a member neither invites nor reads invitations, a personal workspace takes none, and another workspace's invitation is not canceled",
+  "a member neither invites nor reads invitations, and another workspace's invitation is not canceled",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -1037,7 +1050,6 @@ it.effect(
         const grace = yield* openGithubAccount("Grace Hopper");
         const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
         const other = yield* openTeam(plugin.api, grace, []);
-        const personal = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
         const elsewhere = readAs(
           yield* inviting(plugin, grace, other, "someone@example.com"),
           workspaceInvitationAnswerSchema,
@@ -1047,7 +1059,6 @@ it.effect(
         const answers = [
           yield* inviting(plugin, grace, acme, "alan@example.com"),
           yield* readInSession(plugin, grace, invitationsAt(acme)),
-          yield* inviting(plugin, ada, personal, "alan@example.com"),
         ];
         const crossed = yield* postedInSession(
           plugin,
@@ -1060,7 +1071,7 @@ it.effect(
           HOSTED_HTTP_STATUS.FORBIDDEN,
           HOSTED_API_ERROR.NOT_PERMITTED,
         );
-        assert.deepEqual(answers, [notPermitted, notPermitted, notPermitted]);
+        assert.deepEqual(answers, [notPermitted, notPermitted]);
         assert.deepEqual(
           crossed,
           refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

@@ -262,7 +262,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         }
       : undefined,
     // The Workspace page's groups, as it draws them for the workspace it shows.
-    input.workspace && !input.workspace.personal
+    input.workspace
       ? {
           id: SETTINGS_SECTION.MEMBERS,
           label: "Members",

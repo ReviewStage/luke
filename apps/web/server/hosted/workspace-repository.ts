@@ -5,8 +5,8 @@
  * started on the repository its plan names, so the rule is read at each of
  * those moments rather than once when the plan is written: an installation
  * disconnected or replaced after the plan named its repository still decides
- * whether an agent may start on it. A workspace with no installation, a
- * personal one among them, reaches no repository at all.
+ * whether an agent may start on it. A workspace with no installation
+ * reaches no repository at all.
  */
 
 import type { DatabaseServices } from "@sidecar/database/core/query";

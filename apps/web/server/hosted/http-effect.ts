@@ -82,7 +82,7 @@ export const HOSTED_REFUSAL = {
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The plan is archived, so it takes nothing until it is brought back; nothing was written. */
   PLAN_ARCHIVED: { error: HOSTED_API_ERROR.PLAN_ARCHIVED },
-  /** The account's role in the workspace, or the workspace being personal, does not allow this; nothing was written. */
+  /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
   /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },

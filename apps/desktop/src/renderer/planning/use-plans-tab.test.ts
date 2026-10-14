@@ -289,7 +289,6 @@ function row(
 const PERSONAL = {
   id: "workspace-personal",
   name: "Personal",
-  personal: true,
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -297,7 +296,6 @@ const PERSONAL = {
 const ACME = {
   id: "workspace-acme",
   name: "acme",
-  personal: false,
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
@@ -345,7 +343,6 @@ const UNSTARTED = {
 const PLATFORM = {
   id: "workspace-platform",
   name: "Platform",
-  personal: false,
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -722,7 +719,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
 });
 
-test("the sidebar lists the personal workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
+test("the sidebar lists the first workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
 
   const personal = {
@@ -809,7 +806,7 @@ test("the new-plan page's recent repositories are the chosen workspace's own, an
   assert.deepEqual([acme.recent, acme.scope], [["acme/relay"], ACME.id]);
 });
 
-test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the personal one", () => {
+test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the first one", () => {
   const first = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => first.control().onChooseWorkspace(ACME.id));
   document.body.innerHTML = "";
@@ -826,7 +823,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
   );
 });
 
-test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the personal one", async () => {
+test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the first one", async () => {
   const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
 
   await tab.control().newPlan.start("Invites", null);
@@ -948,7 +945,7 @@ test("Workspace settings opens Settings on the listed workspace's page", () => {
   assert.deepEqual(tab.links, [{ page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id }]);
 });
 
-test("the listed workspace left lists the personal one again, and another workspace left keeps the one listed", () => {
+test("the listed workspace left lists the first one again, and another workspace left keeps the one listed", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(ACME.id));
   const chosen = tab.control().workspace?.id;
@@ -962,7 +959,7 @@ test("the listed workspace left lists the personal one again, and another worksp
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-test("a fixture run lists its personal workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", () => {
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
   const staged = fixture.control().listed.plans.map((plan) => plan.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));

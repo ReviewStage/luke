@@ -6,7 +6,7 @@
  * GitHub on a token the App mints for the listing the moment it is asked
  * for and stored nowhere: every repository of the installation connected to
  * the workspace named in the `workspaceId` query, or to the account's
- * personal workspace where none is named, most recently updated first, to a
+ * first workspace where none is named, most recently updated first, to a
  * member of it, and whether one is connected at all; a workspace the
  * account is not in is not found. A workspace with nothing connected has no
  * repositories. A GitHub or a store the service could not reach is
@@ -56,7 +56,7 @@ export type GitHubRepositoriesAppServices = DatabaseServices | GitHubApp | HttpC
 
 /**
  * The workspace the listing is for: the one named, where the account is a
- * member of it, or the account's personal one where none is named, which a
+ * member of it, or the account's first one where none is named, which a
  * first read may arrive ahead of and so finds none, with nothing connected.
  * One not a member of is not found; more than one named, or one off the
  * wire's shape, is an invalid request.

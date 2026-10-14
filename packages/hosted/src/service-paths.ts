@@ -131,7 +131,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_DISCONNECT: "/api/github/disconnect",
   /**
-   * The workspaces the account is a member of, its personal one first and
+   * The workspaces the account is a member of, its first one first and
    * the rest by name, each with its connected GitHub account (GET), or a
    * workspace created, the account its owner (POST). `workspace-wire.ts`
    * declares both.

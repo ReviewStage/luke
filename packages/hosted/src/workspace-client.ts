@@ -117,7 +117,7 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Every workspace the account is a member of, its personal one first; nothing where the service refused or did not answer. */
+  /** Every workspace the account is a member of, its first one first; nothing where the service refused or did not answer. */
   list(): Effect.Effect<WorkspacesAnswer | undefined, never, HttpClient.HttpClient> {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES },
@@ -160,7 +160,7 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** One workspace's members, owners first; or why there are none: not a member, a personal workspace, or no answer. */
+  /** One workspace's members, owners first; or why there are none: not a member, not permitted, or no answer. */
   members(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {

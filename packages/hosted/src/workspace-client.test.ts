@@ -15,14 +15,12 @@ import { WORKSPACE_ROLE } from "./workspace-wire.js";
 const PERSONAL = {
   id: "org-personal-1",
   name: "Ada Lovelace",
-  personal: true,
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME = {
   id: "org-acme-1",
   name: "Acme",
-  personal: false,
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: false },
 };
@@ -169,11 +167,11 @@ it.effect("reads a workspace's members under the workspace's id, as the service 
   }),
 );
 
-it.effect("names a members read the service refused: a personal workspace, or not a member", () =>
+it.effect("names a members read the service refused: not permitted, or not a member", () =>
   Effect.gen(function* () {
     const route = "GET /api/workspaces/members";
 
-    const personal = yield* Effect.provide(
+    const notPermitted = yield* Effect.provide(
       client().members(PERSONAL.id),
       refusing(route, HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN).layer,
     );
@@ -182,7 +180,7 @@ it.effect("names a members read the service refused: a personal workspace, or no
       refusing(route, HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND).layer,
     );
 
-    assert.deepEqual(personal, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(notPermitted, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
     assert.deepEqual(outsider, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
   }),
 );

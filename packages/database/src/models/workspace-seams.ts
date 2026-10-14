@@ -19,31 +19,8 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * the API of a Better Auth over its own database.
  */
 
-/** The metadata the plugin stores on a personal workspace, as JSON text; only the server writes it. */
+/** The metadata the plugin stores on the workspace made for an account, as JSON text; only the server writes it, and nothing reads it to behave differently. */
 export const PERSONAL_WORKSPACE_METADATA = { personal: true } as const;
-
-const MarkedMetadataSchema = Schema.Struct({ personal: Schema.optional(Schema.Boolean) });
-
-/** An organization's metadata as the plugin hands it back: the column's JSON text, or the record where it parsed it. */
-export type StoredOrganizationMetadata =
-  | string
-  | typeof MarkedMetadataSchema.Type
-  | null
-  | undefined;
-
-const decodeStoredMetadata = Schema.decodeUnknownOption(
-  Schema.Union([Schema.fromJsonString(MarkedMetadataSchema), MarkedMetadataSchema]),
-);
-
-/**
- * Whether an organization's metadata marks a personal workspace. The
- * plugin's adapter answers the column's text unparsed, so the text is read
- * as JSON, and a record is read as it stands; anything else marks nothing.
- */
-export function isPersonalWorkspaceMetadata(metadata: StoredOrganizationMetadata): boolean {
-  const stored = decodeStoredMetadata(metadata);
-  return Option.isSome(stored) && stored.value.personal === true;
-}
 
 /** What a workspace is created with: its name and slug, the account that will own it, and the metadata the plugin stores as JSON text. */
 export interface WorkspaceCreation {
