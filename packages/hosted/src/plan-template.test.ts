@@ -92,3 +92,42 @@ test("a note naming a field rather than a heading is passed over, and a correcti
     unread: 1,
   });
 });
+
+/** A plan's text holding a mention the developer placed. */
+const MENTIONED = "## Rollout\n\n- Ship as [@Goal](luke://plan/pl_1#Goal) says, store first.\n";
+
+test("a correction that drops a mention the developer placed is not taken", () => {
+  const note: PlanNote = {
+    kind: NOTE_KIND.REPLACE,
+    find: "Ship as [@Goal](luke://plan/pl_1#Goal) says",
+    text: "Ship",
+  };
+
+  const taken = applyNotesToText(MENTIONED, [note]);
+
+  assert.equal(taken.text, MENTIONED);
+  assert.deepEqual(taken.missed, [note]);
+});
+
+test("a correction that rewords around a mention, keeping it, is taken", () => {
+  const taken = applyNotesToText(MENTIONED, [
+    {
+      kind: NOTE_KIND.REPLACE,
+      find: "Ship as [@Goal](luke://plan/pl_1#Goal) says, store first",
+      text: "Ship in the order [@Goal](luke://plan/pl_1#Goal) gives, desktop first",
+    },
+  ]);
+
+  assert.equal(
+    taken.text,
+    "## Rollout\n\n- Ship in the order [@Goal](luke://plan/pl_1#Goal) gives, desktop first.\n",
+  );
+  assert.deepEqual(taken.missed, []);
+});
+
+test("striking the line a mention stands on is a retraction, and is taken", () => {
+  const taken = applyNotesToText(MENTIONED, [{ kind: NOTE_KIND.REMOVE, find: "Ship as" }]);
+
+  assert.equal(taken.text.includes("[@Goal]"), false);
+  assert.deepEqual(taken.missed, []);
+});

@@ -249,11 +249,6 @@ export function decodeMention(target: string): Mention | undefined {
   return Option.getOrUndefined(readMention(fieldsOf(target)));
 }
 
-/** Whether a mention names the plan or one of its sections. */
-export function isPlanMention(mention: Mention): mention is PlanMention {
-  return mention.kind === MENTION_KIND.PLAN || mention.kind === MENTION_KIND.SECTION;
-}
-
 /** Whether a link's label is a mention's: it starts with `@`. */
 export function isMentionLabel(label: string): boolean {
   return label.startsWith(MENTION_SIGIL) && label.length > MENTION_SIGIL.length;

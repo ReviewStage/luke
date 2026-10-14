@@ -295,6 +295,7 @@ function PlanDocument({
   };
   const sectionLinksOf = (shown: string): SectionLinks => ({
     onOpen: openMention,
+    onOpenFile: (path) => plans.sidePanel.onOpenFile({ path }),
     reveal: revealed?.planId === shown ? revealed.reveal : undefined,
   });
   if (region.kind !== DOCUMENT_REGION.READY) {
