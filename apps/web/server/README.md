@@ -2961,3 +2961,19 @@ as entities so it cannot close the fence, and reads the rest with `gh`. The App 
 request and check events it already reads, a setting of the App on GitHub
 rather than of this repository; until it does, those two triggers never
 fire.
+
+A webhook trigger's address is `POST /api/automations/{id}/webhook`
+(`server/automation-webhook-app.ts`), called by whatever the developer
+hands it to under the trigger's own secret rather than an account bearer:
+the `Authorization: Bearer` value, or the `token` query for a sender that
+can set no header, hashed and compared in constant time against the
+SHA-256 the row keeps. An id that names no webhook automation and a secret
+that does not hold are both `invalid-token`, so the address says nothing of
+what stands behind it. A paused automation answers `200 { queued: 0 }`, so
+a sender does not retry; otherwise the call is `202 { queued }`, the run
+recorded under the caller's `Idempotency-Key` where it sends one, with its
+body, at most 64 KiB, kept on the run's `payload` for the agent, which is
+handed it fenced as the caller's own text. The sweep starts the agent.
+`POST /api/automations/{id}/webhook-secret` mints the secret again under
+the account bearer and answers it once; the one before stops admitting
+calls. `tests/automation-webhook-app.test.ts` holds both.

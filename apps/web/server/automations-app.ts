@@ -86,6 +86,8 @@ const PATH = {
   RUN: "/api/automations/run",
   /** GET reads its runs; the rewrite moves the path's id into the `id` query. */
   RUNS: "/api/automations/runs",
+  /** POST mints a webhook trigger's secret again; the rewrite moves the path's id into the `id` query. */
+  WEBHOOK_SECRET: "/api/automations/webhook-secret",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH", DELETE: "DELETE" } as const;
@@ -456,13 +458,43 @@ const runsEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsEndpoint")(fun
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(runs) });
 });
 
-/** The group: the four automation paths, and the hosted vocabulary's own refusal for any other. */
+/** POST: a webhook trigger's secret minted again and answered once; the one before stops admitting calls. */
+const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSecretEndpoint")(
+  function* (
+    seams: AutomationsAppSeams,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.POST) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const userId = yield* resolvedUserId(seams, request);
+    const id = yield* idOf(request);
+    const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+    if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    if (standing.value.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    }
+    const webhook = mintWebhookSecret();
+    const written = yield* hostedStoreOrUnavailable(
+      updateAutomation(userId, id, { webhookSecretHash: webhook.hash }),
+    );
+    if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      automation: yield* summaryOf(userId, written.value),
+      webhookSecret: webhook.secret,
+    });
+  },
+);
+
+/** The group: the five automation paths, and the hosted vocabulary's own refusal for any other. */
 export function automationsApp(seams: AutomationsAppSeams): WebRoutes<AutomationsAppServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, PATH.AUTOMATIONS, hostedRefusing(automationsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PATH.AUTOMATION, hostedRefusing(automationEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PATH.RUN, hostedRefusing(runEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PATH.RUNS, hostedRefusing(runsEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PATH.WEBHOOK_SECRET, hostedRefusing(webhookSecretEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

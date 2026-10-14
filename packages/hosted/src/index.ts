@@ -104,6 +104,8 @@ export {
   automationPath,
   automationRunPath,
   automationRunsPath,
+  automationWebhookPath,
+  automationWebhookSecretPath,
   HOSTED_SERVICE_PATH,
   planAgentsPath,
   planPath,

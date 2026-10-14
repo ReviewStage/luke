@@ -135,6 +135,7 @@ const RunRowSchema = Schema.Struct({
   id: Schema.String,
   automationId: Schema.String,
   firing: automationFiringSchema,
+  payload: Schema.NullOr(Schema.String),
   status: automationRunStatusSchema,
   reason: Schema.NullOr(automationRunReasonSchema),
   codingAgentId: Schema.NullOr(Schema.String),
@@ -149,6 +150,7 @@ const RUN_COLUMNS = {
   id: automationRun.id,
   automationId: automationRun.automationId,
   firing: automationRun.firing,
+  payload: automationRun.payload,
   status: automationRun.status,
   reason: automationRun.reason,
   codingAgentId: automationRun.codingAgentId,
@@ -161,6 +163,8 @@ export interface NewAutomationRun {
   readonly dedupeKey: string;
   readonly firing: AutomationFiring;
   readonly firedAt: Date;
+  /** A webhook firing's body, for the agent's task. */
+  readonly payload?: string;
 }
 
 /** How a run settled: started with its agent, or skipped or failed for a reason. */
@@ -323,6 +327,7 @@ const insertRun = SqlSchema.findAll({
     userId: Schema.String,
     dedupeKey: Schema.String,
     firing: automationFiringSchema,
+    payload: Schema.NullOr(Schema.String),
     firedAt: Schema.Date,
   }),
   Result: RunRowSchema,
@@ -744,6 +749,33 @@ const findGithubAutomations = SqlSchema.findAll({
     ),
 });
 
+const WebhookRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  enabled: Schema.Boolean,
+  webhookSecretHash: Schema.NullOr(Schema.String),
+});
+
+/** What a webhook call is checked against: the automation, its owner, whether it runs, and its secret's hash. */
+export type WebhookAutomation = typeof WebhookRowSchema.Type;
+
+const findWebhookAutomation = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: WebhookRowSchema,
+  execute: (id) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: automation.id,
+          userId: automation.userId,
+          enabled: automation.enabled,
+          webhookSecretHash: automation.webhookSecretHash,
+        })
+        .from(automation)
+        .where(and(eq(automation.id, id), eq(automation.triggerKind, AUTOMATION_TRIGGER.WEBHOOK))),
+    ),
+});
+
 const writePause = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
   execute: ({ id, reason, now }) =>
@@ -827,9 +859,15 @@ export function recordAutomationRun(
   owner: Pick<Automation, "id" | "userId">,
   run: NewAutomationRun,
 ): PlanStoreEffect<Option.Option<AutomationRun>> {
-  return Effect.map(insertRun({ ...run, automationId: owner.id, userId: owner.userId }), (rows) =>
-    Option.fromUndefinedOr(rows[0]),
-  );
+  const row = {
+    dedupeKey: run.dedupeKey,
+    firing: run.firing,
+    payload: run.payload ?? null,
+    firedAt: run.firedAt,
+    automationId: owner.id,
+    userId: owner.userId,
+  };
+  return Effect.map(insertRun(row), (rows) => Option.fromUndefinedOr(rows[0]));
 }
 
 /** Settles a queued run as it came out; false where it was settled already, so a run settles once. */
@@ -1027,4 +1065,11 @@ export function githubAutomationsOn(
   limit: number,
 ): PlanStoreEffect<readonly ListeningAutomation[]> {
   return findGithubAutomations({ repository, event, limit });
+}
+
+/** The webhook automation under this id, whoever owns it, for a call to its address; nothing for any other id or trigger. */
+export function readWebhookAutomation(
+  id: string,
+): PlanStoreEffect<Option.Option<WebhookAutomation>> {
+  return findWebhookAutomation(id);
 }

@@ -367,3 +367,21 @@ export const automationRunAnswerSchema = EffectSchema.Struct({
 export const automationRunsAnswerSchema = EffectSchema.Struct({
   runs: EffectSchema.Array(automationRunSummarySchema),
 });
+
+/**
+ * How a webhook trigger's caller is admitted and deduplicated: the secret as
+ * the `Authorization: Bearer` value, or, for a sender that can set no
+ * header, as the `token` query of the address; a retry carrying the same
+ * `Idempotency-Key` header is the same run. A body larger than the bound is
+ * refused.
+ */
+export const AUTOMATION_WEBHOOK = {
+  TOKEN_QUERY: "token",
+  IDEMPOTENCY_HEADER: "idempotency-key",
+  MAX_BODY_BYTES: 64 * 1024,
+} as const;
+
+/** What a webhook call is answered with: how many runs it queued, none for a paused automation or a retry. */
+export const automationWebhookAnswerSchema = EffectSchema.Struct({
+  queued: countedNumber,
+});

@@ -72,7 +72,9 @@ export const automation = pgTable(
  * a schedule claimed twice, a webhook GitHub delivers again, or a caller's
  * retry under the same key records one run: the due instant for a
  * schedule, GitHub's delivery id for an event, the caller's idempotency key
- * for a webhook or a "Run now". The status is the firing's; how the agent it
+ * for a webhook or a "Run now". A webhook's body is kept beside it, since
+ * the sweep that starts the run's agent comes after the request that
+ * brought it. The status is the firing's; how the agent it
  * started is doing is the agent's own, read through `coding_agent_id`,
  * which goes null where the agent is deleted while the run stays in the
  * history. The row goes with its automation.
@@ -89,6 +91,8 @@ export const automationRun = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     dedupeKey: text("dedupe_key").notNull(),
     firing: jsonb("firing").$type<AutomationFiring>().notNull(),
+    /** A webhook firing's body as its caller sent it, bounded, for the agent's task; null for every other firing. */
+    payload: text("payload"),
     status: text("status").$type<AutomationRunStatus>().notNull(),
     /** Why it was skipped or failed; null while queued and once started. */
     reason: text("reason").$type<AutomationRunReason>(),
