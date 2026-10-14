@@ -12,13 +12,15 @@ import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { AVATAR_STATUS } from "#shared/messages/avatar";
 import { VOICE_COMMAND } from "#shared/messages/voice-view";
 import { useAct } from "../act";
+import { startAvatarFeed } from "../avatar-feed/start-avatar-feed";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { LiveCall, type LiveStreamSlot } from "./live-call";
+import { type AvatarFeedActs, LiveCall, type LiveStreamSlot } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
@@ -61,8 +63,15 @@ function atomSlot(atom: Atom.Writable<MediaStream | undefined>): LiveStreamSlot 
  * `AudioContext`, the element Luke's voice plays through — and the
  * subscriptions the main process reaches this window on. Nothing is drawn
  * here, and nothing here appends to the model: every append is the host's.
+ *
+ * With `avatarFeed`, Luke's voice is also teed to his avatar while the call
+ * window shows one, and the element is muted while the avatar voices him.
+ * Like the acts, it is read once, when the window's orchestrator is made.
  */
-export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
+export function useVoiceSession(
+  remoteAudio: RefObject<HTMLAudioElement | null>,
+  avatarFeed?: AvatarFeedActs,
+): void {
   const { act, tell } = useAct();
   const local = useAtomValue(localStreamAtom);
   const remote = useAtomValue(remoteStreamAtom);
@@ -70,14 +79,17 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
   /**
    * Why Luke's voice is not played: the stop silencing the utterance it cut
-   * short, and the developer's speaker toggle. The element is muted while
-   * either stands, and never the stream, which the meter reads.
+   * short, the developer's speaker toggle, and his avatar voicing him in the
+   * element's place. The element is muted while any stands, and never the
+   * stream, which the meter and the avatar's tee read.
    */
   const outputSilenced = useRef(false);
   const speakerMuted = useRef(false);
+  const avatarVoiced = useRef(false);
   const playRemoteAudio = () => {
     if (remoteAudio.current) {
-      remoteAudio.current.muted = outputSilenced.current || speakerMuted.current;
+      remoteAudio.current.muted =
+        outputSilenced.current || speakerMuted.current || avatarVoiced.current;
     }
   };
   /** Everything the policy asks of the main process, over the one bridge this window has. */
@@ -138,6 +150,16 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           outputSilenced.current = silenced;
           playRemoteAudio();
         },
+        ...(avatarFeed && {
+          avatarFeed: {
+            acts: avatarFeed,
+            startTee: startAvatarFeed,
+            onAvatarVoiced: (voiced: boolean) => {
+              avatarVoiced.current = voiced;
+              playRemoteAudio();
+            },
+          },
+        }),
         services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the
@@ -147,6 +169,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
         },
       });
+      call.reportAvatarStatus(appStateNow()?.voice.avatar.status ?? AVATAR_STATUS.OFF);
       callRef.current = call;
       return call;
     },
@@ -180,6 +203,13 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     };
     orchestrator.surround(surroundings);
   }, [orchestrator, state]);
+
+  // The avatar's status as the call window reported it, for the call to hand
+  // Luke's voice over to it, or take it back.
+  const avatarStatus = state?.voice.avatar.status ?? AVATAR_STATUS.OFF;
+  useEffect(() => {
+    callRef.current?.reportAvatarStatus(avatarStatus);
+  }, [avatarStatus]);
 
   // Two meters over one context: Luke's track decides the speaking status,
   // since the guide forbids reading it off transcript events, and the
@@ -233,9 +263,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(
     () =>
       window.sidecar.onVoiceCommand(({ command }) => {
-        if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
-        else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
-        else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
+        if (command === VOICE_COMMAND.STOP_SPEAKING) {
+          callRef.current?.interruptAvatar();
+          drive(orchestrator.stopSpeaking());
+        } else if (command === VOICE_COMMAND.END_CALL) {
+          // The graceful close can take its bound, and the avatar must not talk on through it.
+          callRef.current?.interruptAvatar();
+          drive(orchestrator.stopCall());
+        } else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
           drive(orchestrator.toggleMicrophone());
         else if (command === VOICE_COMMAND.MUTE_SPEAKER) drive(orchestrator.muteSpeaker(true));
         else if (command === VOICE_COMMAND.UNMUTE_SPEAKER) drive(orchestrator.muteSpeaker(false));
@@ -271,21 +306,33 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // recording is known; a release always lands, so a hold begun before the
   // recording still ends. A press made while the panel has a plan open names
   // that plan, and is heard on that plan's call.
+  // The call is told too, since a hold over Luke gone quiet flushes his avatar.
   useEffect(
     () =>
-      window.sidecar.onVoiceHotkeyPress((press) => drive(orchestrator.beginTalk(press?.planId))),
+      window.sidecar.onVoiceHotkeyPress((press) => {
+        callRef.current?.reportTalkKey(true);
+        drive(orchestrator.beginTalk(press?.planId));
+      }),
     [drive, orchestrator],
   );
   useEffect(
-    () => window.sidecar.onVoiceHotkeyRelease(() => drive(orchestrator.endTalk())),
+    () =>
+      window.sidecar.onVoiceHotkeyRelease(() => {
+        callRef.current?.reportTalkKey(false);
+        drive(orchestrator.endTalk());
+      }),
     [drive, orchestrator],
   );
   // The stop key asks for quiet from any app, exactly as Escape asks for it
   // from the panel: the microphone closes, and where Luke is speaking the
   // host tells the model to stop; a press over no session simply does
-  // nothing.
+  // nothing. Luke's avatar, a second behind him, is flushed at once.
   useEffect(
-    () => window.sidecar.onStopHotkeyPress(() => drive(orchestrator.stopSpeaking())),
+    () =>
+      window.sidecar.onStopHotkeyPress(() => {
+        callRef.current?.interruptAvatar();
+        drive(orchestrator.stopSpeaking());
+      }),
     [drive, orchestrator],
   );
 

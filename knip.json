@@ -32,7 +32,6 @@
         "src/renderer/plan-editor/index.ts",
         "src/renderer/session-recorder/index.ts",
         "src/renderer/avatar-feed/pcm-tee-worklet.ts",
-        "src/renderer/avatar-feed/start-avatar-feed.ts",
         "src/renderer/avatar-session/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
