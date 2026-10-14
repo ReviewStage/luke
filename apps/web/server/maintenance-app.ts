@@ -6,6 +6,7 @@ import { voiceSessionRecord } from "@sidecar/database/models/voice-session-recor
 import { storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
+import { sweepAutomations } from "./hosted/automation-sweep.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js";
@@ -60,6 +61,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         sweepAbandonedTurns({ writer }, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
+    sweepAutomations,
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)

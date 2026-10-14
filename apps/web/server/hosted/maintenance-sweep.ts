@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import { Clock, Effect, type Redacted } from "effect";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
+import type { AutomationSweepOutcome } from "./automation-sweep.js";
 import {
   bearerMatchesSecret,
   errorResponse,
@@ -17,15 +18,16 @@ import type { SessionSandboxSweepOutcome } from "./session-sandboxes.js";
  * once it has ended, a turn whose end eve never told the relay is settled as
  * abandoned, a voice session whose device detached and never came back is
  * ended on Luke's key, as a connection would have ended it, and the Vercel
- * Sandboxes of the eve sessions Luke let go of are deleted. None of the five
- * reads a word of any account; each is bounded on its own, and the sweep
- * runs them in turn.
+ * Sandboxes of the eve sessions Luke let go of are deleted, and the
+ * automations whose schedule is due are fired. None of the six reads a word
+ * of any account; each is bounded on its own, and the sweep runs them in
+ * turn.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The five sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The six sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -37,6 +39,8 @@ interface MaintenanceSweeps {
   sweepVoice: (now: number) => SweepRead<VoiceOrphanSweepOutcome>;
   /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
   sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
+  /** Fires the automations whose schedule is due, a sweep's worth, each once. */
+  sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
 }
 
 export interface MaintenanceSweepOptions extends MaintenanceSweeps {
@@ -56,6 +60,8 @@ interface MaintenanceSweepAnswer {
   voice: VoiceOrphanSweepOutcome;
   /** What the sweep over the queued sessions' sandboxes did. */
   sandboxes: SessionSandboxSweepOutcome;
+  /** What the sweep over the automations due did. */
+  automations: AutomationSweepOutcome;
 }
 
 export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaintenanceSweep")(
@@ -84,6 +90,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       abandoned: yield* options.sweepAbandonedTurns(now),
       voice: yield* options.sweepVoice(now),
       sandboxes: yield* options.sweepSandboxes(now),
+      automations: yield* options.sweepAutomations(now),
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },

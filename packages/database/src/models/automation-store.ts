@@ -1,4 +1,5 @@
 import {
+  AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationAction,
@@ -16,10 +17,11 @@ import {
   automationRunStatusSchema,
   automationTriggerSchema,
 } from "@sidecar/hosted/automation-wire";
-import { and, desc, eq, gte, inArray, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
+import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -357,6 +359,87 @@ const findRuns = SqlSchema.findAll({
     ),
 });
 
+const DueRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  trigger: automationTriggerSchema,
+  dueAt: InstantColumnSchema,
+});
+
+/** One schedule the sweep found due: its automation, what fires it, and the instant it was due. */
+type DueAutomation = typeof DueRowSchema.Type;
+
+/** A firing the sweep's claim recorded: the schedule it is of, and its run, queued. */
+export interface ClaimedFiring {
+  readonly automation: DueAutomation;
+  readonly run: AutomationRun;
+}
+
+/** What a claim of the schedules due takes: the instant, how many at most, how late a firing may still run, and the next due instant of a schedule. */
+export interface DueClaim {
+  readonly now: Date;
+  readonly limit: number;
+  readonly graceMs: number;
+  /** The first instant strictly after `after` the trigger is due; null where it never is again. */
+  readonly nextAfter: (trigger: AutomationTrigger, after: Date) => Date | null;
+}
+
+/**
+ * The condition that the automation's owner still reaches its plan, read
+ * per row, since the sweep claims every account's automations at once.
+ */
+const OWNER_REACHES_PLAN = exists(
+  queryBuilder
+    .select({ id: plan.id })
+    .from(plan)
+    .innerJoin(
+      member,
+      and(eq(member.organizationId, plan.organizationId), eq(member.userId, automation.userId)),
+    )
+    .where(eq(plan.id, automation.planId)),
+);
+
+/**
+ * The enabled schedules due, soonest first, of owners who still reach
+ * their plans, locked for this claim. Note that a row another claim holds is
+ * skipped rather than waited on, because the cron may call twice in one
+ * minute and the second call must find nothing left rather than queue
+ * behind the first; and that the trigger's kind is read beside the due
+ * instant, so a due instant left on a trigger of another kind fires nothing.
+ */
+const lockDue = SqlSchema.findAll({
+  Request: Schema.Struct({ now: Schema.Date, limit: Schema.Int }),
+  Result: DueRowSchema,
+  execute: ({ now, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: automation.id,
+          userId: automation.userId,
+          trigger: automation.trigger,
+          dueAt: automation.nextRunAt,
+        })
+        .from(automation)
+        .where(
+          and(
+            eq(automation.enabled, true),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.SCHEDULE),
+            lte(automation.nextRunAt, now),
+            OWNER_REACHES_PLAN,
+          ),
+        )
+        .orderBy(asc(automation.nextRunAt), asc(automation.id))
+        .limit(limit)
+        .for("update", { skipLocked: true }),
+    ),
+});
+
+const writeNextRun = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, nextRunAt: Schema.NullOr(Schema.Date) }),
+  execute: ({ id, nextRunAt }) =>
+    Database.use((db) => db.update(automation).set({ nextRunAt }).where(eq(automation.id, id))),
+});
+
 const findRunsSince = SqlSchema.findAll({
   Request: Schema.Struct({ automationId: Schema.String, since: Schema.Date }),
   Result: RunRowSchema,
@@ -468,4 +551,35 @@ export function automationRunsSince(
   since: Date,
 ): PlanStoreEffect<readonly AutomationRun[]> {
   return findRunsSince({ automationId, since });
+}
+
+/**
+ * Claims the schedules due at `now`, at most `limit` of them, in one
+ * transaction: each one's next due instant is written first, so a claim
+ * that comes after finds it not due, and a firing no later than the grace
+ * past its due instant is recorded as a run under that instant, which the
+ * run's dedupe key holds to once even if two claims read the same row. A
+ * firing later than the grace, a sweep that was down or a schedule just
+ * resumed, is moved on without a run, so a backlog is never replayed.
+ */
+export function claimDueAutomations(claim: DueClaim): PlanStoreEffect<readonly ClaimedFiring[]> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const due = yield* lockDue({ now: claim.now, limit: claim.limit });
+        const claimed: ClaimedFiring[] = [];
+        for (const each of due) {
+          yield* writeNextRun({ id: each.id, nextRunAt: claim.nextAfter(each.trigger, claim.now) });
+          if (claim.now.getTime() - each.dueAt.getTime() > claim.graceMs) continue;
+          const run = yield* recordAutomationRun(each, {
+            dedupeKey: each.dueAt.toISOString(),
+            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: each.dueAt.getTime() },
+            firedAt: claim.now,
+          });
+          if (Option.isSome(run)) claimed.push({ automation: each, run: run.value });
+        }
+        return claimed;
+      }),
+    ),
+  );
 }

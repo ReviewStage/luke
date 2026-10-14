@@ -2760,9 +2760,39 @@ without a hang-up more than a minute ago on Luke's key, at most 20 a sweep and
 each inside ten seconds, counted as `voice`. A deployment without the OpenAI
 key opened no voice session and sweeps none.
 
+It then fires the automations whose schedule is due ("Automations" below),
+at most twenty-five a sweep, counted as `automations.fired`.
+
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project; the same secret is the one the
 voice function acts for an account under at eve's door ("The exchange on the
 sessions route"). Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
+
+## Automations
+
+An automation is an account's saved coding-agent Start on one of its plans,
+fired by a trigger (`docs/proposals/automations-research.md` is the
+research and the plan behind it). The account, the plan, the trigger, the
+action, and the guards are an `automation` row
+(`packages/database/src/schemas/automation.ts`), the trigger, the action,
+and the guards as `@sidecar/hosted/automation-wire`'s own JSON; every
+firing is an `automation_run` row, kept whatever came of it, under a
+dedupe key unique per automation, so the same firing claimed twice is one
+run. The store is `packages/database/src/models/automation-store.ts`: an
+automation is made only on a plan the account reaches, and every other
+statement an account makes names it.
+
+A schedule is five-field cron read in an IANA zone
+(`@sidecar/hosted/automation-schedule`), so nine o'clock stays nine o'clock
+in that zone across a daylight-saving change; one that would fire more
+often than every fifteen minutes is refused. Its next due instant is the
+row's `next_run_at`, which the minute sweep claims by
+(`hosted/automation-sweep.ts`): in one transaction it locks the enabled
+rows due, skipping any another claim holds, writes each one's next instant,
+and records a queued run under the due instant. Vercel's cron may call the
+same minute twice; the second claim finds the row moved on or locked, and
+a claim that still read it at its old instant records nothing past the
+unique key. A schedule due more than an hour ago, the cron down or a
+deploy between, is moved on without a run, so a backlog is never replayed.

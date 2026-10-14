@@ -35,6 +35,7 @@ interface Recorded {
   abandoned: number[];
   voiced: number[];
   sandboxed: number[];
+  automated: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -44,6 +45,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     abandoned: [],
     voiced: [],
     sandboxed: [],
+    automated: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -73,6 +75,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.sandboxed.push(now);
         return SANDBOXED;
       }),
+    sweepAutomations: (now) =>
+      Effect.sync(() => {
+        recorded.automated.push(now);
+        return { fired: 1 };
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -98,6 +105,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       abandoned: [],
       voiced: [],
       sandboxed: [],
+      automated: [],
     });
   }),
 );
@@ -118,6 +126,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       abandoned: [],
       voiced: [],
       sandboxed: [],
+      automated: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -125,6 +134,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       abandoned: [],
       voiced: [],
       sandboxed: [],
+      automated: [],
     });
   }),
 );

@@ -13,9 +13,11 @@ import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
+import { automation, automationRun } from "../../schemas/automation.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
+  claimDueAutomations,
   createAutomation,
   deleteAutomation,
   listAutomationRuns,
@@ -31,8 +33,9 @@ import { createPlan } from "../plan-store.js";
 /**
  * An account's automations and their runs, over a real dialect: made only
  * on a plan the account reaches, read and changed by that account alone
- * while it still reaches the plan,
- * one run per firing however often it is claimed, and a run settled once.
+ * while it still reaches the plan, one run per firing however often it is
+ * claimed, a run settled once, and a schedule claimed once when due, its
+ * backlog moved on rather than run.
  *
  * Synthetic accounts, workspaces, and plans throughout.
  */
@@ -196,6 +199,84 @@ it.layer(getTestDB())("the automation store", (it) => {
         );
         assert.equal(yield* deleteAutomation(owner, made.id), false);
         assert.deepEqual(yield* listAutomationRuns(owner, made.id), []);
+      }),
+  );
+
+  it.effect(
+    "the schedules due are claimed once, each moved on to its next instant, one missed by more than the grace is moved on without a run, and neither a webhook nor a leaver's schedule is claimed",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const now = new Date("2026-10-15T09:05:00Z");
+        const next = new Date("2026-10-16T09:00:00Z");
+        const make = (nextRunAt: Date) =>
+          Effect.map(createAutomation(owner, { ...nightly(planId), nextRunAt }), Option.getOrThrow);
+        const due = yield* make(new Date("2026-10-15T09:00:00Z"));
+        const stale = yield* make(new Date("2026-10-15T06:00:00Z"));
+        const later = yield* make(new Date("2026-10-15T10:00:00Z"));
+        const paused = yield* make(new Date("2026-10-15T09:00:00Z"));
+        yield* updateAutomation(owner, paused.id, { enabled: false });
+        const hooked = yield* make(new Date("2026-10-15T09:00:00Z"));
+        yield* updateAutomation(owner, hooked.id, {
+          trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+        });
+        yield* Database.use((db) =>
+          db
+            .update(automation)
+            .set({ nextRunAt: new Date("2026-10-15T09:00:00Z") })
+            .where(eq(automation.id, hooked.id)),
+        );
+        const leaver = yield* openAccount;
+        const left = Option.getOrThrow(
+          yield* createAutomation(leaver, {
+            ...nightly(yield* openPlan(leaver)),
+            nextRunAt: new Date("2026-10-15T09:00:00Z"),
+          }),
+        );
+        yield* Database.use((db) => db.delete(member).where(eq(member.userId, leaver)));
+        const claim = {
+          now,
+          limit: 10,
+          graceMs: 60 * 60_000,
+          nextAfter: () => next,
+        };
+
+        const first = yield* claimDueAutomations(claim);
+        const second = yield* claimDueAutomations(claim);
+
+        assert.deepEqual(
+          first.map((each) => [each.automation.id, each.run.firing]),
+          [[due.id, { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: due.nextRunAt?.getTime() }]],
+        );
+        assert.deepEqual(second, [], "a claim after finds nothing left due");
+        const nextOf = (id: string) =>
+          Effect.map(readAutomation(owner, id), (read) => Option.getOrThrow(read).nextRunAt);
+        assert.deepEqual(yield* nextOf(due.id), next);
+        assert.deepEqual(yield* nextOf(stale.id), next, "the stale one is moved on");
+        assert.deepEqual(yield* listAutomationRuns(owner, stale.id), [], "and runs nothing");
+        assert.deepEqual(yield* nextOf(later.id), later.nextRunAt);
+        assert.deepEqual(yield* nextOf(paused.id), paused.nextRunAt);
+        const [webhookRuns, leaverRuns] = yield* Effect.all([
+          listAutomationRuns(owner, hooked.id),
+          Database.use((db) =>
+            db
+              .select({ id: automationRun.id })
+              .from(automationRun)
+              .where(eq(automationRun.automationId, left.id)),
+          ),
+        ]);
+        assert.deepEqual(webhookRuns, [], "a due instant left on a webhook fires nothing");
+        assert.deepEqual(
+          leaverRuns,
+          [],
+          "nor does a schedule whose owner left the plan's workspace",
+        );
+
+        // A second claim that read the row at its old instant records no second run.
+        yield* updateAutomation(owner, due.id, { nextRunAt: due.nextRunAt });
+        assert.deepEqual(yield* claimDueAutomations(claim), []);
+        assert.equal((yield* listAutomationRuns(owner, due.id)).length, 1);
       }),
   );
 });
