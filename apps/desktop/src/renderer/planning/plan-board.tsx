@@ -85,7 +85,7 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
       : undefined;
     const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
-      try: () => window.sidecar.act(actRequest(ACT_KIND.PLANNING_BOARD_SAVE, payload)),
+      try: () => window.luke.act(actRequest(ACT_KIND.PLANNING_BOARD_SAVE, payload)),
       catch: (error) => error,
     });
   }),

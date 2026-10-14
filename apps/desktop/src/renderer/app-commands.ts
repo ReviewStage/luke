@@ -106,7 +106,7 @@ export function useAppKeymap(enabled: boolean): void {
 export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
-    return window.sidecar.onMenuCommand((command) => {
+    return window.luke.onMenuCommand((command) => {
       runAppCommand(command);
     });
   }, [enabled]);

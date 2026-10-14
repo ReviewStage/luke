@@ -193,7 +193,7 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   refuseGitHubDisconnect = false;
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
   });

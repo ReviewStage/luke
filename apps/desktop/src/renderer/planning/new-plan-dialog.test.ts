@@ -23,7 +23,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),

@@ -17,7 +17,7 @@ import { useEffect } from "react";
 export function useStaleHoverAfterMove(): void {
   useEffect(() => {
     const root = document.documentElement;
-    const stopMoved = window.sidecar.onCallWindowMoved(() => {
+    const stopMoved = window.luke.onCallWindowMoved(() => {
       root.dataset.pointerStale = "true";
       delete root.dataset.keyboard;
     });

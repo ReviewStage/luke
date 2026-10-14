@@ -33,7 +33,7 @@ let sent: { kind: string }[] = [];
 
 beforeEach(() => {
   sent = [];
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: { kind: string }) => {

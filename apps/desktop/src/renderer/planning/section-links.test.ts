@@ -43,7 +43,7 @@ const copied: string[] = [];
 
 beforeEach(() => {
   copied.length = 0;
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {

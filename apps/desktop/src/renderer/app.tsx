@@ -125,7 +125,7 @@ export function App(): React.JSX.Element {
       setSettingsView(SETTINGS_VIEW.ACCOUNT);
       // `PanelTab` and the counted tab are the same union: both are
       // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
-      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+      window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
         panel_tab: next,
       });
     },
@@ -199,7 +199,7 @@ export function App(): React.JSX.Element {
     shortcutCapture.current = capturing;
     // The talk and stop keys are routed by the main process to a window that
     // is not this one, so the recording is reported there to be honored.
-    window.sidecar.setShortcutCapturing(capturing);
+    window.luke.setShortcutCapturing(capturing);
   }, []);
 
   // A capture run stages its conversation from the launch profile, since no
@@ -257,7 +257,7 @@ export function App(): React.JSX.Element {
   showAgent.current = plans.onShowAgent;
   useEffect(
     () =>
-      window.sidecar.onShowAgent(({ planId, agentId }) => {
+      window.luke.onShowAgent(({ planId, agentId }) => {
         changeTab(PANEL_TAB.PLANS);
         showAgent.current(planId, agentId);
       }),
@@ -269,7 +269,7 @@ export function App(): React.JSX.Element {
   showPlan.current = plans.onShowPlan;
   useEffect(
     () =>
-      window.sidecar.onShowPlan(({ planId }) => {
+      window.luke.onShowPlan(({ planId }) => {
         changeTab(PANEL_TAB.PLANS);
         showPlan.current(planId);
       }),
@@ -312,7 +312,7 @@ export function App(): React.JSX.Element {
     },
     [changeTab],
   );
-  useEffect(() => window.sidecar.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
+  useEffect(() => window.luke.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
   useInboxToasts(
     openInbox,
     state?.inbox.waiting ?? NOTHING_WAITING,
@@ -353,7 +353,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
-    window.sidecar.notifyReady();
+    window.luke.notifyReady();
   }, [state]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —

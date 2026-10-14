@@ -33,7 +33,7 @@ interface Landing {
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),

@@ -290,7 +290,7 @@ test("a dictation's words land where the caret stood as it began, spaced from th
     configurable: true,
     value: () => ({ matches: true, addEventListener: ignore, removeEventListener: ignore }),
   });
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),

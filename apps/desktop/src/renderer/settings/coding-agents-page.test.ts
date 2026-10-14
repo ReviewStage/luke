@@ -114,7 +114,7 @@ beforeEach(() => {
   keys = [];
   sent = [];
   refuseWrite = false;
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
   });

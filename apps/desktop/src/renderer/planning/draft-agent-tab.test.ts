@@ -80,7 +80,7 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {

@@ -79,7 +79,7 @@ beforeEach(() => {
     configurable: true,
     value: () => ({ matches: false, addEventListener: ignore, removeEventListener: ignore }),
   });
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, onMenuCommand: () => ignore, recordSurfaceEvent: ignore },
   });

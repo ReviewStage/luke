@@ -39,4 +39,4 @@ function exposedBridge(): AppBridge {
   return bridge as unknown as AppBridge;
 }
 
-contextBridge.exposeInMainWorld("sidecar", exposedBridge());
+contextBridge.exposeInMainWorld("luke", exposedBridge());

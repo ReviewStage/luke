@@ -57,7 +57,7 @@ const TOOLS = new Map<IntegrationProvider, readonly IntegrationTool[]>([
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> =>
