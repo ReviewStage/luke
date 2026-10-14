@@ -249,6 +249,14 @@
           "dest": "/changelog.html"
         },
         {
+          "src": "/changelog/page/(\\d+)",
+          "dest": "/changelog/page/$1.html"
+        },
+        {
+          "src": "/changelog/(\\d+\\.\\d+\\.\\d+)",
+          "dest": "/changelog/$1.html"
+        },
+        {
           "src": "/admin",
           "dest": "/admin.html"
         }
