@@ -1,5 +1,6 @@
 import type { ContextWindow } from "@luke/features/coding-agent-wire";
-import { pgTable, text } from "drizzle-orm/pg-core";
+import type { ExperimentChoices } from "@luke/settings";
+import { jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -32,6 +33,14 @@ export const accountPreference = pgTable("account_preference", {
    * (`/api/account/plan-template`), apart from the preferences snapshot.
    */
   planTemplate: text("plan_template"),
+  /**
+   * Each experiment the account turned on or back off, by its key
+   * (`@luke/settings`'s `EXPERIMENT`); null on a row that never chose one,
+   * which reads as every experiment off. A write merges its keys over what
+   * stood, so a Mac that knows fewer experiments never erases another's
+   * choice, and a key no build lists any more is left inert.
+   */
+  experiments: jsonb("experiments").$type<ExperimentChoices>(),
   createdAt: createdAt(),
   /**
    * When the preferences part was last written; null on a row only a
