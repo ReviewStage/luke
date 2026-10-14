@@ -33,6 +33,8 @@ export const RUN_PROFILE = {
   PLANNING_TRANSCRIPT: "planning-transcript",
   /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
   PLANNING_WORK: "planning-work",
+  /** The same plan, opened at launch on its Stack tab, its rollout's three pull requests each at a different stage. */
+  PLANNING_STACK: "planning-stack",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

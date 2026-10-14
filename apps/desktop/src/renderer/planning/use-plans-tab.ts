@@ -1,4 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
@@ -43,9 +44,11 @@ import { dictationKeywords } from "./dictation-keywords";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
 import {
   FIXTURE_PLANNING_CALL,
+  fixtureMainTab,
   fixturePlanningView,
   fixtureRepositories,
   fixtureSidePanel,
+  fixtureStackAgents,
 } from "./planning-fixture";
 import {
   archivedPlansNote,
@@ -275,6 +278,8 @@ export interface PlansControl {
   };
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
+  /** The agents the plan's Stack tab lays its rollout out over: the open plan's as last read, or a fixture's staged workers. */
+  stackAgents: readonly CodingAgentSummary[] | undefined;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
   onSelect: (planId: string) => void;
@@ -679,6 +684,17 @@ export function usePlansTab(input: {
   mainRef.current = mainTabs;
   // A page's tab is held to the pages agents wrote for the plan.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
+  // A fixture profile that opens its plan on a tab of the column chooses it
+  // once, as the plan opens, and the column is the capture's from then on.
+  const stagedTab = fixtureMainTab(input.run);
+  const stagedOn = useRef<string | undefined>(undefined);
+  const { onChoose: chooseMainTab } = mainTabs;
+  useEffect(() => {
+    const planId = viewed.activePlanId;
+    if (stagedTab === undefined || planId === undefined || stagedOn.current === planId) return;
+    stagedOn.current = planId;
+    chooseMainTab(stagedTab);
+  }, [stagedTab, viewed.activePlanId, chooseMainTab]);
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
     { id: viewed.activePlanId, holds: planHolds(viewed, transcript) },
@@ -1453,6 +1469,7 @@ export function usePlansTab(input: {
           : undefined,
     },
     agents,
+    stackAgents: fixtureStackAgents(input.run) ?? agents.agents,
     history: {
       ...history,
       open: historyOpen,

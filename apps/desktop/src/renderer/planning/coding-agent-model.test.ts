@@ -5,6 +5,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
+  type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -36,6 +37,7 @@ import {
   showsPublishedRow,
   startedAgentOf,
   unreadSentLines,
+  withAgent,
 } from "./coding-agent-model";
 
 test("the transcript is followed only while the tab shows and the agent may still write", () => {
@@ -468,4 +470,35 @@ test("a planning transcript's raw parts read as the agent tab reads them: eve's 
   assert.equal(startedAgentOf(started), "agent-9");
   assert.equal(startedAgentOf(refused), undefined);
   assert.equal(startedAgentOf(worker), undefined);
+});
+
+test("an agent the service answers takes its place in the list, keeping the pull request only the list carries where the answer has none", () => {
+  const opened: CodingAgentPullRequest = {
+    number: 412,
+    title: "Pending memberships",
+    url: "https://github.com/acme/relay/pull/412",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 4,
+    deletions: 1,
+    changedFiles: 1,
+  };
+  const listed: CodingAgentSummary = {
+    id: "a1",
+    planId: "p1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Pending memberships",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    published: opened,
+  };
+  const { published: _none, ...renamed } = { ...listed, title: "Memberships" };
+  const merged = { ...opened, state: PULL_REQUEST_STATE.MERGED };
+
+  assert.deepEqual(withAgent([listed], renamed), [{ ...renamed, published: opened }]);
+  assert.deepEqual(withAgent([listed], { ...renamed, published: merged }), [
+    { ...renamed, published: merged },
+  ]);
 });

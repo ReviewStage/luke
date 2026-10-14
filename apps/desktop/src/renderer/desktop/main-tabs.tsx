@@ -4,7 +4,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { PlanSummary, RolloutItem } from "@sidecar/hosted/plan-wire";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -557,15 +557,19 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
 export function MainTabContent({
   tab,
   agents,
+  stack,
   shown,
   views,
   onOpenDelegation,
   onOpenChanges,
   onOpenTarget,
   cards,
+  onChooseAgent,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
+  /** What the Stack tab lays out: the plan's rollout, and the agents working it as last read. */
+  stack: { rollout: readonly RolloutItem[]; agents: readonly CodingAgentSummary[] | undefined };
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
   views: TabViews;
@@ -581,8 +585,19 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
+  /** Chooses an agent's tab in the column, as a press of its card on the Stack tab asks. */
+  onChooseAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  if (tab === MAIN_TAB.STACK) return <StackTab />;
+  if (tab === MAIN_TAB.STACK)
+    return (
+      <StackTab
+        rollout={stack.rollout}
+        agents={stack.agents}
+        models={agents.models ?? []}
+        onChoose={onChooseAgent}
+        onReadAgain={agents.onRetryList}
+      />
+    );
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
     // column moves back to the plan, a render away.

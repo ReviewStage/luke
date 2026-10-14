@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  ROLLOUT_ROLE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -1120,4 +1124,17 @@ test("Home from an open plan leaves it, and from the home page only puts the Inb
   act(() => home.control().onGoHome());
   assert.equal(home.control().inboxView.open, false);
   assert.ok(!home.told.includes(ACT_KIND.PLANNING_CLOSE));
+});
+
+test("the planning-stack profile's fixture opens its plan on the Stack tab over its staged workers, and the planning profile's on the plan", () => {
+  const stacked = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING_STACK });
+  assert.equal(stacked.control().mainTabs.tab, MAIN_TAB.STACK);
+  assert.deepEqual(
+    stacked.control().stackAgents?.map((agent) => agent.position ?? agent.role),
+    [ROLLOUT_ROLE.KEEPER, 1, 2, 3],
+  );
+
+  const plain = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
+  assert.equal(plain.control().mainTabs.tab, MAIN_TAB.PLAN);
+  assert.equal(plain.control().stackAgents, undefined);
 });

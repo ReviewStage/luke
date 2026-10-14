@@ -570,11 +570,14 @@ const findAgentsOfPlan = SqlSchema.findAll({
     planId: Schema.String,
     includeArchived: Schema.Boolean,
   }),
-  Result: CodingAgentRowSchema,
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
   execute: ({ userId, planId, includeArchived }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
+        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
         .from(codingAgent)
         .innerJoin(plan, eq(plan.id, codingAgent.planId))
         .where(
@@ -893,7 +896,21 @@ export function listCodingAgents(
   planId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
-  return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+  return Effect.map(listPlanCodingAgentsPublished(userId, planId, options), (held) =>
+    held.map(({ agent }) => agent),
+  );
+}
+
+/** The agents `listCodingAgents` answers, in its order, each with the pull request it last published as GitHub last answered it, which the plan's list carries. */
+export function listPlanCodingAgentsPublished(
+  userId: string,
+  planId: string,
+  options: { readonly includeArchived?: boolean } = {},
+): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+  return Effect.map(
+    findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false }),
+    (rows) => rows.map(({ published, ...agent }) => ({ agent, published })),
+  );
 }
 
 /** The live worker at this position of the account's plan's rollout, newest started first: one not archived whose newest turn neither failed nor was stopped; nothing where none stands. */

@@ -520,12 +520,14 @@ function PlanDocument({
                 <MainTabContent
                   tab={tab}
                   agents={agents}
+                  stack={{ rollout: plan.rollout, agents: plans.stackAgents }}
                   shown={plans.shown && !sidePanel.fullScreen}
                   views={views}
                   onOpenDelegation={openDelegation}
                   onOpenChanges={openChanges}
                   onOpenTarget={openTarget}
                   cards={cards}
+                  onChooseAgent={(agentId) => mainTabs.onChoose({ agent: agentId })}
                 />
               </section>
             )}
