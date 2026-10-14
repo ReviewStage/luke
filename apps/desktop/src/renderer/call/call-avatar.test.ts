@@ -33,6 +33,8 @@ const GRANT: AvatarGrant = {
   agentIdentity: "keyframe-agent",
 };
 
+const SECOND_GRANT: AvatarGrant = { ...GRANT, participantToken: "second-token-never-printed" };
+
 /** Keyframe's session as the SDK behaves at its edges: a room joined or refused, the calls made on it, and a close that reports itself. */
 class FakePersona implements PersonaSessionSlice {
   /** Each call the window made, in order. */
@@ -44,12 +46,12 @@ class FakePersona implements PersonaSessionSlice {
   constructor(
     readonly options: PersonaSessionOptions,
     private readonly refuse: boolean,
-    private readonly joined: Deferred.Deferred<FakePersona>,
+    private readonly joined: Queue.Queue<FakePersona>,
   ) {}
 
   connect(): Promise<void> {
     if (this.refuse) return Promise.reject(new Error("the room refused the grant"));
-    Deferred.doneUnsafe(this.joined, Effect.succeed(this));
+    Queue.offerUnsafe(this.joined, this);
     return Promise.resolve();
   }
 
@@ -68,11 +70,14 @@ class FakePersona implements PersonaSessionSlice {
     return Promise.resolve();
   }
 
+  /** Holds `close()` open, as the SDK's does while it awaits every queued audio write. */
+  flushing: Promise<void> = Promise.resolve();
+
   /** As the SDK's does: the close report lands after `close()` has returned. */
   close(): Promise<void> {
     if (this.left) return Promise.resolve();
     this.left = true;
-    return Promise.resolve().then(() => this.options.onClose("client_initiated"));
+    return this.flushing.then(() => this.options.onClose("client_initiated"));
   }
 
   serverCloses(reason: PersonaCloseReason): void {
@@ -105,7 +110,7 @@ const harness = Effect.fnUntraced(function* (
   const feeds = yield* Queue.unbounded<AvatarFeed>();
   const reports = yield* Queue.unbounded<AvatarReport>();
   const tracks = yield* Queue.unbounded<CallAvatarTracks>();
-  const joined = yield* Deferred.make<FakePersona>();
+  const joined = yield* Queue.unbounded<FakePersona>();
   const module: AvatarSessionModule = {
     createSession: (made) => new FakePersona(made, options.refuse ?? false, joined),
   };
@@ -121,7 +126,7 @@ const harness = Effect.fnUntraced(function* (
       Queue.offer(tracks, each),
     ),
   );
-  return { grants, feeds, reports, tracks, joined: Deferred.await(joined) };
+  return { grants, feeds, reports, tracks, joined: Queue.take(joined) };
 });
 
 it.effect("a grant reports starting, then live on the video's first frame, not on its track", () =>
@@ -165,7 +170,7 @@ it.effect(
 );
 
 it.effect(
-  "a grant of nothing closes the session, ends it as the developer's own, and draws no tracks",
+  "a grant of nothing closes the session, draws no tracks, and reports nothing for the withdrawn grant",
   () =>
     Effect.gen(function* () {
       const avatar = yield* harness();
@@ -178,13 +183,10 @@ it.effect(
         { audio: asTrack(audio) },
       ]);
       yield* Queue.offer(avatar.grants, undefined);
-      assert.deepEqual(yield* Queue.takeN(avatar.reports, 2), [
-        { status: AVATAR_STATUS.STARTING },
-        { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER },
-      ]);
       assert.equal(yield* Queue.take(avatar.tracks), NO_AVATAR_TRACKS);
       assert.ok(persona.left, "the session was left open");
-      assert.ok(Option.isNone(yield* Queue.poll(avatar.reports)), "the end was reported twice");
+      // Main withdrew the grant and knows why, so the window says nothing after starting.
+      assert.deepEqual(yield* Queue.takeAll(avatar.reports), [{ status: AVATAR_STATUS.STARTING }]);
     }).pipe(Effect.scoped),
 );
 
@@ -243,4 +245,41 @@ it.effect("a bundle that will not load ends the avatar as an error", () =>
       { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.ERROR },
     ]);
   }).pipe(Effect.scoped),
+);
+
+it.effect(
+  "a withdrawn session still closing reports nothing over the next grant, whose own reports go through",
+  () =>
+    Effect.gen(function* () {
+      const avatar = yield* harness();
+      yield* Queue.offer(avatar.grants, GRANT);
+      const first = yield* avatar.joined;
+      const video = new FakeTrack();
+      first.options.onVideoTrack(asTrack(video));
+      // The first session's close is held open, as the SDK's is while it flushes queued audio.
+      let flushed = () => {};
+      first.flushing = new Promise<void>((resolve) => {
+        flushed = resolve;
+      });
+
+      // Main has withdrawn the first grant and holds the second while the first still closes.
+      yield* Queue.offerAll(avatar.grants, [undefined, SECOND_GRANT]);
+      for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+      // What the first session says late: a first frame, and Keyframe's own close.
+      video.firstFrame();
+      first.options.onClose("room_deleted");
+      flushed();
+      const second = yield* avatar.joined;
+      for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+
+      assert.deepEqual(yield* Queue.takeAll(avatar.reports), [
+        { status: AVATAR_STATUS.STARTING },
+        { status: AVATAR_STATUS.STARTING },
+      ]);
+      second.serverCloses("room_deleted");
+      assert.deepEqual(yield* Queue.take(avatar.reports), {
+        status: AVATAR_STATUS.ENDED,
+        endReason: AVATAR_END_REASON.SERVER_CLOSED,
+      });
+    }).pipe(Effect.scoped),
 );
