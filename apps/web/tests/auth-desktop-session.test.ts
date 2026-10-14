@@ -337,3 +337,19 @@ test("no browser session, no transfer; and the plugin's own sign-in start is not
   );
   assert.equal(proxied.status, 404);
 });
+
+test("the Mac's sign-out under its bearer token ends its session, and the browser's stands", async () => {
+  const auth = desktopAuth();
+  const { browser } = await desktopSignsIn(auth);
+  const code = await transfer(auth, browser, "session-state");
+  const signed = (await exchange(auth, code, "session-state", PKCE.verifier)).headers.get(
+    "set-auth-token",
+  );
+  const bearerHeader = { authorization: `Bearer ${signed}` };
+
+  const signedOut = await post(auth, "/sign-out", {}, bearerHeader);
+  assert.equal(signedOut.status, 200);
+
+  assert.equal(await sessionFor(auth, bearerHeader), null);
+  assert.equal((await sessionFor(auth, { cookie: browser }))?.user.email, GITHUB_EMAIL);
+});

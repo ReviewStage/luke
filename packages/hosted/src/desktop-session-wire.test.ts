@@ -57,6 +57,6 @@ test("the code returns to the loopback beside the Mac's own state, on the path i
   const back = new URL(desktopSessionReturnUrl(new URL(REQUEST.returnTo), "code+1&", "state-1"));
 
   assert.equal(back.origin + back.pathname, REQUEST.returnTo);
-  assert.equal(back.searchParams.get("token"), "code+1&");
+  assert.equal(back.searchParams.get("code"), "code+1&");
   assert.equal(back.searchParams.get("state"), "state-1");
 });

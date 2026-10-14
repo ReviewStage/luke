@@ -10,6 +10,10 @@
  * redirect through a custom URL scheme; Luke's Mac listens on the loopback
  * its OAuth sign-in already uses, so the page returns there, and only to a
  * loopback (`desktop-session-wire.ts`).
+ *
+ * A browser that holds no session, which is the case when the Mac asks for
+ * a session apart from its sign-in, signs in here first, and the page
+ * carries on with the transfer when the sign-in returns it.
  */
 
 import {
@@ -17,11 +21,12 @@ import {
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
 } from "@sidecar/hosted/desktop-session-wire";
-import { createAuthClient } from "better-auth/client";
+import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
+import { SignInChoices } from "./sign-in-choices";
 import "./styles.css";
 
 const authClient = createAuthClient();
@@ -34,12 +39,16 @@ const TransferAnswer = Schema.Struct({ electron_authorization_code: Schema.Strin
 /** The HTTP status Better Auth answers a transfer with when the browser holds no session. */
 const SIGNED_OUT_STATUS = 401;
 
-/** What the page shows: the hand-off under way, or how it ended short of the Mac. */
-const VIEW = { WORKING: "working", SAID: "said" } as const;
+/** What the page shows: the hand-off under way, a sign-in it needs first, or how it ended short of the Mac. */
+const VIEW = { WORKING: "working", SIGN_IN: "sign-in", SAID: "said" } as const;
 
 type View =
   | { readonly kind: typeof VIEW.WORKING }
-  | { readonly kind: typeof VIEW.SAID; readonly title: string; readonly body: string };
+  | {
+      readonly kind: typeof VIEW.SIGN_IN | typeof VIEW.SAID;
+      readonly title: string;
+      readonly body: string;
+    };
 
 const WORKING: View = { kind: VIEW.WORKING };
 
@@ -59,7 +68,11 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
   });
   if (answered.error) {
     return answered.error.status === SIGNED_OUT_STATUS
-      ? said("You're signed out", "Return to Luke and sign in again.")
+      ? {
+          kind: VIEW.SIGN_IN,
+          title: "Sign in to finish",
+          body: "Sign in with the account you use in Luke, and you'll come back here.",
+        }
       : said("Luke could not be reached", "Return to Luke and sign in again.");
   }
   const code = Schema.decodeUnknownSync(TransferAnswer)(answered.data).electron_authorization_code;
@@ -85,7 +98,10 @@ function DesktopSession(): React.JSX.Element {
         <h1 id="hand-off-title" className={AUTH_TITLE}>
           {view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
         </h1>
-        {view.kind === VIEW.SAID ? <p className="m-0 text-muted-foreground">{view.body}</p> : null}
+        {view.kind === VIEW.WORKING ? null : (
+          <p className="m-0 text-muted-foreground">{view.body}</p>
+        )}
+        {view.kind === VIEW.SIGN_IN ? <SignInChoices client={authClient} /> : null}
       </section>
     </main>
   );

@@ -34,9 +34,13 @@ const TRANSFER_PARAM = {
   CODE_CHALLENGE: "code_challenge",
 } as const;
 
-/** The query names the page writes back to the loopback. */
+/**
+ * The query names the page writes back to the loopback: the plugin's code
+ * and the Mac's state, under the names an authorization redirect uses
+ * (RFC 6749 section 4.1.2), so the loopback reads them as it reads one.
+ */
 const RETURN_PARAM = {
-  TOKEN: "token",
+  CODE: "code",
   STATE: "state",
 } as const;
 
@@ -104,9 +108,9 @@ export function desktopSessionPageQuery(search: string): DesktopSessionPageQuery
 }
 
 /** The loopback address carrying the plugin's code and the Mac's own state back. */
-export function desktopSessionReturnUrl(returnTo: URL, token: string, state: string): string {
+export function desktopSessionReturnUrl(returnTo: URL, code: string, state: string): string {
   const url = new URL(returnTo.href);
-  url.searchParams.set(RETURN_PARAM.TOKEN, token);
+  url.searchParams.set(RETURN_PARAM.CODE, code);
   url.searchParams.set(RETURN_PARAM.STATE, state);
   return url.href;
 }
