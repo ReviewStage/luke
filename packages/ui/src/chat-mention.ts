@@ -1,4 +1,4 @@
-import { CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
+import { CHAT_BOUNDS, CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
 import { insideCode } from "./skill-mention.js";
 
 /**
@@ -9,8 +9,10 @@ import { insideCode } from "./skill-mention.js";
  * member; and links a channel with a `#` the same way (`#general`). The
  * composer opens its list while the caret stands in such a word, on the
  * same terms a `/` opens the skills (`skill-mention.ts`): an `@` or a `#`
- * inside a word (`dev@example.com`, `a#b`), or in code, opens nothing. A
- * chosen one is written as its own word and a space. Nothing here draws.
+ * inside a word (`dev@example.com`, `a#b`), or in code, opens nothing, and
+ * neither does a word past the bound its grammar keeps a handle or a name
+ * to. A chosen one is written as its own word and a space, so the word's
+ * edge ends the mention as the service reads one. Nothing here draws.
  */
 
 type ChatSigil = (typeof CHAT_TARGET_SIGIL)[keyof typeof CHAT_TARGET_SIGIL];
@@ -35,6 +37,12 @@ const NAME_CHARACTER = {
   [CHAT_TARGET_SIGIL.CHANNEL]: /[a-z0-9._-]/u,
 } as const satisfies Record<ChatSigil, RegExp>;
 
+/** The most characters a handle or a channel's name may spell, by its sigil, as `post_chat`'s `to` bounds it. */
+const NAME_BOUND = {
+  [CHAT_TARGET_SIGIL.MEMBER]: CHAT_BOUNDS.MAX_HANDLE_CHARS,
+  [CHAT_TARGET_SIGIL.CHANNEL]: CHAT_BOUNDS.MAX_KEY_CHARS,
+} as const satisfies Record<ChatSigil, number>;
+
 /** The words and the caret after an edit. */
 interface TextEdit {
   readonly text: string;
@@ -57,6 +65,7 @@ export function chatMentionAt(text: string, caret: number): ChatMention | undefi
   const sigil = text[start];
   if (!isSigil(sigil)) return undefined;
   const query = text.slice(at, caret);
+  if (query.length > NAME_BOUND[sigil]) return undefined;
   if (![...query].every((character) => NAME_CHARACTER[sigil].test(character))) return undefined;
   const before = text[start - 1];
   if (before !== undefined && !SPACE.test(before)) return undefined;

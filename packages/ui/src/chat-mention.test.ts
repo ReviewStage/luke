@@ -51,6 +51,17 @@ test("an @ or a # opens the list only where it starts a word outside code, a dot
   );
 });
 
+test("the list stays shut on a word longer than a handle or a channel's name may be", () => {
+  const handle = "a".repeat(40);
+  const name = "b".repeat(80);
+  assert.deepEqual(
+    [`@${handle}`, `@${handle}a`, `#${name}`, `#${name}b`].map(
+      (text) => openedAt(text) !== undefined,
+    ),
+    [true, false, true, false],
+  );
+});
+
 test("the list offers the sigil's targets whose name starts with what is typed first, then whose name holds it, then whose detail does", () => {
   const offered = (text: string) => {
     const mention = chatMentionAt(text, text.length);
