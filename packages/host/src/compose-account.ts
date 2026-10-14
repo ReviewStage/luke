@@ -19,6 +19,8 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import {
+  AccountRefreshFailed,
+  type AccountSessionToken,
   type AccountToken,
   hostedVoiceServiceOrigin,
   VOICE_SERVICE_ORIGIN_VARIABLE,
@@ -60,6 +62,12 @@ export interface AccountComposer extends Composer {
    * off the network.
    */
   readonly token: AccountToken;
+  /**
+   * The Mac's own Better Auth session, for the calls that write through
+   * Better Auth's organization endpoints. A run that sends nothing reads
+   * none, as it reads no token.
+   */
+  readonly sessionToken: AccountSessionToken;
   applyVoiceCredential: Effect.Effect<void>;
   sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
   link: (links: AccountLinks) => Effect.Effect<void>;
@@ -188,6 +196,21 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
   };
 
+  // Note that a hand-off that did not land is no failure of the call that
+  // asked for it: the call retries on whatever session stands, and its
+  // second refusal is what gets reported.
+  const sessionToken: AccountSessionToken = {
+    readSessionToken: () =>
+      runMode.sendsNetwork
+        ? Effect.map(readStoredAccount(), (account) => account?.sessionToken)
+        : Effect.succeed(undefined),
+    obtainSession: () =>
+      session.obtainSession().pipe(
+        Effect.asVoid,
+        Effect.mapError((failed) => new AccountRefreshFailed({ message: failed.message })),
+      ),
+  };
+
   const voiceCapabilities = new VoiceCapabilityAssembler({
     settings: settings.store,
     credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
@@ -313,6 +336,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     signedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
     capabilitiesActive,
     token,
+    sessionToken,
     applyVoiceCredential,
     sessionReplayState,
     link: (next) => Effect.asVoid(late.set(next)),

@@ -11,7 +11,7 @@ import {
 } from "@sidecar/hosted/github-connection-wire";
 import { HTTP_METHOD } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Cause, Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -23,6 +23,7 @@ import {
   hostedRefusing,
   hostedStoreOrUnavailable,
   readJsonBodyEffect,
+  type SessionUserIdResolver,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -43,11 +44,6 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
 const MAXIMUM_CLAIM_BODY_BYTES = 1_024;
-
-/** The browser session a claim rides in on: its account, or none; a failure is the auth service's, not a signed-out browser. */
-type SessionUserIdResolver = (
-  request: Request,
-) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
 export interface GitHubConnectionAppSeams {
   resolveUserId: UserIdResolver;

@@ -37,3 +37,17 @@ export interface AccountToken {
    */
   readAccountKey?: (() => Effect.Effect<string | undefined>) | undefined;
 }
+
+/**
+ * The Mac's own Better Auth session, for the calls Luke's service makes
+ * through Better Auth's organization endpoints, which take a session rather
+ * than an OAuth token. A session is not refreshed the way a token is: a new
+ * one comes only through the browser's hand-off, so asking for one is
+ * something only a press may do.
+ */
+export interface AccountSessionToken {
+  /** The signed session token, read fresh for every attempt; none before the Mac holds one. */
+  readSessionToken: () => Effect.Effect<string | undefined>;
+  /** Asks for a new session through the browser's hand-off; the call retries on whatever it left. */
+  obtainSession: () => Effect.Effect<void, AccountRefreshFailed>;
+}
