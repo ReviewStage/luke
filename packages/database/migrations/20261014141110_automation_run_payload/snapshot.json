@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "c71c3f9c-0ca5-439c-9d76-daa0bfe36a54",
-  "prevIds": ["b4333fa8-f04f-421e-ab3a-f700560c85a0"],
+  "id": "732dfa42-d075-4815-a9ef-6607b2517c79",
+  "prevIds": ["52601e69-21ff-4eb2-a199-72b305604e63"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -380,6 +380,19 @@
       "generated": null,
       "identity": null,
       "name": "status_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "fast_access",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -5489,6 +5502,19 @@
       "generated": null,
       "identity": null,
       "name": "cancel_requested_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "turns"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "fast_refused",
       "entityType": "columns",
       "schema": "public",
       "table": "turns"
