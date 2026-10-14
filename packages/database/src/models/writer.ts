@@ -16,6 +16,7 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   type AssistantMessageMetadata,
+  type ChatNoticeMetadata,
   isWireString,
   jsonRoundTrip,
   MESSAGE_AUTHOR,
@@ -29,6 +30,7 @@ import {
   TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
+  type TypedAskMetadata,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "@luke/wire";
@@ -302,14 +304,29 @@ type UserMessageWriteResult = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The developer's line to a coding agent as the message route and the queue's drain write it: its words, the files attached to it, and the client's key for the send. */
+/**
+ * The line to a coding agent as the message route and the queue's drain
+ * write it: its words, the files attached to it, the client's key for the
+ * send, and who the row says wrote it, the developer's typed ask where it
+ * names no one else, or a chat notice steered on a member's behalf.
+ */
 interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
   readonly mentioned?: string | undefined;
+  readonly metadata?: AwaitingLineMetadata | undefined;
 }
+
+/** Who an awaiting line says wrote it. */
+export type AwaitingLineMetadata = TypedAskMetadata | ChatNoticeMetadata;
+
+/** An awaiting line naming no author is the developer's typed ask. */
+const TYPED_LINE_METADATA: TypedAskMetadata = {
+  author: MESSAGE_AUTHOR.DEVELOPER,
+  channel: MESSAGE_CHANNEL.TYPED,
+};
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
 type AwaitingLineWritten = Result.Result<
@@ -2001,7 +2018,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = yield* admitted(context, {
     id: clientId,
     role: MESSAGE_ROLE.USER,
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    metadata: line.metadata ?? TYPED_LINE_METADATA,
     parts: lineParts(line.text, line.attachments ?? [], line.mentioned),
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);

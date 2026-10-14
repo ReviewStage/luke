@@ -54,6 +54,7 @@ export {
 export {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
+  type ChatNoticeMetadata,
   COMPACTION_METADATA,
   type CompactionMetadata,
   MESSAGE_AUTHOR,

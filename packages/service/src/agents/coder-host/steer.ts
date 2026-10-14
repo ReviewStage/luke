@@ -7,7 +7,7 @@ import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { readPlan } from "@luke/database/models/plan-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
-import type { StoreWriter } from "@luke/database/models/writer";
+import type { AwaitingLineMetadata, StoreWriter } from "@luke/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -64,11 +64,16 @@ import { codingAgentStatusOf } from "./status.js";
  * nothing, since every list leaves it out until it is brought back.
  */
 
-/** The developer's words, the files they attached where they did, and the key the send is made under, which a repeat carries again. */
+/**
+ * The developer's words, the files they attached where they did, and the key
+ * the send is made under, which a repeat carries again; and who the row says
+ * wrote it, the developer's typed ask unless a chat notice names its poster.
+ */
 export interface SteerLine {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly metadata?: AwaitingLineMetadata | undefined;
 }
 
 /** What a steer came to: the line sent and written, or found already sent under its key. */

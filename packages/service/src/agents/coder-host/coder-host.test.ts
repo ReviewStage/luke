@@ -5,6 +5,7 @@ import {
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
+  readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
 import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
@@ -17,6 +18,7 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -42,6 +44,7 @@ import { type CoderHost, coderHost } from "./host.js";
 import type { ProviderKeys } from "./model.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
+import { titleCodingAgent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START, transcriptPast } from "./transcript.js";
 
@@ -277,6 +280,43 @@ function codingTurn(
 
 const STEP_START = "step-start";
 
+/** A chat notice as the chat steers one in: another agent's words, which are no task of the developer's. */
+const CHAT_NOTICE = "@agent-2 in #teammate-invitations: the invite table is mine, leave it.";
+
+/** A second turn as eve emits it for a line it received while the agent was idle: the line, then a word of answer. */
+function answeredTurn(turnId: string, received: string): MessageStreamEvent[] {
+  const sequence = 1;
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: received } }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: "Understood." },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+/** A title model answering every call with one title, keeping the prompt each call was handed. */
+function titleModelAnswering(title: string) {
+  return new MockLanguageModelV4({
+    doGenerate: {
+      content: [{ type: "text", text: title }],
+      finishReason: { unified: "stop", raw: "stop" },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+      warnings: [],
+    },
+  });
+}
+
 const TurnRowSchema = Schema.Struct({
   origin: Schema.String,
   status: Schema.String,
@@ -478,6 +518,64 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(yield* host.sandboxHeld(held.admitted), true);
         assert.equal(yield* host.sandboxHeld(lapsed.admitted), false);
         assert.equal(yield* host.sandboxHeld(untouched.admitted), false);
+      }),
+  );
+
+  it.effect(
+    "a chat notice steered into an agent is taken into the turn that received it as the chat's line, and the agent's title is named from the developer's words alone",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(
+              event,
+              admitted,
+              { id: sessionId, auth, turn: { id: turnId } } as never,
+              state,
+              {
+                hash: prompt.hash,
+              },
+            ),
+          );
+        yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const notice = {
+          author: MESSAGE_AUTHOR.AGENT,
+          channel: MESSAGE_CHANNEL.CHAT,
+          chat_seq: 41,
+          from: "agent-2",
+        } as const;
+        const written = yield* writer.writeAwaitingLine(
+          target,
+          { text: CHAT_NOTICE, clientKey: "chat-notice-41", metadata: notice },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        yield* relayed("turn_1", answeredTurn("turn_1", CHAT_NOTICE));
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const said = page.messages.flatMap((message) =>
+          message.role === MESSAGE_ROLE.USER ? [message.metadata] : [],
+        );
+        assert.deepEqual(said, [
+          { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+          notice,
+        ]);
+
+        const model = titleModelAnswering("Teammate invitations by email");
+        yield* titleCodingAgent(model, target, agent);
+        const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+        assert.ok(asked.includes("Invite a teammate by email."));
+        assert.ok(!asked.includes("the invite table is mine"));
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Teammate invitations by email");
       }),
   );
 });
