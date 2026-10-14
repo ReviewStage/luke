@@ -41,6 +41,7 @@ import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
 import { CODER } from "../coder-host/bounds.js";
+import type { TurnEndEvent } from "../coder-host/report.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
 /** The release of `gh stack` the snapshot carries, moved deliberately, with the SHA-256 of each binary as it was downloaded when pinned, since the release publishes none. */
@@ -175,8 +176,8 @@ export function openSandbox(role: AgentRole) {
   return environment.open(options);
 }
 
-/** Whether the event ends a turn. */
-export function endsTurn(event: MessageStreamEvent): boolean {
+/** Whether the event ends a turn, as the three events that do. */
+export function endsTurn(event: MessageStreamEvent): event is TurnEndEvent {
   return TURN_END_EVENTS.has(event.type);
 }
 
