@@ -103,7 +103,7 @@ export interface DrawnMenu extends OpenMenu {
 }
 
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
-export function dropBelow(button: HTMLElement): MenuPlacement {
+function dropBelow(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
   return { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END };
 }
@@ -120,8 +120,13 @@ export function riseAbove(button: HTMLElement): MenuPlacement {
   return { x: bounds.left, y: bounds.top - MENU_DROP, align: MENU_ALIGN.START, grow: MENU_GROW.UP };
 }
 
-/** Where a right-click's menu hangs: at the pointer, growing rightward from it. */
-export function atPointer(event: React.MouseEvent): MenuPlacement {
+/**
+ * Where a right-click's menu hangs: at the pointer, growing rightward from
+ * it; or, for the menu key the system turned into a right-click, which says
+ * no point of its own, under what was clicked from its start.
+ */
+export function atPointer(event: React.MouseEvent<HTMLElement>): MenuPlacement {
+  if (event.clientX === 0 && event.clientY === 0) return dropBelowStart(event.currentTarget);
   return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
 }
 
@@ -132,6 +137,14 @@ export function atPointer(event: React.MouseEvent): MenuPlacement {
  * exit at the last place it hung. A menu does not outlive the surface it
  * stands on, so it starts leaving in the render that finds the surface off
  * screen.
+ *
+ * It also hands out the two doors every owner draws, so each opens its menu
+ * the same way: `trigger`, the props of the button the menu drops from,
+ * whose press opens it where `place` says (under the button, right edges
+ * level, unless told otherwise) and closes it again while it stands; and
+ * `contextMenu`, a right-click's handler that hangs it at the pointer and
+ * hands focus back to `opener` where one is given, the ⋯ or the row the
+ * keyboard reaches the menu from, else to what was clicked.
  */
 export function useActionMenu(shown: boolean) {
   const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
@@ -150,7 +163,20 @@ export function useActionMenu(shown: boolean) {
   }, []);
   const drawn: DrawnMenu | undefined =
     mounted && menu !== undefined ? { ...menu, leaving, ref } : undefined;
-  return { open: standing ? menu : undefined, drawn, show, close };
+  const trigger = (place: (button: HTMLElement) => MenuPlacement = dropBelow) => ({
+    "aria-haspopup": "menu" as const,
+    "aria-expanded": standing,
+    onClick: (event: React.MouseEvent<HTMLElement>) => {
+      if (standing) close(true);
+      else show(place(event.currentTarget), event.currentTarget);
+    },
+  });
+  const contextMenu =
+    (opener?: React.RefObject<HTMLElement | null>) => (event: React.MouseEvent<HTMLElement>) => {
+      event.preventDefault();
+      show(atPointer(event), opener?.current ?? event.currentTarget);
+    };
+  return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu };
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -196,9 +222,15 @@ function moveFocus(event: React.KeyboardEvent<HTMLElement>): boolean {
 
 /** What an item prints at its end: a setting's check while it is on, its shortcut, or nothing. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
-  if (action.checked === true) return <CheckIcon aria-hidden="true" className="plan-menu-check" />;
+  if (action.checked === true) {
+    return (
+      <span className="menu-item-end">
+        <CheckIcon aria-hidden="true" />
+      </span>
+    );
+  }
   if (action.command === undefined) return null;
-  return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="plan-menu-end" />;
+  return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="menu-item-hint" />;
 }
 
 /** One item, as a menu draws it and as a list of the same offers outside a menu draws it. */
@@ -214,7 +246,7 @@ export function MenuItem({
 }): React.JSX.Element {
   const body = (
     <>
-      <span className="plan-menu-icon">{action.icon}</span>
+      <span className="menu-item-glyph">{action.icon}</span>
       <span className="plan-menu-label">{action.label}</span>
       <ItemEnd action={action} />
     </>
@@ -227,7 +259,7 @@ export function MenuItem({
         role="menuitemcheckbox"
         aria-checked={action.checked}
         tabIndex={-1}
-        className="plan-menu-item"
+        className="menu-item"
         disabled={action.disabled}
         onClick={onChoose}
       >
@@ -240,7 +272,7 @@ export function MenuItem({
       type="button"
       role={inMenu ? "menuitem" : undefined}
       tabIndex={inMenu ? -1 : undefined}
-      className="plan-menu-item"
+      className="menu-item"
       data-danger={action.danger ? "true" : undefined}
       disabled={action.disabled}
       onClick={onChoose}
@@ -268,7 +300,7 @@ function SubmenuItem({
       type="button"
       role="menuitem"
       tabIndex={-1}
-      className="plan-menu-item"
+      className="menu-item"
       aria-haspopup="menu"
       aria-expanded={open}
       data-open={open ? "true" : undefined}
@@ -280,9 +312,11 @@ function SubmenuItem({
         onOpen(event.currentTarget, true);
       }}
     >
-      <span className="plan-menu-icon">{entry.icon}</span>
+      <span className="menu-item-glyph">{entry.icon}</span>
       <span className="plan-menu-label">{entry.label}</span>
-      <ChevronRightIcon aria-hidden="true" className="plan-menu-check" />
+      <span className="menu-item-end">
+        <ChevronRightIcon aria-hidden="true" />
+      </span>
     </button>
   );
 }
@@ -342,7 +376,7 @@ function Submenu({
   return (
     <div
       ref={element}
-      className="plan-menu plan-submenu"
+      className="menu-surface plan-menu plan-submenu"
       role="menu"
       aria-label={entry.label}
       data-placed={String(placed)}
@@ -469,7 +503,7 @@ export function ActionMenu({
   return createPortal(
     <div
       ref={drawn}
-      className="plan-menu"
+      className="menu-surface plan-menu"
       role="menu"
       aria-label={label}
       data-placed={String(placed)}

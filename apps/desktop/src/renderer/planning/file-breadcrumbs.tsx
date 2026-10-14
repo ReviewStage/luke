@@ -142,7 +142,7 @@ function CrumbTree({
   return createPortal(
     <div
       ref={box}
-      className="file-crumb-tree ph-no-capture"
+      className="menu-surface file-crumb-tree ph-no-capture"
       role="dialog"
       aria-label={label}
       tabIndex={-1}

@@ -91,7 +91,7 @@ function type(words: string): void {
 
 /** Each row the palette lists, as its name and the muted words after it. */
 function rows(): string[] {
-  return [...document.querySelectorAll(".command-palette-row")].map((row) =>
+  return [...document.querySelectorAll(".menu-item")].map((row) =>
     [row.querySelector(".command-palette-name"), row.querySelector(".command-palette-detail")]
       .map((part) => part?.textContent)
       .filter((words) => words !== undefined)
@@ -102,7 +102,7 @@ function rows(): string[] {
 /** Presses the row listed as exactly these words. */
 function press(listed: string): void {
   const at = rows().indexOf(listed);
-  const row = document.querySelectorAll<HTMLElement>(".command-palette-row")[at];
+  const row = document.querySelectorAll<HTMLElement>(".menu-item")[at];
   assert.ok(row, `${listed} is listed`);
   act(() => row.click());
 }
@@ -152,7 +152,7 @@ test("choosing a page opens Settings on that page", () => {
   press("Integrations");
 
   assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
-  assert.equal(document.querySelector(".command-palette-row"), null, "the palette closed");
+  assert.equal(document.querySelector(".menu-item"), null, "the palette closed");
 });
 
 /** The filter whose chip stands pressed. */
@@ -277,7 +277,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
   ]);
-  const row = document.querySelectorAll<HTMLElement>(".command-palette-row")[1];
+  const row = document.querySelectorAll<HTMLElement>(".menu-item")[1];
   assert.ok(row, "the agent is listed");
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

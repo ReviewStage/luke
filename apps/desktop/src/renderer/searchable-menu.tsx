@@ -217,10 +217,10 @@ function WithId(props: { children: (id: string) => React.JSX.Element }): React.J
 /** What a row prints before its end slot: why it cannot be picked, its shortcut, or nothing. */
 function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
   if (row.disabled !== undefined) {
-    return <span className="plan-compose-menu-hint">{row.disabled}</span>;
+    return <span className="menu-item-hint">{row.disabled}</span>;
   }
   if (row.command === undefined) return null;
-  return <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="plan-compose-menu-hint" />;
+  return <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="menu-item-hint" />;
 }
 
 /** Words in a row cut short by its width, marked so desktop.css fades them out at their end. */
@@ -233,6 +233,12 @@ function RowWords(props: { className: string; children: React.ReactNode }): Reac
   );
 }
 
+/** A row's mark, in the glyph slot every menu's rows share; none where the row has no mark. */
+function RowGlyph({ icon }: { icon: React.ReactNode }): React.JSX.Element | null {
+  if (icon === undefined || icon === null) return null;
+  return <span className="menu-item-glyph">{icon}</span>;
+}
+
 /** The inside of every row: the mark, the name, the detail, the hint, and the end slot, which is drawn whether or not it holds anything so the names line up. */
 function RowBody(props: {
   icon: React.ReactNode;
@@ -243,13 +249,13 @@ function RowBody(props: {
 }): React.JSX.Element {
   return (
     <>
-      {props.icon}
+      <RowGlyph icon={props.icon} />
       <RowWords className="plan-compose-menu-name">{props.label}</RowWords>
       {props.detail !== undefined ? (
         <RowWords className="plan-compose-menu-detail">{props.detail}</RowWords>
       ) : null}
       {props.hint}
-      <span className="plan-compose-menu-end">{props.end}</span>
+      <span className="menu-item-end">{props.end}</span>
     </>
   );
 }
@@ -461,8 +467,8 @@ export function SearchableMenu(props: {
   ];
   const root =
     props.className === undefined
-      ? "plan-compose-menu searchable-menu"
-      : `plan-compose-menu searchable-menu ${props.className}`;
+      ? "menu-surface searchable-menu"
+      : `menu-surface searchable-menu ${props.className}`;
   return (
     <div
       ref={drawn}
@@ -521,7 +527,7 @@ export function SearchableMenu(props: {
                   type="button"
                   role="option"
                   tabIndex={-1}
-                  className="plan-compose-menu-row"
+                  className="menu-item"
                   aria-selected={index === at}
                   aria-disabled={row.disabled === undefined ? undefined : "true"}
                   aria-current={row.id === value ? "true" : undefined}
@@ -571,7 +577,7 @@ export function SearchableMenu(props: {
                   id,
                   type: "button",
                   tabIndex: -1,
-                  className: "plan-compose-menu-row",
+                  className: "menu-item",
                   "aria-disabled": row.disabled === undefined ? undefined : "true",
                   "data-highlighted": index === footAt ? "true" : undefined,
                   onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
@@ -606,7 +612,7 @@ export function SearchableMenu(props: {
                     </button>
                   ) : (
                     <button {...shared} role="switch" aria-checked={row.toggle.on}>
-                      {row.icon}
+                      <RowGlyph icon={row.icon} />
                       <span className="plan-compose-menu-name">{row.label}</span>
                       <Switch checked={row.toggle.on} className="plan-compose-menu-switch" />
                     </button>
@@ -622,7 +628,7 @@ export function SearchableMenu(props: {
                       <div
                         ref={panel}
                         id={submenuId}
-                        className="plan-compose-submenu"
+                        className="menu-surface plan-compose-submenu"
                         role="listbox"
                         aria-label={open.label}
                         data-side={place.side}
@@ -637,7 +643,7 @@ export function SearchableMenu(props: {
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
-                                className="plan-compose-menu-row"
+                                className="menu-item"
                                 aria-selected={subIndex === subAt}
                                 aria-current={sub.id === open.value ? "true" : undefined}
                                 onMouseMove={() => setSubmenu({ moved: subIndex })}

@@ -61,16 +61,8 @@ export function WorkspaceSwitcher({
       <button
         type="button"
         className="sidebar-workspace-toggle"
-        aria-haspopup="menu"
-        aria-expanded={menu.open !== undefined}
         aria-label={`Workspace: ${listed.name}`}
-        onClick={(event) => {
-          if (menu.open !== undefined) {
-            menu.close(true);
-            return;
-          }
-          menu.show(dropBelowStart(event.currentTarget), event.currentTarget);
-        }}
+        {...menu.trigger(dropBelowStart)}
       >
         <span className="sidebar-workspace-name">{listed.name}</span>
         <ChevronDownIcon />

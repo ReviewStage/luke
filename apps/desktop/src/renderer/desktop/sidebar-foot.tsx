@@ -184,7 +184,7 @@ function AccountMenu({
 }): React.JSX.Element {
   const { tell } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const { open, drawn, show, close } = useActionMenu(shown);
+  const { drawn, close, trigger } = useActionMenu(shown);
   const logOut = useConfirmDialog(
     { subject: signedIn, surfaceOpen: shown },
     // A sign-out main refused keeps the dialog up saying so, rather than
@@ -210,19 +210,7 @@ function AccountMenu({
   });
   return (
     <>
-      <button
-        type="button"
-        className="sidebar-item sidebar-account"
-        aria-haspopup="menu"
-        aria-expanded={open !== undefined}
-        onClick={(event) => {
-          if (open !== undefined) {
-            close(true);
-            return;
-          }
-          show(riseAbove(event.currentTarget), event.currentTarget);
-        }}
-      >
+      <button type="button" className="sidebar-item sidebar-account" {...trigger(riseAbove)}>
         <AccountAvatar account={account} />
         <span className="sidebar-account-name">
           {signedIn ? (account.name ?? account.email) : "Not signed in"}

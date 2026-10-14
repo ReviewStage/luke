@@ -45,7 +45,7 @@ import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -181,14 +181,6 @@ function sourceItem(source: SourceDoor): MenuAction {
   return { label: source.label, icon: <ArrowUpRightIcon />, onSelect: source.onOpen };
 }
 
-/** A right-click's door to a row's menu, hung at the pointer and handing focus back to the row. */
-function showMenuAt(menu: ReturnType<typeof useActionMenu>) {
-  return (event: React.MouseEvent<HTMLElement>) => {
-    event.preventDefault();
-    menu.show(atPointer(event), event.currentTarget);
-  };
-}
-
 /**
  * One revision's row: who wrote it, what it did, and when; lit while its
  * version is drawn. Its ⋯ stands over the time while the row is hovered or
@@ -240,10 +232,7 @@ function RevisionRow({
   const offered = groups.length > 0;
   // Note that the ⋯ is what a right-click's menu hands focus back to, since
   // it is the menu's own door from the keyboard.
-  const showMenu = (event: React.MouseEvent<HTMLElement>) => {
-    event.preventDefault();
-    menu.show(atPointer(event), ellipsis.current ?? event.currentTarget);
-  };
+  const showMenu = menu.contextMenu(ellipsis);
   return (
     <li className="version-item" data-menu-open={String(menu.open !== undefined)}>
       <button
@@ -273,15 +262,7 @@ function RevisionRow({
               type="button"
               className="sidebar-plan-mark"
               aria-label={ACTIONS_LABEL}
-              aria-haspopup="menu"
-              aria-expanded={menu.open !== undefined}
-              onClick={(event) => {
-                if (menu.open !== undefined) {
-                  menu.close(true);
-                  return;
-                }
-                menu.show(dropBelow(event.currentTarget), event.currentTarget);
-              }}
+              {...menu.trigger()}
               onContextMenu={showMenu}
             >
               <EllipsisIcon />
@@ -366,7 +347,7 @@ function SectionRow({
         className="version-section-row"
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
-        onContextMenu={source === undefined ? undefined : showMenuAt(menu)}
+        onContextMenu={source === undefined ? undefined : menu.contextMenu()}
       >
         <span className="version-section-name">{sectionName(section.heading)}</span>
         {word === undefined ? null : <span className="version-section-change">{word}</span>}

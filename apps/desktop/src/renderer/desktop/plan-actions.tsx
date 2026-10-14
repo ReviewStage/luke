@@ -22,7 +22,7 @@ import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { PlanStatusMark, planCardOf } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
@@ -111,7 +111,7 @@ function SidebarPlanMarks({
   current: boolean;
   disabled: boolean;
   /** Offers the row's own menu, so a right-click on a button over its end still reaches it. */
-  onContextMenu: (event: React.MouseEvent) => void;
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
 }): React.JSX.Element {
   return (
     <span className="sidebar-plan-marks">
@@ -223,7 +223,7 @@ function usePlanMenu(
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
-  const { open, drawn, show, close } = useActionMenu(plans.shown && doors.drawn);
+  const { open, drawn, close, trigger, contextMenu } = useActionMenu(plans.shown && doors.drawn);
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
@@ -242,7 +242,7 @@ function usePlanMenu(
       question={deleteQuestion(name, plan?.archivedAt !== undefined)}
     />
   );
-  return { deletion, open: open !== undefined, show, close, menu, dialog };
+  return { deletion, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
 }
 
 /**
@@ -285,16 +285,8 @@ export function PlanActions({
             type="button"
             className="icon-button"
             aria-label="Plan actions"
-            aria-haspopup="menu"
-            aria-expanded={actions.open}
             disabled={deletion.busy}
-            onClick={(event) => {
-              if (actions.open) {
-                actions.close(true);
-                return;
-              }
-              actions.show(dropBelow(event.currentTarget), event.currentTarget);
-            }}
+            {...actions.trigger()}
           >
             <EllipsisIcon />
           </button>
@@ -350,11 +342,7 @@ export function SidebarPlan({
   }, [rename.editing]);
   // Note that the row is what the menu rings and hands focus back to, even
   // when the right-click lands on Pin or Archive over its end.
-  const showMenu = (event: React.MouseEvent) => {
-    event.preventDefault();
-    if (row.current === null) return;
-    actions.show(atPointer(event), row.current);
-  };
+  const showMenu = actions.contextMenu(row);
   return (
     <li ref={item} className="sidebar-plan-item">
       {rename.editing ? (

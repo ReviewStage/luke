@@ -10,7 +10,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 
 /**
@@ -131,14 +131,7 @@ function ArchivedAgentRow({
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
-    <li
-      ref={item}
-      className="plan-summary-archived-agent"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        menu.show(atPointer(event), event.currentTarget);
-      }}
-    >
+    <li ref={item} className="plan-summary-archived-agent" onContextMenu={menu.contextMenu()}>
       <Tooltip
         label={subject.name}
         card={<AgentCard subject={subject} models={agents.models} />}
