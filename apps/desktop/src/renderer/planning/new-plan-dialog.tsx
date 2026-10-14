@@ -1,11 +1,9 @@
 import { PLAN_BOUNDS } from "@sidecar/hosted/plan-wire";
-import { useId, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
-import { trappedTab } from "../settings/confirm-dialog";
+import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
-import { useStagedFocus } from "../staged-focus";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { PlansControl } from "./use-plans-tab";
 
@@ -58,25 +56,9 @@ function NewPlanCard({
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const field = useRef<HTMLInputElement>(null);
-  const card = useRef<HTMLDivElement>(null);
-  const invoker = useRef<HTMLElement | null>(null);
-  const pressedBackdrop = useRef(false);
   const titleId = useId();
   const repository = chosen ?? repositories.recent[0] ?? null;
   const canStart = name.trim().length > 0 && !starting;
-
-  // Note that the invoker is read before the field takes focus, because once
-  // it has, the control that opened the card no longer holds it.
-  useLayoutEffect(() => {
-    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => {
-      if (invoker.current?.isConnected) invoker.current.focus({ preventScroll: true });
-    };
-  }, []);
-  useStagedFocus(field, !starting);
-  // The field is stilled while the plan is being created, so the card holds
-  // focus itself rather than letting it fall to the window behind.
-  useStagedFocus(card, starting);
 
   const start = () => {
     if (!canStart) return;
@@ -91,17 +73,6 @@ function NewPlanCard({
     if (!starting) newPlan.onClose();
   };
 
-  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that no key pressed in the card goes on to the window, because a
-    // window chord would change what stands behind a plan being named.
-    event.stopPropagation();
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Tab") trappedTab(event);
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    close();
-  };
-
   // Return creates the plan with any modifier held, since the name has no
   // second line to begin.
   const fieldKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -111,82 +82,65 @@ function NewPlanCard({
   };
 
   return (
-    // A press that begins and ends on the dimmed window closes the card; a
-    // text selection dragged out of the card is no press on the window.
-    // biome-ignore lint/a11y/noStaticElementInteractions: the dimmed window is a pointer target alone; the keys it hears come from the card's own focus.
-    <div
-      className="confirm-dialog-backdrop"
-      onPointerDown={(event) => {
-        pressedBackdrop.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        if (pressedBackdrop.current && event.target === event.currentTarget) close();
-        pressedBackdrop.current = false;
-      }}
-      onKeyDown={keyDown}
+    <ModalShell
+      className="confirm-dialog new-plan-dialog ph-no-capture"
+      labelledBy={titleId}
+      busy={starting}
+      initialFocus={field}
+      onDismiss={close}
     >
-      <div
-        ref={card}
-        className="confirm-dialog new-plan-dialog ph-no-capture"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-busy={starting}
-        tabIndex={-1}
-      >
-        <h2 id={titleId} className="confirm-dialog-title">
-          New plan
-        </h2>
-        <input
-          ref={field}
-          type="text"
-          className="dialog-name-field"
-          aria-label="Plan name"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          placeholder="Plan name"
-          maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
-          spellCheck
-          value={name}
-          disabled={starting}
-          onChange={(event) => setName(event.currentTarget.value)}
-          onKeyDown={fieldKey}
+      <h2 id={titleId} className="confirm-dialog-title">
+        New plan
+      </h2>
+      <input
+        ref={field}
+        type="text"
+        className="dialog-name-field"
+        aria-label="Plan name"
+        aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+        placeholder="Plan name"
+        maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
+        spellCheck
+        value={name}
+        disabled={starting}
+        onChange={(event) => setName(event.currentTarget.value)}
+        onKeyDown={fieldKey}
+      />
+      {note === undefined ? null : (
+        <p className="error-message" role="alert">
+          {note}
+        </p>
+      )}
+      <div className="confirm-dialog-actions">
+        <RepositoryChip
+          key={repositories.scope}
+          place={CHIP_PLACE.COMPOSER}
+          value={repository}
+          chooser={repositories}
+          onChoose={setChosen}
         />
-        {note === undefined ? null : (
-          <p className="error-message" role="alert">
-            {note}
-          </p>
-        )}
-        <div className="confirm-dialog-actions">
-          <RepositoryChip
-            key={repositories.scope}
-            place={CHIP_PLACE.COMPOSER}
-            value={repository}
-            chooser={repositories}
-            onChoose={setChosen}
-          />
-          <button type="button" className="toolbar-button" disabled={starting} onClick={close}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-            aria-busy={starting}
-            disabled={!canStart}
-            onClick={start}
-          >
-            <BusyLabel busy={starting} label="Creating">
-              Create plan
-            </BusyLabel>
-            <Shortcut chord={CREATE_CHORD} />
-          </button>
-        </div>
+        <button type="button" className="toolbar-button" disabled={starting} onClick={close}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="primary-button"
+          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+          aria-busy={starting}
+          disabled={!canStart}
+          onClick={start}
+        >
+          <BusyLabel busy={starting} label="Creating">
+            Create plan
+          </BusyLabel>
+          <Shortcut chord={CREATE_CHORD} />
+        </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
-/** The card over the window while New plan is asked, drawn over `document.body` so no surface's stacking context clips it; nothing otherwise. */
+/** The card over the window while New plan is asked, in the window's one modal frame (`../modal-shell.tsx`); nothing otherwise. */
 export function NewPlanDialog({
   newPlan,
   repositories,
@@ -195,5 +149,5 @@ export function NewPlanDialog({
   repositories: PlansControl["repositories"];
 }): React.JSX.Element | null {
   if (!newPlan.open) return null;
-  return createPortal(<NewPlanCard newPlan={newPlan} repositories={repositories} />, document.body);
+  return <NewPlanCard newPlan={newPlan} repositories={repositories} />;
 }

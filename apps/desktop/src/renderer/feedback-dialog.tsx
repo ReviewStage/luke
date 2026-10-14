@@ -33,16 +33,14 @@ import {
 } from "@sidecar/feedback";
 import { ImageIcon, RemoveIcon } from "@sidecar/panel";
 import { Duration } from "effect";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { encodeImage, imageFiles } from "./feedback-images";
-import { trappedTab } from "./settings/confirm-dialog";
+import { ModalShell } from "./modal-shell";
 import { Shortcut } from "./shortcut";
 import { BusyLabel } from "./spinner";
-import { useStagedFocus } from "./staged-focus";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -204,7 +202,7 @@ export function FeedbackDialog({
   kind: FeedbackKind | undefined;
   account: AccountSnapshot | undefined;
   onClose: () => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { act } = useAct();
   const [drafts, setDrafts, latestDrafts] = useStateWithRef<FeedbackDrafts>(FRESH_DRAFTS);
   /**
@@ -224,29 +222,10 @@ export function FeedbackDialog({
   const showToast = useToast();
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
-  const card = useRef<HTMLDivElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
-  const invoker = useRef<HTMLElement | null>(null);
-  const pressedBackdrop = useRef(false);
   const titleId = useId();
   const signatureId = useId();
   const signature = accountSignature(account);
-
-  // Note that the invoker is read before the field takes focus, because once
-  // it has, the control that opened the dialog no longer holds it.
-  useLayoutEffect(() => {
-    if (!open) return;
-    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => {
-      if (invoker.current?.isConnected) invoker.current.focus({ preventScroll: true });
-      invoker.current = null;
-    };
-  }, [open]);
-
-  useStagedFocus(field, open && !busy);
-  // The field is stilled while the note is on its way, so the card holds
-  // focus itself rather than letting it fall to the window behind.
-  useStagedFocus(card, open && busy);
 
   // Closing puts a drop's highlight away, whatever became of the drag.
   useEffect(() => {
@@ -320,188 +299,154 @@ export function FeedbackDialog({
     showToast(SENT_NOTICE);
   };
 
-  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that no key pressed in the dialog goes on to the window, because
-    // a window chord would change what stands behind a note being written.
-    event.stopPropagation();
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Tab") {
-      trappedTab(event);
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close(false);
-      return;
-    }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      void send();
-    }
+  // Command-Return sends from anywhere in the card.
+  const sendKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    event.preventDefault();
+    void send();
   };
 
   const ready = hasWords(draft) && !busy;
   const full = draft.images.length >= FEEDBACK_LIMITS.MAX_IMAGES;
 
-  return (
-    <>
-      {kind === undefined
-        ? null
-        : createPortal(
-            // A press that begins and ends on the dimmed window closes the
-            // dialog; a text selection dragged out of the card is no press
-            // on the window. The whole window takes a dropped screenshot.
-            // biome-ignore lint/a11y/noStaticElementInteractions: the dimmed window is a pointer and drop target alone; the keys it hears come from the card's own focus.
-            <div
-              className="confirm-dialog-backdrop"
-              onPointerDown={(event) => {
-                pressedBackdrop.current = event.target === event.currentTarget;
-              }}
-              onClick={(event) => {
-                if (pressedBackdrop.current && event.target === event.currentTarget) close(false);
-                pressedBackdrop.current = false;
-              }}
-              onKeyDown={keyDown}
-              onDragOver={(event) => {
-                if (!carriesFiles(event)) return;
-                event.preventDefault();
-                setDropping(true);
-              }}
-              onDragLeave={(event) => {
-                if (event.relatedTarget === null) setDropping(false);
-              }}
-              onDrop={(event) => {
-                if (!carriesFiles(event)) return;
-                event.preventDefault();
-                setDropping(false);
-                void attach(imageFiles(event.dataTransfer.files));
-              }}
-            >
-              <div
-                ref={card}
-                className="confirm-dialog feedback-dialog ph-no-capture"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                aria-busy={busy}
-                data-dropping={String(dropping)}
-                tabIndex={-1}
-              >
-                <h2 id={titleId} className="confirm-dialog-title">
-                  {FEEDBACK_COPY[kind].title}
-                </h2>
-                <textarea
-                  ref={field}
-                  className="feedback-dialog-message"
-                  aria-label={FEEDBACK_COPY[kind].field}
-                  placeholder={FEEDBACK_COPY[kind].placeholder}
-                  maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-                  value={draft.message}
-                  disabled={busy}
-                  onChange={(event) => changeDraft({ message: event.target.value })}
-                  onPaste={(event) => {
-                    // A screenshot on the clipboard is an attachment, not text
-                    // that failed to paste; text pastes as it always does.
-                    const pasted = imageFiles(event.clipboardData.files);
-                    if (pasted.length === 0) return;
-                    event.preventDefault();
-                    void attach(pasted);
-                  }}
-                />
-                {draft.images.length > 0 ? (
-                  <ul className="feedback-dialog-images" aria-label="Screenshots">
-                    {draft.images.map((image, index) => (
-                      <ImageThumbnail
-                        key={`${image.name}-${String(index)}`}
-                        image={image}
-                        busy={busy}
-                        onRemove={() =>
-                          changeDraft({
-                            images: latestDrafts()[kind].images.filter((_, held) => held !== index),
-                          })
-                        }
-                      />
-                    ))}
-                  </ul>
-                ) : null}
-                {signature ? (
-                  <div className="feedback-dialog-signature">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={draft.signed}
-                        disabled={busy}
-                        aria-describedby={signatureId}
-                        onChange={(event) => changeDraft({ signed: event.target.checked })}
-                      />
-                      Include my name and email
-                    </label>
-                    <span
-                      id={signatureId}
-                      className="feedback-dialog-identity"
-                      data-signed={String(draft.signed)}
-                    >
-                      {draft.signed
-                        ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
-                        : "Sending without your name"}
-                    </span>
-                  </div>
-                ) : null}
-                {rejection === undefined ? null : (
-                  <p className="error-message" role="alert">
-                    {rejection}
-                  </p>
-                )}
-                <div className="confirm-dialog-actions">
-                  <Tooltip label="Attach screenshot">
-                    <button
-                      type="button"
-                      className="icon-button feedback-dialog-attach"
-                      aria-label="Attach screenshot"
-                      disabled={busy || full}
-                      onClick={() => picker.current?.click()}
-                    >
-                      <ImageIcon />
-                    </button>
-                  </Tooltip>
-                  <input
-                    ref={picker}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    hidden
-                    onChange={(event) => {
-                      const picked = imageFiles(event.currentTarget.files);
-                      // Cleared so the same file can be picked again after a removal.
-                      event.currentTarget.value = "";
-                      void attach(picked);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="toolbar-button"
-                    disabled={busy}
-                    onClick={() => close(true)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    aria-keyshortcuts={shortcutAria(SEND_CHORD)}
-                    disabled={!ready}
-                    onClick={() => void send()}
-                  >
-                    <BusyLabel busy={busy} label="Sending">
-                      Send
-                    </BusyLabel>
-                    <Shortcut chord={SEND_CHORD} />
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )}
-    </>
+  return kind === undefined ? null : (
+    // The whole dimmed window takes a dropped screenshot.
+    <ModalShell
+      className="confirm-dialog feedback-dialog ph-no-capture"
+      labelledBy={titleId}
+      busy={busy}
+      initialFocus={field}
+      onDismiss={() => close(false)}
+      onKeyDown={sendKey}
+      dropTarget={{
+        onDragOver: (event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setDropping(true);
+        },
+        onDragLeave: (event) => {
+          if (event.relatedTarget === null) setDropping(false);
+        },
+        onDrop: (event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setDropping(false);
+          void attach(imageFiles(event.dataTransfer.files));
+        },
+      }}
+      data-dropping={String(dropping)}
+    >
+      <h2 id={titleId} className="confirm-dialog-title">
+        {FEEDBACK_COPY[kind].title}
+      </h2>
+      <textarea
+        ref={field}
+        className="feedback-dialog-message"
+        aria-label={FEEDBACK_COPY[kind].field}
+        placeholder={FEEDBACK_COPY[kind].placeholder}
+        maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+        value={draft.message}
+        disabled={busy}
+        onChange={(event) => changeDraft({ message: event.target.value })}
+        onPaste={(event) => {
+          // A screenshot on the clipboard is an attachment, not text
+          // that failed to paste; text pastes as it always does.
+          const pasted = imageFiles(event.clipboardData.files);
+          if (pasted.length === 0) return;
+          event.preventDefault();
+          void attach(pasted);
+        }}
+      />
+      {draft.images.length > 0 ? (
+        <ul className="feedback-dialog-images" aria-label="Screenshots">
+          {draft.images.map((image, index) => (
+            <ImageThumbnail
+              key={`${image.name}-${String(index)}`}
+              image={image}
+              busy={busy}
+              onRemove={() =>
+                changeDraft({
+                  images: latestDrafts()[kind].images.filter((_, held) => held !== index),
+                })
+              }
+            />
+          ))}
+        </ul>
+      ) : null}
+      {signature ? (
+        <div className="feedback-dialog-signature">
+          <label>
+            <input
+              type="checkbox"
+              checked={draft.signed}
+              disabled={busy}
+              aria-describedby={signatureId}
+              onChange={(event) => changeDraft({ signed: event.target.checked })}
+            />
+            Include my name and email
+          </label>
+          <span
+            id={signatureId}
+            className="feedback-dialog-identity"
+            data-signed={String(draft.signed)}
+          >
+            {draft.signed
+              ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
+              : "Sending without your name"}
+          </span>
+        </div>
+      ) : null}
+      {rejection === undefined ? null : (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      )}
+      <div className="confirm-dialog-actions">
+        <Tooltip label="Attach screenshot">
+          <button
+            type="button"
+            className="icon-button feedback-dialog-attach"
+            aria-label="Attach screenshot"
+            disabled={busy || full}
+            onClick={() => picker.current?.click()}
+          >
+            <ImageIcon />
+          </button>
+        </Tooltip>
+        <input
+          ref={picker}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(event) => {
+            const picked = imageFiles(event.currentTarget.files);
+            // Cleared so the same file can be picked again after a removal.
+            event.currentTarget.value = "";
+            void attach(picked);
+          }}
+        />
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={busy}
+          onClick={() => close(true)}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="primary-button"
+          aria-keyshortcuts={shortcutAria(SEND_CHORD)}
+          disabled={!ready}
+          onClick={() => void send()}
+        >
+          <BusyLabel busy={busy} label="Sending">
+            Send
+          </BusyLabel>
+          <Shortcut chord={SEND_CHORD} />
+        </button>
+      </div>
+    </ModalShell>
   );
 }
