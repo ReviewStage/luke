@@ -4,6 +4,11 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeySummary,
+} from "@sidecar/hosted/provider-key-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -29,7 +34,10 @@ import { CodingAgentsPage } from "./coding-agents-page";
  * would: Fast is a settings switch like every other, resting while its write
  * is out and saying a refusal under its own row with the switch left where
  * it stood, and Effort and Context are each a radio group a reader hears the
- * way they hear every segmented control. Synthetic catalog.
+ * way they hear every segmented control. Where the service withholds a fast
+ * version because Anthropic never granted the key's organization fast mode,
+ * Fast rests saying so, and on the account's own Anthropic key links to
+ * where the organization asks Anthropic for it. Synthetic catalog and keys.
  */
 
 const OPUS: CatalogModel = {
@@ -45,6 +53,18 @@ const OPUS_FAST: CatalogModel = {
   name: "Claude Opus 5.5 (Fast)",
 };
 
+/** The account's own Anthropic key, as the service answers it. */
+const OWN_ANTHROPIC: ProviderKeySummary = {
+  provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+  hint: "sk-ant-…wxyz",
+  addedAt: Date.UTC(2026, 9, 14, 12),
+  status: PROVIDER_KEY_STATUS.VERIFIED,
+  statusAt: Date.UTC(2026, 9, 14, 12),
+};
+
+/** The models the test's service offers, and the keys it holds for the account. */
+let models: readonly CatalogModel[] = [OPUS, OPUS_FAST];
+let keys: readonly ProviderKeySummary[] = [];
 /** The default the test's service holds. */
 let stored: ModelChoice = { model: OPUS.id, effort: "high" };
 /** Every act the page sent, in order. */
@@ -62,9 +82,17 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.PROVIDER_KEYS_READ:
-      return Promise.resolve(done({ keys: [] }));
+      return Promise.resolve(done({ keys }));
     case ACT_KIND.CODING_AGENTS_MODELS:
-      return Promise.resolve(done({ models: [OPUS, OPUS_FAST] }));
+      return Promise.resolve(done({ models }));
+    case ACT_KIND.WEB_OPEN:
+      return Promise.resolve(done(undefined));
+    case ACT_KIND.PROVIDER_KEYS_SAVE:
+      // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
+      // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
+      keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
+      models = [OPUS, OPUS_FAST];
+      return Promise.resolve(done({ keys }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
@@ -82,6 +110,8 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   stored = { model: OPUS.id, effort: "high" };
+  models = [OPUS, OPUS_FAST];
+  keys = [];
   sent = [];
   refuseWrite = false;
   Object.defineProperty(window, "sidecar", {
@@ -199,4 +229,73 @@ test("a refusal goes once any row's save lands, Fast's after an effort is kept a
   assert.deepEqual(effortRefused, ["The default could not be saved. Try again."]);
   assert.deepEqual(alerts(), []);
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
+});
+
+/** The Fast row's words under its name. */
+const fastNote = (page: HTMLElement) =>
+  [...page.querySelectorAll<HTMLElement>(".settings-row")]
+    .find((row) => row.querySelector("strong")?.textContent === "Fast")
+    ?.querySelector("small") ?? assert.fail("no Fast note");
+
+test("a model whose fast version the key's organization was never granted rests saying so, and on the account's own key links to where it asks Anthropic, opened in the browser", async () => {
+  models = [{ ...OPUS, fastNotEnabled: true }];
+  keys = [OWN_ANTHROPIC];
+  const page = await mount();
+
+  const note = fastNote(page);
+  assert.match(
+    note.textContent ?? "",
+    /Fast isn't enabled for this key's Anthropic organization\./u,
+  );
+  const link = note.querySelector("a") ?? assert.fail("no Request access link");
+  assert.equal(link.textContent, "Request access");
+
+  act(() => link.click());
+  await settle();
+  assert.deepEqual(
+    sent.filter((request) => request.kind === ACT_KIND.WEB_OPEN).map((request) => request.payload),
+    [{ url: "https://claude.com/fast-mode" }],
+  );
+});
+
+test("on Luke's key the resting Fast row says the same and links nowhere, since only the key's own organization can ask", async () => {
+  models = [{ ...OPUS, fastNotEnabled: true }];
+  const page = await mount();
+
+  const note = fastNote(page);
+  assert.match(
+    note.textContent ?? "",
+    /Fast isn't enabled for this key's Anthropic organization\./u,
+  );
+  assert.equal(note.querySelector("a"), null);
+});
+
+test("replacing the account's own Anthropic key reads the models again, so Fast follows the new key's organization", async () => {
+  models = [{ ...OPUS, fastNotEnabled: true }];
+  keys = [OWN_ANTHROPIC];
+  const page = await mount();
+  assert.equal(fastSwitch(page).disabled, true);
+
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('[aria-label="Anthropic key actions"]') ??
+      assert.fail("no Anthropic key actions")
+    ).click(),
+  );
+  const edit =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === "Edit key",
+    ) ?? assert.fail("no Edit key");
+  act(() => edit.click());
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    assert.fail("no Anthropic field");
+  act(() => {
+    field.value = "sk-ant-api03-synthetic-0000000000000000new1";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => field.form?.requestSubmit());
+  await settle();
+
+  assert.equal(fastSwitch(page).disabled, false);
 });

@@ -26,7 +26,6 @@ import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
-  FAST_WITHHELD,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -434,8 +433,11 @@ function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[]
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
 
-/** What the Fast row says where the service withholds the model's fast version because the account runs its provider on its own key. */
-const FAST_OWN_KEY_NOTE = "Fast isn't available on your own API key";
+/** What the Fast row says where the service withholds the model's fast version because Anthropic never granted the organization of the key the account's agents run on fast mode. */
+const FAST_NOT_ENABLED_NOTE = "Fast isn't enabled for this key's Anthropic organization";
+
+/** Where an organization asks Anthropic for fast mode, which it grants organization by organization. */
+export const FAST_ACCESS_URL = "https://claude.com/fast-mode";
 
 /** What separates the words of a choice: "Opus 5.5 High Fast", the model's name and then its detail. */
 const CHOICE_WORD_SEPARATOR = " ";
@@ -492,14 +494,14 @@ export function unsearchedModels(
   return new Set([...leads.values(), ...(chosen === undefined ? [] : [chosen])]);
 }
 
-/** Why the Fast row rests for the base model chosen, or nothing where its fast version is offered: withheld for the account's own key, or none listed. */
+/** Why the Fast row rests for the base model chosen, or nothing where its fast version is offered: withheld because the key's organization was never granted fast mode, or none listed. */
 export function fastRestingNote(
   baseId: string,
   offered: OfferedModel | undefined,
   models: readonly CatalogModel[],
 ): string | undefined {
   if (offered?.fast !== undefined) return undefined;
-  if (offered?.model.fastWithheld === FAST_WITHHELD.OWN_KEY) return FAST_OWN_KEY_NOTE;
+  if (offered?.model.fastNotEnabled === true) return FAST_NOT_ENABLED_NOTE;
   return `No fast version of ${modelLabel(baseId, models)}`;
 }
 
