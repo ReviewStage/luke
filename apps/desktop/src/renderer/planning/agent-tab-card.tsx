@@ -201,7 +201,7 @@ export function AgentTabCard({
   /** What the card says, read from what the tab holds as the card is hung. */
   read: () => CardReading;
   /** One line under a rule, said by a tab of the agent's other than its own. */
-  foot?: string | undefined;
+  foot?: React.ReactNode;
 }): React.JSX.Element {
   const { corner, choice, transcript } = read();
   return (

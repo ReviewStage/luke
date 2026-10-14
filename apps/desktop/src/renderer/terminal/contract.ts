@@ -41,6 +41,8 @@ export interface TerminalHandle {
   /** The size the terminal stands at now, which a shell attaching is told first. */
   readonly size: () => TerminalSize;
   readonly focus: () => void;
+  /** Clears the screen and its scrollback, as another shell is about to draw on it. */
+  readonly reset: () => void;
   readonly unmount: () => void;
 }
 

@@ -1,9 +1,11 @@
 import { SHORTCUT_KEY } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
+import { TreeToggle, useTreeSlide } from "./file-view";
 import { AgentGlyph } from "./tab-look";
 import { TERMINAL_LOAD_FAILED } from "./terminal-bundle";
 import { type TerminalAction, type TerminalBar, terminalLook } from "./terminal-model";
+import { TerminalShells } from "./terminal-shells";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useTerminalSession } from "./use-terminal-session";
 import { WorkingTime } from "./working-time";
@@ -24,6 +26,9 @@ import { WorkingTime } from "./working-time";
  * own words are drawn on a canvas the text masking cannot reach, and a
  * shell prints whatever its commands print.
  */
+
+/** What the shells list's toggle says. */
+const SHELLS_TOGGLE = { open: "Hide shells", closed: "Show shells" } as const;
 
 /** The slim bar over the screen: its words, a count or a note, and its one action with its key. */
 function StateBar({
@@ -71,6 +76,7 @@ export function TerminalTab({
   shown,
   onOpenAgent,
   onClose,
+  shells,
 }: {
   agentId: string;
   agents: CodingAgentsControl;
@@ -80,10 +86,13 @@ export function TerminalTab({
   onOpenAgent: () => void;
   /** Closes the tab, as an archived agent's does. */
   onClose: () => void;
+  /** Whether the shells list stands beside the screen, which holds for every Terminal tab alike, and its toggle. */
+  shells: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
   const session = useTerminalSession(agentId, shown, onClose);
   const look = terminalLook(session.state);
+  const slide = useTreeSlide(shells.open);
   return (
     <div className="terminal-tab file-view ph-no-capture" data-state={session.state.kind}>
       <header className="file-view-bar">
@@ -94,14 +103,30 @@ export function TerminalTab({
           </AgentRef>
           <span className="terminal-tab-standing">· sandbox · {look.words}</span>
         </span>
+        <div className="file-view-actions">
+          <TreeToggle open={shells.open} onToggle={shells.onToggle} words={SHELLS_TOGGLE} />
+        </div>
       </header>
       <div className="terminal-tab-body">
-        {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}
-        {session.failed ? (
-          <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
-        ) : (
-          <div ref={session.screen} className="terminal-tab-screen" data-dim={String(look.dim)} />
-        )}
+        <div className="terminal-tab-host">
+          {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}
+          {session.failed ? (
+            <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
+          ) : (
+            <div ref={session.screen} className="terminal-tab-screen" data-dim={String(look.dim)} />
+          )}
+        </div>
+        {slide.drawn ? (
+          <TerminalShells
+            subject={subject}
+            models={agents.models}
+            session={session}
+            onOpenAgent={onOpenAgent}
+            pane={slide.pane}
+            leaving={slide.leaving}
+            surfaceOpen={shown}
+          />
+        ) : null}
       </div>
     </div>
   );

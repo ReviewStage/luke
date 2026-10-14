@@ -14,6 +14,7 @@ import type { UnparsedWireValue } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   ACT_KIND,
@@ -26,6 +27,7 @@ import {
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";
+import { TerminalCardFoot } from "./terminal-shells";
 import { TerminalTab } from "./terminal-tab";
 
 /**
@@ -85,6 +87,10 @@ interface Main {
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.list` answers in place of the list, where the service refuses it. */
   listRefused: TerminalRefusal | undefined;
+  /** The answers held back, in the order asked, each landing when the test lets it go. */
+  readonly held: (() => void)[];
+  /** The kinds whose answers are held back until the test lets them go. */
+  readonly holding: Set<ActKind>;
   /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
@@ -102,6 +108,22 @@ beforeEach(() => {
         if (main.createRefused !== undefined) return { refused: main.createRefused };
         main.listed = { ...main.listed, terminals: [...main.listed.terminals, shell(MADE, "zsh")] };
         return { terminal: shell(MADE, "zsh") };
+      case ACT_KIND.TERMINAL_RENAME:
+        main.listed = {
+          ...main.listed,
+          terminals: main.listed.terminals.map((each) =>
+            each.id === request.payload.terminalId
+              ? { ...each, title: request.payload.title }
+              : each,
+          ),
+        };
+        return main.listed;
+      case ACT_KIND.TERMINAL_KILL:
+        main.listed = {
+          ...main.listed,
+          terminals: main.listed.terminals.filter((each) => each.id !== request.payload.terminalId),
+        };
+        return main.listed;
       case ACT_KIND.TERMINAL_RESUME:
         main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
         return { sandbox: SANDBOX_STATE.RUNNING };
@@ -115,6 +137,8 @@ beforeEach(() => {
     down: new Set(),
     createRefused: undefined,
     listRefused: undefined,
+    held: [],
+    holding: new Set(),
     post: (terminalId) => {
       const { port1: port } = new MessageChannel();
       const posted: TerminalPortInbound[] = [];
@@ -150,6 +174,13 @@ beforeEach(() => {
             status: ACT_OUTCOME_STATUS.REFUSED,
             reason: "Could not reach this agent's sandbox.",
           });
+        }
+        // A held answer says what main said when it was asked, landing whenever it is let go.
+        if (main.holding.has(request.kind)) {
+          const value = answer(request);
+          return new Promise((resolve) =>
+            main.held.push(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+          );
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
       },
@@ -188,7 +219,7 @@ async function settle(): Promise<void> {
 }
 
 /** The tab mounted for the agent, shown or not, with what it draws. */
-async function mount(shown = true) {
+async function mount(shown = true, shellsOpen = true) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -196,6 +227,7 @@ async function mount(shown = true) {
   const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   let closed = 0;
+  let toggled = 0;
   const render = (on: boolean) =>
     act(() =>
       root.render(
@@ -208,6 +240,12 @@ async function mount(shown = true) {
             onOpenAgent: () => undefined,
             onClose: () => {
               closed += 1;
+            },
+            shells: {
+              open: shellsOpen,
+              onToggle: () => {
+                toggled += 1;
+              },
             },
           }),
         ),
@@ -228,6 +266,35 @@ async function mount(shown = true) {
     },
     /** How many times the tab asked to close. */
     closed: () => closed,
+    /** How many times the shells list's toggle was pressed. */
+    toggled: () => toggled,
+    registry,
+    /** The shells as the list draws them: each one's name, what it says under it, whether it is shown, and whether it runs something. */
+    rows: () =>
+      [...container.querySelectorAll(".terminal-shell")].map((row) => ({
+        name: row.querySelector(".terminal-shell-name")?.textContent,
+        detail: row.querySelector(".terminal-shell-detail")?.textContent,
+        shown: row.getAttribute("aria-current") === "true",
+        running: row.querySelector(".terminal-shell-running") !== null,
+      })),
+    /** Presses the button the label names, wherever it stands in the tab. */
+    press: async (label: string) => {
+      const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+      assert.ok(button, `a button named ${label}`);
+      await act(async () => button.click());
+      await settle();
+    },
+    /** Presses a shell's row, which shows it. */
+    choose: async (name: string) => {
+      const row = [...container.querySelectorAll<HTMLButtonElement>(".terminal-shell-row")].find(
+        (each) => each.querySelector(".terminal-shell-name")?.textContent === name,
+      );
+      assert.ok(row, `a row for ${name}`);
+      // A press takes the keyboard to the row first, as the window's does.
+      row.focus();
+      await act(async () => row.click());
+      await settle();
+    },
     /** The acts the tab sent, by kind, from the n-th on. */
     kinds: (from = 0) => main.sent.slice(from).map((request) => request.kind),
     /** Where the bar says the connection stands. */
@@ -609,4 +676,308 @@ test("a tab taken down with attaches out for two shells closes both ports, which
   // The later attach's port lands first.
   assert.equal(main.post(NEWER).closed(), true);
   assert.equal(main.post(OLDEST).closed(), true);
+});
+
+/** The payload of the last act of the kind the tab sent, as main received it. */
+function lastPayload(kind: ActKind) {
+  const request = main.sent.findLast((each) => each.kind === kind);
+  assert.ok(request, `the tab sent ${kind}`);
+  return "payload" in request ? request.payload : undefined;
+}
+
+test("the list shows each shell in the agent's sandbox, the one shown marked, a running one's command and its dot", async () => {
+  main.listed = {
+    sandbox: SANDBOX_STATE.RUNNING,
+    terminals: [
+      shell(OLDEST, "zsh"),
+      { ...shell(NEWER, "dev server"), command: "pnpm dev", running: true },
+    ],
+  };
+  const tab = await mount();
+  assert.deepEqual(tab.rows(), [
+    { name: "zsh", detail: "luke", shown: true, running: false },
+    { name: "dev server", detail: "pnpm dev", shown: false, running: true },
+  ]);
+});
+
+test("a press on another shell's row shows that shell, from a clear screen", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  await tab.choose("dev server");
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: NEWER,
+    cols: 80,
+    rows: 24,
+  });
+  assert.deepEqual(
+    tab.rows().map((row) => row.shown),
+    [false, true],
+  );
+});
+
+test("the list's + starts a shell in the same agent's sandbox and shows it", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  await tab.press("New shell");
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_CREATE), { agentId: AGENT.id });
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: MADE,
+    cols: 80,
+    rows: 24,
+  });
+  assert.deepEqual(
+    tab.rows().map((row) => [row.name, row.shown]),
+    [
+      ["zsh", false],
+      ["dev server", false],
+      ["zsh", true],
+    ],
+  );
+});
+
+/** Answers the question standing over the window with its act's button. */
+async function confirmWith(verb: string): Promise<void> {
+  const dialog = document.querySelector('[role="alertdialog"]');
+  assert.ok(dialog, "a question stands over the window");
+  const button = [...dialog.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === verb,
+  );
+  assert.ok(button, `the question offers ${verb}`);
+  await act(async () => button.click());
+}
+
+test("a shell's × asks first, then ends it, and ending the one shown shows the oldest left", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+  await tab.press("End zsh");
+  assert.equal(document.querySelector('[role="alertdialog"] h2')?.textContent, "End zsh?");
+  assert.deepEqual(tab.kinds(before), [], "nothing is ended before the answer");
+  await confirmWith("End shell");
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
+  assert.deepEqual(
+    tab.rows().map((row) => [row.name, row.shown]),
+    [["dev server", true]],
+  );
+});
+
+test("a shell renamed from its row's menu is renamed in place, and the list says its new name", async () => {
+  const tab = await mount();
+  const row = tab.container.querySelector<HTMLButtonElement>(".terminal-shell-row");
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  assert.ok(rename, "the row's menu offers Rename");
+  await act(async () => rename.click());
+  const field = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.ok(field, "the name is edited in place");
+  act(() => {
+    field.value = "server";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_RENAME), {
+    agentId: AGENT.id,
+    terminalId: OLDEST,
+    title: "server",
+  });
+  assert.equal(tab.rows()[0]?.name, "server");
+});
+
+test("the shells list folds away beside the screen, and its toggle asks the panel to bring it back", async () => {
+  const tab = await mount(true, false);
+  assert.equal(tab.container.querySelector(".terminal-shells"), null);
+  await tab.press("Show shells");
+  assert.equal(tab.toggled(), 1);
+});
+
+test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {
+  vi.useFakeTimers();
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+  main.listed = { ...main.listed, terminals: [...main.listed.terminals, shell(MADE, "tests")] };
+  await act(async () => vi.advanceTimersByTimeAsync(5_000));
+  assert.deepEqual(tab.kinds(before), ["terminal.list"]);
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server", "tests"],
+  );
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.list"]);
+});
+
+test("the tab's card counts the agent's shells as the tab last read them", async () => {
+  const tab = await mount();
+  const foot = renderToStaticMarkup(
+    onRegistry(tab.registry, createElement(TerminalCardFoot, { agentId: AGENT.id })),
+  );
+  assert.equal(foot, "Terminal in this agent’s sandbox · 2 shells");
+});
+
+test("the list's foot names the agent and where it stands", async () => {
+  const tab = await mount();
+  assert.equal(tab.container.querySelector(".terminal-shells-foot")?.textContent, "Working…");
+});
+
+test("a sandbox that stops under a connected shell is read again, and the list says it holds no shells", async () => {
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  port.say({ type: "state", state: "stopped" });
+  await settle();
+  assert.equal(tab.container.querySelector(".terminal-shells-none")?.textContent, "No shells.");
+  assert.equal(tab.container.querySelector(".terminal-shells-foot")?.textContent, "Working…");
+  assert.equal(
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="New shell"]')?.disabled,
+    true,
+  );
+});
+
+test("a shell chosen from the list takes the keyboard to the screen, the shell's to type into", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  await tab.choose("dev server");
+  // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
+  assert.ok(
+    document.activeElement === tab.container.querySelector("textarea"),
+    "the screen holds the keyboard",
+  );
+});
+
+test("a read of the shells that went out before a rename lands nowhere, so the new name stands", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  main.holding.add(ACT_KIND.TERMINAL_LIST);
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  main.holding.clear();
+  const row = tab.container.querySelector<HTMLButtonElement>(".terminal-shell-row");
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  await act(async () => rename?.click());
+  const field = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.ok(field);
+  act(() => {
+    field.value = "server";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+  // The read from before the rename lands now, holding the old name.
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "server");
+});
+
+test("ending the shown shell starts one shell in its place, though the host says it went before the end answers", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [shell(OLDEST, "zsh")] };
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+  main.holding.add(ACT_KIND.TERMINAL_KILL);
+  await tab.press("End zsh");
+  await confirmWith("End shell");
+  // The host says the shell is gone, on the port the tab let go, before the end answers.
+  port.say({ type: "state", state: "gone" });
+  await settle();
+  main.holding.clear();
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.deepEqual(tab.kinds(before), [
+    "terminal.kill",
+    "terminal.list",
+    "terminal.create",
+    "terminal.attach",
+  ]);
+});
+
+test("an end the service refuses leaves the shown shell shown, attached again, and the question saying why", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  main.down.add(ACT_KIND.TERMINAL_KILL);
+  const before = main.sent.length;
+  await tab.press("End zsh");
+  await confirmWith("End shell");
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: OLDEST,
+    cols: 80,
+    rows: 24,
+  });
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Could not end that shell\./,
+  );
+});
+
+test("an end still out when another shell is chosen leaves the chosen one shown", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  main.holding.add(ACT_KIND.TERMINAL_KILL);
+  await tab.press("End zsh");
+  await confirmWith("End shell");
+  await tab.choose("dev server");
+  const before = main.sent.length;
+  main.holding.clear();
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.deepEqual(tab.kinds(before), []);
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: NEWER,
+    cols: 80,
+    rows: 24,
+  });
+});
+
+test("the question asked from the list goes when the tab leaves the screen", async () => {
+  const tab = await mount();
+  await tab.press("End zsh");
+  assert.ok(document.querySelector('[role="alertdialog"]'), "the question stands");
+  await tab.render(false);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+});
+
+test("an idle close is the shown shell's alone: one said on a shell no longer shown changes nothing, and a key after the shown one's re-attaches it", async () => {
+  const tab = await mount();
+  const first = main.post(OLDEST);
+  first.say({ type: "state", state: "attached" });
+  await tab.choose("dev server");
+  const shown = main.post(NEWER);
+  shown.say({ type: "state", state: "attached" });
+  // The relay closes each terminal on its own five idle minutes: the one no longer shown first.
+  first.say({ type: "state", state: "idle" });
+  assert.equal(tab.standing(), "· sandbox · connected");
+  assert.equal(tab.dimmed(), false);
+  shown.say({ type: "state", state: "idle" });
+  assert.equal(tab.standing(), "· sandbox · disconnected");
+  const before = main.sent.length;
+  await tab.type("q", 81);
+  assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: NEWER,
+    cols: 80,
+    rows: 24,
+  });
 });
