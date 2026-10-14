@@ -434,11 +434,13 @@ export function useMentionPicker({
     };
   }, [open, read, act, planId, repository]);
 
-  // The skills are asked for the first time the list opens, as the `/` list asks for them.
+  // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
+  // that answered is kept, and one that failed is asked again by the next word.
   const askSkills = skills?.ask;
+  const askedAt = open ? trigger.start : undefined;
   useEffect(() => {
-    if (open) askSkills?.();
-  }, [open, askSkills]);
+    if (askedAt !== undefined) askSkills?.();
+  }, [askedAt, askSkills]);
 
   // Each server's tools are read while the list stands open, and forgotten once it closes.
   const tools = useIntegrationTools(open ? servers : NO_SERVERS);

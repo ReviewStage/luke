@@ -373,3 +373,37 @@ test("an @ in the box offers the repository's skills, a pick written as the /nam
   );
   assert.deepEqual(sent, ["Run /release"]);
 });
+
+test("skills that could not be read for one @ list are asked for again by the next", async () => {
+  let asks = 0;
+  const flaky: SkillSource = () => {
+    asks += 1;
+    return Promise.resolve(
+      asks === 1
+        ? { unread: "GitHub could not be reached." }
+        : {
+            skills: [
+              {
+                name: "release",
+                description: "Use to cut a release.",
+                path: ".agents/skills/release/SKILL.md",
+              },
+            ],
+          },
+    );
+  };
+  const groups = (container: HTMLElement) =>
+    [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) =>
+      group.getAttribute("aria-label"),
+    );
+  const { container } = await box(planPage([]), flaky);
+
+  typeInComposer(container, "Run @releas");
+  await settle();
+  const first = groups(container);
+  typeInComposer(container, " then @releas");
+  await settle();
+
+  assert.deepEqual(first, []);
+  assert.deepEqual(groups(container), ["Skills"]);
+});
