@@ -81,6 +81,7 @@ const ALREADY_USED_CARD = {
 
 const RESPONSE_STATUS = {
   ANSWERED: 200,
+  SEE_OTHER: 303,
   NOT_FOUND: 404,
   ALREADY_USED: 409,
 } as const;
@@ -134,6 +135,8 @@ export interface LoopbackAuthorization {
 
 export interface LoopbackExchange {
   code: string;
+  /** This trip's own state, which the callback carried back. */
+  state: string;
   redirectUri: string;
   /** The verifier whose challenge the authorization page was shown. */
   codeVerifier: string;
@@ -162,6 +165,12 @@ export interface LoopbackConsentOptions<Grant> {
   authorizationUrl(input: LoopbackAuthorization): string;
   /** Trades the code for a grant, or names why not. Never fails. */
   exchange(input: LoopbackExchange): Effect.Effect<LoopbackConsentOutcome<Grant>>;
+  /**
+   * Where the browser goes on to after a grant, in place of the granted
+   * card: the next page of a sign-in that continues past this trip, or
+   * nothing to end on the card. Never fails.
+   */
+  continueTo?(grant: Grant): Effect.Effect<string | undefined>;
   /**
    * Opens the consent page in the user's own browser. Injected so the caller
    * hands in the shell and tests hand in a recorder — this module never
@@ -330,9 +339,16 @@ export function loopbackConsent<Grant extends object>(
       const refused = parameter(parameters, "error");
       const code = parameter(parameters, "code");
       if (!refused && code) {
-        outcome = yield* options.exchange({ code, redirectUri, codeVerifier });
+        outcome = yield* options.exchange({ code, state, redirectUri, codeVerifier });
       }
       const granted = !("reason" in outcome);
+      // Note that a continuation is read only off a grant, and asked of the
+      // flow inside this request, because the browser waits on the answer.
+      const next =
+        "reason" in outcome || !options.continueTo ? undefined : yield* options.continueTo(outcome);
+      if (next !== undefined) {
+        return HttpServerResponse.redirect(next, { status: RESPONSE_STATUS.SEE_OTHER });
+      }
       return card(
         RESPONSE_STATUS.ANSWERED,
         granted ? LOOPBACK_PAGE_TONE.SETTLED : LOOPBACK_PAGE_TONE.ATTENTION,

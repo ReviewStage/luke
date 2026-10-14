@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   type FakeResponder,
@@ -28,12 +29,19 @@ function manager(options: {
   identity?: { id: string; email: string };
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
+  /** Whose session the hand-off's exchange answers; the stored account's person unless given. */
+  sessionUserId?: string;
+  /** That session's account's address; the stored account's unless given. */
+  sessionEmail?: string;
 }): Effect.Effect<
   {
     instance: AccountSessionManager;
     changes: string[];
     events: string[];
     authorizations: { redirectUri: string; state: string }[];
+    opened: string[];
+    sessionExchanges: { code: string; state: string; codeVerifier: string }[];
+    endedSessions: string[];
     stored: () => StoredAccount | undefined;
   },
   never,
@@ -44,6 +52,9 @@ function manager(options: {
     const changes: string[] = [];
     const events: string[] = [];
     const authorizations: { redirectUri: string; state: string }[] = [];
+    const opened: string[] = [];
+    const sessionExchanges: { code: string; state: string; codeVerifier: string }[] = [];
+    const endedSessions: string[] = [];
     // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
     const fixtureClient = {
       revoke: options.revoke ?? (() => Effect.void),
@@ -60,6 +71,19 @@ function manager(options: {
       exchangeCode:
         options.exchangeCode ??
         (() => Effect.succeed({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
+      exchangeSessionCode: (input: { code: string; state: string; codeVerifier: string }) =>
+        Effect.sync(() => {
+          sessionExchanges.push(input);
+          return {
+            sessionToken: "signed-session",
+            userId: options.sessionUserId ?? STORED.id,
+            email: options.sessionEmail ?? STORED.email,
+          };
+        }),
+      endSession: (token: string) =>
+        Effect.sync(() => {
+          endedSessions.push(token);
+        }),
     } as unknown as AccountClient;
     const instance = yield* AccountSessionManager.make({
       client: options.client ?? fixtureClient,
@@ -79,7 +103,9 @@ function manager(options: {
       },
       hostedServiceBaseUrl: "https://example.com",
       requiresAccount: true,
-      openExternal: async () => undefined,
+      openExternal: async (url) => {
+        opened.push(url);
+      },
       startCapabilities: Effect.sync(() => {
         events.push("start");
       }),
@@ -94,7 +120,16 @@ function manager(options: {
     yield* Effect.forkScoped(
       Stream.runForEach(subscription, (account) => Effect.sync(() => changes.push(account.status))),
     );
-    return { instance, changes, events, authorizations, stored: () => stored };
+    return {
+      instance,
+      changes,
+      events,
+      authorizations,
+      opened,
+      sessionExchanges,
+      endedSessions,
+      stored: () => stored,
+    };
   });
 }
 
@@ -182,9 +217,137 @@ function grantCode(authorizations: readonly { redirectUri: string; state: string
     const callback = new URL(redirectUri);
     callback.searchParams.set("state", state);
     callback.searchParams.set("code", "auth-code");
-    yield* Effect.promise(() => fetch(callback));
+    // The browser is handed on to the hand-off page rather than following it here.
+    return yield* Effect.promise(() => fetch(callback, { redirect: "manual" }));
   });
 }
+
+/** The hand-off page the sign-in sent the browser on to, read off its redirect. */
+function handOffPage(response: Response): URL {
+  assert.equal(response.status, 303);
+  return new URL(response.headers.get("location") ?? "");
+}
+
+/** The hand-off page returning the plugin's code to the loopback, as it does on a transfer. */
+function returnCode(page: URL, code = "session-code") {
+  return Effect.promise(async () => {
+    const back = new URL(page.searchParams.get("return_to") ?? "");
+    back.searchParams.set("code", code);
+    back.searchParams.set("state", page.searchParams.get("state") ?? "");
+    return fetch(back);
+  });
+}
+
+/** Waits for the session trip to have opened its hand-off page in the browser. */
+async function openedPage(opened: readonly string[]): Promise<URL> {
+  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  // SAFETY: the loop returns only once a page was opened.
+  return new URL(opened[0] as string);
+}
+
+function s256(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
+it.effect(
+  "a sign-in sends the browser on to the hand-off page, and keeps the session it hands back beside the tokens",
+  () =>
+    Effect.gen(function* () {
+      const subject = yield* manager({});
+      const signingIn = yield* Effect.forkChild(
+        subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+      );
+      const page = handOffPage(yield* grantCode(subject.authorizations));
+      assert.equal((yield* Fiber.join(signingIn)).status, ACCOUNT_STATUS.SIGNED_IN);
+      assert.equal(page.origin + page.pathname, "https://example.com/desktop-session.html");
+      assert.equal(new URL(page.searchParams.get("return_to") ?? "").hostname, "127.0.0.1");
+
+      const landed = yield* returnCode(page);
+
+      assert.equal(landed.status, 200);
+      assert.equal(subject.stored()?.sessionToken, "signed-session");
+      assert.equal(subject.stored()?.refreshToken, "issued-refresh");
+      const [exchanged] = subject.sessionExchanges;
+      assert.equal(exchanged?.code, "session-code");
+      assert.equal(exchanged?.state, page.searchParams.get("state"));
+      assert.equal(s256(exchanged?.codeVerifier ?? ""), page.searchParams.get("code_challenge"));
+      // One tab for the whole sign-in: the hand-off page rode the sign-in's redirect.
+      assert.equal(subject.opened.length, 1);
+      assert.equal(new URL(subject.opened[0] ?? "").origin, "https://accounts.example");
+    }),
+);
+
+it.effect(
+  "a browser signed in as someone else hands over nothing, and the session it handed is ended",
+  () =>
+    Effect.gen(function* () {
+      const subject = yield* manager({ stored: STORED, sessionUserId: "user-2" });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const asked = yield* Effect.forkChild(Effect.exit(subject.instance.obtainSession()));
+
+      yield* returnCode(yield* Effect.promise(() => openedPage(subject.opened)));
+
+      const refused = yield* Fiber.join(asked);
+      assert.equal(Exit.isFailure(refused), true);
+      assert.deepEqual(subject.stored(), STORED);
+      assert.deepEqual(subject.endedSessions, ["signed-session"]);
+    }),
+);
+
+it.effect("an account signed in without a session asks for one through the hand-off page", () =>
+  Effect.gen(function* () {
+    const subject = yield* manager({ stored: STORED });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    const asked = yield* Effect.forkChild(subject.instance.obtainSession());
+
+    const page = yield* Effect.promise(() => openedPage(subject.opened));
+    yield* returnCode(page);
+
+    assert.equal(yield* Fiber.join(asked), true);
+    assert.equal(page.pathname, "/desktop-session.html");
+    assert.deepEqual(subject.stored(), { ...STORED, sessionToken: "signed-session" });
+  }),
+);
+
+it.effect("signed out, there is no session to ask for and no page opens", () =>
+  Effect.gen(function* () {
+    const subject = yield* manager({});
+
+    assert.equal(yield* subject.instance.obtainSession(), false);
+    assert.deepEqual(subject.opened, []);
+  }),
+);
+
+it.effect("a sign-out ends the Mac's session on the service along with its tokens", () =>
+  Effect.gen(function* () {
+    const subject = yield* manager({ stored: { ...STORED, sessionToken: "signed-session" } });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+    yield* subject.instance.signOut({ revokeRemote: true });
+
+    assert.deepEqual(subject.endedSessions, ["signed-session"]);
+    assert.equal(subject.stored(), undefined);
+  }),
+);
+
+it.effect(
+  "a sign-in again over an account holding a session keeps it, and ends on the sign-in's card",
+  () =>
+    Effect.gen(function* () {
+      const subject = yield* manager({ stored: { ...STORED, sessionToken: "standing-session" } });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const pending = yield* Effect.forkChild(
+        subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB),
+      );
+
+      const landed = yield* grantCode(subject.authorizations);
+
+      assert.equal(landed.status, 200);
+      assert.equal(yield* Fiber.join(pending), true);
+      assert.equal(subject.stored()?.sessionToken, "standing-session");
+      assert.equal(subject.stored()?.refreshToken, "issued-refresh");
+    }),
+);
 
 it.effect(
   "a sign-in again withdrawn midway leaves the standing session signed in and working",
@@ -294,4 +457,36 @@ it.effect(
       yield* grantCode(subject.authorizations);
       assert.equal(yield* Fiber.join(github), true);
     }),
+);
+
+it.effect(
+  "an account stored before it named an id takes a session for its own address, and the session's id with it",
+  () =>
+    Effect.gen(function* () {
+      const { id: _id, ...unnamed } = STORED;
+      const subject = yield* manager({ stored: unnamed });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...unnamed });
+      const asked = yield* Effect.forkChild(subject.instance.obtainSession());
+
+      yield* returnCode(yield* Effect.promise(() => openedPage(subject.opened)));
+
+      assert.equal(yield* Fiber.join(asked), true);
+      assert.deepEqual(subject.stored(), { ...STORED, sessionToken: "signed-session" });
+      assert.deepEqual(subject.endedSessions, []);
+    }),
+);
+
+it.effect("an account stored without an id still refuses a session for another address", () =>
+  Effect.gen(function* () {
+    const { id: _id, ...unnamed } = STORED;
+    const subject = yield* manager({ stored: unnamed, sessionEmail: "someone@example.com" });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...unnamed });
+    const asked = yield* Effect.forkChild(Effect.exit(subject.instance.obtainSession()));
+
+    yield* returnCode(yield* Effect.promise(() => openedPage(subject.opened)));
+
+    assert.equal(Exit.isFailure(yield* Fiber.join(asked)), true);
+    assert.deepEqual(subject.stored(), unnamed);
+    assert.deepEqual(subject.endedSessions, ["signed-session"]);
+  }),
 );

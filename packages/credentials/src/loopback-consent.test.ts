@@ -90,7 +90,7 @@ function armedTrip(
 function answerCallback(
   redirectUri: string,
   parameters: Record<string, string>,
-): Promise<{ status: number; body: string }> {
+): Promise<{ status: number; body: string; location: string | undefined }> {
   const callback = new URL(redirectUri);
   for (const [name, value] of Object.entries(parameters)) {
     callback.searchParams.set(name, value);
@@ -109,7 +109,9 @@ function answerCallback(
         response.on("data", (chunk: string) => {
           body += chunk;
         });
-        response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
+        response.on("end", () =>
+          resolve({ status: response.statusCode ?? 0, body, location: response.headers.location }),
+        );
       },
     );
     request.on("error", reject);
@@ -119,7 +121,7 @@ function answerCallback(
 function callback(
   redirectUri: string,
   parameters: Record<string, string>,
-): Effect.Effect<{ status: number; body: string }> {
+): Effect.Effect<{ status: number; body: string; location: string | undefined }> {
   return Effect.promise(() => answerCallback(redirectUri, parameters));
 }
 
@@ -149,6 +151,49 @@ it.effect("one trip runs press to grant, with the PKCE pair the exchange answers
       authorization.codeChallenge,
       createHash("sha256").update(exchange.codeVerifier, "ascii").digest("base64url"),
     );
+  }),
+);
+
+it.effect(
+  "a grant with somewhere to continue sends the browser on, and hands the exchange its state",
+  () =>
+    Effect.gen(function* () {
+      const armed = yield* Deferred.make<LoopbackAuthorization>();
+      const { consent, exchanges } = harness(armed, {
+        continueTo: (grant) => Effect.succeed(`https://example.test/next?for=${grant.token}`),
+      });
+
+      const waiting = yield* trip(consent);
+      const authorization = yield* armedTrip(armed);
+      const answered = yield* callback(authorization.redirectUri, {
+        state: authorization.state,
+        code: "auth-code",
+      });
+
+      assert.equal(answered.status, 303);
+      assert.equal(answered.location, "https://example.test/next?for=granted");
+      assert.deepEqual(yield* Fiber.join(waiting), { token: "granted" });
+      assert.equal(exchanges[0]?.state, authorization.state);
+    }),
+);
+
+it.effect("a refusal lands on its card whatever the flow would continue to", () =>
+  Effect.gen(function* () {
+    const armed = yield* Deferred.make<LoopbackAuthorization>();
+    const { consent } = harness(armed, {
+      continueTo: () => Effect.succeed("https://example.test/next"),
+    });
+
+    const waiting = yield* trip(consent);
+    const authorization = yield* armedTrip(armed);
+    const answered = yield* callback(authorization.redirectUri, {
+      state: authorization.state,
+      error: "access_denied",
+    });
+
+    assert.equal(answered.status, 200);
+    assert.equal(answered.location, undefined);
+    assert.deepEqual(yield* Fiber.join(waiting), { reason: REASON.REFUSED });
   }),
 );
 

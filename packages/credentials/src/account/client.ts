@@ -134,6 +134,40 @@ function tokensFrom(body: WireRecord): Effect.Effect<AccountTokens, AccountClien
 
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
+const JSON_CONTENT_TYPE = "application/json";
+
+/**
+ * The response header Better Auth's bearer plugin hands a session out in,
+ * signed under the service's secret: the one form of the token the service
+ * takes back as a bearer (https://www.better-auth.com/docs/plugins/bearer).
+ */
+const SESSION_TOKEN_HEADER = "set-auth-token";
+
+/** The Mac's own Better Auth session, and whose it is. */
+export interface AccountSession {
+  /** The signed session token, sent back as `Authorization: Bearer`. */
+  sessionToken: string;
+  /** The account the session is for, as the service's `sub` names it. */
+  userId: string;
+  /** That account's address, for a stored account that names no id. */
+  email: string;
+}
+
+/** The session the exchange answered, read off the bearer plugin's header and the plugin's own body. */
+function sessionFrom(
+  response: Response,
+  body: WireRecord,
+): Effect.Effect<AccountSession, AccountClientError> {
+  const sessionToken = response.headers.get(SESSION_TOKEN_HEADER);
+  const user = record(body.user);
+  if (!sessionToken || !isWireString(user?.id) || !user.id || !isWireString(user.email)) {
+    return Effect.fail(
+      new AccountClientError({ message: "Account service did not return a session" }),
+    );
+  }
+  return Effect.succeed({ sessionToken, userId: user.id, email: user.email });
+}
+
 /**
  * One request over the client handed in, under its own deadline, which is
  * provided here so a caller yields the request without carrying an
@@ -253,6 +287,52 @@ export class AccountClient {
     });
   }
 
+  /**
+   * Exchanges the Electron plugin's single-use code for a session of this
+   * Mac's own, as the plugin's `/electron/token` takes it: the code, the
+   * state it was asked for under, and the PKCE verifier whose challenge the
+   * hand-off page carried
+   * (https://www.better-auth.com/docs/integrations/electron#manual-token-exchange).
+   */
+  exchangeSessionCode(input: {
+    code: string;
+    state: string;
+    codeVerifier: string;
+  }): Effect.Effect<AccountSession, AccountClientFailure> {
+    return Effect.gen({ self: this }, function* () {
+      const response = yield* timedRequest(
+        this.#client,
+        HttpClientRequest.post(`${this.#baseUrl}/electron/token`, {
+          body: HttpBody.raw(
+            JSON.stringify({
+              token: input.code,
+              state: input.state,
+              code_verifier: input.codeVerifier,
+            }),
+            { contentType: JSON_CONTENT_TYPE },
+          ),
+        }),
+        this.#timeoutMs,
+      );
+      return yield* sessionFrom(response, yield* responseRecord(response));
+    });
+  }
+
+  /** Ends the Mac's session on the service; local sign-out never depends on this succeeding. */
+  endSession(sessionToken: string): Effect.Effect<void, AccountClientFailure> {
+    return Effect.gen({ self: this }, function* () {
+      const response = yield* timedRequest(
+        this.#client,
+        HttpClientRequest.post(`${this.#baseUrl}/sign-out`, {
+          headers: { authorization: `Bearer ${sessionToken}` },
+          body: HttpBody.raw("{}", { contentType: JSON_CONTENT_TYPE }),
+        }),
+        this.#timeoutMs,
+      );
+      if (!response.ok) yield* responseRecord(response);
+    });
+  }
+
   userInfo(
     accessToken: string,
     provider: AccountProvider,
@@ -302,6 +382,12 @@ export class AccountClient {
 export interface StoredAccount extends AccountIdentity {
   accessToken: string;
   refreshToken: string;
+  /**
+   * The Mac's own Better Auth session, signed, for the endpoints that take a
+   * session rather than an OAuth token. Absent for an account signed in
+   * before the Mac held one, or whose hand-off did not complete.
+   */
+  sessionToken?: string;
 }
 
 export const ACCOUNT_FAILURE_ACTION = {
