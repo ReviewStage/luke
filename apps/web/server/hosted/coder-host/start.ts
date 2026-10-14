@@ -142,7 +142,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       ...brief,
       repository,
       disabledServers: ask.disabledServers,
-    }),
+    }).pipe(
+      // Note that this Start names no rollout role, so the store has no keeper to refuse it for.
+      Effect.catchTag("KeeperTaken", (taken) => Effect.die(taken)),
+    ),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created } = started.value;

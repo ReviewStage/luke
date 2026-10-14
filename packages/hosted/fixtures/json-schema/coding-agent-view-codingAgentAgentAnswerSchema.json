@@ -87,6 +87,17 @@
                 "maxLength": 64
               },
               "maxItems": 32
+            },
+            "position": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "builder",
+                "keeper"
+              ]
             }
           },
           "required": [

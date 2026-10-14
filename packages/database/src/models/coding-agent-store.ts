@@ -5,6 +5,9 @@ import {
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
+  ROLLOUT_ROLE,
+  type RolloutRole,
+  rolloutRoleSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER_LIST,
@@ -26,7 +29,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
+import { Data, DateTime, Duration, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import {
@@ -101,9 +104,27 @@ import type { ConversationTarget } from "./writer.js";
  * agent by its id still finds it, so its transcript and pull request stand.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
+ *
+ * An agent started for the plan's rollout carries its role there. A builder
+ * is the worker of the pull request at its position, with the branch its
+ * work bases on; the keeper, at no position, owns the rollout's stack. A
+ * plan's agents list its builders first, by position, then the rest in the
+ * order started. A rollout agent is live until its newest turn fails or is
+ * stopped, or until the developer archives it, which is what frees its
+ * place for another; one that settled stands, since it is waiting on its
+ * pull request or its next word rather than gone. Liveness is read through
+ * the agent's own status (`coder-host/status.ts`), so the two never
+ * disagree: one with no turn yet is live inside the grace its first turn
+ * lands in, or while a line of the developer's waits on that turn, and past
+ * the grace with nothing waiting its status reads failed, so an agent whose
+ * session was taken but never ran a turn does not hold its place forever. A plan has at most one
+ * live keeper, held under the plan's lock like every Start of it.
  */
 
 type CodingAgentStoreFailure = QueryError | Schema.SchemaError;
+
+/** The plan's rollout already has a live keeper, so a Start of another made nothing. */
+export class KeeperTaken extends Data.TaggedError("KeeperTaken") {}
 
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type CodingAgentStoreEffect<A> = Effect.Effect<A, CodingAgentStoreFailure, DatabaseServices>;
@@ -131,6 +152,12 @@ export interface CodingAgent {
   readonly archivedAt: Date | null;
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
   readonly disabledServers: readonly IntegrationProvider[];
+  /** The pull request of the plan's rollout the agent works, counted from one; null for an agent started outside a rollout. */
+  readonly position: number | null;
+  /** The branch the agent's work bases on; null for the repository's default branch. */
+  readonly baseBranch: string | null;
+  /** What the agent does for the plan's rollout; null for an agent started outside one. */
+  readonly role: RolloutRole | null;
   readonly createdAt: Date;
 }
 
@@ -167,6 +194,12 @@ export type NewCodingAgent = CodingAgentBriefText & {
   readonly repository: string;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  /** The pull request of the plan's rollout the agent works, counted from one; none for an agent started outside a rollout. */
+  readonly position?: number | undefined;
+  /** The branch the agent's work bases on; none for the repository's default branch. */
+  readonly baseBranch?: string | undefined;
+  /** What the agent does for the plan's rollout, a builder at its position or the keeper at none; none for an agent started outside one. */
+  readonly role?: RolloutRole | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -185,6 +218,9 @@ const CODING_AGENT_COLUMNS = {
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
   disabledServers: codingAgent.disabledServers,
+  position: codingAgent.rolloutPosition,
+  baseBranch: codingAgent.baseBranch,
+  role: codingAgent.rolloutRole,
   createdAt: codingAgent.createdAt,
 };
 
@@ -226,6 +262,9 @@ const CodingAgentRowSchema = Schema.Struct({
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   disabledServers: DisabledServersColumnSchema,
+  position: Schema.NullOr(Schema.Number),
+  baseBranch: Schema.NullOr(Schema.String),
+  role: Schema.NullOr(rolloutRoleSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -306,6 +345,9 @@ const insertAgent = SqlSchema.findOne({
     task: Schema.NullOr(Schema.String),
     repository: Schema.String,
     disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    position: Schema.NullOr(Schema.Number),
+    baseBranch: Schema.NullOr(Schema.String),
+    role: Schema.NullOr(rolloutRoleSchema),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -324,6 +366,9 @@ const insertAgent = SqlSchema.findOne({
           task: write.task,
           repository: write.repository,
           disabledServers: write.disabledServers,
+          rolloutPosition: write.position,
+          baseBranch: write.baseBranch,
+          rolloutRole: write.role,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -511,7 +556,113 @@ const findAgentsOfPlan = SqlSchema.findAll({
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
-        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+        // Postgres sorts nulls last ascending, so the workers lead by position and the rest follow.
+        .orderBy(asc(codingAgent.rolloutPosition), asc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
+});
+
+/**
+ * How long a rollout agent with no turn row yet holds its place: the grace
+ * its first turn may land in. `CODER.STARTING_GRACE` reads this one constant,
+ * so the status a tab draws and the place a Start is refused for agree.
+ */
+export const CODING_AGENT_STARTING_GRACE = Duration.minutes(5);
+
+/** The turn statuses under which a rollout agent's newest turn still holds its place; a failed or cancelled one, and a word this build does not know, end it. */
+const HOLDING_TURN_STATUSES: ReadonlySet<string> = new Set([
+  TURN_STATUS.QUEUED,
+  TURN_STATUS.RUNNING,
+  TURN_STATUS.SETTLED,
+]);
+
+/** What a rollout agent's place is read from: its newest turn, and whether a line of the developer's awaits its turn. */
+interface RolloutStanding {
+  readonly turn: LatestTurn | undefined;
+  readonly lineAwaits: boolean;
+}
+
+/**
+ * Whether a rollout agent still holds its place, by the rule its status reads
+ * (`coder-host/status.ts`): a line awaiting its turn holds it; with no turn
+ * it holds inside the starting grace; a failed or cancelled newest turn, or
+ * a queued or running one asked to stop, frees it. Note that this is the
+ * store's own copy of that rule, interim until the rule moves down beside
+ * the store and the status reads it from here.
+ */
+function isLiveWorkerTurn(agent: CodingAgent, standing: RolloutStanding, now: Date): boolean {
+  if (standing.lineAwaits) return true;
+  const turn = standing.turn;
+  if (turn === undefined) {
+    return (
+      now.getTime() - agent.createdAt.getTime() <= Duration.toMillis(CODING_AGENT_STARTING_GRACE)
+    );
+  }
+  if (!HOLDING_TURN_STATUSES.has(turn.status)) return false;
+  return turn.status === TURN_STATUS.SETTLED || turn.cancelRequestedAt === null;
+}
+
+/** The newest live one of these rollout agents, which the caller names newest first. */
+function newestLive(
+  userId: string,
+  agents: readonly CodingAgent[],
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.gen(function* () {
+    const conversationIds = agents.map((agent) => agent.conversationId);
+    const newest = yield* latestTurnsOf(userId, conversationIds);
+    const awaiting = yield* awaitingLinesOf(userId, conversationIds);
+    const now = yield* DateTime.nowAsDate;
+    return Option.fromNullishOr(
+      agents.find((agent) =>
+        isLiveWorkerTurn(
+          agent,
+          {
+            turn: newest.get(agent.conversationId),
+            lineAwaits: awaiting.has(agent.conversationId),
+          },
+          now,
+        ),
+      ),
+    );
+  });
+}
+
+const findKeepers = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, planId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .innerJoin(plan, eq(plan.id, codingAgent.planId))
+        .where(
+          and(
+            reachablePlan(userId, planId),
+            eq(codingAgent.rolloutRole, ROLLOUT_ROLE.KEEPER),
+            isNull(codingAgent.archivedAt),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
+});
+
+const findWorkersAtPosition = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String, position: Schema.Number }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, planId, position }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .innerJoin(plan, eq(plan.id, codingAgent.planId))
+        .where(
+          and(
+            reachablePlan(userId, planId),
+            eq(codingAgent.rolloutPosition, position),
+            isNull(codingAgent.archivedAt),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id)),
     ),
 });
 
@@ -621,15 +772,16 @@ const deleteConversationRow = SqlSchema.void({
  * the repository, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account reaches no such plan. An archived plan starts no
- * agent, read under the same lock, though a retry still answers the agent
- * its Start made before the archive.
+ * agent, and a plan whose rollout has a live keeper starts no second one,
+ * each read under the same lock, though a retry still answers the agent its
+ * Start made before either.
  */
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
 ): Effect.Effect<
   Option.Option<CodingAgentStarted>,
-  CodingAgentStoreFailure | PlanArchived,
+  CodingAgentStoreFailure | PlanArchived | KeeperTaken,
   DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -645,6 +797,10 @@ export function createCodingAgent(
           return Option.some({ agent: existing.value, created: false });
         }
         if (reached.value.archived) return yield* new PlanArchived();
+        if (started.role === ROLLOUT_ROLE.KEEPER) {
+          const keeper = yield* liveKeeperOf(userId, started.planId);
+          if (Option.isSome(keeper)) return yield* new KeeperTaken();
+        }
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -662,6 +818,9 @@ export function createCodingAgent(
           task: started.task,
           repository: started.repository,
           disabledServers: storedServers(started.disabledServers ?? []),
+          position: started.position ?? null,
+          baseBranch: started.baseBranch ?? null,
+          role: started.role ?? null,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -691,13 +850,32 @@ export function discardCodingAgent(
   );
 }
 
-/** Every agent started on the plan, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such plan. */
+/** Every agent started on the plan, by any member, its rollout's workers first by position, then the rest in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such plan. */
 export function listCodingAgents(
   userId: string,
   planId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+}
+
+/** The live worker at this position of the account's plan's rollout, newest started first: one not archived whose newest turn neither failed nor was stopped; nothing where none stands. */
+export function liveWorkerAtPosition(
+  userId: string,
+  planId: string,
+  position: number,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.flatMap(findWorkersAtPosition({ userId, planId, position }), (workers) =>
+    newestLive(userId, workers),
+  );
+}
+
+/** The live keeper of the account's plan's rollout: the newest keeper not archived whose newest turn neither failed nor was stopped; nothing where none stands. */
+export function liveKeeperOf(
+  userId: string,
+  planId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.flatMap(findKeepers({ userId, planId }), (keepers) => newestLive(userId, keepers));
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */

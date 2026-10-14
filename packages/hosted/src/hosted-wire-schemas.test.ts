@@ -55,6 +55,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
   "coding-agent-wire": {
     contextWindowSchema: codingAgentWire.contextWindowSchema,
+    rolloutRoleSchema: codingAgentWire.rolloutRoleSchema,
     codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,
     codingAgentMessageRequestSchema: codingAgentWire.codingAgentMessageRequestSchema,
     codingAgentRenameRequestSchema: codingAgentWire.codingAgentRenameRequestSchema,

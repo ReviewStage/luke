@@ -1,3 +1,4 @@
+import { CODING_AGENT_STARTING_GRACE } from "@sidecar/database/models/coding-agent-store";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 
@@ -67,7 +68,7 @@ export const CODER = {
    * agent still without one past this is read as failed, so nothing reads
    * starting forever and no transcript read is held for it.
    */
-  STARTING_GRACE: Duration.minutes(5),
+  STARTING_GRACE: CODING_AGENT_STARTING_GRACE,
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

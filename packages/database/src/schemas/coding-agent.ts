@@ -2,9 +2,10 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
   type ContextWindow,
+  type RolloutRole,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
-import { foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { plan } from "./plan.js";
@@ -48,6 +49,14 @@ import { conversations } from "./storage.js";
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
+ *
+ * A row with a rollout role is one of a rollout's agents. A builder was
+ * started on the pull request of the plan's `rollout` field at its position,
+ * counted from one, and its base branch is the one it was cut from, null
+ * where that is the repository's default; the keeper, one per rollout, owns
+ * the stack's git structure and has no position. There is no rollout table: the plan's field is the
+ * graph, and these rows are its state. A position may hold more than one row
+ * over time, since a worker that failed or was stopped is started again.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
@@ -115,6 +124,12 @@ export const codingAgent = pgTable(
     archivedAt: timestamptz("archived_at"),
     /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
     disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
+    /** The pull request of the plan's rollout the agent works, counted from one; null for an agent started outside a rollout. */
+    rolloutPosition: integer("rollout_position"),
+    /** The branch the agent's work bases on; null for the repository's default branch. */
+    baseBranch: text("base_branch"),
+    /** What the agent does for the plan's rollout; null for an agent started outside one. */
+    rolloutRole: text("rollout_role").$type<RolloutRole>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
