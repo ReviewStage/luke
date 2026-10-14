@@ -82,7 +82,7 @@ import {
 import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
-import { agentEntries, inboxEntries } from "./main-tabs";
+import { agentEntries } from "./main-tabs";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
@@ -383,12 +383,11 @@ function shownOverHistory(plans: PlansControl, show: () => void): void {
 }
 
 /**
- * The open plan's Inbox and coding agents, as the column's "+" lists them,
+ * The open plan's coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, each in its row's look and words, found by its row's words,
  * and beside the plan's name; none while no plan is open. An agent opens as
- * its notification's click opens it, the Inbox the same way, and a
- * subagent's or a Changes tab as the "+" opens it, the version history
+ * its notification's click opens it, and a subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
 function agentRows(plans: PlansControl, show: (pick: () => void) => void): readonly PaletteRow[] {
@@ -396,7 +395,6 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
   if (planId === undefined) return [];
   const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
   const workers = planWorkers(workRowsOf(plans.work.conversation, plans.work.callLive));
-  const inbox = inboxEntries(plans.agents, () => plans.onShowInbox(planId));
   const agents = agentEntries(plans.mainTabs, plans.agents).map((entry) => ({
     ...entry,
     onPick: () => plans.onShowAgent(planId, entry.row.id),
@@ -408,7 +406,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     files: [],
     changes: changesOffers(plans.agents, plans.sidePanel.changes),
   }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }));
-  const entries = [...inbox, ...agents, ...subagents];
+  const entries = [...agents, ...subagents];
   return entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,

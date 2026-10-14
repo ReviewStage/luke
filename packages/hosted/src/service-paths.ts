@@ -49,12 +49,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_INTEGRATIONS_CONNECTED: "/api/account/integrations/connected",
   /**
-   * What waits on the developer across the account's plans: every open
-   * inbox item, past a cursor (GET), held open while nothing changed, as a
-   * plan's inbox is. `account-inbox-wire.ts` declares the answer.
-   */
-  INBOX: "/api/inbox",
-  /**
    * The shell commands the account's agents asked to run on the developer's
    * Mac: the ones waiting, held open while none is, each claimed for the
    * Mac that read it (GET), and one's result (POST). `mac-command-wire.ts`
@@ -347,28 +341,6 @@ export function planTemplateRestorePath(seq: number): string {
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
 export function planAgentsPath(planId: string): string {
   return `${planPath(planId)}/agents`;
-}
-
-/**
- * One plan's inbox: every item its coding agents posted for the developer,
- * past a cursor (GET), held open while nothing changed, as an agent's
- * transcript is. `inbox-wire.ts` declares the answer.
- */
-export function planInboxPath(planId: string, after?: string): string {
-  const path = `${planPath(planId)}/inbox`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One item of a plan's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
-export function inboxItemPath(itemId: string): string {
-  return `/api/inbox/${encodeURIComponent(itemId)}`;
-}
-
-/** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
-export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
-  return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
 /**

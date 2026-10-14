@@ -600,8 +600,8 @@ function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): 
  * (GET `/api/plans/{id}/file`): the path, and its first and last line; or,
  * with `raw`, the file's whole text, its lines uncut, as a copy or a
  * download of the file asks it, the window then standing for nothing. With
- * `ref`, the file is read as it stood at that commit, as an inbox item's
- * code reference pins it, rather than at the default branch's head.
+ * `ref`, the file is read as it stood at that commit, as a snippet Luke
+ * read from his checkout pins it, rather than at the default branch's head.
  */
 export const planFileRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(

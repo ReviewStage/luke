@@ -22,13 +22,12 @@
 
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
- * it is named (`tab-look.tsx`): the plan's Inbox, a draft agent's tab and
- * the "+" row that opens one, an agent the window holds nothing of, and an
+ * it is named (`tab-look.tsx`): a draft agent's tab and the "+" row
+ * that opens one, an agent the window holds nothing of, and an
  * agent's Changes before its agent is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
-  INBOX: "Inbox",
   NEW_AGENT: "New coding agent",
   CODING_AGENT: "Coding agent",
   CHANGES: "Changes",

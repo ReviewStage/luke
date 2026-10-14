@@ -6,7 +6,6 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Schema } from "effect";
-import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -15,18 +14,13 @@ import {
   type CallAnswer,
   callAnswered,
 } from "./account-call.js";
-import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -64,13 +58,6 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import {
-  type InboxAnswerRequest,
-  inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
-  inboxAnswerSchema,
-  inboxImageTypeSchema,
-} from "./inbox-wire.js";
-import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -96,10 +83,7 @@ import {
   agentStopPath,
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
-  inboxAttachmentPath,
-  inboxItemPath,
   planAgentsPath,
-  planInboxPath,
   planMessagesPath,
   planSubagentMessagesPath,
   planTemplateRestorePath,
@@ -119,11 +103,10 @@ import {
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read and the two inbox reads, a plan's and the account's, are the calls
- * the service holds open, for as long as it waits on the agent's next
- * message or the inbox's next change, so they travel under a deadline of
- * their own that outlasts that hold; every other call keeps the account
- * call's usual one. The account's plan
+ * reads are the calls the service holds open, for as long as it waits on
+ * the agent's next message, so they travel under a deadline of their own
+ * that outlasts that hold; every other call keeps the account call's usual
+ * one. The account's plan
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
@@ -174,9 +157,6 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
 
-/** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
-const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
-
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
@@ -198,25 +178,6 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
   return failure === undefined ? UNANSWERED : { failure };
-}
-
-/** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
-function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
-  const contentType = Result.getOrUndefined(
-    readEither(inboxImageTypeSchema)(unparsedWire(response.headers.get("content-type"))),
-  );
-  if (contentType === undefined) return Effect.succeed(UNANSWERED);
-  return Effect.promise(() =>
-    response
-      .arrayBuffer()
-      .then(
-        (bytes): CodingAgentInboxAttachmentView => ({
-          contentType,
-          base64: Base64.encode(new Uint8Array(bytes)),
-        }),
-      )
-      .catch(() => UNANSWERED),
-  );
 }
 
 /**
@@ -243,9 +204,7 @@ function readAnswer<Answer, Encoded>(
  * The window's reads and writes of a plan's coding agents: the models the
  * service offers and the account's default among them, a plan's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
- * and effort changed, one stopped, what one published, the plan's inbox
- * of what its agents need of the developer, read past a cursor and
- * answered an item at a time, and what waits across the account's plans.
+ * and effort changed, one stopped, and what one published.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -616,79 +575,6 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentChangesAnswerSchema, ROW_REFUSALS),
-    );
-  }
-
-  /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
-  inbox(
-    planId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
-    );
-  }
-
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed. */
-  accountInbox(
-    after: string,
-  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
-      }),
-      (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
-    );
-  }
-
-  /**
-   * One image of an inbox item, fetched under the account: its bytes in
-   * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block may be; not found where the item or
-   * the attachment is not the account's; unanswered for anything else,
-   * another media type included, so nothing the window draws is a type it
-   * did not expect.
-   */
-  inboxAttachment(
-    itemId: string,
-    attachmentId: string,
-  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: inboxAttachmentPath(itemId, attachmentId) }),
-      (answer) => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-        if (!answer.response.ok) {
-          return Effect.map(jsonOf(answer.response), (body) =>
-            refusedAs(unparsedWire(body), ROW_REFUSALS),
-          );
-        }
-        return readImage(answer.response);
-      },
-    );
-  }
-
-  /**
-   * Answers one item of the inbox against the revision the window drew,
-   * under the key the window made for the answer, which a retry carries
-   * again, and answers the item as it then stands with whether the answer
-   * was taken; an answer the service would refuse by shape is refused here
-   * without traveling.
-   */
-  answerInbox(
-    itemId: string,
-    request: InboxAnswerRequest,
-  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(inboxAnswerRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: inboxItemPath(itemId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
     );
   }
 }

@@ -7,9 +7,7 @@ import { searchAnchorProps } from "./settings-anchors";
  * the group is named by its legend, each option is a radio checked while it
  * is the value, Tab lands on the checked option (the first while none is) and
  * leaves the group in one press, and the arrow keys move along it and choose
- * as they go. A press on the chosen option does nothing, unless the control
- * is `clearable`, where it takes the choice back — an optional Inbox field's,
- * which has no other way to be left unanswered once picked.
+ * as they go. A press on the chosen option does nothing.
  */
 
 /** The keys that step along the group, and which way. */
@@ -26,7 +24,7 @@ interface SegmentedOption<Value extends string> {
   label: string;
 }
 
-interface SegmentedBase<Value extends string> {
+interface SegmentedProps<Value extends string> {
   /** The group's accessible name, which a sighted reader has from the row's own label. */
   legend: string;
   options: readonly SegmentedOption<Value>[];
@@ -35,29 +33,15 @@ interface SegmentedBase<Value extends string> {
   disabled?: boolean | undefined;
   /** The settings search id a result lands on. */
   anchor?: string | undefined;
-}
-
-/** A control whose choice always stands once made. */
-interface SegmentedFixed<Value extends string> extends SegmentedBase<Value> {
-  clearable?: false | undefined;
   onChange: (value: Value) => void;
 }
 
-/** A control whose chosen option, pressed again, takes the choice back where `clearable` is on. */
-interface SegmentedClearable<Value extends string> extends SegmentedBase<Value> {
-  clearable: boolean;
-  onChange: (value: Value | undefined) => void;
-}
-
 /** The segmented control over `options`, choosing `value`. */
-export function Segmented<Value extends string>(
-  props: SegmentedFixed<Value> | SegmentedClearable<Value>,
-): React.JSX.Element {
+export function Segmented<Value extends string>(props: SegmentedProps<Value>): React.JSX.Element {
   const { legend, options, value, disabled, anchor } = props;
   const tabStop = options.some((option) => option.value === value) ? value : options[0]?.value;
   const press = (pressed: Value) => {
     if (pressed !== value) props.onChange(pressed);
-    else if (props.clearable === true) props.onChange(undefined);
   };
   // An arrow chooses the next option along and takes the keyboard there, wrapping at either end.
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {

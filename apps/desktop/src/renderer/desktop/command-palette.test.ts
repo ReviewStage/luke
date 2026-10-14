@@ -283,11 +283,8 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
     }),
   );
   chooseFilter("Agents");
-  assert.deepEqual(rows(), [
-    "Inbox · Billing usage alerts",
-    "Invoice export · Billing usage alerts",
-  ]);
-  const row = document.querySelectorAll<HTMLElement>(".menu-item")[1];
+  assert.deepEqual(rows(), ["Invoice export · Billing usage alerts"]);
+  const row = document.querySelectorAll<HTMLElement>(".menu-item")[0];
   assert.ok(row, "the agent is listed");
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

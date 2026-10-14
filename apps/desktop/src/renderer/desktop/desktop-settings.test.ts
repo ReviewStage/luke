@@ -46,7 +46,7 @@ const HOMES = [
   { words: "Delete account", page: "Account" },
   { words: "Talk to Luke", page: "Voice" },
   { words: "Stop Luke", page: "Voice" },
-  { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
+  { words: "Notify me when a coding agent finishes", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },

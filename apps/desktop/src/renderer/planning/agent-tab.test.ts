@@ -136,27 +136,6 @@ const OPENING_CALLS: readonly {
       ref: { path: "src/invoice.ts", startLine: 12, endLine: 40 },
     },
   },
-  {
-    name: "a post to the inbox opens the Inbox",
-    tool: "post_to_inbox",
-    input: { title: "Which currency?", response: { type: "text" } },
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
-  },
-  {
-    name: "a close in the inbox opens the Inbox",
-    tool: "close_inbox_item",
-    input: { key: "currency", reason: "Settled in the plan" },
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
-  },
-  {
-    name: "a read of the inbox opens the Inbox",
-    tool: "read_inbox",
-    input: {},
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
-  },
 ];
 
 for (const call of OPENING_CALLS) {
@@ -228,6 +207,14 @@ const FOLDING_CALLS: readonly {
       "write_file",
       { filePath: "src/new.ts", content: "export {}" },
       { path: "src/new.ts" },
+    ),
+  },
+  {
+    name: "a post to the inbox, a tool since retired, which a transcript written before still holds",
+    part: toolPart(
+      "post_to_inbox",
+      { title: "Which currency?", response: { type: "text" } },
+      { items: [] },
     ),
   },
 ];

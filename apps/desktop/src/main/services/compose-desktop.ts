@@ -206,12 +206,9 @@ export function composeDesktop(
         }),
       );
       // The notices read the plans' names from the document and write the
-      // unseen agents and the waiting inbox items back into it; a click
-      // brings the window forward and asks the panel to open the plan on the
-      // agent's tab or its Inbox, and what the focused window should hear is
-      // handed to the panels' toast. Whose inbox is read follows the
-      // document's account, which the launch's bootstrap writes as well as
-      // every change after it.
+      // unseen agents back into it; a click brings the window forward and
+      // asks the panel to open the plan on the agent's tab, and what the
+      // focused window should hear is handed to the panels' toast.
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
@@ -239,20 +236,12 @@ export function composeDesktop(
         onPlanAgentsMoved: () => {
           void run(operator.host.planningRefresh());
         },
-        readAccountInbox: (after) => operator.host.codingAgentAccountInbox({ after }),
-        accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
-        onInboxChanged: (inbox) => state.update({ inbox }),
-        openInbox: (planId) => {
-          windows.panels.focusExpanded();
-          windows.showInbox(planId);
-        },
         report: config.report,
       }).pipe(
         Effect.provideService(
           AgentNoticeDoors,
           electronNoticeDoors({
             toPanels: windows.toastAgentEnd,
-            inboxToPanels: windows.toastInboxItem,
             onRefused: (refused) => {
               if (state.snapshot().notifications.refused !== refused) {
                 state.update({ notifications: { refused } });

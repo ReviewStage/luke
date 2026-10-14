@@ -106,12 +106,12 @@ export const APP_SETTING_SCHEMA = {
   agentNotifications: toggleSetting({
     field: "agentNotifications",
     id: APP_SETTING_ID.AGENT_NOTIFICATIONS,
-    label: "Notify me when a coding agent finishes or needs me",
+    label: "Notify me when a coding agent finishes",
     detail: "Sent only while Luke's window is in the background.",
     default: true,
     page: SETTINGS_PAGE.NOTIFICATIONS,
     order: 1,
-    // Nothing to run per write: main reads the setting as each end or inbox item is announced.
+    // Nothing to run per write: main reads the setting as each end is announced.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   voice: choiceSetting({

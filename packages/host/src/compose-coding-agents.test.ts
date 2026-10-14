@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
-import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -11,15 +10,6 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
-import {
-  INBOX_CURSOR_START,
-  INBOX_IMAGE_TYPE,
-  INBOX_REPLY,
-  INBOX_RESPONSE,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-  type InboxItem,
-} from "@sidecar/hosted/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
@@ -112,36 +102,6 @@ const KEPT: ProviderKeySummary = {
   addedAt: 1,
   status: PROVIDER_KEY_STATUS.VERIFIED,
   statusAt: 1,
-};
-
-const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
-
-const ITEM: InboxItem = {
-  id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
-  agentId: AGENT_ID,
-  key: "push-access",
-  revision: 2,
-  version: INBOX_WIRE_VERSION,
-  title: "Push to the release branch?",
-  blocks: [],
-  response: { type: INBOX_RESPONSE.APPROVAL },
-  needsReply: true,
-  status: INBOX_STATUS.OPEN,
-  postedAt: 1_800_000_000_000,
-  updatedAt: 1_800_000_060_000,
-};
-
-/** That item as what waits across the account carries it. */
-const WAITING: AccountInboxEntry = {
-  id: ITEM.id,
-  planId: PLAN_ID,
-  agentId: AGENT_ID,
-  agentTitle: null,
-  agentModel: AGENT.model,
-  title: ITEM.title,
-  revision: ITEM.revision,
-  postedAt: ITEM.postedAt,
-  updatedAt: ITEM.updatedAt,
 };
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -285,36 +245,6 @@ function fakeService() {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
         return { text: "Run the tests" };
       }),
-    inbox: (planId, after) =>
-      Effect.sync(() => {
-        asked.push(`inbox:${planId}:${after}`);
-        return { items: [ITEM], cursor: "7" };
-      }),
-    inboxAttachment: (itemId, attachmentId) =>
-      Effect.sync(() => {
-        asked.push(`attachment:${itemId}:${attachmentId}`);
-        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
-      }),
-    answerInbox: (itemId, request) =>
-      Effect.sync(() => {
-        asked.push(
-          `answer:${itemId}:${request.revision}:${request.reply}:${request.note ?? ""}:${request.clientKey}`,
-        );
-        return {
-          item: {
-            ...ITEM,
-            revision: 3,
-            status: INBOX_STATUS.ANSWERED,
-            answer: { reply: request.reply },
-          },
-          taken: true,
-        };
-      }),
-    accountInbox: (after) =>
-      Effect.sync(() => {
-        asked.push(`account-inbox:${after}`);
-        return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
-      }),
   };
   return { client, asked };
 }
@@ -435,44 +365,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID }),
       CHANGES,
     );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-        planId: PLAN_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "7" },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
-        itemId: ITEM.id,
-        attachmentId: ATTACHMENT_ID,
-      }),
-      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
-        itemId: ITEM.id,
-        revision: 2,
-        reply: INBOX_REPLY.DECLINED,
-        note: "Not before the freeze lifts.",
-        clientKey: "answer-1",
-      }),
-      {
-        item: {
-          ...ITEM,
-          revision: 3,
-          status: INBOX_STATUS.ANSWERED,
-          answer: { reply: INBOX_REPLY.DECLINED },
-        },
-        taken: true,
-      },
-    );
-
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
-      { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
-    );
-
     assert.deepEqual(asked, [
       "models",
       "default",
@@ -490,10 +382,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `archive:${AGENT_ID}:true`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
-      `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
-      `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
-      `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
-      `account-inbox:${INBOX_CURSOR_START}`,
     ]);
   }),
 );

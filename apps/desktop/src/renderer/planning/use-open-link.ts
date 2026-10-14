@@ -3,7 +3,7 @@ import { ACT_KIND, isGitHubAddress, isWebAddress } from "#shared/messages/acts";
 import { useAct } from "../act";
 
 /**
- * use-open-link.ts -- how a link in written words opens: a transcript's, the Call tab's, an agent tab's, or an Inbox item's.
+ * use-open-link.ts -- how a link in written words opens: a transcript's, the Call tab's, or an agent tab's.
  *
  * A page on GitHub, such as the pull request an agent opened, goes through
  * `github.open`, the act every GitHub press in the window goes through; any

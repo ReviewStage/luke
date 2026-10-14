@@ -110,7 +110,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
- * the board, an agent, code shown, the plan, or the Inbox, the one
+ * the board, an agent, code shown, or the plan, the one
  * button that opens that tab (`toolTarget`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest

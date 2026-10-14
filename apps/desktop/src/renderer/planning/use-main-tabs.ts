@@ -43,24 +43,6 @@ import {
  * no tab for: a plan opened on an agent shows its document while the list
  * is on its way, and stays on it where the read fails.
  *
- * The plan's Inbox tab, everything its agents need of the developer,
- * answered in place (`inbox-pane.tsx`), stands only once it has something
- * to show: it is closed on a plan until an item the developer has not seen
- * waits there (`onInboxRead`), and then opens as a tab the "+" opens does,
- * after every tab standing, chosen. An item has not been seen where it did
- * not wait at the plan's last read: one just posted, or one answered and
- * posted again, but not one its agent changed while it waited. It is a tab
- * like an agent's in every other way: it closes, and then stays closed on
- * that plan until such an item waits, and it is dragged among the others.
- * The "+" opens it again at any time, after every tab, and chooses it where
- * it stands open, moving it nowhere; an item arriving while it stands open
- * only counts on it. Each plan keeps whether its Inbox is open and the
- * items that waited at its last read, so a closed Inbox stays closed across
- * a launch. A plan with no agent has no Inbox, since only an agent posts,
- * unless main's read of what waits across the account says an item waits
- * on it, which an agent started on another Mac posts before this window
- * has read the plan's agents again.
- *
  * The tabs after the plan's are dragged or moved from the keyboard among
  * themselves, and the plan keeps the order from then on: an agent's tab
  * closed and opened again stands where it stood, and one never moved
@@ -71,25 +53,36 @@ import {
  * mount. The agents' tabs once stood in the side panel, whose record kept
  * them; a window with no record of its own reads theirs from there once,
  * the plan's tab viewed after them, so each plan opens on its document as
- * it did before. A fixture run neither reads nor writes them: its plans
+ * it did before. The Inbox's tab, which an earlier version kept among a
+ * plan's tabs, reads as never kept (`RETIRED_MAIN_TAB`). A fixture run
+ * neither reads nor writes them: its plans
  * have no agents, and a capture must not depend on how the last run left
  * the column. ⌘T's ask for the column's "+" is a moment's, kept nowhere.
  */
 
-/**
- * The column's own tabs, each one word beside the agents' and the draft's
- * objects: the plan's, and its Inbox, which stands while open on a plan
- * with an agent, since only an agent posts.
- */
+/** The column's own tab, one word beside the agents' and the draft's objects: the plan's. */
 export const MAIN_TAB = {
   PLAN: "plan",
+} as const;
+
+/** The plan's own tab. */
+type OwnMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
+
+/**
+ * The column's own tabs an earlier version had and this one does not, which
+ * what it kept may still name: the plan's Inbox. Note that a tab is retired
+ * here rather than deleted, because a kept state naming one would otherwise
+ * not read at all and lose every other choice it holds.
+ */
+const RETIRED_MAIN_TAB = {
   INBOX: "inbox",
 } as const;
 
-/** The plan's own tab, or its Inbox. */
-type OwnMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
+type RetiredMainTab = (typeof RETIRED_MAIN_TAB)[keyof typeof RETIRED_MAIN_TAB];
 
-/** A tab of the plan's column: the plan's own, its Inbox, one agent's, or the draft agent's. */
+const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_MAIN_TAB));
+
+/** A tab of the plan's column: the plan's own, one agent's, or the draft agent's. */
 export type MainTab = OwnMainTab | AgentStripTab | DraftStripTab;
 
 /** Where the preference is kept in the renderer's storage. */
@@ -119,22 +112,16 @@ const RECENT_KEPT = 20;
  */
 const PLANS_KEPT = 500;
 
-/** A tab as it is kept across a launch: the plan's, or an agent's; a draft's is kept nowhere. */
+/** A tab as it is kept across a launch: the plan's, an agent's, or one retired, which reads and is then let go; a draft's is kept nowhere. */
 const keptTabSchema = Schema.Union([
-  Schema.Literals(Object.values(MAIN_TAB)),
+  Schema.Literals([...Object.values(MAIN_TAB), ...Object.values(RETIRED_MAIN_TAB)]),
   Schema.Struct({ agent: Schema.String }),
 ]);
 
-/**
- * One plan's choices: the tabs viewed on it, the latest last, its order
- * since a tab was first moved on it, whether its Inbox is open, and the
- * items that waited in its inbox at its last read, by id.
- */
+/** One plan's choices: the tabs viewed on it, the latest last, and its order since a tab was first moved on it. */
 const planChoicesSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(keptTabSchema)),
   order: Schema.optional(Schema.Array(keptTabSchema)),
-  inboxOpen: Schema.optional(Schema.Boolean),
-  inboxSeen: Schema.optional(Schema.Array(Schema.String)),
 });
 
 /** The agents whose tabs were closed, every plan's, and each plan's choices, by plan id. */
@@ -149,8 +136,6 @@ type MainTabsState = typeof mainTabsSchema.Type;
 interface PlanChoices {
   readonly recent?: readonly MainTab[] | undefined;
   readonly order?: readonly MainTab[] | undefined;
-  readonly inboxOpen?: boolean | undefined;
-  readonly inboxSeen?: readonly string[] | undefined;
 }
 
 /** The state the hook holds: the kept one, with a draft's tab possibly among a plan's choices. */
@@ -190,12 +175,9 @@ const NO_CHOICES: PlanChoices = {};
 /** A plan no tab was moved on, or viewed. */
 const NO_TABS: readonly MainTab[] = [];
 
-/** An inbox read with nothing waiting, or never read. */
-const NO_ITEMS: readonly string[] = [];
-
 /** What the column draws and hands back. */
 export interface MainTabsControl {
-  /** The column's tabs in the strip's order: the plan's first, then the open agents', the draft's, and the Inbox where open, in the plan's order. */
+  /** The column's tabs in the strip's order: the plan's first, then the open agents' and the draft's, in the plan's order. */
   tabs: readonly MainTab[];
   /** The tab shown. */
   tab: MainTab;
@@ -207,10 +189,8 @@ export interface MainTabsControl {
   onChoose: (tab: MainTab) => void;
   /** Shows the tab on the plan given, as `onChoose` does on the open plan: what a pin, a notification, or the call card asks, the plan opened beside it. */
   onShow: (planId: string, tab: MainTab) => void;
-  /** Closes the tab, and only the view: an agent goes on as it was, and the Inbox keeps its items. The plan's tab never closes. */
+  /** Closes the tab, and only the view: an agent goes on as it was. The plan's tab never closes. */
   onClose: (tab: MainTab) => void;
-  /** Hears what a read of the plan's inbox found waiting, by id, opening and choosing its Inbox where an item did not wait at the last read. */
-  onInboxRead: (planId: string, waiting: readonly string[]) => void;
   /** Moves a tab other than the plan's to the place `to` among them, after the plan's, leaving the chosen one chosen. */
   onMove: (tab: MainTab, to: number) => void;
   /** Asks the column's "+" to open its menu, as ⌘T does. */
@@ -219,14 +199,11 @@ export interface MainTabsControl {
   onNewTabAnswered: () => void;
 }
 
-/** What the open plan holds for the tabs: its id, its agents, or nothing while unread, its draft's key, and whether an inbox item waits on it. */
+/** What the open plan holds for the tabs: its id, its agents, or nothing while unread, and its draft's key. */
 interface DrawnTabs {
   planId: string | undefined;
   agents: readonly string[] | undefined;
   draft: string | undefined;
-  waiting: boolean;
-  /** Whether the plan holds an agent, an archived one included, whose Inbox items still stand. */
-  holds: boolean;
 }
 
 /** The plan's choices. */
@@ -261,21 +238,13 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
   return agents?.filter((agent) => !held.closedAgents.includes(agent));
 }
 
-/**
- * The strip in its order: the plan's tab, then the open agents', the
- * draft's, and the Inbox where open on a plan with an agent, an archived
- * one included, in the plan's order.
- */
+/** The strip in its order: the plan's tab, then the open agents' and the draft's, in the plan's order. */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.planId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
-  const inbox = choices.inboxOpen === true && (drawn.holds || drawn.waiting);
   const order = choices.order ?? NO_TABS;
-  return [
-    MAIN_TAB.PLAN,
-    ...inPlanOrder([...agents, ...draft, ...(inbox ? [MAIN_TAB.INBOX] : [])], order, (tab) => tab),
-  ];
+  return [MAIN_TAB.PLAN, ...inPlanOrder([...agents, ...draft], order, (tab) => tab)];
 }
 
 /** Whether the tab stands in the plan's strip now. */
@@ -301,36 +270,8 @@ function withViewed(
   });
 }
 
-/**
- * The plan's order with its Inbox after every tab: the tabs the order held
- * but the Inbox, then those the strip draws that it did not, as they stand,
- * so every other tab stays where it stood. Note that on a plan whose agents
- * are unread the Inbox is only let out of the order, because no strip is
- * known to stand after, and a tab the order does not hold stands after
- * those it does.
- */
-function inboxLast(held: HeldState, drawn: DrawnTabs, was: readonly MainTab[]): readonly MainTab[] {
-  const others = was.filter((tab) => tab !== MAIN_TAB.INBOX);
-  if (drawn.agents === undefined) return others;
-  const unplaced = stripOf(held, drawn).filter(
-    (tab) =>
-      tab !== MAIN_TAB.PLAN && tab !== MAIN_TAB.INBOX && !was.some((other) => sameTab(other, tab)),
-  );
-  return [...others, ...unplaced, MAIN_TAB.INBOX];
-}
-
-/**
- * The state with the agent's tab, or the plan's Inbox, open, where it was
- * closed. The Inbox opens after every tab of the plan's strip, wherever it
- * stood before it closed.
- */
-function withOpened(held: HeldState, drawn: DrawnTabs, tab: MainTab): HeldState {
-  if (tab === MAIN_TAB.INBOX)
-    return withChoices(held, drawn.planId, (was) =>
-      was.inboxOpen === true
-        ? was
-        : { ...was, inboxOpen: true, order: inboxLast(held, drawn, was.order ?? NO_TABS) },
-    );
+/** The state with the agent's tab open, where it was closed. */
+function withOpened(held: HeldState, tab: MainTab): HeldState {
   if (!isAgentTab(tab) || !held.closedAgents.includes(tab.agent)) return held;
   return { ...held, closedAgents: held.closedAgents.filter((agent) => agent !== tab.agent) };
 }
@@ -344,12 +285,7 @@ function withOpened(held: HeldState, drawn: DrawnTabs, tab: MainTab): HeldState 
 function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
   const shown = shownIn(held, drawn);
   const viewed = sameTab(shown, tab) ? [tab] : [shown, tab];
-  return withViewed(withOpened(held, drawn, tab), drawn.planId, viewed);
-}
-
-/** What a plan other than the open one holds for the tabs, which is unread. */
-function unreadPlan(planId: string): DrawnTabs {
-  return { planId, agents: undefined, draft: undefined, waiting: false, holds: false };
+  return withViewed(withOpened(held, tab), drawn.planId, viewed);
 }
 
 /**
@@ -358,36 +294,14 @@ function unreadPlan(planId: string): DrawnTabs {
  */
 function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs): HeldState {
   if (on === drawn.planId) return withChosen(held, tab, drawn);
-  return withViewed(withOpened(held, unreadPlan(on), tab), on, [tab]);
-}
-
-/**
- * The state with `waiting`, the items waiting in the plan's inbox by id,
- * seen, and its Inbox opened and chosen where one did not wait at its last
- * read; an Inbox already open only sees them. Note that an item answered
- * leaves what is kept as it settles, so posted again it is new, and that a
- * plan that has read nothing has seen no item, so its first opens its Inbox.
- */
-function withInboxRead(
-  held: HeldState,
-  on: string,
-  waiting: readonly string[],
-  drawn: DrawnTabs,
-): HeldState {
-  const was = choicesOn(held, on);
-  const seen = was.inboxSeen ?? NO_ITEMS;
-  const fresh = waiting.some((item) => !seen.includes(item));
-  if (!fresh && waiting.length === seen.length) return held;
-  const read = withChoices(held, on, (choices) => ({ ...choices, inboxSeen: waiting }));
-  return fresh && was.inboxOpen !== true ? withShown(read, on, MAIN_TAB.INBOX, drawn) : read;
+  return withViewed(withOpened(held, tab), on, [tab]);
 }
 
 /**
  * The state with the tab closed, gone from those viewed on the plan, and
  * the tab viewed before it, or its neighbour, viewed in its place where it
  * was the one shown. Closing an agent's tab closes nothing of the agent's
- * own, closing a draft's leaves the draft its owner's to let go, and
- * closing the Inbox keeps what it has seen, so only a newer item opens it.
+ * own, and closing a draft's leaves the draft its owner's to let go.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
   if (tab === MAIN_TAB.PLAN) return held;
@@ -397,7 +311,6 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
   const forgotten = withChoices(closed, drawn.planId, (was) => ({
     ...was,
     recent: (was.recent ?? NO_TABS).filter((each) => !sameTab(each, tab)),
-    ...(tab === MAIN_TAB.INBOX ? { inboxOpen: false } : undefined),
   }));
   if (!sameTab(shownIn(held, drawn), tab)) return forgotten;
   const standing = stripOf(forgotten, drawn).filter((each) => !sameTab(each, tab));
@@ -430,9 +343,9 @@ function stored(held: HeldState): MainTabsState {
   return {
     closedAgents: held.closedAgents,
     plans: Object.fromEntries(
-      Object.entries(held.plans).map(([plan, { recent, order, inboxOpen, inboxSeen }]) => [
+      Object.entries(held.plans).map(([plan, { recent, order }]) => [
         plan,
-        { recent: kept(recent), order: kept(order), inboxOpen, inboxSeen },
+        { recent: kept(recent), order: kept(order) },
       ]),
     ),
   };
@@ -471,9 +384,26 @@ function fromSidePanel(record: typeof sidePanelAgentsSchema.Type): HeldState {
   return { closedAgents: record.closedAgents ?? [], plans: Object.fromEntries(plans) };
 }
 
+/** Whether a kept tab is of a kind this version still has: any but a retired one. */
+function current<T>(tab: T): tab is Exclude<T, RetiredMainTab> {
+  return !RETIRED_TABS.has(tab);
+}
+
+/** The kept preference without the tabs retired since it was kept. */
+function currentOf(state: MainTabsState): HeldState {
+  const plans = Object.entries(state.plans).map(([plan, { recent, order }]) => {
+    const choices: PlanChoices = {
+      ...(recent === undefined ? undefined : { recent: recent.filter(current) }),
+      ...(order === undefined ? undefined : { order: order.filter(current) }),
+    };
+    return [plan, choices] as const;
+  });
+  return { closedAgents: state.closedAgents, plans: Object.fromEntries(plans) };
+}
+
 /** The kept preference, or what the side panel's record kept of the agents' tabs where none is, or nothing. */
 function readStored(): HeldState {
-  return Option.getOrElse(decodeStored(storedText(STORAGE_KEY)), () =>
+  return Option.getOrElse(Option.map(decodeStored(storedText(STORAGE_KEY)), currentOf), () =>
     Option.match(decodeSidePanel(storedText(SIDE_PANEL_KEY)), {
       onNone: () => NOTHING_KEPT,
       onSome: fromSidePanel,
@@ -484,19 +414,14 @@ function readStored(): HeldState {
 /**
  * The column's tabs over the open plan: `planId`, none while no plan is
  * open, `agents` its agents by id in the order started, or nothing while
- * unread, `draft` its draft agent's key, if it holds one, `waiting`
- * whether an inbox item waits on it, and `held` every agent it holds, an
- * archived one among them, which its Inbox stands on too, the standing
- * ones where unsaid. A fixture run's column keeps nothing,
- * and starts from nothing.
+ * unread, and `draft` its draft agent's key, if it holds one. A fixture
+ * run's column keeps nothing, and starts from nothing.
  */
 export function useMainTabs(
   fixture: boolean,
   planId: string | undefined,
   agents: readonly string[] | undefined,
   draft: string | undefined,
-  waiting: boolean,
-  held: readonly string[] | undefined = agents,
 ): MainTabsControl {
   // Note that a fixture run's column is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -509,11 +434,7 @@ export function useMainTabs(
     (change: (held: HeldState) => HeldState) => (fixture ? setStaged : setKept)(change),
     [fixture],
   );
-  const holds = (held?.length ?? 0) > 0;
-  const drawn = useMemo(
-    () => ({ planId, agents, draft, waiting, holds }),
-    [planId, agents, draft, waiting, holds],
-  );
+  const drawn = useMemo(() => ({ planId, agents, draft }), [planId, agents, draft]);
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {
@@ -541,11 +462,6 @@ export function useMainTabs(
     (tab: MainTab) => update((held) => withoutTab(held, tab, drawn)),
     [update, drawn],
   );
-  const onInboxRead = useCallback(
-    (on: string, waiting: readonly string[]) =>
-      update((held) => withInboxRead(held, on, waiting, drawn)),
-    [update, drawn],
-  );
   const onMove = useCallback(
     (tab: MainTab, to: number) => update((held) => withTabAt(held, tab, to, drawn)),
     [update, drawn],
@@ -560,7 +476,6 @@ export function useMainTabs(
     onChoose,
     onShow,
     onClose,
-    onInboxRead,
     onMove,
     onNewTab,
     onNewTabAnswered,

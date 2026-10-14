@@ -359,7 +359,6 @@ export function TabStrip({
 export function Tab({
   icon,
   label,
-  detail,
   endMark,
   selected,
   unread = false,
@@ -376,8 +375,6 @@ export function Tab({
 }: {
   icon: React.JSX.Element;
   label: string;
-  /** Words after the label, dimmed: a count, as the Inbox tab's. */
-  detail?: string | undefined;
   /** A mark at the tab's end, in its ×'s place until the pointer comes over it: a failed agent's (`state-glyph.tsx`). */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
@@ -438,12 +435,6 @@ export function Tab({
       {glyph}
       <span ref={words} className="tab-label" data-overflow={String(clipped)}>
         {label}
-        {detail === undefined ? null : (
-          <>
-            {" "}
-            <span className="tab-detail">{detail}</span>
-          </>
-        )}
       </span>
       {endMark === undefined ? null : <span className="tab-end-mark">{endMark}</span>}
     </button>

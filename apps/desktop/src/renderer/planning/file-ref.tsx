@@ -10,7 +10,7 @@ import { FileTypeIcon } from "./file-type-icon";
  * file-ref.tsx -- a file named anywhere in the window: its look as a row wears it, the card its tab hangs, and its mark, path, and lines as the one button that hangs that card and opens its tab.
  *
  * A file of the plan's repository is named in many places beside its own
- * tab: a code card's head, an inbox item's code, the side panel's "+", the
+ * tab: a code card's head, the side panel's "+", the
  * plan's summary, ⌘K, and a `show_code` row in a transcript. Each wears
  * the file's type icon, as the file tree draws it (`file-type-icon.tsx`),
  * before its name, says its lines one way (`lineRangeText`), and hangs the

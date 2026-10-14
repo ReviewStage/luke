@@ -12,7 +12,6 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
-import { Tooltip } from "../tooltip";
 
 /**
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
@@ -272,8 +271,8 @@ export function PlanCard({
 
 /**
  * The plan's card as every place naming the plan hangs it, read from the
- * window's plans: its sidebar row, its tab in its own column, and the
- * Inbox's crumb. An agent's line opens the plan on that agent's tab.
+ * window's plans: its sidebar row and its tab in its own column. An
+ * agent's line opens the plan on that agent's tab.
  */
 export function planCardOf(
   plans: Pick<PlansControl, "agents" | "repositories" | "onShowAgent">,
@@ -289,36 +288,5 @@ export function planCardOf(
       onOpenGitHub={plans.repositories.openGitHub}
       onShowAgent={(agentId) => plans.onShowAgent(plan.id, agentId)}
     />
-  );
-}
-
-/**
- * A plan named in place: what it is drawn as, its document glyph and its
- * name as the place sets them, as one button that hangs the plan's card
- * while the pointer rests on it and opens the plan on a press, as
- * `AgentRef` names an agent. Note that the Inbox list's plan heading, whose
- * press folds it, and ⌘K's plan rows, whose card's buttons the modal
- * palette would leave unpressable, name the plan without one.
- */
-export function PlanRef({
-  plan,
-  card,
-  onOpen,
-  className,
-  children,
-}: {
-  plan: Pick<PlanSummary, "name">;
-  /** The plan's card (`planCardOf`). */
-  card: React.ReactNode;
-  onOpen: () => void;
-  className?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <Tooltip label={plan.name} card={card}>
-      <button type="button" className={className} data-plan-ref="" onClick={onOpen}>
-        {children}
-      </button>
-    </Tooltip>
   );
 }

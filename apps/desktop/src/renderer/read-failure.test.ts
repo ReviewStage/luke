@@ -6,7 +6,6 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
-import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -23,7 +22,6 @@ import {
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
-import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { PANEL_TAB } from "./panel-tabs";
 import { AgentChangesTab } from "./planning/agent-changes-tab";
@@ -32,16 +30,16 @@ import { WorkspacePage } from "./settings/workspace-page";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
- * sidebar's plans, the Inbox's list, a side panel tab, and a Settings
- * page's card each draw one alert in the one fault red, a sentence of the
- * shape "The inbox could not be read.", and one Retry, whose press reads
+ * sidebar's plans, a side panel tab, and a Settings page's card each draw
+ * one alert in the one fault red, a sentence of the shape "Your plans could
+ * not be read.", and one Retry, whose press reads
  * again. Synthetic plans and keys.
  */
 
 const ignore = () => undefined;
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-const PLAN: PlanSummary = {
+const _PLAN: PlanSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
@@ -60,10 +58,6 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_LIST:
       return done({ agents: [] });
-    case ACT_KIND.CODING_AGENTS_INBOX:
-      // A read past the cursor is held open while nothing changes, as the service holds it.
-      if (request.payload.after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-      return done(answering ? { items: [], cursor: "1" } : UNANSWERED);
     case ACT_KIND.PROVIDER_KEYS_READ:
       return done(answering ? { keys: [] } : UNANSWERED);
     default:
@@ -177,30 +171,6 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
   assertSaidAlike(failure, "Your plans could not be read.");
   failure.retry();
   assert.equal(retried, 1);
-});
-
-test("the Inbox's list says a plan it could not read as the sidebar does, and Retry lists what the plan holds", async () => {
-  const page = await mount(
-    createElement(DesktopInbox, {
-      plans: plansControl({
-        plans: [PLAN],
-        inboxPlans: [{ planId: PLAN.id, items: 1, updatedAt: 2 }],
-        inboxView: {
-          open: true,
-          chosen: undefined,
-          onOpen: ignore,
-          onClose: ignore,
-          onChoose: ignore,
-        },
-      }),
-    }),
-  );
-  const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
-  answering = true;
-  failure.retry();
-  await settle();
-  assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
 });
 
 test("a side panel tab whose read failed says so alike, centred where its files would stand, and Retry reads them again", async () => {

@@ -56,8 +56,8 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * tree is open or closed for every File tab alike, as the
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A plan with no repository draws the tab
- * alone, its path plain in the bar. A file opened at a commit, as an inbox
- * item's code or a snippet Luke read from his checkout opens it, is read at
+ * alone, its path plain in the bar. A file opened at a commit, as a snippet
+ * Luke read from his checkout opens it, is read at
  * that commit, its GitHub page and its copy too, the commit named quietly
  * beside the path, and drawn afresh when the same file is opened at another.
  *

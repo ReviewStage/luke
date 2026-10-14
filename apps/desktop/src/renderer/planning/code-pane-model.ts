@@ -42,8 +42,8 @@ export interface NamedLines {
 
 /**
  * The lines a reference points at, as every place naming them says them, a
- * code card's head, a File tab's note, a `show_code` row, and an inbox
- * item's code alike: "Lines 40–58", "Line 7", or nothing for a whole file.
+ * code card's head, a File tab's note, and a `show_code` row alike:
+ * "Lines 40–58", "Line 7", or nothing for a whole file.
  */
 export function lineRangeText(ref: Omit<NamedLines, "path">): string | undefined {
   if (ref.startLine === undefined || ref.endLine === undefined) return undefined;

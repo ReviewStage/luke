@@ -144,7 +144,7 @@ export function CodeLineRows({
 const REVEAL_TOP_PX = 44;
 
 /** A card's lines. */
-export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   return (
     <div className="code-lines">
       <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />
@@ -178,7 +178,7 @@ function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
  * names them (`file-ref.tsx`), hanging the file's card and opening it in its
  * tab where the card's file can be; their copy, where the card holds them;
  * and the file's opening again as a button of its own. The Code tab's cards
- * and an inbox item's code are both headed by it.
+ * are headed by it.
  */
 export function CodeCardHeader({
   codeRef,

@@ -134,15 +134,6 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
-    codingAgentInboxParamsSchema: codingAgentView.codingAgentInboxParamsSchema,
-    codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
-    codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
-    codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
-    codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
-    codingAgentAccountInboxAnswerViewSchema:
-      codingAgentView.codingAgentAccountInboxAnswerViewSchema,
-    codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
-    codingAgentInboxAttachmentViewSchema: codingAgentView.codingAgentInboxAttachmentViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "dictation-wire": {
     dictationRequestSchema: dictationWire.dictationRequestSchema,

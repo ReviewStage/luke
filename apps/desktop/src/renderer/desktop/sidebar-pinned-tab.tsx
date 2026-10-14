@@ -9,7 +9,6 @@ import { TAB_KIND, type TabSubject, tabLook } from "../planning/tab-look";
 import { isAgentTab, isChangesTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
 import type { PullRequestReader } from "../planning/use-agent-pull-request";
-import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { PinnedTab } from "../planning/use-side-panel";
 import { Tooltip } from "../tooltip";
@@ -77,7 +76,6 @@ function pinSubject(pin: PinnedTab, agent: PlanAgentLine | undefined): TabSubjec
     const pinned = pin.model === undefined ? undefined : { model: pin.model };
     return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
   }
-  if (tab === MAIN_TAB.INBOX) return { kind: TAB_KIND.INBOX };
   if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES, agentName: undefined };
   return isFileTab(tab) ? { kind: TAB_KIND.FILE, path: tab.file } : { kind: TAB_KIND.PANEL, tab };
 }

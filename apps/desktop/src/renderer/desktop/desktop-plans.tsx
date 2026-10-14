@@ -1,23 +1,10 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import { MENTION_KIND, type Mention } from "@sidecar/hosted/mention-link";
-import { InboxIcon } from "lucide-react";
-import { Fragment, useEffect, useId, useMemo, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
+import { Fragment, useEffect, useId, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
-import { InboxList } from "../planning/inbox-list";
-import {
-  firstChoice,
-  INBOX_GROUPING,
-  inboxList,
-  listedItems,
-  NEEDS_YOU,
-} from "../planning/inbox-model";
-import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks, type SectionReveal } from "../planning/plan-body";
 import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
@@ -27,8 +14,6 @@ import { SkillFiles } from "../planning/skill-chip";
 import { sameTab } from "../planning/tab-strip-model";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
-import { useOpenLink } from "../planning/use-open-link";
-import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
@@ -132,84 +117,6 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
 }
 
 /**
- * The plan's own Inbox tab: its items newest first in the window's Inbox's
- * list, with neither head nor groups since they are one plan's, and the
- * chosen item read beside them in the same pane, on the plan's own held
- * read. With nothing chosen, the first item that waits stands chosen, else
- * the newest; a plan whose read holds nothing says so under the Inbox's
- * glyph. The pane's plan crumb chooses the plan's tab and its agent crumb
- * the agent's.
- */
-function PlanInboxTab({
-  plans,
-  plan,
-  inbox,
-  onOpenPlan,
-  onOpenAgent,
-  openLink,
-  code,
-}: {
-  plans: PlansControl;
-  plan: PlansControl["plans"][number];
-  inbox: PlanInboxControl;
-  onOpenPlan: () => void;
-  onOpenAgent: (agentId: string) => void;
-  openLink: (url: string) => void;
-  code: InboxCodeDoors;
-}): React.JSX.Element {
-  const now = useMinute();
-  const [asked, setAsked] = useState<string | undefined>(undefined);
-  const items = [...inbox.board.open, ...inbox.board.settled];
-  const list = inboxList([{ plan, items }], {
-    grouping: INBOX_GROUPING.NEWEST,
-    waitingOnly: false,
-    chosen: asked,
-  });
-  const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
-  return (
-    <section className="inbox-view" role="tabpanel" aria-label="Inbox">
-      <InboxList
-        view={list}
-        chosen={chosen?.item.id}
-        head={undefined}
-        models={plans.agents.models}
-        note={
-          inbox.reading ? (
-            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
-          ) : inbox.failed && items.length === 0 ? (
-            <div className="sidebar-note">
-              <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
-            </div>
-          ) : null
-        }
-        onChoose={({ item }) => setAsked(item.id)}
-      />
-      {chosen === undefined ? (
-        <section className="inbox-view-items" aria-label="Inbox">
-          {inbox.read && items.length === 0 ? (
-            <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
-          ) : null}
-        </section>
-      ) : (
-        <InboxPane
-          plan={plan}
-          item={chosen.item}
-          control={inbox}
-          agents={plans.agents}
-          doors={{
-            onOpenPlan,
-            planCard: planCardOf(plans, plan, now),
-            onOpenAgent,
-            openLink,
-            code,
-          }}
-        />
-      )}
-    </section>
-  );
-}
-
-/**
  * The open plan's region: its column, or the state standing in its place.
  * While the plan is read, its strip holds one tab-shaped skeleton where the
  * plan's tab will stand, so the row does not move when the plan is drawn,
@@ -231,15 +138,6 @@ function PlanDocument({
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
-  const { act } = useAct();
-  const openLink = useOpenLink();
-  const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
-  const inbox = usePlanInbox({
-    planId: inboxPlanId,
-    shown: plans.shown,
-    waiting: plans.inbox.some((plan) => plan.planId === inboxPlanId),
-    agents: plans.agents,
-  });
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
   const [area, setArea] = useState<HTMLDivElement | null>(null);
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
@@ -264,15 +162,6 @@ function PlanDocument({
     };
   }, [area]);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
-  // What waits in the plan's inbox opens its Inbox tab where an item did
-  // not wait at the last read (`use-main-tabs.ts`). Note that only a read
-  // that answered counts, because a plan just opened holds nothing yet, and
-  // nothing would forget what waited there.
-  const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
-  const { onInboxRead } = plans.mainTabs;
-  useEffect(() => {
-    if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
-  }, [planId, inbox.read, waiting, onInboxRead]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
@@ -386,16 +275,14 @@ function PlanDocument({
     setFocus(COLUMN.MAIN);
   };
   // A call's row in a transcript opens what the call is about where the
-  // window already draws it: the plan, an agent, or the Inbox in this
-  // column, the rest in the side panel.
+  // window already draws it: the plan or an agent in this column, the rest
+  // in the side panel.
   const openTarget = (target: ToolTarget) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
         return openColumnTab({ agent: target.agent });
       case TOOL_TARGET.PLAN:
         return openColumnTab(MAIN_TAB.PLAN);
-      case TOOL_TARGET.INBOX:
-        return openColumnTab(MAIN_TAB.INBOX);
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -442,7 +329,6 @@ function PlanDocument({
               rename={archived ? undefined : rename}
               keys={plans.shown && !sideFocused}
               shown={plans.shown}
-              inbox={inbox.board.open.length}
             />
           }
         >
@@ -514,22 +400,7 @@ function PlanDocument({
                 sectionLinks={sectionLinksOf(plan.id)}
               />
             </section>
-            {tab === MAIN_TAB.INBOX ? (
-              <PlanInboxTab
-                plans={plans}
-                plan={listed}
-                inbox={inbox}
-                onOpenPlan={() => mainTabs.onChoose(MAIN_TAB.PLAN)}
-                onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
-                openLink={openLink}
-                code={{
-                  repository: plan.repository,
-                  readFile: (window) => act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
-                  onOpenFile: sidePanel.onOpenFile,
-                }}
-              />
-            ) : null}
-            {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
+            {tab === MAIN_TAB.PLAN ? null : (
               <section
                 className="desktop-agent"
                 role="tabpanel"
@@ -553,7 +424,6 @@ function PlanDocument({
             plans={plans}
             layout={summaryLayout}
             cardId={summaryCard}
-            inbox={inbox.board}
             held={views.held}
             repository={plan.repository}
           />

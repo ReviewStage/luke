@@ -37,8 +37,9 @@ import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-r
  * same way from the part S1's `delegate` tool stores: the task, the pair
  * the worker runs on, and its answer once it has one. A to-do write's list
  * is read through the wire's own schema, since its input is the list the
- * row draws item by item, and an item posted to the developer's inbox
- * through it too, its row naming the item the Inbox tab draws. A call
+ * row draws item by item, and an item a coding agent posted to the
+ * developer's inbox, a tool since retired that a transcript written before
+ * may still hold, through it too, its row naming the item. A call
  * about something the window opens elsewhere, a page, the board, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
  * Nothing here draws.
@@ -301,11 +302,12 @@ function postLines(post: InboxPost): string {
 }
 
 /**
- * An inbox call's row: a post names its item's title and lists what it
- * asks, a close names the item's key and says why, and a read names
- * nothing. An answer that did what was asked is the agent's whole inbox,
- * which the Inbox tab draws as it stands, so none is shown here; one that
- * did nothing shows why, so a refused post never reads as posted.
+ * An inbox call's row, from a transcript written while coding agents still
+ * had an inbox: a post names its item's title and lists what it asks, a
+ * close names the item's key and says why, and a read names nothing. An
+ * answer that did what was asked is the agent's whole inbox as it then
+ * stood, so none is shown here; one that did nothing shows why, so a
+ * refused post never reads as posted.
  */
 function inboxToolView(
   tool: string,
@@ -341,7 +343,7 @@ function inboxToolView(
 /** The status an inbox call answers with when it did nothing, by the word its answer spells. */
 const INBOX_CALL_REJECTED = "rejected";
 
-/** Why an inbox call did nothing, as the row's answer shows it; nothing where it did what it was asked, whose answer is the inbox the Inbox tab draws. */
+/** Why an inbox call did nothing, as the row's answer shows it; nothing where it did what it was asked. */
 function inboxRefusal(output: WireValue | undefined): ToolBlock | undefined {
   if (stringAt(output, "status") !== INBOX_CALL_REJECTED) return undefined;
   return textBlock(stringAt(output, "reason") ?? "");
@@ -592,8 +594,6 @@ export const TOOL_TARGET = {
   PLAN: "plan",
   /** The File tab of a file Luke showed, its lines lit as the call showed them. */
   SHOWN_CODE: "shown-code",
-  /** The plan's Inbox tab. */
-  INBOX: "inbox",
 } as const;
 
 export type ToolTarget =
@@ -601,8 +601,7 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
   | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
-  | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
-  | { readonly kind: typeof TOOL_TARGET.INBOX };
+  | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef };
 
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
@@ -611,7 +610,6 @@ export const TARGET_HINT = {
   [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
-  [TOOL_TARGET.INBOX]: "Open the Inbox",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
 /** A call as its target is read from it: the tool, the call's id, and its input and answer. */
@@ -624,7 +622,6 @@ interface TargetedCall {
 
 const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const PLAN_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
-const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
@@ -664,8 +661,8 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * opens nothing, and its row folds its input and answer open in place. A
  * worker's own delegation and a loaded skill open their tabs through their
  * own rows (`DelegationRow`, `LoadedSkillView`), and a command, a search, or
- * a file's read, write, or patch, or a web read is read in its row's body,
- * so none is listed. Note that a coding agent's file calls stay in their
+ * a file's read, write, or patch, a web read, or a retired inbox call is
+ * read in its row's body, so none is listed. Note that a coding agent's file calls stay in their
  * bodies, because a File tab and the Changes tab read the repository and
  * the pull request on GitHub rather than the agent's checkout, so what the
  * agent read or wrote and has not pushed would open on nothing.
@@ -682,9 +679,6 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
-  [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
-  [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
-  [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
 ]);
 
 /**

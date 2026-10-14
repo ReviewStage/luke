@@ -58,7 +58,6 @@ export function codingAgentsControl(
     archived: [],
     agentIds: [],
     // A plan with no archived agent holds exactly the agents given.
-    heldIds: overrides.agentIds ?? [],
     keywords: [],
     readSkills: undefined,
     draft: undefined,
@@ -96,9 +95,6 @@ export function codingAgentsControl(
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
   };
 }
@@ -145,7 +141,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
       onShow: ignore,
       onClose: ignore,
-      onInboxRead: ignore,
       onMove: ignore,
       onNewTab: ignore,
       onNewTabAnswered: ignore,
@@ -201,7 +196,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onShowAgent: ignore,
     onShowSource: ignore,
     onShowPlan: ignore,
-    onShowInbox: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
@@ -215,17 +209,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       },
       question: { title: "", body: "", verb: "", running: "" },
     },
-    inbox: [],
-    inboxShown: null,
-    inboxPlans: [],
-    inboxView: {
-      open: false,
-      chosen: undefined,
-      onOpen: ignore,
-      onClose: ignore,
-      onChoose: ignore,
-    },
-    onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,
     chosenPin: undefined,

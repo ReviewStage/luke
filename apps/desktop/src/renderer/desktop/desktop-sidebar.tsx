@@ -13,14 +13,13 @@ import {
   SearchIcon,
   UnpinIcon,
 } from "@sidecar/panel";
-import { HouseIcon, InboxIcon } from "lucide-react";
+import { HouseIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import {
   PLANS_PAGE,
@@ -463,13 +462,8 @@ function ListSkeleton(): React.JSX.Element {
   );
 }
 
-/** How many items wait on the developer across every plan: the sum of the Inbox's row counts. */
-function waitingItems(plans: PlansControl): number {
-  return plans.inbox.reduce((sum, plan) => sum + plan.items.length, 0);
-}
-
 /**
- * The home page's row, between Search and the Inbox and drawn as they are:
+ * The home page's row, after Search and drawn as it is:
  * the house, its name, and its chord at its end while the row is hovered or
  * reached from the keyboard. A press goes to the home page from wherever the
  * window stands, and the row is the place shown while the home page is.
@@ -500,59 +494,12 @@ function SidebarHomeRow({
 }
 
 /**
- * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many items wait on the developer across every
- * plan at its end, the sum of the counts the Inbox's rows show, muted in
- * even figures as a group's count is, and nothing at none. Its chord takes the count's place while the row is hovered or
- * reached from the keyboard, as New plan's and Search's show theirs. A press
- * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
- * shown while it stands.
- */
-function SidebarInboxRow({
-  waiting,
-  current,
-  disabled,
-  onOpen,
-}: {
-  waiting: number;
-  current: boolean;
-  disabled: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-inbox"
-      aria-current={current ? "page" : undefined}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
-      disabled={disabled}
-      onClick={onOpen}
-    >
-      <InboxIcon />
-      Inbox
-      {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
-          {waiting}
-          <span className="visually-hidden">
-            {" "}
-            {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-          </span>
-        </span>
-      )}
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} className="row-shortcut" />
-    </button>
-  );
-}
-
-/**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan of the workspace chosen, headed by
  * the workspace's switcher while an account is signed in
  * (`workspace-switcher.tsx`), and the account's
- * row, whose menu and gear lead to Settings and the rest. Home's row and
- * then the Inbox's follow Search above the rule: Home's goes to the home
- * page, and the Inbox's counts what waits on the developer and opens the
- * window's Inbox. The pinned plans, and the side panel tabs
+ * row, whose menu and gear lead to Settings and the rest. Home's row
+ * follows Search above the rule and goes to the home page. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -594,8 +541,6 @@ export function DesktopSidebar({
   call: CallCardInput | undefined;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
-  // The window's Inbox stands in the plan's place, so while it does no plan is the place shown.
-  const inInbox = onPlans && plans.inboxView.open;
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -610,17 +555,13 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onOpenPinnedTab(pin);
   };
-  const openInbox = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
-    plans.inboxView.onOpen();
-  };
   const goHome = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onGoHome();
   };
-  // The home page is the place shown while no plan is open, the Inbox is not
-  // standing in its place, and no launch is still reopening a plan.
-  const atHome = onPlans && !inInbox && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  // The home page is the place shown while no plan is open and no launch is
+  // still reopening a plan.
+  const atHome = onPlans && plans.page === PLANS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
@@ -632,7 +573,7 @@ export function DesktopSidebar({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) => onPlans && !inInbox && planId === plans.activePlanId;
+  const current = (planId: string) => onPlans && planId === plans.activePlanId;
   // The list is the chosen workspace's; the unread marks above read every plan.
   const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
   const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
@@ -659,7 +600,7 @@ export function DesktopSidebar({
     inSight: !sidebar.collapsed,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
-  // an agent's or the Inbox in the plan's own column, any other in the side panel. The
+  // an agent's in the plan's own column, any other in the side panel. The
   // pin marked stands too, so a fold never hides the row the sidebar marks.
   const pinnedShown = ({ plan, pin }: PinnedRow) =>
     (pin !== undefined && pin === pinMarked) ||
@@ -734,12 +675,6 @@ export function DesktopSidebar({
         />
       </button>
       <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={goHome} />
-      <SidebarInboxRow
-        waiting={plans.signedIn ? waitingItems(plans) : 0}
-        current={inInbox}
-        disabled={!plans.signedIn}
-        onOpen={openInbox}
-      />
       <hr className="sidebar-rule" />
       {/* The workspace the list is, while an account is signed in; it
           stands over the scroller, so it never scrolls away. */}

@@ -1,7 +1,7 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelProvider } from "@sidecar/hosted/models-wire";
 import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
-import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
+import { AppWindowIcon, BotIcon, FileDiffIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
@@ -27,7 +27,6 @@ export const TAB_KIND = {
   /** One of the side panel's fixed kinds: Board, Code, or Call. */
   PANEL: "panel",
   PLAN: "plan",
-  INBOX: "inbox",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
   AGENT: "agent",
@@ -47,7 +46,6 @@ interface AgentStanding {
 export type TabSubject =
   | { readonly kind: typeof TAB_KIND.PANEL; readonly tab: FixedSidePanelTab }
   | { readonly kind: typeof TAB_KIND.PLAN; readonly name: string }
-  | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.DRAFT }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
@@ -135,8 +133,6 @@ export function tabLook(subject: TabSubject): KindLook {
     }
     case TAB_KIND.PLAN:
       return { icon: <DocumentIcon />, label: subject.name };
-    case TAB_KIND.INBOX:
-      return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
     case TAB_KIND.DRAFT:
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
     case TAB_KIND.AGENT:

@@ -96,12 +96,10 @@ afterEach(() => {
 });
 
 /**
- * The window's shell on the home page with the sidebar folded, the Inbox
- * open over it or not, New plan opening its dialog and Cancel putting it
- * away as the tab does.
+ * The window's shell on the home page with the sidebar folded, New plan
+ * opening its dialog and Cancel putting it away as the tab does.
  */
 function mount(
-  inboxOpen: boolean,
   restoring = false,
   overrides: Partial<PlansControl> = {},
   tab: PanelTab = PANEL_TAB.PLANS,
@@ -125,13 +123,6 @@ function mount(
       plans: plansControl({
         page: PLANS_PAGE.HOME,
         restoring,
-        inboxView: {
-          open: inboxOpen,
-          chosen: undefined,
-          onOpen: ignore,
-          onClose: ignore,
-          onChoose: ignore,
-        },
         onNewPlan: () => setAsked(true),
         newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
         ...overrides,
@@ -165,15 +156,12 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
-  assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New plan"]);
-  act(() => root?.unmount());
-  root = undefined;
-  assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New plan"]);
+test("with the sidebar folded, New plan stands beside its toggle over the home page", () => {
+  assert.deepEqual(titleBarButtons(mount()), ["Show sidebar", "New plan"]);
 });
 
 test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
-  const page = mount(false);
+  const page = mount();
   const home = page.querySelector('section[aria-label="Home"]');
   assert.ok(home, "the home page stands");
   const newPlan = [...home.querySelectorAll("button")].find((button) =>
@@ -191,7 +179,7 @@ test("the home page welcomes an account with no plan, and its New plan raises th
 });
 
 test("while a launch reopens the plan last open, the column draws no home page to flash before it", () => {
-  const page = mount(false, true);
+  const page = mount(true);
   assert.equal(page.querySelector('section[aria-label="Home"]'), null);
 });
 
@@ -202,23 +190,21 @@ function homeRow(page: HTMLElement): HTMLButtonElement {
   return row;
 }
 
-test("the sidebar's Home row is the place shown on the home page, and neither over the Inbox nor while a launch reopens a plan", () => {
-  assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
+test("the sidebar's Home row is the place shown on the home page, and not while a launch reopens a plan", () => {
+  assert.equal(homeRow(mount()).getAttribute("aria-current"), "page");
   act(() => root?.unmount());
   assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
-  act(() => root?.unmount());
-  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
 });
 
 test("Home, pressed or by its chord from Settings, brings the Plans tab forward on the home page", () => {
   let home = 0;
   const tabs: PanelTab[] = [];
-  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  mount(false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   act(() => runAppCommand(APP_COMMAND.HOME));
   assert.deepEqual([home, tabs], [1, [PANEL_TAB.PLANS]]);
   act(() => root?.unmount());
 
-  const plans = mount(false, false, { onGoHome: () => (home += 1) });
+  const plans = mount(false, { onGoHome: () => (home += 1) });
   act(() => homeRow(plans).click());
   assert.equal(home, 2);
 });

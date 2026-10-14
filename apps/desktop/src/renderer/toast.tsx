@@ -4,9 +4,8 @@
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
  * that closed with the send, a plan archived from a menu, a change refused
- * where nothing beside it is left to say so, a coding agent's turn that
- * ended while the developer was looking elsewhere in the window, or an
- * inbox item an agent posted while they were. Each is a
+ * where nothing beside it is left to say so, or a coding agent's turn that
+ * ended while the developer was looking elsewhere in the window. Each is a
  * card of its words, an optional second line under them, each cut at two
  * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the
  * bottom; a fourth pushes the oldest out, unless it waits, as news that
@@ -29,7 +28,7 @@
  * What each says reaches assistive tech through two regions mounted with
  * the window rather than with the toast, because a live region drawn
  * already holding its words is one a screen reader may never read: a polite
- * one for what was done or is asked, and an alert for what was refused. The words are
+ * one for what was done, and an alert for what was refused. The words are
  * text like any other, so the session recording masks them with the rest.
  */
 
@@ -37,20 +36,19 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, CircleCheckIcon, XIcon } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { rendererRuntime } from "./renderer-runtime";
 
-/** What a toast reports: the act done, the act refused, or something asked of the developer. */
+/** What a toast reports: the act done, or the act refused. */
 export const TOAST_TONE = {
   DONE: "done",
   FAILED: "failed",
-  ASK: "ask",
 } as const;
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
-const POLITE_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.DONE, TOAST_TONE.ASK]);
+const POLITE_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.DONE]);
 
 /** The tone said in the alert region: a refusal. */
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.FAILED]);
@@ -368,15 +366,13 @@ function useStackGlide(): React.RefObject<HTMLOListElement | null> {
   return list;
 }
 
-/** The glyph a toast leads with: a check for what was done, an alert for what was refused, and the Inbox's tray for an ask. */
+/** The glyph a toast leads with: a check for what was done, and an alert for what was refused. */
 function ToneGlyph({ tone }: { tone: ToastTone }): React.JSX.Element {
   switch (tone) {
     case TOAST_TONE.DONE:
       return <CircleCheckIcon aria-hidden="true" />;
     case TOAST_TONE.FAILED:
       return <CircleAlertIcon aria-hidden="true" />;
-    case TOAST_TONE.ASK:
-      return <InboxIcon aria-hidden="true" />;
   }
 }
 

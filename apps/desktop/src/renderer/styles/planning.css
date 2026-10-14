@@ -1137,8 +1137,8 @@ button.file-ref:hover .file-ref-path {
 
 /* Lines wrap rather than scroll sideways, so no card takes a swipe from the
    feed. Note that they opt back into selection, because the window selects
-   nothing by default (`base.css`): a File tab's, a card's, and an inbox
-   item's code is read to be copied, the gutter's numbers left out of it. */
+   nothing by default (`base.css`): a File tab's and a card's code is read
+   to be copied, the gutter's numbers left out of it. */
 .code-lines {
   padding: var(--space-6) 0;
   color: var(--code-text);
@@ -1992,29 +1992,6 @@ button.attached-file-face:hover img {
   text-underline-offset: 2px;
 }
 
-/* An agent named in place (`agent-ref.tsx`): its mark and name as one quiet
-   button in the words around it, its name underlined under the pointer as a
-   link's is, and its tab's card hung while the pointer rests on it. */
-.agent-ref {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: var(--glyph-gap);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  vertical-align: bottom;
-}
-
-button.agent-ref:hover .agent-ref-name {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 /* The chips along the box's foot: the model chip, the MCP button, and the
    context ring, each the box its popover hangs from (`anchored-popover.tsx`),
    above itself since the box stands at the panel's foot, and before them what
@@ -2544,95 +2521,4 @@ button.subagent-line:hover {
 .subagent-job {
   overflow: hidden;
   white-space: nowrap;
-}
-
-/* Inbox ----------------------------------------------------------------------- */
-
-/* A choice's option on the Inbox (`inbox-pane.tsx`): a row the width of
-   its card, its label over its trade-off, picked the way Settings' segments
-   are (`.segment`), the fill of a chosen segment once pressed, ringed
-   so it reads apart from the hover that shares the fill. The
-   one control of the tab with no kin elsewhere, since no other pick-one
-   carries a line of detail. */
-.inbox-option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-6) var(--space-12);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-  color: var(--text-primary);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.inbox-option:hover:not(:disabled) {
-  background: var(--raised-strong);
-}
-
-.inbox-option[aria-pressed="true"],
-.inbox-option[data-picked="true"] {
-  background: var(--raised-strong);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
-}
-
-/* A settled item keeps every option it offered: the pick wears the
-   pressed look, and the rest step back to an outline in muted words. */
-.inbox-option[data-picked="false"] {
-  background: none;
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  color: var(--text-secondary);
-}
-
-.inbox-picked {
-  margin-left: var(--space-8);
-  color: var(--text-secondary);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.inbox-picked svg {
-  width: 13px;
-  height: 13px;
-  margin-right: var(--space-2);
-  vertical-align: -2px;
-}
-
-.inbox-option:disabled {
-  opacity: 0.4;
-}
-
-/* An image block on the Inbox (`inbox-pane.tsx`): the picture the
-   agent took, at the card's own reading width and no wider than itself, a
-   press on it opening the attached-file viewer. The spinner's room stands
-   in for it while its bytes are read, so the card does not jump. */
-.inbox-image {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
-  cursor: zoom-in;
-  overflow: clip;
-}
-
-.inbox-image img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
-/* A form's text field takes Settings' well, but in the card's body type:
-   Settings' tracking is for a key's characters, not an answer's words. */
-.inbox-field-input {
-  font-size: 13px;
-  letter-spacing: 0;
-}
-
-.inbox-image-pending {
-  display: flex;
-  align-items: center;
-  min-height: var(--space-24);
 }

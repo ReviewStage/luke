@@ -142,8 +142,6 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
 export interface TabLook {
   icon: React.JSX.Element;
   label: string;
-  /** Words after the label, dimmed (`Tab`'s). */
-  detail?: string | undefined;
   /** A mark at the tab's end, in its ×'s place: a failed agent's (`Tab`'s). */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;

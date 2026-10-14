@@ -24,7 +24,6 @@ import {
   TAB_WORDS,
   viewedLast,
 } from "./tab-strip-model";
-import { MAIN_TAB } from "./use-main-tabs";
 
 /**
  * use-side-panel.ts -- the open plan's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
@@ -102,7 +101,7 @@ import { MAIN_TAB } from "./use-main-tabs";
  * leaving the rest as they stood.
  *
  * A fixed tab, a file's, or a Changes tab may be pinned to the sidebar, and so may a coding
- * agent's or the Inbox from the plan's column, where it stands under Pinned beside the
+ * agent's from the plan's column, where it stands under Pinned beside the
  * pinned plans, newest pinned first, and opens its plan on that tab from
  * any plan. The pins are kept here, with the rest of the window's tab
  * preferences. The strip draws a pinned tab as it draws any other: it
@@ -143,8 +142,9 @@ export const SIDE_PANEL_TAB = {
 /**
  * The kinds an earlier version had and this one does not, which what it kept
  * may still name: History, whose versions now take the whole window
- * (`desktop-version-history.tsx`), and Transcript and Work, which the Call
- * tab drew together (`plan-call.tsx`). Note that a kind is retired here rather
+ * (`desktop-version-history.tsx`), Transcript and Work, which the Call
+ * tab drew together (`plan-call.tsx`), and the plan's Inbox, which a pin
+ * named from the plan's column. Note that a kind is retired here rather
  * than deleted, because a kept state naming one would otherwise not read at
  * all and lose every other choice it holds.
  */
@@ -152,6 +152,7 @@ const RETIRED_SIDE_PANEL_TAB = {
   HISTORY: "history",
   TRANSCRIPT: "transcript",
   WORK: "work",
+  INBOX: "inbox",
 } as const;
 
 type RetiredSidePanelTab = (typeof RETIRED_SIDE_PANEL_TAB)[keyof typeof RETIRED_SIDE_PANEL_TAB];
@@ -177,9 +178,9 @@ export interface OpenFile {
   readonly path: string;
   readonly range: { readonly startLine: number; readonly endLine: number } | undefined;
   readonly opened: number;
-  /** The plan the file was browsed to on, from a File tab's tree or breadcrumbs or an inbox item's code; none for a file opened from Luke's snippet. */
+  /** The plan the file was browsed to on, from a File tab's tree or breadcrumbs; none for a file opened from Luke's snippet. */
   readonly browsedOn?: string | undefined;
-  /** The commit the file is read at, as an inbox item's code pins it; none reads the default branch's head. */
+  /** The commit the file is read at, as a snippet Luke read from his checkout pins it; none reads the default branch's head. */
   readonly commit?: string | undefined;
   /** The files this tab showed before this one, the latest last, which its Back walks. */
   readonly back?: readonly FileVisit[];
@@ -276,11 +277,10 @@ const anyTabSchema = Schema.Union([
  */
 const PINS_KEPT = 100;
 
-/** The tab a pin opens: a fixed one, an agent's, the plan's Inbox, a file's, or an agent's Changes. */
+/** The tab a pin opens: a fixed one, an agent's, a file's, or an agent's Changes. */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
   Schema.Struct({ agent: Schema.String }),
-  Schema.Literal(MAIN_TAB.INBOX),
   Schema.Struct({ file: Schema.String }),
   changesTabSchema,
 ]);
@@ -472,8 +472,7 @@ export interface SidePanelControl {
    * Shows the panel on the file's tab, opening one at the strip's end where
    * none stands: the window's one door for a file named in place
    * (`file-ref.tsx`). A reference naming lines lights them; with `commit`,
-   * as an inbox item's code or a snippet Luke read from his checkout opens
-   * it, the file as it stood at that commit, drawn on the open plan. One
+   * as a snippet Luke read from his checkout opens it, the file as it stood at that commit, drawn on the open plan. One
    * naming the file alone, as ⌘K finds it, leaves a tab it has as it stands
    * and opens a new one on the whole file, drawn on the open plan.
    */
@@ -598,23 +597,17 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, the Inbox, a file's, or an agent's Changes. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, a file's, or an agent's Changes. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return (
-    FIXED_TABS.has(tab) ||
-    isAgentTab(tab) ||
-    tab === MAIN_TAB.INBOX ||
-    isFileTab(tab) ||
-    isChangesTab(tab)
-  );
+  return FIXED_TABS.has(tab) || isAgentTab(tab) || isFileTab(tab) || isChangesTab(tab);
 }
 
-/** A pin of a tab in the plan's own column rather than the side panel: an agent's, or the Inbox. */
-export type ColumnPinnableTab = Extract<PinnableTab, AgentStripTab | typeof MAIN_TAB.INBOX>;
+/** A pin of a tab in the plan's own column rather than the side panel: an agent's. */
+export type ColumnPinnableTab = Extract<PinnableTab, AgentStripTab>;
 
-/** Whether a pin opens in the plan's own column, an agent's tab or the Inbox, rather than in the side panel. */
+/** Whether a pin opens in the plan's own column, an agent's tab, rather than in the side panel. */
 export function inColumn(tab: PinnableTab): tab is ColumnPinnableTab {
-  return isAgentTab(tab) || tab === MAIN_TAB.INBOX;
+  return isAgentTab(tab);
 }
 
 /** Whether the pin is of the plan's tab. */
@@ -1108,11 +1101,10 @@ function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
   );
 }
 
-/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, any Changes tab's, or any agent's. */
+/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, any Changes tab's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
   if (isChangesTab(tab)) return TAB_WORDS.CHANGES;
-  if (tab === MAIN_TAB.INBOX) return TAB_WORDS.INBOX;
   return isAgentTab(tab) ? TAB_WORDS.CODING_AGENT : SIDE_PANEL_TAB_KIND[tab].label;
 }
 

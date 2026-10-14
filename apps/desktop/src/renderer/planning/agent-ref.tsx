@@ -1,8 +1,6 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import type { PlanAgentLine } from "@sidecar/hosted/plan-wire";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
-import { Tooltip } from "../tooltip";
 import {
   AgentTabCard,
   type CardReading,
@@ -16,22 +14,16 @@ import { agentTranscript } from "./transcript-copy";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * agent-ref.tsx -- an agent named anywhere in the window: the card its tab hangs, read from what the place naming it knows, and its mark and name as the one button that hangs that card and opens its tab.
+ * agent-ref.tsx -- an agent named anywhere in the window: the card its tab hangs, read from what the place naming it knows.
  *
- * An agent is named in many places beside its tab: the Inbox's thread, its
- * crumbs, and its list's rows, a call's row in a transcript, the plan's
- * summary. Each hangs the agent's tab's own card (`agent-tab-card.tsx`)
- * while the pointer rests on the name, and a press or Enter opens the
- * agent's tab, as a press on the tab itself would. The card is read from what the place holds of
- * the agent: its summary, where the plan's list holds it, an archived
- * agent's among them, which says it was archived and when; the line the
- * sidebar's list names it by, which says where it stands but holds no
- * transcript; or nothing, where the plan's list was read and holds no such
- * agent, when the card says so under the name it goes by. A press on an
- * agent whose tab is not drawn, archived or gone, opens its plan, as the
- * column does for any tab whose subject is missing (`use-main-tabs.ts`).
- * A name inside a row whose press does something of its own, an Inbox
- * row's mark, hangs the card alone and leaves the press to its row.
+ * An agent is named in many places beside its tab: a call's row in a
+ * transcript, the plan's summary, the side panel's "+", ⌘K, and the
+ * archived agents' fold. Each hangs the agent's tab's own card
+ * (`agent-tab-card.tsx`) while the pointer rests on the name. The card is
+ * read from what the place holds of the agent: its summary, where the
+ * plan's list holds it, an archived agent's among them, which says it was
+ * archived and when; or nothing, where the plan's list was read and holds
+ * no such agent, when the card says so under the name it goes by.
  */
 
 /** What a card's corner says of an archived agent, whose tab is gone. */
@@ -84,25 +76,6 @@ export function agentCardReading(
   };
 }
 
-/** An agent as the sidebar's list names it: where it stands and since when, and its pair, with no step to preview. */
-export function lineSubject(
-  line: PlanAgentLine,
-  models: readonly CatalogModel[] | undefined,
-): AgentSubject {
-  const writing = agentStillWriting(line.status);
-  const reading: CardReading = {
-    corner: cardCorner({
-      writing,
-      startedAt: writing ? line.at : undefined,
-      movedAt: writing ? undefined : line.at,
-      state: agentStateWords(line.status),
-    }),
-    choice: { model: line.model, effort: line.effort },
-    transcript: undefined,
-  };
-  return { name: agentTabLabel(line, models), read: () => reading };
-}
-
 /**
  * An agent named by id on the plan whose agents `agents` reads, archived
  * or not, its card read from what its tab last held; where the list holds
@@ -144,41 +117,4 @@ export function AgentCard({
   models: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} />;
-}
-
-/**
- * An agent named in place: what it is drawn as, its mark or its name or
- * both, as one button that hangs its tab's card while the pointer rests on
- * it and opens its tab on a press. With no `onOpen` it stands inside a row
- * whose press is the row's own, and hangs the card alone.
- */
-export function AgentRef({
-  subject,
-  models,
-  onOpen,
-  className,
-  children,
-}: {
-  subject: AgentSubject;
-  /** The catalog as last read, which names the agent's model on its card. */
-  models: readonly CatalogModel[] | undefined;
-  /** Opens the agent's tab; none inside a row whose own press does something else. */
-  onOpen: (() => void) | undefined;
-  className?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const classes = className === undefined ? "agent-ref" : `agent-ref ${className}`;
-  return (
-    <Tooltip label={subject.name} card={<AgentCard subject={subject} models={models} />}>
-      {onOpen === undefined ? (
-        <span className={classes} data-agent-ref="">
-          {children}
-        </span>
-      ) : (
-        <button type="button" className={classes} data-agent-ref="" onClick={onOpen}>
-          {children}
-        </button>
-      )}
-    </Tooltip>
-  );
 }

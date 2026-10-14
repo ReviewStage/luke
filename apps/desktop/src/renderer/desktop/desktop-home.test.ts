@@ -1,25 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@sidecar/hosted/coding-agent-view";
-import {
-  INBOX_RESPONSE,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-  type InboxItem,
-} from "@sidecar/hosted/inbox-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
+import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
-import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopHome } from "./desktop-home";
 
-const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const DAY = 86_400_000;
 const NOW = Date.now();
 
@@ -48,51 +40,6 @@ const PLANS: readonly PlanSummary[] = [
   plan(8, "Old dashboard", 40 * DAY, "acme/relay"),
 ];
 
-/** An item of the agent's asking a choice, open unless `status` says otherwise. */
-function item(
-  n: number,
-  title: string,
-  updatedAt: number,
-  status: InboxItem["status"] = INBOX_STATUS.OPEN,
-): InboxItem {
-  return {
-    id: `a1b2c3d4-0000-4000-8000-${String(n).padStart(12, "0")}`,
-    agentId: AGENT_ID,
-    key: String(n),
-    revision: 1,
-    version: INBOX_WIRE_VERSION,
-    title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.CHOICE, options: [{ label: "Yes" }, { label: "No" }] },
-    needsReply: true,
-    status,
-    postedAt: updatedAt,
-    updatedAt,
-  };
-}
-
-const EMAIL = item(1, "Email the invitee when an invite is withdrawn?", NOW - 6 * 60_000);
-const SETTLED = item(2, "Expire after 7 days?", NOW - 60_000, INBOX_STATUS.ANSWERED);
-const ACCOUNT = item(3, "Which billing account does the export read?", NOW - 2 * 3_600_000);
-
-/** Each plan's inbox as the service answers a read of it. */
-const INBOXES = new Map<string, readonly InboxItem[]>([
-  [INVITES.id, [EMAIL, SETTLED]],
-  [BILLING.id, [ACCOUNT]],
-]);
-
-/** The plans holding items, and those of them with an item waiting, as main reads the account. */
-const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
-  inbox: [
-    { planId: INVITES.id, items: [EMAIL.id] },
-    { planId: BILLING.id, items: [ACCOUNT.id] },
-  ],
-  inboxPlans: [
-    { planId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },
-    { planId: BILLING.id, items: 1, updatedAt: ACCOUNT.updatedAt },
-  ],
-};
-
 let root: Root | undefined;
 
 beforeEach(() => {
@@ -101,16 +48,7 @@ beforeEach(() => {
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        const value: CodingAgentInboxAnswerView = {
-          items: INBOXES.get(request.payload.planId) ?? [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
     },
   });
 });
@@ -124,27 +62,18 @@ afterEach(() => {
 /** Every door the page opens, in order. */
 interface Opened {
   readonly plans: string[];
-  readonly inbox: (InboxChoice | "inbox")[];
   newPlans: number;
 }
 
 /** The home page over `overrides`, every door it opens recorded. */
 function mount(overrides: Partial<PlansControl> = {}, accountName = "Dean Stratakos") {
-  const opened: Opened = { plans: [], inbox: [], newPlans: 0 };
+  const opened: Opened = { plans: [], newPlans: 0 };
   const plans = plansControl({
     plans: PLANS,
     listed: { plans: PLANS, archived: [] },
-    ...HOLDING,
     onSelect: (planId) => opened.plans.push(planId),
     onNewPlan: () => {
       opened.newPlans += 1;
-    },
-    inboxView: {
-      open: false,
-      chosen: undefined,
-      onOpen: () => opened.inbox.push("inbox"),
-      onClose: () => undefined,
-      onChoose: (chosen) => opened.inbox.push(chosen),
     },
     ...overrides,
   });
@@ -184,16 +113,12 @@ function button(page: HTMLElement, text: string): HTMLButtonElement {
   return found;
 }
 
-test("the home page greets the account, lists what needs it with each item's plan, and the plans saved latest with their repositories", async () => {
+test("the home page greets the account and lists the plans saved latest with their repositories", async () => {
   const { page } = mount();
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
   assert.ok(button(page, "New plan"));
-  assert.deepEqual(rows(page, "home-inbox"), [
-    "Email the invitee when an invite is withdrawn? · Teammate invitations",
-    "Which billing account does the export read? · Billing export",
-  ]);
   assert.deepEqual(rows(page, "home-recent"), [
     "Teammate invitations · acme/relay",
     "Billing export · acme/ledger",
@@ -205,45 +130,21 @@ test("the home page greets the account, lists what needs it with each item's pla
   assert.ok(button(page, "Search all 8 plans"));
 });
 
-test("a waiting item's row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
+test("a recent plan opens the plan, and New plan asks for one", async () => {
   const { page, opened } = mount();
   await settle();
 
-  button(page, "Email the invitee").click();
   button(page, "Usage alerts").click();
   button(page, "New plan").click();
 
-  assert.deepEqual(opened.inbox, ["inbox", { planId: INVITES.id, itemId: EMAIL.id }]);
   assert.deepEqual(opened.plans, [PLANS[0]?.id]);
   assert.equal(opened.newPlans, 1);
-});
-
-test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {
-  const { page } = mount();
-  await settle();
-
-  const heading = page.querySelector("#home-inbox");
-  assert.equal(heading?.closest("section")?.getAttribute("aria-labelledby"), "home-inbox");
-  // The heading's count follows the name in a span of its own.
-  assert.equal(heading?.firstChild?.textContent, "Inbox");
-});
-
-test("with nothing waiting, the home's Inbox says so in the Inbox's own words, as a line with no glyph", async () => {
-  const { page } = mount({ inbox: [], inboxPlans: [] });
-  await settle();
-
-  const section = page.querySelector('section[aria-labelledby="home-inbox"]');
-  const note = section?.querySelector(".sidebar-note");
-  assert.equal(note?.textContent, "Nothing needs you");
-  assert.equal(section?.querySelector("svg"), null);
 });
 
 test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
   const { page } = mount({
     plans: [],
     listed: { plans: [], archived: [] },
-    inbox: [],
-    inboxPlans: [],
   });
 
   assert.equal(page.querySelector("h1")?.textContent, "Plan your first feature");
@@ -265,12 +166,12 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
   const focused = () => document.activeElement?.textContent ?? "";
 
   press("ArrowDown");
-  assert.match(focused(), /^Email the invitee/u);
-  press("ArrowDown");
-  press("ArrowDown");
   assert.match(focused(), /^Teammate invitations/u);
+  press("ArrowDown");
+  press("ArrowDown");
+  assert.match(focused(), /^Nightly bump/u);
   press("ArrowUp");
-  assert.match(focused(), /^Which billing account/u);
+  assert.match(focused(), /^Billing export/u);
 
   field.focus();
   press("ArrowDown");
@@ -281,12 +182,11 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
   assert.match(focused(), /^Search all 8 plans/u);
 });
 
-test("a workspace with no plan of its own, in an account with plans elsewhere, still says what needs it rather than welcoming a new account", async () => {
+test("a workspace with no plan of its own, in an account with plans elsewhere, is greeted rather than welcomed as a new account", async () => {
   const { page } = mount({ listed: { plans: [], archived: [] } });
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
-  assert.equal(rows(page, "home-inbox").length, 2);
   assert.equal(page.querySelector('section[aria-labelledby="home-recent"]'), null);
 });
 
