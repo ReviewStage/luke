@@ -1,5 +1,6 @@
 import {
   AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationAction,
@@ -17,7 +18,7 @@ import {
   automationRunStatusSchema,
   automationTriggerSchema,
 } from "@sidecar/hosted/automation-wire";
-import { and, asc, desc, eq, exists, gte, inArray, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, ne, or, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
@@ -516,10 +517,14 @@ const findLatestStarts = SqlSchema.findAll({
         .where(
           and(
             eq(automationRun.automationId, automationId),
-            inArray(automationRun.status, [
-              AUTOMATION_RUN_STATUS.STARTED,
-              AUTOMATION_RUN_STATUS.FAILED,
-            ]),
+            // A run that never tried, missed past its hour, is no failed start.
+            or(
+              eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+              and(
+                eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
+                ne(automationRun.reason, AUTOMATION_RUN_REASON.MISSED),
+              ),
+            ),
           ),
         )
         .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
@@ -729,7 +734,7 @@ export function startedRunAgents(
   return findStartedAgents({ automationId, since });
 }
 
-/** The automation's newest starts, the runs that started an agent or failed to, newest first, at most `limit`, whoever owns it. */
+/** The automation's newest starts, the runs that started an agent or tried and failed to, newest first, at most `limit`, whoever owns it. */
 export function latestAutomationStarts(
   automationId: string,
   limit: number,

@@ -238,7 +238,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a scheduled run queued before its automation was paused starts nothing, and one queued past the hour is settled as missed",
+    "a scheduled run queued before its automation was paused starts nothing, and one still queued hours on is settled as missed",
     () =>
       Effect.gen(function* () {
         const { owner, automation, now } = yield* openAutomation();
@@ -253,8 +253,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const stale = Option.getOrThrow(
           yield* recordAutomationRun(automation, {
             dedupeKey: "due-0",
-            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: now - 2 * 60 * 60_000 },
-            firedAt: new Date(now - 2 * 60 * 60_000),
+            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: now - 3 * 60 * 60_000 },
+            firedAt: new Date(now - 3 * 60 * 60_000),
           }),
         );
         yield* updateAutomation(owner, automation.id, { enabled: false, nextRunAt: null });
@@ -326,5 +326,26 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const paused = Option.getOrThrow(yield* readAutomation(owner, automation.id));
         assert.equal(paused.pausedReason, AUTOMATION_PAUSE.FAILURES);
       }),
+  );
+
+  it.effect("missed runs never count as failed starts toward a pause", () =>
+    Effect.gen(function* () {
+      const { owner, automation } = yield* openAutomation({ repository: null });
+      const eve = fakeEve();
+      for (let missed = 0; missed < 2; missed += 1) {
+        const run = yield* runNow(automation);
+        yield* settleAutomationRun(run.id, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.MISSED,
+        });
+      }
+
+      yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
+        Effect.provide(services),
+      );
+
+      const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
+      assert.equal(standing.enabled, true, "one failed start after two missed runs pauses nothing");
+    }),
   );
 });

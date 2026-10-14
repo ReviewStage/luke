@@ -2801,7 +2801,9 @@ deploy between, is moved on without a run, so a backlog is never replayed.
 
 A queued run is acted on by `hosted/automation-runs.ts`, one automation's
 runs one after another so each run's guards read what the one before
-settled; a run still queued an hour after it fired is settled as `missed`.
+settled; a run still queued two hours after it fired, an hour past the
+last sweep that would act on it, is settled as `missed`, which no failure
+count reads.
 Its guards come first: a run whose automation was paused after it was
 queued is skipped as `paused` (the owner's own "Run now" still runs), and
 a run past the daily cap (runs started in the last twenty-four

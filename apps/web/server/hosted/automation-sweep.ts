@@ -37,8 +37,9 @@ import type { StartServices } from "./coder-host/start.js";
  * automations at once, but one automation's runs one after another, since
  * each run's guards read what the one before it settled. A run two sweeps
  * both act on starts one agent, since the run's id is its Start's key, and
- * settles once. A run still queued past the hour is settled as missed, so
- * the history never holds a run that will not come.
+ * settles once. A run still queued two hours on, an hour past the last
+ * sweep that would act on it, is settled as missed, so the history never
+ * holds a run that will not come.
  */
 
 const AUTOMATION_SWEEP = {
@@ -48,8 +49,14 @@ const AUTOMATION_SWEEP = {
   MAX_RUNS: 12,
   /** How many runs are acted on at once. */
   CONCURRENCY: 4,
-  /** How far back a queued run is still acted on; older is left as it stands. */
+  /** How far back a queued run is still acted on. */
   QUEUED_WITHIN_MS: 60 * 60_000,
+  /**
+   * How old a queued run is before it is settled as missed. Note that it is
+   * an hour past the window above, because a run acted on near the window's
+   * edge must settle on its own before the expiry could reach it.
+   */
+  EXPIRED_AFTER_MS: 2 * 60 * 60_000,
 } as const;
 
 /** What the sweep's share did: how many schedules it fired, and how the runs it acted on came out. */
@@ -98,7 +105,7 @@ export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations"
     AUTOMATION_SWEEP.MAX_RUNS,
   );
   yield* expireQueuedAutomationRuns(
-    new Date(now - AUTOMATION_SWEEP.QUEUED_WITHIN_MS),
+    new Date(now - AUTOMATION_SWEEP.EXPIRED_AFTER_MS),
     AUTOMATION_RUN_REASON.MISSED,
   );
   const outcomes = (yield* Effect.forEach(
