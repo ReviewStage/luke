@@ -278,3 +278,77 @@ test("on a plan that cannot be edited, where no block is a Tab stop, every secti
   assert.equal(mores.length, 3);
   assert.ok(mores.every((more) => more.tabIndex === 0));
 });
+
+/** A plan whose words mention a file and a folder of its repository. */
+const FILES_PLAN: Plan = {
+  ...PLAN,
+  document: {
+    body: "## Goal\nMove [@session-store.ts](luke://file/apps/web/session-store.ts) out of [@auth/](luke://folder/apps/web/auth/).",
+    assumptions: [],
+  },
+};
+
+function drawnFiles(onOpenFile: ((path: string) => void) | undefined): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanBody, {
+        plan: FILES_PLAN,
+        live: false,
+        sectionLinks: { onOpen: () => undefined, onOpenFile, reveal: undefined },
+      }),
+    ),
+  );
+  return container;
+}
+
+test("a mention of a file is drawn as its chip, and a press opens the file's tab", () => {
+  const opened: string[] = [];
+  const container = drawnFiles((path) => opened.push(path));
+
+  act(() => chipNamed(container, "session-store.ts").click());
+
+  assert.deepEqual(opened, ["apps/web/session-store.ts"]);
+});
+
+test("a folder's chip, and a file's where no file opens from here, hang their cards and open nothing", () => {
+  const container = drawnFiles(undefined);
+
+  const chips = [...container.querySelectorAll<HTMLElement>(".mention-chip")];
+
+  assert.deepEqual(
+    chips.map((chip) => [chip.textContent, chip.tagName]),
+    [
+      ["session-store.ts", "SPAN"],
+      ["auth/", "SPAN"],
+    ],
+  );
+});
+
+test("a click on a folder's chip in a plan that can be edited opens no editor", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanBody, {
+        plan: FILES_PLAN,
+        live: false,
+        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+        sectionLinks: { onOpen: () => undefined, onOpenFile: () => undefined, reveal: undefined },
+      }),
+    ),
+  );
+  const folder = [...container.querySelectorAll<HTMLElement>(".mention-chip")].find(
+    (chip) => chip.textContent === "auth/",
+  );
+  assert.ok(folder);
+
+  act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+  assert.equal(container.querySelector(".plan-document-editor"), null);
+});

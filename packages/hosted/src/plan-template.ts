@@ -7,6 +7,7 @@ import {
 } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
+import { encodeMention, mentionsIn } from "./mention-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
@@ -466,7 +467,29 @@ function applyNoteToText(
   if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
   // A correction inside a fence is code, written as given rather than contained as prose.
   const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
-  return text.slice(0, at.from) + words + text.slice(at.to);
+  const corrected = text.slice(0, at.from) + words + text.slice(at.to);
+  return keepsMentions(text, corrected) ? corrected : undefined;
+}
+
+/**
+ * Whether a correction keeps every mention the text held: a link whose
+ * label starts with `@`, which the developer placed. A correction may
+ * reword around one, or its name, but one that drops it or breaks its
+ * target is not taken, as a note naming a phrase the text does not hold
+ * is not; striking the line a mention stands on is a retraction, and is.
+ */
+function keepsMentions(before: string, after: string): boolean {
+  // Note that every mention is counted, each copy of one alike, however many the plan holds.
+  const counted = (text: string) => {
+    const counts = new Map<string, number>();
+    for (const { mention } of mentionsIn(text, Number.POSITIVE_INFINITY)) {
+      const target = encodeMention(mention);
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const kept = counted(after);
+  return [...counted(before)].every(([target, count]) => (kept.get(target) ?? 0) >= count);
 }
 
 /** Notes taken over a document's text: the text after, and the notes that could not be taken. */

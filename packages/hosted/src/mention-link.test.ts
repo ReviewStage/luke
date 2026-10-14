@@ -158,3 +158,98 @@ test("a fence closed on a line ending in a carriage return closes, so a mention 
     [{ kind: MENTION_KIND.FILE, path: "a.ts" }],
   );
 });
+
+test("a path still percent-encoded once its target is read names nothing, so no reader decoding it again can climb out", () => {
+  for (const target of ["luke://file/apps%252F..%252F..%252Fetc%252Fpasswd"]) {
+    assert.equal(decodeMention(target), undefined, target);
+  }
+});
+
+test("a link in an indented code block, or in a code span across lines, is code", () => {
+  const words = [
+    "An example:",
+    "",
+    "    [@a](luke://file/a.ts)",
+    "",
+    "and `a span",
+    "[@b](luke://file/b.ts) across lines` too.",
+    "",
+    "- an item",
+    "",
+    "    [@c](luke://file/c.ts) is the item's own words",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "c.ts" }],
+  );
+});
+
+test("a whole plan is read for every mention it holds, past a message's twenty", () => {
+  const words = Array.from({ length: 25 }, (_, at) => `[@f${at}](luke://file/f${at}.ts)`).join(" ");
+
+  assert.equal(mentionsIn(words, Number.POSITIVE_INFINITY).length, 25);
+});
+
+test("a name that holds a percent sign is still a file, while an encoded separator still names nothing", () => {
+  assert.deepEqual(
+    decodeMention(encodeMention({ kind: MENTION_KIND.FILE, path: "docs/report%20final.md" })),
+    {
+      kind: MENTION_KIND.FILE,
+      path: "docs/report%20final.md",
+    },
+  );
+  assert.equal(decodeMention("luke://file/a%252Eb%252F..%252Fc"), undefined);
+});
+
+test("a stray backtick before a list pairs with nothing in the list, so the list's mentions stand", () => {
+  const words = ["Watch the ` tick.", "- see [@a](luke://file/a.ts)", "- and `this`"].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "a.ts" }],
+  );
+});
+
+test("a code span across a quote's lines is code, the quote's lines being one block", () => {
+  const words = [
+    "> quoted `span",
+    "> [@a](luke://file/a.ts) still` code",
+    "",
+    "[@b](luke://file/b.ts)",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
+  );
+});
+
+test("a quote's blank line, or an item inside the quote, ends its paragraph, so a backtick before it pairs with nothing after", () => {
+  const paragraphs = ["> `before", ">", "> [@a](luke://file/a.ts) `after"].join("\n");
+  const item = ["> `before", "> - [@b](luke://file/b.ts) `after"].join("\n");
+  const deeper = ["> `before", "> > [@c](luke://file/c.ts) `after"].join("\n");
+
+  assert.deepEqual(
+    [paragraphs, item, deeper].flatMap((words) => mentionsIn(words).map(({ mention }) => mention)),
+    [
+      { kind: MENTION_KIND.FILE, path: "a.ts" },
+      { kind: MENTION_KIND.FILE, path: "b.ts" },
+      { kind: MENTION_KIND.FILE, path: "c.ts" },
+    ],
+  );
+});
+
+test("a nested quote is one depth however far apart its markers stand, so a span across its lines is code", () => {
+  const words = [
+    ">    > `before",
+    "> > [@a](luke://file/a.ts) `after",
+    "",
+    "[@b](luke://file/b.ts)",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
+  );
+});

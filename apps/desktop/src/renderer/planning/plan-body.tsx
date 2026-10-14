@@ -1,7 +1,6 @@
 import {
   decodeMention,
   isMentionLabel,
-  isPlanMention,
   MENTION_KIND,
   mentionMarkdown,
   mentionName,
@@ -68,9 +67,10 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * around it too; a section the plan no longer holds leaves it at its top.
  */
 
-/** What a plan's own page does with its sections' links: opens what a mention names, and the section it was last asked to show. */
+/** What a plan's own page does with its sections' links and its mentions: opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
 export interface SectionLinks {
   readonly onOpen: (mention: PlanMention) => void;
+  readonly onOpenFile?: ((path: string) => void) | undefined;
   readonly reveal: SectionReveal | undefined;
 }
 
@@ -316,32 +316,34 @@ function unitClass(view: UnitView, changed: boolean): string {
  * whose label starts with `@` and whose destination names a mention, drawn
  * against the plan's headings as they stand; nothing off a plan's page,
  * where mentions stay words. Note that it is made again only when a
- * heading changes, since every unit's words are drawn again when it is.
+ * heading changes, since every unit's words are drawn again when it is,
+ * and that what opening one does is read as it is pressed.
  */
 function useMentionChips(
   planId: string,
   views: readonly UnitView[],
-  onOpen: ((mention: PlanMention) => void) | undefined,
+  links: SectionLinks | undefined,
 ): LinkDrawer | undefined {
-  const opener = useRef(onOpen);
-  opener.current = onOpen;
-  const offered = onOpen !== undefined;
+  const latest = useRef(links);
+  latest.current = links;
+  const offered = links !== undefined;
+  const opensFiles = links?.onOpenFile !== undefined;
   const headingKey = views.map((view) => view.heading).join("\n");
   return useMemo(() => {
     if (!offered) return undefined;
     const doors: MentionDoors = {
       planId,
       headings: new Set(headingKey.split("\n").filter((heading) => heading !== "")),
-      onOpen: (mention) => opener.current?.(mention),
+      onOpenPlan: (mention) => latest.current?.onOpen(mention),
+      onOpenFile: opensFiles ? (path) => latest.current?.onOpenFile?.(path) : undefined,
     };
     return (href: string, label: string) => {
       if (!isMentionLabel(label)) return undefined;
       const mention = decodeMention(href);
-      // Note that only the plan and its sections are drawn as chips here so far; a file's is words.
-      if (mention === undefined || !isPlanMention(mention)) return undefined;
+      if (mention === undefined) return undefined;
       return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
     };
-  }, [offered, planId, headingKey]);
+  }, [offered, opensFiles, planId, headingKey]);
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
@@ -511,7 +513,7 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
-  const link = useMentionChips(plan.id, views, sectionLinks?.onOpen);
+  const link = useMentionChips(plan.id, views, sectionLinks);
   const linkedPlan = sectionLinks === undefined ? undefined : plan.id;
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
