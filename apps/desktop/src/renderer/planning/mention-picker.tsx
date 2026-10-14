@@ -1,5 +1,6 @@
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
+  decodeMention,
   encodeMention,
   MENTION_KIND,
   type Mention,
@@ -62,6 +63,9 @@ const TOOL_DETAIL = "Tool";
 
 /** What stands between a server's name and its tool's in a tool's mention. */
 const TOOL_JOIN = " · ";
+
+/** The place a tool's mention is read back from, which its link names none of, since a server's mention is the app's own form wherever it is written. */
+const NO_PLACE: MentionPlace = { workspace: "", repository: null };
 
 /** The servers of a list that offers none. */
 const NO_SERVERS: readonly IntegrationProvider[] = [];
@@ -174,14 +178,19 @@ function serverRows(
     };
     const read = reads[provider];
     if (query.trim() === "" || read === undefined || !("tools" in read)) return [server];
-    const tools = read.tools.map(
-      (tool): MentionRow => ({
-        mention: { kind: MENTION_KIND.TOOL, provider, tool: tool.name },
-        name: `${name}${TOOL_JOIN}${tool.name}`,
-        detail: TOOL_DETAIL,
-        terms: `${tool.name} ${name}`,
-      }),
-    );
+    // Note that a tool whose name no mention can carry is left out, since its pick would name nothing.
+    const tools = read.tools.flatMap((tool): MentionRow[] => {
+      const mention: Mention = { kind: MENTION_KIND.TOOL, provider, tool: tool.name };
+      if (decodeMention(encodeMention(mention, NO_PLACE), null) === undefined) return [];
+      return [
+        {
+          mention,
+          name: `${name}${TOOL_JOIN}${tool.name}`,
+          detail: TOOL_DETAIL,
+          terms: `${tool.name} ${name}`,
+        },
+      ];
+    });
     return [server, ...tools];
   });
 }
