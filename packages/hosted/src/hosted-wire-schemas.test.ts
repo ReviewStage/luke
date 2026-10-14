@@ -263,6 +263,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "rollout-wire": {
     reportSchema: rolloutWire.reportSchema,
+    workerReportInputSchema: rolloutWire.workerReportInputSchema,
   } satisfies RecordedEffectJsonSchemas<typeof rolloutWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,

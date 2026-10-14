@@ -15,7 +15,12 @@ import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
 import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
-import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
+import {
+  type CoderHost,
+  coderHost,
+  type InboxCall,
+  type ReportCall,
+} from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
 import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
@@ -25,6 +30,7 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
+import { type ReportToolResult, reportRejected } from "../server/hosted/coder-host/report.js";
 import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
@@ -274,4 +280,19 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
         }),
       ),
   });
+}
+
+/** One `report` call handed to Luke under the agent's session, for the tool, which runs here rather than at an edge of its own. */
+export function reportToLuke(
+  auth: SessionAuth,
+  sessionId: string,
+  call: ReportCall,
+): Promise<ReportToolResult> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return reportRejected(admitted.failure);
+      return yield* host.report(admitted.success, call);
+    }),
+  );
 }

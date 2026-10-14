@@ -664,10 +664,14 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
-  // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
+  // Whether the agent has ended and the branch its row holds are part of the key, so the first ask
+  // after its turn ends, or after a branch is written, reads GitHub afresh.
   const { status } = yield* summaryOf(agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
-  return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
+  return yield* Cache.get(
+    published,
+    new PublishedKey({ userId, agentId: agent.id, ended, branch: agent.branch }),
+  ).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
         // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.

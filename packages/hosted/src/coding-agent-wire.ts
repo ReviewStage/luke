@@ -633,6 +633,14 @@ export const codingAgentDelegationOutputSchema = EffectSchema.Struct({
  */
 export const CODING_AGENT_TODOS_TOOL = "write_todos";
 
+/**
+ * The tool a rollout's worker reports to Luke with, by the name its tool
+ * part carries in the transcript (`tool-report`): a milestone of its pull
+ * request or a question, which lands on the plan's conversation as a turn
+ * (`rollout-wire.ts`'s `workerReportInputSchema` is its input).
+ */
+export const CODING_AGENT_REPORT_TOOL = "report";
+
 /** Where one to-do stands. */
 export const CODING_AGENT_TODO_STATUS = {
   PENDING: "pending",
