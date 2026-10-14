@@ -4,11 +4,12 @@
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
  * one kind each. All lists each kind's best few rows under its heading, and
- * a filter that kind's alone, as many as are worth reading; ← and → step
- * through the filters where the caret can go no further that way, and a
- * press on a filter chooses it. The palette
- * ranks the rows itself with cmdk's own scoring, so each kind keeps its own
- * best few however many rows the others hold.
+ * a filter that kind's alone, as many as are worth reading. ← and → step
+ * through the filters while the search field is empty, and ⌘[ and ⌘] at
+ * any time, where they mean Back and Forward elsewhere; once anything is
+ * typed, ← and → move the caret, as in any text field. A press on a filter
+ * chooses it. The palette ranks the rows itself with cmdk's own scoring, so
+ * each kind keeps its own best few however many rows the others hold.
  *
  * It decides nothing about a command: it lists the commands whose control is
  * on screen and able right now (`app-commands.ts`), so a row runs exactly
@@ -154,11 +155,17 @@ const READING_LINE = "Reading the repository's files…";
 /** What the Files filter says under a listing cut short at the wire's bound. */
 const TRUNCATED_LINE = `Only the repository's first ${PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
 
+/** A footer hint: the chords it names and what they do. */
+interface FooterHint {
+  chords: readonly ShortcutChord[];
+  label: string;
+}
+
 /**
- * The footer's hints, each the bare keys it names and what they do. Escape
- * is not among them, because every dialog closes on it and saying so is noise.
+ * The footer's hints for the list's own keys, which are bare. Escape is not
+ * among them, because every dialog closes on it and saying so is noise.
  */
-const FOOTER_HINTS: readonly { chords: readonly ShortcutChord[]; label: string }[] = [
+const LIST_HINTS: readonly FooterHint[] = [
   {
     chords: [
       { key: SHORTCUT_KEY.UP, bare: true },
@@ -167,14 +174,26 @@ const FOOTER_HINTS: readonly { chords: readonly ShortcutChord[]; label: string }
     label: "Select",
   },
   { chords: [{ key: SHORTCUT_KEY.ENTER, bare: true }], label: "Open" },
-  {
+];
+
+/**
+ * The Filter hint, naming the keys that step the filters now: ← and → while
+ * the search field is empty, ⌘[ and ⌘] once anything is typed, when the
+ * arrows are the caret's.
+ */
+const FILTER_HINT = {
+  EMPTY: {
     chords: [
       { key: SHORTCUT_KEY.LEFT, bare: true },
       { key: SHORTCUT_KEY.RIGHT, bare: true },
     ],
     label: "Filter",
   },
-];
+  TYPED: {
+    chords: [APP_SHORTCUTS[APP_COMMAND.BACK].chord, APP_SHORTCUTS[APP_COMMAND.FORWARD].chord],
+    label: "Filter",
+  },
+} as const satisfies Record<string, FooterHint>;
 
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
@@ -307,20 +326,15 @@ function fileRow(path: string, open: (path: string) => void): PaletteRow {
 }
 
 /**
- * How many filters a press steps, or none: ← or → alone, in the search field,
- * where the caret can go no further that way — at the start for ←, at the end
- * for →, either in an empty field. Anywhere else the arrow moves the caret, a
- * selection included, which the arrow collapses first.
+ * How many filters an arrow steps, or none: ← or → alone while the search
+ * field is empty, where there is no caret to move. Once anything is typed the
+ * arrows move the caret, and ⌘[ and ⌘] are what step the filters.
  */
-function filterStep(event: React.KeyboardEvent): number {
-  const field = event.target;
-  if (!(field instanceof HTMLInputElement)) return 0;
+function arrowStep(event: React.KeyboardEvent, query: string): number {
+  if (query !== "" || event.nativeEvent.isComposing) return 0;
   if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return 0;
-  if (event.nativeEvent.isComposing || field.selectionStart !== field.selectionEnd) return 0;
-  if (event.key === SHORTCUT_KEY.LEFT.key) return field.selectionStart === 0 ? -1 : 0;
-  if (event.key === SHORTCUT_KEY.RIGHT.key) {
-    return field.selectionEnd === field.value.length ? 1 : 0;
-  }
+  if (event.key === SHORTCUT_KEY.LEFT.key) return -1;
+  if (event.key === SHORTCUT_KEY.RIGHT.key) return 1;
   return 0;
 }
 
@@ -527,10 +541,11 @@ function FilterChips({
   );
 }
 
-function PaletteFooter(): React.JSX.Element {
+function PaletteFooter({ typed }: { typed: boolean }): React.JSX.Element {
+  const hints = [...LIST_HINTS, typed ? FILTER_HINT.TYPED : FILTER_HINT.EMPTY];
   return (
     <div className="command-palette-footer" aria-hidden="true">
-      {FOOTER_HINTS.map((hint) => (
+      {hints.map((hint) => (
         <span key={hint.label} className="command-palette-footer-hint">
           <span className="command-palette-footer-keys">
             {hint.chords.map((chord) => (
@@ -664,15 +679,22 @@ export function CommandPalette({
     // change what stands behind the palette. Escape itself is the dialog's,
     // which closes the palette alone.
     event.stopPropagation();
-    const step = filterStep(event);
+    const step = arrowStep(event, query);
     if (step !== 0) {
       event.preventDefault();
       changeFilter(steppedFilter(filter, step));
       return;
     }
-    if (commandForKey([APP_COMMAND.COMMAND_PALETTE], event.nativeEvent) === undefined) return;
+    const pressed = commandForKey(
+      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
+      event.nativeEvent,
+    );
+    if (pressed === undefined) return;
+    // The menu bar's Back and Forward are held off too, since the palette
+    // claims their chords for its filters while it stands.
     event.preventDefault();
-    setOpen(false);
+    if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
+    else changeFilter(steppedFilter(filter, pressed === APP_COMMAND.BACK ? -1 : 1));
   };
 
   const tokens = searchTokens(query);
@@ -800,7 +822,7 @@ export function CommandPalette({
         ))}
         {cut ? <div className="command-palette-notice">{TRUNCATED_LINE}</div> : null}
       </Command.List>
-      <PaletteFooter />
+      <PaletteFooter typed={query !== ""} />
     </Command.Dialog>
   );
 }
