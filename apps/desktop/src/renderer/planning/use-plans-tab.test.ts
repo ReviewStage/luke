@@ -7,6 +7,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/co
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
+  PLAN_CALL_FAILURE,
   PLAN_WORK_STATE,
   PLANNING_READ,
   type PlanCode,
@@ -37,6 +38,7 @@ import {
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
+import { PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
@@ -257,6 +259,39 @@ test("a repository pin still waiting on the service is let go with a sign-out, s
 
   assert.deepEqual(pending, ["acme/secret"]);
   assert.deepEqual(tab.control().pinnedRepositories, []);
+});
+
+test("New plan opens its dialog over the open plan, which stays open, and only a plan that starts closes it", async () => {
+  const answers = [
+    { failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE },
+    { planId: OTHER_PLAN_ID },
+  ] as const;
+  let start = 0;
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_START]: () => Promise.resolve(answers[start++] ?? answers[1]) },
+  );
+
+  act(() => tab.control().onNewPlan());
+  act(() => tab.control().newPlan.onClose());
+  assert.equal(tab.control().newPlan.open, false, "Cancel puts the dialog away");
+  act(() => tab.control().onNewPlanIn("acme/web"));
+  assert.equal(tab.control().newPlan.open, true);
+  assert.deepEqual(tab.control().newPlan.preset, { repository: "acme/web" });
+  assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT, "the plan behind the dialog stays open");
+  assert.ok(!tab.told.includes(ACT_KIND.PLANNING_CLOSE), "nothing left the plan");
+
+  let note: string | undefined;
+  await act(async () => {
+    note = await tab.control().newPlan.start("Dark mode", "acme/web");
+  });
+  assert.ok(note, "a refusal says why");
+  assert.equal(tab.control().newPlan.open, true, "a refusal keeps the dialog");
+  await act(async () => {
+    note = await tab.control().newPlan.start("Dark mode", "acme/web");
+  });
+  assert.equal(note, undefined);
+  assert.equal(tab.control().newPlan.open, false, "a plan started closes the dialog");
 });
 
 test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {

@@ -1,7 +1,7 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a plan's page, a plan's version history, the new-plan page,
+ * A place is a plan's page, a plan's version history, the home page,
  * the Inbox, or Settings, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
@@ -41,7 +41,7 @@ export const MOUSE_BUTTON = {
 const PLACE_KIND = {
   PLAN: "plan",
   VERSION_HISTORY: "version-history",
-  NEW_PLAN: "new-plan",
+  HOME: "home",
   INBOX: "inbox",
   SETTINGS: "settings",
 } as const;
@@ -54,7 +54,7 @@ type Place =
       readonly planId: string;
       readonly spot: HistorySpot | undefined;
     }
-  | { readonly kind: typeof PLACE_KIND.NEW_PLAN }
+  | { readonly kind: typeof PLACE_KIND.HOME }
   | { readonly kind: typeof PLACE_KIND.INBOX }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
@@ -65,7 +65,7 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the new-plan page, the Inbox on any plan, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
@@ -241,7 +241,7 @@ export function useWindowHistory(input: {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
-    if (boundFor === undefined) return { kind: PLACE_KIND.NEW_PLAN };
+    if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
@@ -277,7 +277,7 @@ export function useWindowHistory(input: {
     }
     if (historyOpen) plans.history.onClose();
     if (to.kind === PLACE_KIND.PLAN && boundFor !== to.planId) plans.onSelect(to.planId);
-    if (to.kind === PLACE_KIND.NEW_PLAN && boundFor !== undefined) plans.onLeavePlan();
+    if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) plans.onLeavePlan();
   };
   const { backTo, ...history } = useHistory({ place, reachable, go });
   return {

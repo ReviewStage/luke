@@ -104,12 +104,12 @@ export function codingAgentsControl(
 }
 
 /**
- * A signed-in Plans tab on screen on its new-plan page with no plans, every
+ * A signed-in Plans tab on screen on its home page with no plans, every
  * press ignored, bound for whichever plan it is given as open.
  */
 export function plansControl(overrides: Partial<PlansControl> = {}): PlansControl {
   return {
-    page: PLANS_PAGE.NEW,
+    page: PLANS_PAGE.HOME,
     shown: true,
     signedIn: true,
     plans: [],
@@ -233,9 +233,10 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onNewPlan: ignore,
     onNewPlanIn: ignore,
     newPlan: {
-      presses: 0,
+      open: false,
       preset: undefined,
       start: () => Promise.resolve(undefined),
+      onClose: ignore,
     },
     onLeavePlan: ignore,
     onRenamePlan: () => Promise.resolve(true),

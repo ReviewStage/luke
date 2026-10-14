@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
@@ -92,46 +92,56 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's shell on the new-plan page with the sidebar folded, the Inbox open over it or not. */
+/**
+ * The window's shell on the home page with the sidebar folded, the Inbox
+ * open over it or not, New plan opening its dialog and Cancel putting it
+ * away as the tab does.
+ */
 function mount(inboxOpen: boolean): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const shell = createElement(DesktopShell, {
-    gates: {
-      accountRequired: false,
-      onBeginSignIn: ignore,
-      onCancelSignIn: ignore,
-      signInFace: { play: 0 },
-    },
-    tab: PANEL_TAB.PLANS,
-    onTabChange: ignore,
-    plans: plansControl({
-      page: PLANS_PAGE.NEW,
-      inboxView: {
-        open: inboxOpen,
-        chosen: undefined,
-        onOpen: ignore,
-        onClose: ignore,
-        onChoose: ignore,
+  const control = plansControl();
+  function Shell() {
+    const [asked, setAsked] = useState(false);
+    return createElement(DesktopShell, {
+      gates: {
+        accountRequired: false,
+        onBeginSignIn: ignore,
+        onCancelSignIn: ignore,
+        signInFace: { play: 0 },
       },
-    }),
-    history: {
-      canGoBack: false,
-      canGoForward: false,
-      onBack: ignore,
-      onForward: ignore,
-      onLeaveVersionHistory: ignore,
-    },
-    sidebar: { collapsed: true, width: 264, onToggle: ignore, onResize: ignore, staged: false },
-    call: undefined,
-    captions: {
-      caption: { content: undefined, shown: false },
-      volumeHint: { wanted: false, text: "", onDismiss: ignore },
-    },
-    settings: SETTINGS,
-  });
-  act(() => root?.render(onRegistry(AtomRegistry.make(), shell)));
+      tab: PANEL_TAB.PLANS,
+      onTabChange: ignore,
+      plans: plansControl({
+        page: PLANS_PAGE.HOME,
+        inboxView: {
+          open: inboxOpen,
+          chosen: undefined,
+          onOpen: ignore,
+          onClose: ignore,
+          onChoose: ignore,
+        },
+        onNewPlan: () => setAsked(true),
+        newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
+      }),
+      history: {
+        canGoBack: false,
+        canGoForward: false,
+        onBack: ignore,
+        onForward: ignore,
+        onLeaveVersionHistory: ignore,
+      },
+      sidebar: { collapsed: true, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+      call: undefined,
+      captions: {
+        caption: { content: undefined, shown: false },
+        volumeHint: { wanted: false, text: "", onDismiss: ignore },
+      },
+      settings: SETTINGS,
+    });
+  }
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Shell))));
   return container;
 }
 
@@ -144,9 +154,27 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("with the sidebar folded, New plan stands beside its toggle over the Inbox, though the new-plan page beneath it leaves New plan out", () => {
-  assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar"]);
+test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
+  assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New plan"]);
   act(() => root?.unmount());
   root = undefined;
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New plan"]);
+});
+
+test("the home page says no plan is open, and its New plan raises the dialog over the window, which Cancel puts away", () => {
+  const page = mount(false);
+  const home = page.querySelector('section[aria-label="No plan open"]');
+  assert.ok(home, "the home page stands");
+  const newPlan = [...home.querySelectorAll("button")].find((button) =>
+    button.textContent?.startsWith("New plan"),
+  );
+  assert.ok(newPlan, "the home page offers New plan");
+  act(() => newPlan.click());
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+  assert.equal(dialog?.querySelector("h2")?.textContent, "New plan");
+  const cancel = [...(dialog?.querySelectorAll("button") ?? [])].find(
+    (button) => button.textContent === "Cancel",
+  );
+  act(() => cancel?.click());
+  assert.equal(document.querySelector('[role="dialog"][aria-modal="true"]'), null);
 });

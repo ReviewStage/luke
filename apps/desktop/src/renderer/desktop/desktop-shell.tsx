@@ -8,6 +8,7 @@ import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/cal
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { NewPlanDialog } from "../planning/new-plan-dialog";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import { usePlanLooks } from "../planning/use-plan-looks";
@@ -126,9 +127,8 @@ function usePlaceCommands(
 /**
  * The sidebar's New plan, kept in reach while the sidebar is folded: an icon
  * beside the toggle, the way a chat app keeps its compose button beside its
- * own. It asks for exactly what the sidebar's button asks for, so the shell
- * leaves it out on the new-plan page, where it would ask for the page it is
- * on, unless the Inbox stands in that page's place.
+ * own. It asks for exactly what the sidebar's button asks for: the New plan
+ * dialog, over whatever stands.
  */
 function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
@@ -178,7 +178,8 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
- * stands behind it. The live captions ride the call bar while the plan's
+ * stands behind it. New plan's dialog stands over the plans or a version
+ * history, whichever is drawn (`new-plan-dialog.tsx`). The live captions ride the call bar while the plan's
  * column is drawn, and float at the window's foot wherever else a call can
  * still be heard; they hold back spoken words while the plan's Transcript
  * is on screen streaming the same ones.
@@ -255,6 +256,8 @@ export function DesktopShell({
       </div>
     );
   }
+  // New plan asks over whatever stands, the plans or a version history.
+  const newPlanDialog = <NewPlanDialog newPlan={plans.newPlan} repositories={plans.repositories} />;
   // A plan's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the plan back as it found it.
   if (plans.history.open) {
@@ -270,6 +273,7 @@ export function DesktopShell({
         />
         <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
         <CaptionStrip {...captions} />
+        {newPlanDialog}
       </div>
     );
   }
@@ -324,9 +328,7 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
       <div className="title-bar-controls">
         <SidebarToggle sidebar={sidebar} />
-        {sidebar.collapsed && (plans.page !== PLANS_PAGE.NEW || inboxOpen) ? (
-          <TitleBarNewPlan plans={plans} />
-        ) : null}
+        {sidebar.collapsed ? <TitleBarNewPlan plans={plans} /> : null}
       </div>
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end">
@@ -336,6 +338,7 @@ export function DesktopShell({
           />
         </div>
       ) : null}
+      {newPlanDialog}
       <PaneGlide
         root={shell}
         layout={{

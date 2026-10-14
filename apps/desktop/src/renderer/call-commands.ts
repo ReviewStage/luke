@@ -13,7 +13,7 @@ import { useAppCommand } from "./app-commands";
 
 /**
  * The call's two mute chords, offered while a call is in progress wherever
- * the panel stands, on another plan, in Settings, or on the new-plan page,
+ * the panel stands, on another plan, in Settings, or on the home page,
  * since the call outlives the call bar that draws their buttons. Each is the
  * voice window's to carry out on the call standing, so neither names the
  * open plan. The microphone's waits on the system's permission, as the call

@@ -1,8 +1,9 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import { DocumentIcon } from "@sidecar/panel";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
@@ -11,7 +12,6 @@ import { ArchivedBanner } from "../planning/archived-plan";
 import { InboxList } from "../planning/inbox-list";
 import { firstChoice, INBOX_GROUPING, inboxList, listedItems } from "../planning/inbox-model";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
-import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
@@ -27,8 +27,10 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog } from "../settings/confirm-dialog";
+import { Shortcut } from "../shortcut";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { commandKeyshortcuts } from "../tooltip";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { PlanCard } from "./plan-card";
@@ -42,7 +44,7 @@ import { useTabViews } from "./strip-tabs";
  * The work column while Plans is chosen: the open plan's column, its
  * toolbar above and the call bar below, and the side panel beside it, the
  * window's full height, while that is open (or over it, while it fills the
- * window); or, with none open, the new-plan page, which is the window's home.
+ * window); or, with none open, the home page, which offers New plan.
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions: Start, which
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
@@ -124,6 +126,9 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
 
 /** What a plan's Inbox tab says while its read holds nothing. */
 const NOTHING_WAITS = "Nothing is waiting on you.";
+
+/** What the column says while no plan is open. */
+const NO_PLAN_OPEN_LINE = "Choose a plan in the sidebar, or start a new one.";
 
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
@@ -309,7 +314,7 @@ function PlanDocument({
             <RetryButton onRetry={plans.onRetryDocument} />
           ) : null}
           {/* A plan that cannot be drawn offers no menu, so its way back to
-              the new-plan page is said here. */}
+              the home page is said here. */}
           {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
             <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
               Close plan
@@ -574,7 +579,7 @@ export function DesktopPlans({
   summary: SummaryPin;
 }): React.JSX.Element {
   // The second call's question stands over either page: a Talk press on a
-  // plan's page asks it, and so does a plan started from the new-plan page.
+  // plan's page asks it, and so does a plan started from the New plan dialog.
   const secondCall = (
     <ConfirmDialog confirm={plans.secondCall.confirm} question={plans.secondCall.question} />
   );
@@ -591,17 +596,28 @@ export function DesktopPlans({
           {secondCall}
         </SkillFiles>
       );
-    // The page is titled by the name being typed, so its strip is the drag
-    // handle alone, and it is laid out as the plan's document will be.
-    case PLANS_PAGE.NEW:
+    // With no plan open the column says so and offers New plan, whose
+    // dialog stands over it as it stands over a plan.
+    case PLANS_PAGE.HOME:
       return (
         <>
           <div className="desktop-drag-strip" />
-          <div className="desktop-document">
-            <div className="plan-document-scroll">
-              <NewPlanForm newPlan={plans.newPlan} repositories={plans.repositories} />
-            </div>
-          </div>
+          <section className="desktop-empty" aria-label="No plan open">
+            <span className="empty-state-icon" aria-hidden="true">
+              <DocumentIcon />
+            </span>
+            <p>{NO_PLAN_OPEN_LINE}</p>
+            <button
+              type="button"
+              className="primary-button"
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
+              disabled={!plans.signedIn}
+              onClick={plans.onNewPlan}
+            >
+              New plan
+              <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} />
+            </button>
+          </section>
           {secondCall}
         </>
       );

@@ -23,7 +23,6 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
 import {
-  PLANS_PAGE,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
@@ -580,9 +579,8 @@ export function DesktopSidebar({
   call: CallCardInput | undefined;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
-  // The window's Inbox stands in the plan's place, so while it does no plan, nor the new-plan page, is the place shown.
+  // The window's Inbox stands in the plan's place, so while it does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
-  const composing = onPlans && !inInbox && plans.page === PLANS_PAGE.NEW;
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -612,8 +610,7 @@ export function DesktopSidebar({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) =>
-    onPlans && !inInbox && !composing && planId === plans.activePlanId;
+  const current = (planId: string) => onPlans && !inInbox && planId === plans.activePlanId;
   const unlisted = plans.plans.length === 0 && plans.archived.length === 0;
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
@@ -668,18 +665,15 @@ export function DesktopSidebar({
       folds.folded(group.repository) ? group.plans.filter((plan) => current(plan.id)) : group.plans,
     ),
   ];
-  // Moving up and down the list as it reads, New plan at its head: up from
-  // the first plan is the new-plan page, and down from that page is the
-  // first plan. The ends go no further.
-  const at = composing ? -1 : drawn.findIndex((plan) => plan.id === plans.activePlanId);
+  // Moving up and down the list as it reads: down from the home page, where
+  // no plan is open, is the first plan. The ends go no further.
+  const at = drawn.findIndex((plan) => plan.id === plans.activePlanId);
   const step = (by: number) => {
-    const next = at + by;
-    if (next === -1) newPlan();
-    const plan = drawn[next];
+    const plan = drawn[at + by];
     if (plan !== undefined) openPlan(plan.id);
   };
   const listed = plans.signedIn && drawn.length > 0;
-  useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at >= 0 ? () => step(-1) : undefined);
+  useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_PLAN, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
   return (
@@ -691,7 +685,6 @@ export function DesktopSidebar({
       <button
         type="button"
         className="sidebar-new-plan"
-        aria-current={composing ? "page" : undefined}
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
         disabled={!plans.signedIn}
         onClick={newPlan}
