@@ -10,6 +10,7 @@ import {
   jsonResponse,
 } from "./http.js";
 import type { SessionSandboxSweepOutcome } from "./session-sandboxes.js";
+import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
@@ -17,9 +18,10 @@ import type { SessionSandboxSweepOutcome } from "./session-sandboxes.js";
  * deleted plan's call that was still open when the plan went is removed
  * once it has ended, a turn whose end eve never told the relay is settled as
  * abandoned, a voice session whose device detached and never came back is
- * ended on Luke's key, as a connection would have ended it, and the Vercel
- * Sandboxes of the eve sessions Luke let go of are deleted, and the
- * automations whose schedule is due are fired. None of the six reads a word
+ * ended on Luke's key, as a connection would have ended it, the Vercel
+ * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
+ * sandbox no developer's terminal holds any more is stopped, and the
+ * automations whose schedule is due are fired. None of the seven reads a word
  * of any account; each is bounded on its own, and the sweep runs them in
  * turn.
  */
@@ -27,7 +29,7 @@ import type { SessionSandboxSweepOutcome } from "./session-sandboxes.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The six sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The seven sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -39,6 +41,8 @@ interface MaintenanceSweeps {
   sweepVoice: (now: number) => SweepRead<VoiceOrphanSweepOutcome>;
   /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
   sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
+  /** Stops the coding agents' sandboxes whose terminal lease lapsed past its grace, a sweep's worth. */
+  sweepTerminalLeases: (now: number) => SweepRead<TerminalLeaseSweepOutcome>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
 }
@@ -60,6 +64,8 @@ interface MaintenanceSweepAnswer {
   voice: VoiceOrphanSweepOutcome;
   /** What the sweep over the queued sessions' sandboxes did. */
   sandboxes: SessionSandboxSweepOutcome;
+  /** What the sweep over the lapsed terminal leases did. */
+  terminals: TerminalLeaseSweepOutcome;
   /** What the sweep over the automations due did. */
   automations: AutomationSweepOutcome;
 }
@@ -90,6 +96,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       abandoned: yield* options.sweepAbandonedTurns(now),
       voice: yield* options.sweepVoice(now),
       sandboxes: yield* options.sweepSandboxes(now),
+      terminals: yield* options.sweepTerminalLeases(now),
       automations: yield* options.sweepAutomations(now),
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

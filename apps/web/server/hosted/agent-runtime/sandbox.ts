@@ -146,13 +146,20 @@ export function endsTurn(event: MessageStreamEvent): boolean {
   return TURN_END_EVENTS.has(event.type);
 }
 
-/** Whether the role's policy stops its sandbox at this event: a turn's end, once a sandbox tool has opened it. */
+/**
+ * Whether the role's policy stops its sandbox at this event: a turn's end,
+ * once a sandbox tool has opened it, unless a developer's terminal holds it
+ * (`held`), when the sweep stops it once the terminal's lease lapses.
+ */
 export function stopsAtTurnEnd(
   role: AgentRole,
   event: MessageStreamEvent,
   record: SandboxRecord,
+  held: boolean,
 ): boolean {
-  return lifecycleOf(role).stopsAtTurnEnd && endsTurn(event) && record.openedAt !== undefined;
+  return (
+    lifecycleOf(role).stopsAtTurnEnd && endsTurn(event) && record.openedAt !== undefined && !held
+  );
 }
 
 /** Whether the role's policy renews the credential at its sandbox's firewall at this event: a step that starts once the credential has aged. */

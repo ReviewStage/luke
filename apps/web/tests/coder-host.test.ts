@@ -8,6 +8,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
+import { holdSandbox } from "@sidecar/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
@@ -460,6 +461,23 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
           [["add", "add"]],
         );
+      }),
+  );
+
+  it.effect(
+    "the turn-end stop is told an agent's sandbox is held while a developer's terminal lease reaches past now, and not once it lapsed",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const held = yield* openAgent(host);
+        const lapsed = yield* openAgent(host);
+        const untouched = yield* openAgent(host);
+        yield* holdSandbox(held.target.conversationId, new Date(NOW + 60_000));
+        yield* holdSandbox(lapsed.target.conversationId, new Date(NOW - 1));
+
+        assert.equal(yield* host.sandboxHeld(held.admitted), true);
+        assert.equal(yield* host.sandboxHeld(lapsed.admitted), false);
+        assert.equal(yield* host.sandboxHeld(untouched.admitted), false);
       }),
   );
 });
