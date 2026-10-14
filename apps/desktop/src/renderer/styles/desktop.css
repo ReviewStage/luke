@@ -2517,10 +2517,12 @@ body:has(.app-stage[data-capture="true"])
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
    popover's server page and in Settings › Integrations alike: one list, each
-   tool a press whose face is its name in the code face with its badge after
-   it, and the start of what it does under it in the muted type, two lines at
-   most. A tool opened shows the whole of what it does instead, wrapped as
-   its server wrote it and selectable, on the pressed row's fill. */
+   tool a press of one line, its title in the window's type with its name
+   after it in the code face, muted, and its badge, and under them the first
+   sentence of what it does in the muted type. The name gives way first where
+   the row is narrow, then the title, never the badge. The row its owner
+   holds wears the menu's highlight, and its chevron, which says a press
+   opens it. */
 .integration-tool-list {
   margin: 0;
   padding: 0;
@@ -2534,17 +2536,14 @@ body:has(.app-stage[data-capture="true"])
   border-radius: var(--menu-row-radius);
 }
 
-.integration-tool[data-open="true"] {
-  background: var(--raised);
-}
-
 .integration-tool-head {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
   flex-direction: column;
   gap: 1px;
-  padding: var(--space-4) var(--row-inset);
+  padding: var(--space-4) calc(var(--row-inset) + 16px) var(--space-4) var(--row-inset);
   border-radius: var(--menu-row-radius);
   background: none;
   color: inherit;
@@ -2552,52 +2551,77 @@ body:has(.app-stage[data-capture="true"])
   text-align: left;
 }
 
-.integration-tool-head:hover {
-  background: var(--raised);
-}
-
-.integration-tool-full {
-  margin: 0;
-  padding: 0 var(--row-inset) var(--space-6);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-  cursor: text;
+.integration-tool-head:hover,
+.integration-tool[data-current="true"] > .integration-tool-head {
+  background: var(--raised-strong);
 }
 
 .integration-tool-name {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-6);
+}
+
+.integration-tool-title {
+  overflow: hidden;
+  flex: 0 1 auto;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A tool its server gave no title is called by its name, in the code face. */
+:is(.integration-tool-title, .integration-tool-detail-title)[data-name="true"] {
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .integration-tool-id {
   overflow: hidden;
-  color: var(--text-primary);
+  flex: 0 100 auto;
+  min-width: 0;
+  color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .integration-tool-description {
-  display: -webkit-box;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-tool-chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--row-inset);
+  display: flex;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.integration-tool-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+
+.integration-tool[data-current="true"] .integration-tool-chevron {
+  opacity: 1;
 }
 
 /* The badge a server's own annotations earn a tool: quiet for Read-only,
    the danger tint for Destructive. */
 .integration-tool-badge {
   flex: none;
+  align-self: center;
   padding: 0 var(--space-4);
   border-radius: 4px;
   background: var(--raised-strong);
@@ -2610,6 +2634,248 @@ body:has(.app-stage[data-capture="true"])
 .integration-tool-badge[data-destructive="true"] {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger-text);
+}
+
+/* A tool's page: its head at a server page's head's height over a hairline,
+   the title in the head's weight and the name after it in the code face,
+   then one scroller holding its hints, what it does as rendered markdown,
+   selectable, and its parameters. A hint is the badge's chip, the danger
+   tint for Destructive, and only hairlined for how far the tool reaches. A
+   parameter is its name and type in the code face, required in the
+   attention tint, and under them what it is, the values it takes as chips,
+   its default outlined; where the page is wide enough, the name and type
+   stand in a column of their own beside the rest. */
+.integration-tool-detail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.integration-tool-detail-head {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--glyph-gap);
+  height: 40px;
+  padding: 0 var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.integration-tool-detail-head:has(.integration-tool-back) {
+  padding-left: var(--space-6);
+}
+
+.integration-tool-back {
+  --control-height: 24px;
+}
+
+.integration-tool-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.integration-tool-detail-title {
+  overflow: hidden;
+  flex: 0 1 auto;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-tool-detail-name {
+  overflow: hidden;
+  flex: 0 100 auto;
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.integration-tool-detail-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-12) var(--space-12);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+}
+
+.integration-tool-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.integration-tool-hint {
+  padding: 0 var(--space-6);
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 560;
+  line-height: 18px;
+}
+
+.integration-tool-hint[data-tone="danger"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger-text);
+}
+
+.integration-tool-hint[data-tone="quiet"] {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  font-weight: 500;
+}
+
+.integration-tool-description-whole {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  user-select: text;
+  cursor: text;
+}
+
+.integration-tool-description-whole :is(strong, .markdown-heading, code) {
+  color: var(--text-primary);
+}
+
+.integration-tool-description-whole .markdown-heading {
+  margin-top: 0.9em;
+  font-size: 1em;
+}
+
+.integration-tool-silent {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.integration-tool-parameters {
+  container-type: inline-size;
+}
+
+.integration-tool-section {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.integration-tool-section-count {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.integration-tool-parameter-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.integration-tool-parameter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-6) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.integration-tool-parameter-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-6);
+}
+
+.integration-tool-parameter-name {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.integration-tool-parameter-type {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.integration-tool-parameter-required {
+  margin-left: auto;
+  color: var(--state-attention);
+  font-size: 10.5px;
+  font-weight: 560;
+}
+
+.integration-tool-parameter-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.4;
+  user-select: text;
+}
+
+.integration-tool-parameter-description code {
+  color: var(--text-primary);
+}
+
+.integration-tool-parameter-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+  color: var(--text-tertiary);
+}
+
+.integration-tool-parameter-values code {
+  padding: 0 var(--space-4);
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.integration-tool-parameter-values code[data-default="true"] {
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--text-primary);
+}
+
+@container (min-width: 440px) {
+  .integration-tool-parameter {
+    display: grid;
+    grid-template-columns: minmax(150px, 34%) 1fr;
+    column-gap: var(--space-12);
+  }
+
+  .integration-tool-parameter-required {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
 }
 
 /* Inbox ---------------------------------------------------------------------- */
