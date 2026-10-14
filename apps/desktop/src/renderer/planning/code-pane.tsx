@@ -1,6 +1,6 @@
+import { cssCustomProperties } from "@sidecar/brand/react-css";
 import type { CodeRef } from "@sidecar/features/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/features/planning-view";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import {

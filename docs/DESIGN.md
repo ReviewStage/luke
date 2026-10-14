@@ -18,7 +18,7 @@ sidebar and the side panel open, close, and fill the window on `--motion-pane`
 over `--duration-pane`, a plain ease-out, because a pane stands on the
 window's own edge and a spring's overshoot would part the two for a frame.
 Durations and delays come only from the tokens in
-`packages/surface/src/generated/motion-tokens.css` (`--duration-shape`,
+`packages/brand/src/generated/motion-tokens.css` (`--duration-shape`,
 `--duration-exit`, `--duration-quick`, `--duration-fast`, `--duration-hover`,
 `--duration-pane`, `--motion-exit`, `--motion-pane`, `--row-stagger`,
 `--hint-delay`). Never write a literal millisecond into a rule: reduced motion
@@ -87,7 +87,7 @@ one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
 Repository checks hold one part of this contract: the generated brand art and
-surface tokens must match their generators. The rest is held by review:
+motion tokens must match their generators in `@sidecar/brand`. The rest is held by review:
 renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 

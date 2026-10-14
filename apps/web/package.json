@@ -38,7 +38,7 @@
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/settings": "workspace:*",
-    "@sidecar/surface": "workspace:*",
+    "@sidecar/brand": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "@tailwindcss/vite": "4.3.3",

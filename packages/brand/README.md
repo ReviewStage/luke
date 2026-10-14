@@ -5,17 +5,17 @@ with two eyes above it. The wordmark is **face-first caps**: the face *is* the L
 followed by custom U·K·E letterforms weight-matched to the face's stroke.
 
 Everything here is generated. Do not hand-edit the SVGs; instead tweak the parameters
-in `design/generate-brand-assets.mjs` and re-run:
+in `packages/brand/scripts/generate-brand-assets.mjs` and re-run:
 
 ```sh
-node design/generate-brand-assets.mjs
+node packages/brand/scripts/generate-brand-assets.mjs
 ```
 
 PNG derivatives are rasterized from the SVGs (any SVG renderer works; these were made
 with `rsvg-convert`):
 
 ```sh
-cd design/brand
+cd packages/brand/assets
 for s in 16 32 64 128 256 512 1024; do
   rsvg-convert -w $s -h $s icon/luke-icon-dark.svg -o icon/luke-icon-dark-$s.png
 done
@@ -37,7 +37,7 @@ for m in light dark; do
 done
 rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
 rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
-rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luke-og-card.png
+rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../../apps/web/public/luke-og-card.png
 ```
 
 ## In the app
@@ -56,10 +56,10 @@ cut from. They are generated files and are not to be hand-edited either:
 
 | File | What it carries |
 |---|---|
-| `packages/surface/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
+| `packages/brand/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
 | `apps/desktop/src/renderer/styles/generated/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
 
-`scripts/repository-checks.sh` runs `generate-brand-assets.mjs --check`, which
+`scripts/repository-checks.sh` runs `pnpm --filter @sidecar/brand check`, i.e. `generate-brand-assets.mjs --check`, which
 compares every committed output against what the script produces now and fails if
 any of them has drifted.
 
@@ -85,6 +85,8 @@ a full-bleed tile stands larger than every other app's. Only the animated
 
 ## Files
 
+Under `assets/`:
+
 | File | Use |
 |---|---|
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
@@ -94,7 +96,7 @@ a full-bleed tile stands larger than every other app's. Only the animated
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
 | `avatar/luke-avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the face with room around it, on the icon's gradient per mode or on flat black. The square marks are cropped to the face, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo takes the eyes and the smile's end; here the face's bounding box diagonal spans 80% of the canvas, so the whole face sits inside that circle. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
-| `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside this directory, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
+| `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside `assets/`, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
 | `button/luke-cta-download-{light,dark}.svg` | The download button, drawn as the site's hero CTA, per mode, for a page that links the download |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 

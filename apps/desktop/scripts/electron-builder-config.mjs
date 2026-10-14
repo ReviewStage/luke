@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
+import { DMG_WINDOW } from "@sidecar/brand/dmg-window";
 import {
   finalizeElectronBuilderArtifacts,
   notarizeElectronBuilderApp,

@@ -3,13 +3,13 @@ import {
   FACE_MOTION_CYCLE_MS,
   FACE_MOTION_PARTS,
   type FaceMotion,
-} from "@sidecar/surface";
+} from "@sidecar/brand";
 
 /**
  * The animations reference page's own vocabulary, held apart from the
  * component that draws it so the roster and the asset index can be asserted
  * without a DOM. Everything here restates generated facts —
- * `design/generate-brand-assets.mjs` writes the motion table this reads and
+ * `packages/brand/scripts/generate-brand-assets.mjs` writes the motion table this reads and
  * the SVGs the index files — and nothing is authored by hand that could
  * drift from them.
  */

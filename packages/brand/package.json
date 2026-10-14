@@ -1,15 +1,19 @@
 {
-  "name": "@sidecar/surface",
+  "name": "@sidecar/brand",
   "version": "0.13.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./assets-directory": "./scripts/assets-directory.mjs",
+    "./dmg-window": "./scripts/dmg-window.mjs",
     "./motion-tokens.css": "./src/generated/motion-tokens.css",
     "./react-css": "./src/react-css.js"
   },
   "types": "./src/index.ts",
   "scripts": {
+    "generate": "node scripts/generate-brand-assets.mjs && node scripts/generate-surface-shared.mjs",
+    "check": "node scripts/generate-brand-assets.mjs --check && node scripts/generate-surface-shared.mjs --check",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {

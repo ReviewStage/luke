@@ -14,12 +14,8 @@
   "ignore": [".opencode/**"],
   "workspaces": {
     ".": {
-      "entry": [
-        "scripts/fixtures/discarded-effect/*.ts",
-        "design/generate-brand-assets.mjs",
-        "design/generate-surface-shared.mjs"
-      ],
-      "project": ["scripts/**", "design/**"]
+      "entry": ["scripts/fixtures/discarded-effect/*.ts"],
+      "project": ["scripts/**"]
     },
     "apps/desktop": {
       "entry": [
@@ -69,6 +65,10 @@
     "tools/anti-slop": {
       "entry": ["index.ts"],
       "project": ["**/*.ts"]
+    },
+    "packages/brand": {
+      "entry": ["scripts/generate-brand-assets.mjs", "scripts/generate-surface-shared.mjs"],
+      "project": ["src/**", "scripts/**"]
     }
   },
   "rules": {

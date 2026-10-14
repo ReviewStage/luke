@@ -1,6 +1,6 @@
+import type { FaceMotion } from "@sidecar/brand";
 import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
 import { ComposeIcon, SidebarIcon } from "@sidecar/panel";
-import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";

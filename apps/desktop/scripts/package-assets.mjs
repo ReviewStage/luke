@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
+import { BRAND_ASSETS_DIRECTORY } from "@sidecar/brand/assets-directory";
+import { DMG_WINDOW } from "@sidecar/brand/dmg-window";
 import { buildAppIcon } from "./app-icon.mjs";
 import { LICENSE_RESOURCE_NAME } from "./package-config.mjs";
 import { NATIVE_HELPERS } from "./package-layout.mjs";
@@ -40,11 +41,11 @@ export function preparePackageAssets({ repoRoot, paths }) {
 
   fs.mkdirSync(path.dirname(paths.licensePath), { recursive: true });
   fs.copyFileSync(path.join(repoRoot, "LICENSE"), paths.licensePath);
-  buildAppIcon(paths.appRoot, repoRoot);
+  buildAppIcon(paths.appRoot);
 }
 
-export function prepareElectronBuilderDmgAssets({ repoRoot, paths }) {
-  const dmgBackgroundDirectory = path.join(repoRoot, "design", "brand", "dmg");
+export function prepareElectronBuilderDmgAssets({ paths }) {
+  const dmgBackgroundDirectory = path.join(BRAND_ASSETS_DIRECTORY, "dmg");
   fs.mkdirSync(path.dirname(paths.dmgBackgroundPath), { recursive: true });
   execFileSync(
     "tiffutil",

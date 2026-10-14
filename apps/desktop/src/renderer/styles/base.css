@@ -443,7 +443,7 @@ body,
 
 /* Everything the artwork moves wears `luke-face-part`. Which keyframes each
    part plays, at what duration and about which pivot, is generated into
-   face-motion.css from the same table the SVGs in design/brand/ are cut from;
+   face-motion.css from the same table the SVGs in packages/brand/assets/ are cut from;
    this is only the wiring those rules assume — how long they run, and what can
    stop them.
 

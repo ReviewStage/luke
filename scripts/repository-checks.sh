@@ -76,16 +76,12 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# The brand artwork has one source and three sets of committed outputs cut from
-# it: the SVGs, the face the renderer draws, and the motions it plays. If the
-# copies no longer match the source, one of them is telling a story the artwork
-# does not.
-node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
-
-# Motion tokens, layout sizes, and provider-mark path data are the same contract
-# between the desktop renderer and the marketing mock. One source, three
-# committed outputs in @sidecar/surface; --check fails if any drifted.
-node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
+# The brand artwork has one source and committed outputs cut from it: the
+# SVGs, the face the renderer draws, the motions it plays, and the motion
+# tokens, layout sizes, and provider-mark path data the desktop renderer and
+# the marketing mock share. If a copy no longer matches the source, it is
+# telling a story the artwork does not; --check fails on any drift.
+pnpm --dir "$SIDECAR_REPO_ROOT" --filter @sidecar/brand --silent check
 
 # The vercel.json rewrites are what land a route on its grouped function, and
 # they are generated from server/routes/; --check fails if a rewrite went stale.

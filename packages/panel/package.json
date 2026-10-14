@@ -10,7 +10,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/surface": "workspace:*",
+    "@sidecar/brand": "workspace:*",
     "react": "catalog:"
   },
   "devDependencies": {

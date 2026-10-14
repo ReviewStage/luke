@@ -89,7 +89,7 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 
 ## Brand artwork
 
-`repository-checks.sh` runs `design/generate-brand-assets.mjs --check` and fails
+`repository-checks.sh` runs `packages/brand/scripts/generate-brand-assets.mjs --check` and fails
 on drift, so the generated outputs cannot be hand-edited. What the check does not
 say is why the app draws the face rather than loading the SVGs: it needs
 `currentColor` and CSS animation, and `--face-motion` is what holds every loop

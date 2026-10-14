@@ -3,8 +3,8 @@
 
 packages/database/migrations/*/snapshot.json linguist-generated
 
-packages/surface/src/generated/** linguist-generated
-packages/surface/src/generated/*.test.ts -linguist-generated
+packages/brand/src/generated/** linguist-generated
+packages/brand/src/generated/*.test.ts -linguist-generated
 
 apps/desktop/src/renderer/styles/generated/** linguist-generated
 apps/desktop/src/renderer/styles/generated/*.test.ts -linguist-generated

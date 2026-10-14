@@ -1,7 +1,7 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
 /* Motion tokens first, so base.css can spend them without restating the springs
    or the duration set. */
-@import "@sidecar/surface/motion-tokens.css";
+@import "@sidecar/brand/motion-tokens.css";
 /* Before base.css: `.settings-input` is equal specificity to the tweaks
    there, and those tweaks have to win. */
 @import "./settings.css";
@@ -19,7 +19,7 @@
 /* The AI Elements components' utilities, over the tokens above; compiled by
    scripts/tailwind.mjs as the stylesheet is built. */
 @import "./tailwind.css";
-/* Generated from design/generate-brand-assets.mjs; base.css holds the wiring it
+/* Generated from packages/brand/scripts/generate-brand-assets.mjs; base.css holds the wiring it
    assumes. Last, so a hand-written rule can still win. */
 @import "./generated/face-motion.css";
 /* After everything: the window's own layout restages the shared surface's
