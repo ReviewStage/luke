@@ -56,7 +56,7 @@ export const AUTOMATION_TRIGGER = {
 export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER)[keyof typeof AUTOMATION_TRIGGER];
 
 /** The repository events a GitHub trigger listens for. */
-const GITHUB_TRIGGER_EVENT = {
+export const GITHUB_TRIGGER_EVENT = {
   PULL_REQUEST_OPENED: "pull-request-opened",
   PULL_REQUEST_LABELED: "pull-request-labeled",
   ISSUE_OPENED: "issue-opened",
@@ -66,6 +66,8 @@ const GITHUB_TRIGGER_EVENT = {
   /** Commits pushed to a branch. */
   PUSH: "push",
 } as const;
+
+export type GitHubTriggerEvent = (typeof GITHUB_TRIGGER_EVENT)[keyof typeof GITHUB_TRIGGER_EVENT];
 
 /** What an automation starts when it fires. */
 export const AUTOMATION_ACTION = {

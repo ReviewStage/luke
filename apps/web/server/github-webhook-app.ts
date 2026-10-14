@@ -15,6 +15,7 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { clearRevokedAuthorization, type GitHubApp } from "./github/github-app.js";
+import { queueGithubRuns } from "./hosted/automation-github.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { setInstallationStatus } from "./hosted/github-installations.js";
@@ -60,6 +61,12 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * without subscribing (`github_app_authorization`), drops that GitHub user's
  * account row and its tokens, so no account stands linked to a GitHub that no
  * longer answers it.
+ *
+ * Every delivery is also read as an automation's trigger
+ * (`hosted/automation-github.ts`): a pull request or issue opened or
+ * labelled, a check suite that failed, or a push queues a run, under the
+ * delivery's own id, for each automation on a plan of the repository that
+ * listens for it, and the minute sweep starts each one's agent.
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -70,6 +77,8 @@ const HTTP_METHOD = { POST: "POST" } as const;
 /** The headers a delivery carries that are read here. */
 const DELIVERY_HEADER = {
   EVENT: "x-github-event",
+  /** GitHub's id for the delivery, the same on a redelivery, which an automation's run is recorded under. */
+  DELIVERY: "x-github-delivery",
   SIGNATURE: "x-hub-signature-256",
 } as const;
 
@@ -332,9 +341,12 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
       }
       return hostedJsonResponse(200, { read: 0 });
     }
+    const queued = yield* hostedStoreOrUnavailable(
+      queueGithubRuns(request.headers[DELIVERY_HEADER.DELIVERY] ?? "", event, payload),
+    );
     const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
-    return hostedJsonResponse(200, { read });
+    return hostedJsonResponse(200, { read, queued });
   },
 );
 

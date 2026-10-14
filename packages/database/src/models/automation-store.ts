@@ -31,6 +31,7 @@ import {
   ne,
   or,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -706,6 +707,38 @@ const findStranded = SqlSchema.findAll({
     ),
 });
 
+const ListeningRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  trigger: automationTriggerSchema,
+});
+
+/** One automation a repository's event may fire: its id, its owner, and what fires it. */
+export type ListeningAutomation = typeof ListeningRowSchema.Type;
+
+const findGithubAutomations = SqlSchema.findAll({
+  Request: Schema.Struct({ repository: Schema.String, limit: Schema.Int }),
+  Result: ListeningRowSchema,
+  execute: ({ repository, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
+        .from(automation)
+        .innerJoin(plan, eq(plan.id, automation.planId))
+        .where(
+          and(
+            eq(automation.enabled, true),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.GITHUB),
+            // GitHub folds a repository's name; a plan keeps it as GitHub spelled it when it was named.
+            sql`lower(${plan.repository}) = lower(${repository})`,
+            OWNER_REACHES_PLAN,
+          ),
+        )
+        .orderBy(asc(automation.createdAt), asc(automation.id))
+        .limit(limit),
+    ),
+});
+
 const writePause = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
   execute: ({ id, reason, now }) =>
@@ -975,4 +1008,16 @@ export function strandedAutomationRuns(
   limit: number,
 ): PlanStoreEffect<readonly StrandedRun[]> {
   return findStranded({ before, limit });
+}
+
+/**
+ * The enabled automations with a GitHub trigger on plans of the repository,
+ * whoever owns them, of owners who still reach those plans, oldest first,
+ * at most `limit`: what a delivery about the repository may fire.
+ */
+export function githubAutomationsOn(
+  repository: string,
+  limit: number,
+): PlanStoreEffect<readonly ListeningAutomation[]> {
+  return findGithubAutomations({ repository, limit });
 }
