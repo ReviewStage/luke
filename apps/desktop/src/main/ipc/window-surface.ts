@@ -6,7 +6,7 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
   type RecordProductEvent,
-} from "@sidecar/analytics";
+} from "@sidecar/features/analytics";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import {
   MICROPHONE_STATUS,

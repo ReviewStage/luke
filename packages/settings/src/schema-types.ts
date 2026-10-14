@@ -1,4 +1,4 @@
-import type { ProductSettingValue } from "@sidecar/analytics";
+import type { ProductSettingValue } from "@sidecar/features/analytics";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { AppSettingId, DescribedSetting } from "@sidecar/wire/app-settings";
 import type { RuntimeStatus } from "./status.js";

@@ -44,7 +44,6 @@
     "@excalidraw/excalidraw": "0.18.1",
     "@pierre/trees": "1.0.0-beta.6",
     "@sentry/esbuild-plugin": "5.4.0",
-    "@sidecar/analytics": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/features": "workspace:*",
     "@sidecar/gateway": "workspace:*",

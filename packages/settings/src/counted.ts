@@ -1,4 +1,4 @@
-import { PRODUCT_SETTINGS_VIEW, type ProductSettingsView } from "@sidecar/analytics";
+import { PRODUCT_SETTINGS_VIEW, type ProductSettingsView } from "@sidecar/features/analytics";
 import { SETTINGS_PAGE, type SettingsPage } from "./schema.js";
 
 /**

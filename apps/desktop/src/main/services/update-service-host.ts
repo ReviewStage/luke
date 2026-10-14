@@ -1,4 +1,8 @@
-import { PRODUCT_EVENT, PRODUCT_UPDATE_ACTION, type RecordProductEvent } from "@sidecar/analytics";
+import {
+  PRODUCT_EVENT,
+  PRODUCT_UPDATE_ACTION,
+  type RecordProductEvent,
+} from "@sidecar/features/analytics";
 import { jsonStateFile } from "@sidecar/host";
 import { text } from "@sidecar/wire";
 import { Effect, type Scope } from "effect";

@@ -5,7 +5,7 @@ import {
   type ProductExchangeKind,
   type ProductSurfaceEventName,
   productEventFromWire,
-} from "@sidecar/analytics";
+} from "@sidecar/features/analytics";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/gateway/devtrace";
 import { liveExchangeActive } from "@sidecar/live";

@@ -1,6 +1,6 @@
-import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
+import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/features/analytics";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,

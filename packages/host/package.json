@@ -16,7 +16,6 @@
     "@effect/platform-node": "catalog:",
     "@shikijs/langs": "4.5.0",
     "@shikijs/themes": "4.5.0",
-    "@sidecar/analytics": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/features": "workspace:*",
     "@sidecar/gateway": "workspace:*",

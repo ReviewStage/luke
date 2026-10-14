@@ -1,11 +1,11 @@
+import type { AccountRefreshFailed } from "@sidecar/features";
 import {
   PRODUCT_EVENT,
   type ProductEventPropertiesFor,
   productEventFromWire,
   type RecordProductEvent,
-} from "@sidecar/analytics";
-import { ProductEventSender } from "@sidecar/analytics/sender";
-import type { AccountRefreshFailed } from "@sidecar/features";
+} from "@sidecar/features/analytics";
+import { ProductEventSender } from "@sidecar/features/analytics/sender";
 import {
   carried,
   GATEWAY_EVENT,

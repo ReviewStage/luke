@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
+import { PRODUCT_EXCHANGE_KIND } from "@sidecar/features/analytics";
 import { sanitizedTraceEvent } from "@sidecar/gateway/devtrace";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
