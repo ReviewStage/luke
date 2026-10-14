@@ -2,7 +2,13 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+  type IntegrationStatus,
+} from "@luke/features/integration-wire";
 import {
   MENTION_KIND,
   type Mention,
@@ -53,6 +59,17 @@ const TREES: ReadonlyMap<string, string> = new Map([
   ["acme/next", "apps/web/rollout-next.ts"],
 ]);
 
+/** Linear connected, and every other integration unavailable. */
+// SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
+const LINEAR_CONNECTED = Object.fromEntries(
+  INTEGRATION_PROVIDER_LIST.map((provider) => [
+    provider,
+    provider === INTEGRATION_PROVIDER.LINEAR
+      ? INTEGRATION_STATUS.CONNECTED
+      : INTEGRATION_STATUS.UNAVAILABLE,
+  ]),
+) as Record<IntegrationProvider, IntegrationStatus>;
+
 /** The repository the plan's tree is read from now. */
 let standing = "acme/relay";
 
@@ -74,20 +91,37 @@ beforeEach(() => {
     value: {
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
-          request.kind === ACT_KIND.PLANNING_TREE
+          request.kind === ACT_KIND.INTEGRATIONS_STATUS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
-                  folder: {
-                    path: "",
-                    repository: standing,
-                    branch: "main",
-                    entries: [{ name: TREES.get(standing) ?? "", kind: PLAN_TREE_ENTRY.FILE }],
-                    truncated: false,
-                  },
+                  integrations: LINEAR_CONNECTED,
                 },
               }
-            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+            : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
+              ? {
+                  status: ACT_OUTCOME_STATUS.DONE,
+                  value: {
+                    tools: [
+                      { name: "list_issues", description: "List the team's issues." },
+                      { name: "get_issue", description: "Read one issue." },
+                    ],
+                  },
+                }
+              : request.kind === ACT_KIND.PLANNING_TREE
+                ? {
+                    status: ACT_OUTCOME_STATUS.DONE,
+                    value: {
+                      folder: {
+                        path: "",
+                        repository: standing,
+                        branch: "main",
+                        entries: [{ name: TREES.get(standing) ?? "", kind: PLAN_TREE_ENTRY.FILE }],
+                        truncated: false,
+                      },
+                    },
+                  }
+                : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
         ),
       recordSurfaceEvent: ignore,
     },
@@ -279,4 +313,25 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
   assert.equal(chip?.tagName, "SPAN");
   assert.equal(chip?.textContent, "Linear");
   assert.equal(carryingTarget(container), undefined);
+});
+
+test("an @ in the box offers the account's connected MCP servers, and once a word is typed their tools, a pick sent as its link", async () => {
+  const { container, sent } = await box(planPage([]));
+
+  typeInComposer(container, "Use @");
+  await settle();
+  const servers = listed(container);
+  typeInComposer(container, "list");
+  await settle();
+  const tools = listed(container);
+  pressInComposer(container, "Enter");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(servers, ["Goal", "Rollout", "Invitations", "Linear"]);
+  assert.deepEqual(tools, ["Linear · list_issues"]);
+  assert.deepEqual(sent, [
+    `Use ${mentionMarkdown({ kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" }, "Linear · list_issues", PLACE)}`,
+  ]);
 });
