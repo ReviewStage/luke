@@ -9,32 +9,35 @@ import {
 } from "../settings/confirm-dialog";
 
 /**
- * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace… opens: a name, Cancel, and Create.
+ * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a name, Cancel, and Create workspace.
  *
  * It is the confirm dialog with a field in it, so it dims the window, keeps
  * Tab inside, hands focus back to whatever opened it, and says a refusal on
  * the card with the name left as typed for another try. The name is held
- * to the service's bound; Enter creates, and Escape or a press on the dimmed
- * window cancels.
+ * to the service's bound and drawn in New plan's name field; Enter creates,
+ * and Escape or a press on the dimmed window cancels. Each opening starts
+ * from an empty name, so a cancelled one is never offered again, and the
+ * question goes with the sidebar folding away or the account signing out.
  */
 
 /** Why a blank name was not sent. */
 const NAME_ASKED = "Name the workspace.";
 
-/** New workspace…'s ask: the press that opens the card, and the card. */
+/** New workspace's ask: the press that opens the card, and the card. */
 export interface NewWorkspaceAsk {
   ask: () => void;
   dialog: React.JSX.Element;
 }
 
-/** New workspace…'s ask, opened by `ask()`, and the card that asks it. */
+/** New workspace's ask, opened by `ask()`, and the card that asks it, standing only while `surfaceOpen`. */
 export function useNewWorkspaceDialog(
   onCreate: (name: string) => Promise<string | undefined>,
+  surface: { signedIn: boolean; surfaceOpen: boolean },
 ): NewWorkspaceAsk {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement | null>(null);
   const confirm: DialogConfirm = useConfirmDialog(
-    { subject: true, surfaceOpen: true },
+    { subject: surface.signedIn, surfaceOpen: surface.surfaceOpen },
     (): Promise<ActionResult> => {
       const trimmed = name.trim();
       if (trimmed === "") {
@@ -55,15 +58,16 @@ export function useNewWorkspaceDialog(
       question={{
         title: "New workspace",
         body: "You will be its owner, and can invite people to it.",
-        verb: "Create",
+        verb: "Create workspace",
         running: "Creating workspace",
         tone: DIALOG_TONE.PRIMARY,
       }}
     >
       <input
         ref={field}
-        className="settings-input"
+        className="dialog-name-field"
         aria-label="Workspace name"
+        spellCheck={false}
         placeholder="Workspace name"
         maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
         value={name}
@@ -75,5 +79,11 @@ export function useNewWorkspaceDialog(
       />
     </ConfirmDialog>
   );
-  return { ask: confirm.ask, dialog };
+  return {
+    ask: () => {
+      setName("");
+      confirm.ask();
+    },
+    dialog,
+  };
 }

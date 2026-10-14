@@ -140,7 +140,7 @@ function NewPlanCard({
         <input
           ref={field}
           type="text"
-          className="new-plan-dialog-name"
+          className="dialog-name-field"
           aria-label="Plan name"
           aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
           placeholder="Plan name"

@@ -550,28 +550,15 @@
 }
 
 /* Settings › Workspace › Members: the invite form, an address field taking
-   the row's room, then the role and Invite, drawn as the settings field is.
-   Styled from here by element, so the form carries no class of its own. */
-.workspace-invite input,
-.workspace-invite select {
+   the row's room, then the role's segments and Invite, the field drawn as
+   API keys' is. */
+.workspace-invite .settings-input {
   min-width: 0;
   height: var(--control-height);
-  padding: 0 var(--space-8);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--input-fill);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 13px;
-}
-
-.workspace-invite input {
   flex: 1;
-}
-
-.workspace-invite input:focus,
-.workspace-invite select:focus {
-  background: var(--input-fill-focus);
+  padding: 0 var(--space-8);
+  border-radius: var(--control-radius);
+  letter-spacing: 0;
 }
 
 /* The Keyboard shortcuts page: a reference list more than a form, so the

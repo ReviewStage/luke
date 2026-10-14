@@ -10,7 +10,7 @@ import { GitHubSection } from "./github-section";
 /**
  * Settings' GitHub row over the connection as the host last read it: Connect
  * GitHub while none is connected or before the first read, Connected with
- * Reconnect and Disconnect once one is, each press opening its own page.
+ * Reconnect, and Disconnect in its ⋯, which asks first, once one is.
  * Synthetic accounts.
  */
 
@@ -64,14 +64,36 @@ test("with no GitHub connected, and before the first read, the row offers Connec
   assert.deepEqual(disconnected.opened, ["connect"]);
   assert.deepEqual(unread.opened, ["connect"]);
   assert.equal(disconnected.line(), "Not connected");
+  assert.equal(unread.line(), "Checking…");
 });
 
-test("with GitHub connected, the row says so and offers Disconnect, which asks to disconnect it", () => {
+test("with GitHub connected, the row says so, and Disconnect in its ⋯ asks before it disconnects", () => {
   const connected = mount({ connected: true, login: null });
 
-  connected.press("Disconnect");
+  act(() =>
+    (
+      connected.page.querySelector<HTMLButtonElement>('button[aria-label="GitHub actions"]') ??
+      assert.fail("no ⋯ on the row")
+    ).click(),
+  );
+  act(() =>
+    (
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (each) => each.textContent === "Disconnect",
+      ) ?? assert.fail("no Disconnect in the menu")
+    ).click(),
+  );
+  const askedFirst = connected.opened.length === 0;
+  act(() =>
+    (
+      [...(document.querySelector('[role="alertdialog"]')?.querySelectorAll("button") ?? [])].find(
+        (each) => each.textContent === "Disconnect",
+      ) ?? assert.fail("no Disconnect in the dialog")
+    ).click(),
+  );
 
   assert.equal(connected.line(), "Connected");
+  assert.equal(askedFirst, true);
   assert.deepEqual(connected.opened, ["disconnect"]);
   assert.equal(
     [...connected.page.querySelectorAll("button")].some(

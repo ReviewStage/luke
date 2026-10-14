@@ -7,14 +7,19 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@sidecar/hosted/workspace-wire";
+import { TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { UserMinusIcon, XIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { RetryButton } from "../retry-button";
 import { SETTINGS_SECTION } from "../settings-views";
+import { SpinnerRegion } from "../spinner";
 import { managesWorkspace } from "../workspace-role";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { MenuRow } from "./menu-row";
 import { SelectRow } from "./select-row";
 import { SettingsGroup } from "./settings-group";
 
@@ -22,20 +27,24 @@ import { SettingsGroup } from "./settings-group";
  * workspace-page.tsx -- Settings' Workspace page: one workspace the account is in, its members, and its GitHub repositories.
  *
  * A picker at the page's head chooses the workspace, the one the sidebar
- * lists until another is chosen or a link names one. Under it the
- * workspace's name and the account's role. A team's workspace then lists its
- * members as the service holds them now, each with its name, email, and
- * role. An owner or an admin invites people by address and role, sees the
- * invitations still pending with each one's accept link to copy and send,
- * and cancels one; removes a member who is not an owner; and anyone but an
- * owner leaves. For a team's owner or admin, GitHub repositories connects one
- * GitHub organization's installation of the Luke GitHub App to the
- * workspace, or names the connected account with Disconnect and the way to
- * choose its repositories on GitHub. Every act that cannot be undone asks
- * first in the confirm dialog, and a refusal is said where it was asked:
- * the account's role's own line where that is why, the act's own sentence
- * otherwise. The personal workspace has no team, so it draws no members,
- * and connects no GitHub organization, which the service refuses it.
+ * lists until another is chosen or a link names one, and says the account's
+ * role in it. A team's workspace then lists its members as the service holds
+ * them now, each with its email and role. An owner or an admin invites
+ * people by address and role, sees the invitations still pending with each
+ * one's accept link to copy and send, and cancels one; removes a member who
+ * is not an owner; and anyone but an owner leaves. For a team's owner or
+ * admin, GitHub repositories connects one GitHub organization's installation
+ * of the Luke GitHub App to the workspace, or names the connected account
+ * with Choose repositories, the App's page on GitHub, and Disconnect.
+ *
+ * Its rows are the Settings kit's: a row's one constructive act stands at
+ * its end, and the rest are its ⋯'s (`menu-row.tsx`), each act that cannot
+ * be undone asking first in the confirm dialog, whose refusal is said where
+ * it was asked. The page draws whole: while the members or the invitations
+ * are being read it holds itself back (`.settings-reading`), and a read that
+ * failed says so in red with Retry. The personal workspace has no team, so
+ * it draws no members, and connects no GitHub organization, which the
+ * service refuses it.
  */
 
 /** What each role reads as on a member's row. */
@@ -47,6 +56,12 @@ const ROLE_WORDS = {
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
+/** The roles an invitation offers, in the order the form's segments draw them, the default first. */
+const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
+
+/** What the GitHub organization's line says once the App's installation was suspended or removed. */
+const GITHUB_SUSPENDED = "Suspended or removed on GitHub.";
+
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
  * words, which main makes `WORKSPACE_NOT_PERMITTED_REFUSAL` where the
@@ -56,63 +71,124 @@ function refusedWith(refused: Error): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message };
 }
 
-/** The members as the section reads them: still reading, read, or refused with a line. */
-type MembersRead =
-  | { readonly members: readonly WorkspaceMember[] }
-  | { readonly failed: string }
-  | undefined;
+/** A list as the page reads it: still reading, read, or refused with a line. */
+type ListRead<Item> = { readonly items: readonly Item[] } | { readonly failed: string } | undefined;
 
-/** A row's act that cannot be taken back: its red button, and the dialog that asks first and says a refusal. */
-function ConfirmedButton({
-  verb,
-  running,
-  title,
-  body,
-  action,
+/** The line a page draws while it reads, which holds the whole page back until every read is in. */
+function Reading({ label }: { label: string }): React.JSX.Element {
+  return (
+    <div className="settings-card-line settings-reading">
+      <SpinnerRegion label={label} />
+    </div>
+  );
+}
+
+/** A read that failed: its refusal in red, and Retry. */
+function ReadFailed({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
+  return (
+    <div className="settings-card-line">
+      <p className="error-message" role="alert">
+        {line}
+      </p>
+      <RetryButton onRetry={onRetry} />
+    </div>
+  );
+}
+
+/** A row's words: what it names, and a line under it. */
+function RowCopy({ name, line }: { name: string; line?: React.ReactNode }): React.JSX.Element {
+  return (
+    <span className="settings-copy">
+      <strong>{name}</strong>
+      {line === undefined ? null : <small>{line}</small>}
+    </span>
+  );
+}
+
+/** One member's row: its email and role, and for an owner or admin, Remove in its ⋯, which asks first. */
+function MemberRow({
+  workspaceId,
+  member,
+  removable,
+  onRemoved,
 }: {
-  verb: string;
-  running: string;
-  title: string;
-  body: string;
-  action: () => Promise<ActionResult>;
+  workspaceId: string;
+  member: WorkspaceMember;
+  removable: boolean;
+  onRemoved: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element {
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, action);
+  const { act } = useAct();
+  const remove = useConfirmDialog({ subject: removable, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId: member.userId }).then(
+      (members) => {
+        onRemoved(members);
+        return ACCEPTED;
+      },
+      refusedWith,
+    ),
+  );
+  const actions = removable
+    ? [
+        {
+          label: "Remove from workspace",
+          icon: <UserMinusIcon />,
+          danger: true,
+          onSelect: remove.ask,
+        },
+      ]
+    : [];
   return (
     <>
-      <button
-        type="button"
-        className="toolbar-button bordered-button"
-        data-danger="true"
-        disabled={confirm.busy}
-        onClick={confirm.ask}
-      >
-        {verb}
-      </button>
-      <ConfirmDialog confirm={confirm} question={{ title, body, verb, running }} />
+      <MenuRow label={`${member.name} actions`} actions={actions}>
+        <RowCopy name={member.name} line={`${member.email} · ${ROLE_WORDS[member.role]}`} />
+      </MenuRow>
+      <ConfirmDialog
+        confirm={remove}
+        question={{
+          title: `Remove ${member.name} from this workspace?`,
+          body: "They lose its plans until they are invited again.",
+          verb: "Remove",
+          running: "Removing",
+        }}
+      />
     </>
   );
 }
 
-/** One row: what it names, a line under it, and what it offers. */
-function Row({
-  name,
-  line,
-  className,
-  children,
-}: {
-  name: string;
-  line?: string | undefined;
-  className?: string;
-  children?: React.ReactNode;
-}): React.JSX.Element {
+/** The leave, for anyone but an owner: its red button, asking first, as Delete account's is. */
+function LeaveRow({ workspace, onLeft }: { workspace: Workspace; onLeft: () => void }) {
+  const { act } = useAct();
+  const workspaceId = workspace.id;
+  const leave = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
+      onLeft();
+      return ACCEPTED;
+    }, refusedWith),
+  );
   return (
-    <div className={className === undefined ? "settings-row" : `settings-row ${className}`}>
-      <span className="settings-copy">
-        <strong>{name}</strong>
-        {line === undefined ? null : <small>{line}</small>}
-      </span>
-      {children}
-    </div>
+    <>
+      <div className="settings-row">
+        <RowCopy name={`Leave ${workspace.name}`} />
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          data-danger="true"
+          disabled={leave.busy}
+          onClick={leave.ask}
+        >
+          Leave
+        </button>
+      </div>
+      <ConfirmDialog
+        confirm={leave}
+        question={{
+          title: `Leave ${workspace.name}?`,
+          body: "Its plans leave your sidebar until you are invited again.",
+          verb: "Leave",
+          running: "Leaving",
+        }}
+      />
+    </>
   );
 }
 
@@ -125,15 +201,17 @@ function TeamMembers({
   onLeft: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [read, setRead] = useState<MembersRead>(undefined);
+  const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
+  const [attempt, setAttempt] = useState(0);
   const workspaceId = workspace.id;
 
+  // A Retry reads again by bumping the attempt.
   useEffect(() => {
     let live = true;
     setRead(undefined);
     act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
-      (members) => {
-        if (live) setRead({ members });
+      (items) => {
+        if (live) setRead({ items });
       },
       (refused: Error) => {
         if (live) setRead({ failed: refused.message });
@@ -142,59 +220,28 @@ function TeamMembers({
     return () => {
       live = false;
     };
-  }, [act, workspaceId]);
+  }, [act, workspaceId, attempt]);
 
-  const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   const manages = managesWorkspace(workspace);
   return (
     <>
-      {read === undefined ? null : "failed" in read ? (
-        <p className="settings-note" role="alert">
-          {read.failed}
-        </p>
+      {read === undefined ? (
+        <Reading label="Loading the members" />
+      ) : "failed" in read ? (
+        <ReadFailed line={read.failed} onRetry={() => setAttempt((count) => count + 1)} />
       ) : (
-        read.members.map((member) => (
-          <Row
+        read.items.map((member) => (
+          <MemberRow
             key={member.userId}
-            className="workspace-member"
-            name={member.name}
-            line={`${member.email} · ${ROLE_WORDS[member.role]}`}
-          >
-            {manages && member.role !== WORKSPACE_ROLE.OWNER ? (
-              <ConfirmedButton
-                verb="Remove"
-                running="Removing"
-                title={`Remove ${member.name} from this workspace?`}
-                body="They lose its plans until they are invited again."
-                action={() =>
-                  act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, {
-                    workspaceId,
-                    userId: member.userId,
-                  }).then((members) => {
-                    setRead({ members });
-                    return ACCEPTED;
-                  }, refusedWith)
-                }
-              />
-            ) : null}
-          </Row>
+            workspaceId={workspaceId}
+            member={member}
+            removable={manages && member.role !== WORKSPACE_ROLE.OWNER}
+            onRemoved={(items) => setRead({ items })}
+          />
         ))
       )}
-      {owner ? null : (
-        <Row name={`Leave ${workspace.name}`}>
-          <ConfirmedButton
-            verb="Leave"
-            running="Leaving"
-            title={`Leave ${workspace.name}?`}
-            body="Its plans leave your sidebar until you are invited again."
-            action={() =>
-              act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
-                onLeft();
-                return ACCEPTED;
-              }, refusedWith)
-            }
-          />
-        </Row>
+      {workspace.role === WORKSPACE_ROLE.OWNER ? null : (
+        <LeaveRow workspace={workspace} onLeft={onLeft} />
       )}
     </>
   );
@@ -203,13 +250,23 @@ function TeamMembers({
 /**
  * The workspace's invitations, for an owner or an admin: the form that
  * invites an address as a member or an admin, then those still pending,
- * each with its link to copy and a Cancel, which asks nothing first since
- * inviting the address again undoes it. A refusal is said under the form.
+ * each with its link to copy and Cancel invitation in its ⋯, which asks
+ * nothing first since inviting the address again undoes it. A refusal is
+ * said under the form.
  */
 function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const { act } = useAct();
   const copy = useCopyToast();
-  const [pending, setPending] = useState<readonly WorkspaceInvitation[]>([]);
+  const [pending, setPendingState] = useState<readonly WorkspaceInvitation[] | undefined>(
+    undefined,
+  );
+  const [firstReadFailed, setFirstReadFailed] = useState<string>();
+  const pendingRead = useRef(false);
+  const setPending: typeof setPendingState = (next) => {
+    pendingRead.current = true;
+    setFirstReadFailed(undefined);
+    setPendingState(next);
+  };
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
@@ -227,7 +284,10 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
         if (asked === latest.current) setPending(invitations);
       },
       (refused: Error) => {
-        if (asked === latest.current) setNote(refused.message);
+        if (asked !== latest.current) return;
+        // A list never read is not an empty one: it says so with Retry in its place.
+        if (pendingRead.current) setNote(refused.message);
+        else setFirstReadFailed(refused.message);
       },
     );
   };
@@ -246,8 +306,13 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
       });
   };
 
-  useEffect(() => {
+  const read = () => {
+    setFirstReadFailed(undefined);
     show(act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }));
+  };
+
+  useEffect(() => {
+    read();
     return () => {
       latest.current += 1;
     };
@@ -261,11 +326,21 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
       (made) => {
         setEmail("");
-        setPending((standing) => [...standing.filter((one) => one.id !== made.id), made]);
+        setPending((standing) => [...(standing ?? []).filter((one) => one.id !== made.id), made]);
         show(act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }));
       },
     );
   };
+
+  const cancel = (invitationId: string) =>
+    write(
+      () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
+      // The cancel's own answer is the list after it, so a read out before it is passed over.
+      (left) => {
+        latest.current += 1;
+        setPending(left);
+      },
+    );
 
   return (
     <>
@@ -273,39 +348,58 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
         <input
           type="email"
           required
+          className="settings-input"
           aria-label="Email address"
+          placeholder="name@example.com"
+          autoComplete="off"
+          spellCheck={false}
           value={email}
+          disabled={busy}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <select
-          aria-label="Role"
-          value={role}
-          onChange={(event) =>
-            setRole(
-              event.target.value === INVITATION_ROLE.ADMIN
-                ? INVITATION_ROLE.ADMIN
-                : INVITATION_ROLE.MEMBER,
-            )
-          }
-        >
-          {Object.values(INVITATION_ROLE).map((each) => (
-            <option key={each} value={each}>
+        <fieldset className="settings-segments">
+          <legend className="visually-hidden">Role</legend>
+          {INVITATION_ROLES.map((each) => (
+            <button
+              key={each}
+              type="button"
+              className="settings-segment"
+              aria-pressed={each === role}
+              disabled={busy}
+              onClick={() => setRole(each)}
+            >
               {ROLE_WORDS[each]}
-            </option>
+            </button>
           ))}
-        </select>
+        </fieldset>
         <button type="submit" className="toolbar-button bordered-button" disabled={busy}>
           Invite
         </button>
       </form>
-      {note === undefined ? null : <p className="settings-note">{note}</p>}
-      {pending.map((one) => (
-        <Row
+      {note === undefined ? null : (
+        <p className="error-message" role="alert">
+          {note}
+        </p>
+      )}
+      {firstReadFailed !== undefined ? (
+        <ReadFailed line={firstReadFailed} onRetry={read} />
+      ) : pending === undefined ? (
+        <Reading label="Loading the invitations" />
+      ) : null}
+      {(pending ?? []).map((one) => (
+        <MenuRow
           key={one.id}
-          className="workspace-invitation"
-          name={one.email}
-          line={ROLE_WORDS[one.role]}
+          label={`${one.email} actions`}
+          actions={[
+            {
+              label: "Cancel invitation",
+              icon: <XIcon />,
+              disabled: busy,
+              onSelect: () => cancel(one.id),
+            },
+          ]}
         >
+          <RowCopy name={one.email} line={`Invited · ${ROLE_WORDS[one.role]}`} />
           {/* Luke sends no mail: the accept link is copied and sent by hand. */}
           <button
             type="button"
@@ -314,107 +408,77 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
           >
             Copy link
           </button>
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={busy}
-            onClick={() =>
-              write(
-                () =>
-                  act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId: one.id }),
-                // The cancel's own answer is the list after it, so a read out before it is passed over.
-                (left) => {
-                  latest.current += 1;
-                  setPending(left);
-                },
-              )
-            }
-          >
-            Cancel
-          </button>
-        </Row>
+        </MenuRow>
       ))}
     </>
   );
 }
 
-/** A row whose button opens a page in the browser for the workspace, the act's refusal said under it. */
-function OpenerRow({
-  name,
-  line,
-  verb,
-  className,
-  open,
-  children,
-}: {
-  name: string;
-  line?: string | undefined;
-  verb: string;
-  className: string;
-  open: () => Promise<void>;
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  const [refusal, setRefusal] = useState<string>();
-  return (
-    <Row className={className} name={name} line={refusal ?? line}>
-      {children}
-      <button
-        type="button"
-        className="toolbar-button bordered-button"
-        onClick={() => {
-          setRefusal(undefined);
-          open().catch((refused: Error) => setRefusal(refused.message));
-        }}
-      >
-        {verb}
-      </button>
-    </Row>
-  );
-}
-
 /**
- * The workspace's GitHub repositories, for an owner or an admin: Connect
+ * The workspace's GitHub organization, for an owner or an admin: Connect
  * while none is, which installs the Luke GitHub App on a GitHub organization
- * for this workspace, or the connected account's repositories with
- * Disconnect and Choose repositories…, the App's page on GitHub where its
- * repositories are chosen. Both GitHub pages open in the browser through
- * the one connect, whose return to Luke links the installation to this
- * workspace.
+ * for this workspace, or the connected account with Choose repositories, the
+ * App's page on GitHub where its repositories are chosen, and Disconnect in
+ * its ⋯. Both GitHub pages open in the browser through the one connect,
+ * whose return to Luke links the installation to this workspace; a page
+ * that could not be opened says why under the row.
  */
 function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
   const { github } = workspace;
   const workspaceId = workspace.id;
-  const open = () => act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId });
-  return github === null ? (
-    <OpenerRow
-      className="workspace-github"
-      name="No GitHub organization connected"
-      line="Connect one to use its repositories in this workspace."
-      verb="Connect…"
-      open={open}
-    />
-  ) : (
-    <OpenerRow
-      className="workspace-github"
-      name={`Repositories from ${github.login}`}
-      line={github.active ? undefined : "Suspended or removed on GitHub."}
-      verb="Choose repositories…"
-      open={open}
-    >
-      <ConfirmedButton
-        verb="Disconnect"
-        running="Disconnecting"
-        title={`Disconnect ${github.login} from ${workspace.name}?`}
-        body="Its plans lose the organization's repositories until one is connected again."
-        action={() =>
-          act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId }).then(
-            () => ACCEPTED,
-            refusedWith,
-          )
-        }
-      />
-    </OpenerRow>
+  const [refusal, setRefusal] = useState<string>();
+  const disconnect = useConfirmDialog({ subject: github !== null, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
+  );
+  const open = () => {
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId }).catch((refused: Error) =>
+      setRefusal(refused.message),
+    );
+  };
+  const actions =
+    github === null
+      ? []
+      : [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }];
+  return (
+    <>
+      <MenuRow label="GitHub organization actions" actions={actions}>
+        <RowCopy
+          name="GitHub organization"
+          line={
+            github === null ? (
+              "Not connected. Connect one to use its repositories in this workspace."
+            ) : github.active ? (
+              github.login
+            ) : (
+              <span className="settings-state" data-state="attention">
+                {`${github.login} · ${GITHUB_SUSPENDED}`}
+              </span>
+            )
+          }
+        />
+        <button type="button" className="toolbar-button bordered-button" onClick={open}>
+          {github === null ? "Connect" : "Choose repositories"}
+        </button>
+      </MenuRow>
+      {refusal === undefined ? null : (
+        <p className="error-message" role="alert">
+          {refusal}
+        </p>
+      )}
+      {github === null ? null : (
+        <ConfirmDialog
+          confirm={disconnect}
+          question={{
+            title: `Disconnect ${github.login} from ${workspace.name}?`,
+            body: "Its plans lose the organization's repositories until one is connected again.",
+            verb: "Disconnect",
+            running: "Disconnecting",
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -428,6 +492,10 @@ export interface WorkspaceSettingsControl {
   onChooseWorkspace: (workspaceId: string) => void;
   /** Lists the personal workspace again where the workspace left was the one listed. */
   onLeft: (workspaceId: string) => void;
+  /** Whether the read the workspaces arrive with failed, so none will arrive until it is asked again. */
+  listFailed: boolean;
+  /** Asks for the workspaces again. */
+  onRetryList: () => void;
 }
 
 /** The workspace the page shows: the one named, else the first; none before the workspaces are read. */
@@ -444,7 +512,7 @@ function pickerLabel(workspace: Workspace): string {
   return workspace.personal ? `${workspace.name} (personal)` : workspace.name;
 }
 
-/** The page's head: the picker, then the workspace's name and the account's role in it. */
+/** The page's head: the picker, saying under its name the account's role in the workspace chosen. */
 function WorkspaceHead({
   control,
   workspace,
@@ -456,19 +524,15 @@ function WorkspaceHead({
     <SettingsGroup>
       <SelectRow
         label="Workspace"
-        value={workspace.id}
-        options={control.workspaces.map((each) => ({ value: each.id, label: pickerLabel(each) }))}
-        parse={(raw) => control.workspaces.find((each) => each.id === raw)?.id}
-        onChange={control.onChooseWorkspace}
-      />
-      <Row
-        className="workspace-identity"
-        name={workspace.name}
-        line={
+        detail={
           workspace.personal
             ? "Your personal workspace. Its plans are yours alone."
             : `Your role: ${ROLE_WORDS[workspace.role]}`
         }
+        value={workspace.id}
+        options={control.workspaces.map((each) => ({ value: each.id, label: pickerLabel(each) }))}
+        parse={(raw) => control.workspaces.find((each) => each.id === raw)?.id}
+        onChange={control.onChooseWorkspace}
       />
     </SettingsGroup>
   );
@@ -476,15 +540,26 @@ function WorkspaceHead({
 
 /**
  * The page for one workspace: its head, a team's members, and, for a team's
- * owner or admin, its GitHub repositories; nothing before the workspaces are read.
+ * owner or admin, its GitHub repositories; held back, as a page still
+ * reading is, before the workspaces are read, and Retry where that read failed.
  */
 export function WorkspacePage({
   control,
 }: {
   control: WorkspaceSettingsControl;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const workspace = shownWorkspace(control);
-  if (workspace === undefined) return null;
+  if (workspace === undefined) {
+    return (
+      <SettingsGroup>
+        {control.listFailed ? (
+          <ReadFailed line="Luke could not read your workspaces." onRetry={control.onRetryList} />
+        ) : (
+          <Reading label="Loading your workspaces" />
+        )}
+      </SettingsGroup>
+    );
+  }
   return (
     <>
       <WorkspaceHead control={control} workspace={workspace} />

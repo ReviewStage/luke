@@ -61,6 +61,8 @@ test("a link turns to Settings, its page, and its workspace, and lands on its se
           workspaces: [ACME],
           workspaceId: ACME.id,
           onChooseWorkspace: () => undefined,
+          listFailed: false,
+          onRetryList: () => undefined,
           onLeft: () => undefined,
         },
       }),

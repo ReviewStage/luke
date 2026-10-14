@@ -534,7 +534,7 @@ function SidebarInboxRow({
 /**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan of the workspace chosen, headed by
- * the workspace's switcher while the account is in more than one
+ * the workspace's switcher while an account is signed in
  * (`workspace-switcher.tsx`), and the account's
  * row, whose menu and gear lead to Settings and the rest. The Inbox's row
  * follows Search above the rule, counting what waits on the developer, and opens the
@@ -719,8 +719,8 @@ export function DesktopSidebar({
         onOpen={openInbox}
       />
       <hr className="sidebar-rule" />
-      {/* The workspace the list is, while the account is in more than one;
-          it stands over the scroller, so it never scrolls away. */}
+      {/* The workspace the list is, while an account is signed in; it
+          stands over the scroller, so it never scrolls away. */}
       {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away

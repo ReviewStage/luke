@@ -108,6 +108,12 @@ export function dropBelow(button: HTMLElement): MenuPlacement {
   return { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END };
 }
 
+/** Where a menu dropped from a row as wide as its column hangs: under it, its left edge on the row's. */
+export function dropBelowStart(button: HTMLElement): MenuPlacement {
+  const bounds = button.getBoundingClientRect();
+  return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
+}
+
 /** Where a menu raised from a button at the window's foot hangs: over it, its left edge on the button's. */
 export function riseAbove(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();

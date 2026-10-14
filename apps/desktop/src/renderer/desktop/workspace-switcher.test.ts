@@ -13,8 +13,8 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * The head of the sidebar's plans as the developer meets it: the workspace
- * listed, and the menu of every workspace, New workspace…, and Workspace
- * settings…, whoever the account is in the workspace. Each press is written
+ * listed, and the menu of every workspace, New workspace, and Workspace
+ * settings, whoever the account is in the workspace. Each press is written
  * down where the sidebar would hand it on.
  */
 
@@ -73,7 +73,11 @@ function mount(plans: Partial<PlansControl>) {
 
 /** The items of the menu standing open. */
 function menuItems(): HTMLButtonElement[] {
-  return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="menu"] [role="menuitem"], [role="menu"] [role="menuitemcheckbox"]',
+    ),
+  ];
 }
 
 /** Opens the switcher's menu. */
@@ -89,7 +93,7 @@ function choose(label: string): void {
   act(() => item.click());
 }
 
-test("the menu offers the workspaces, the listed one checked, New workspace…, and Workspace settings…, and nothing else", () => {
+test("the menu offers the workspaces, the listed one checked, New workspace, and Workspace settings, and nothing else", () => {
   const pressed: string[] = [];
   const page = mount({
     workspaces: [PERSONAL, CONNECTED],
@@ -99,17 +103,17 @@ test("the menu offers the workspaces, the listed one checked, New workspace…, 
   });
 
   open(page.switcher());
-  const offered = menuItems().map((item) => [item.textContent, item.querySelector("svg") !== null]);
+  const offered = menuItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
   choose("Personal");
   open(page.switcher());
-  choose("Workspace settings…");
+  choose("Workspace settings");
 
   assert.equal(page.switcher()?.textContent, "acme");
   assert.deepEqual(offered, [
-    ["Personal", false],
-    ["acme", true],
-    ["New workspace…", true],
-    ["Workspace settings…", true],
+    ["Personal", "false"],
+    ["acme", "true"],
+    ["New workspace", null],
+    ["Workspace settings", null],
   ]);
   assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, "settings"]);
 });
@@ -120,11 +124,11 @@ test("a member of a team is offered the same three kinds of item as its admin", 
 
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Personal", "acme", "New workspace…", "Workspace settings…"],
+    ["Personal", "acme", "New workspace", "Workspace settings"],
   );
 });
 
-test("New workspace… asks a name and creates it, and a refusal is said on the card with the name kept", async () => {
+test("New workspace asks a name and creates it, and a refusal is said on the card with the name kept", async () => {
   const asked: string[] = [];
   let refusal: string | undefined = "Could not make that workspace on this system.";
   const page = mount({
@@ -138,7 +142,7 @@ test("New workspace… asks a name and creates it, and a refusal is said on the 
 
   open(page.switcher());
   const offered = menuItems().map((item) => item.textContent);
-  choose("New workspace…");
+  choose("New workspace");
   const field =
     document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
     assert.fail("no name field");
@@ -155,11 +159,11 @@ test("New workspace… asks a name and creates it, and a refusal is said on the 
   refusal = undefined;
   const create = [
     ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-  ].find((button) => button.textContent === "Create");
-  assert.ok(create, "the card offers Create");
+  ].find((button) => button.textContent === "Create workspace");
+  assert.ok(create, "the card offers Create workspace");
   await act(async () => create.click());
 
-  assert.deepEqual(offered, ["Personal", "New workspace…", "Workspace settings…"]);
+  assert.deepEqual(offered, ["Personal", "New workspace", "Workspace settings"]);
   assert.deepEqual(asked, ["Platform", "Platform"]);
   assert.equal(refused, "Could not make that workspace on this system.");
   assert.equal(
@@ -184,4 +188,65 @@ test("the workspace menu closes when the sidebar folds away", () => {
 
   assert.equal(opened, 4);
   assert.deepEqual(menuItems(), []);
+});
+
+/** Opens New workspace and types `name` into its field, which it answers. */
+function nameWorkspace(page: { switcher: () => HTMLButtonElement | null }, name: string) {
+  open(page.switcher());
+  choose("New workspace");
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
+    assert.fail("no name field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, name);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return field;
+}
+
+test("New workspace opens on an empty name each time, so a cancelled name is not offered again", () => {
+  const page = mount({ workspaces: [PERSONAL], workspace: PERSONAL });
+  nameWorkspace(page, "Platform");
+  const cancel =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+      (button) => button.textContent === "Cancel",
+    ) ?? assert.fail("no Cancel");
+  act(() => cancel.click());
+
+  open(page.switcher());
+  choose("New workspace");
+
+  assert.equal(
+    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]')?.value,
+    "",
+  );
+});
+
+test("Enter while an input method composes creates nothing, and a press dragged from the field onto the dimmed window cancels nothing", async () => {
+  const asked: string[] = [];
+  const page = mount({
+    workspaces: [PERSONAL],
+    workspace: PERSONAL,
+    onCreateWorkspace: (name) => {
+      asked.push(name);
+      return Promise.resolve(undefined);
+    },
+  });
+  const field = nameWorkspace(page, "東京");
+
+  await act(async () => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true }),
+    );
+  });
+  const backdrop =
+    document.querySelector<HTMLElement>(".confirm-dialog-backdrop") ?? assert.fail("no backdrop");
+  act(() => {
+    field.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  assert.deepEqual(asked, []);
+  assert.ok(document.querySelector('[role="alertdialog"]'), "the card still stands");
 });
