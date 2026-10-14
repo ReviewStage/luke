@@ -5,9 +5,8 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { GearIcon, McpIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
 import type { IntegrationStatuses } from "../integration-statuses";
@@ -125,7 +124,6 @@ function ServersPopover({
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
-  const { act } = useAct();
   const reads = useIntegrationTools(
     INTEGRATION_PROVIDER_LIST.filter(
       (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
@@ -138,6 +136,7 @@ function ServersPopover({
     disabled: servers.disabled,
   });
   const [connecting, setConnecting] = useState<IntegrationProvider | undefined>(undefined);
+  const grant = useIntegrationGrant(statuses);
 
   // The popover takes focus as it opens, so Escape and focus leaving it are heard.
   useEffect(() => {
@@ -150,15 +149,10 @@ function ServersPopover({
     onClose();
   };
 
-  /** A sign-in begun from the row: the browser opens, and the row waits on the window's return to read it. */
+  /** A sign-in begun from the row: the browser opens, and the row waits on the window's return, or the sign-in's landing, to read it. */
   const connect = (provider: IntegrationProvider) => {
     setConnecting(provider);
-    act(ACT_KIND.INTEGRATIONS_CONNECT, { provider })
-      .catch(() => undefined)
-      .then((answer) => {
-        setConnecting(undefined);
-        if (answer !== undefined && !("failure" in answer)) statuses.signInBegun(provider);
-      });
+    void grant.begin(provider).then(() => setConnecting(undefined));
   };
 
   const end = (row: ServerRow): React.JSX.Element | null => {
@@ -190,10 +184,18 @@ function ServersPopover({
             type="button"
             className="toolbar-button bordered-button agent-servers-connect"
             disabled={connecting === row.provider}
-            title={`Sign in to ${row.name} in your browser`}
+            title={
+              grantedBySignIn(row.provider)
+                ? "Sign in to Luke with GitHub in your browser"
+                : `Sign in to ${row.name} in your browser`
+            }
             onClick={() => connect(row.provider)}
           >
-            {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
+            {grantedBySignIn(row.provider)
+              ? SERVER_ACTION.SIGN_IN
+              : row.kind === SERVER_ROW.CONNECT
+                ? SERVER_ACTION.CONNECT
+                : SERVER_ACTION.RECONNECT}
           </button>
         );
       case SERVER_ROW.RETRY:

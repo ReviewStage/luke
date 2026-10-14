@@ -40,7 +40,7 @@ import {
 import { Config, Context, Data, Effect, Layer, Option, Redacted, type Schema } from "effect";
 import { text } from "../core.js";
 import { readAccountPerson } from "./account-person.js";
-import { INTEGRATION } from "./integrations.js";
+import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 
 /** Why Connect answered nothing usable. */
 export const INTEGRATION_CONNECT_FAILURE = {
@@ -73,7 +73,7 @@ export class IntegrationConnectFailure extends Data.TaggedError("IntegrationConn
 }
 
 /** One account's token as Connect issued it; the token itself travels sealed until the one place that hands it to eve. */
-interface IntegrationToken {
+export interface IntegrationToken {
   readonly token: Redacted.Redacted;
   /** When it stops being good, in milliseconds since the epoch. */
   readonly expiresAt: number;
@@ -323,7 +323,12 @@ export const accountIntegrationConnect = /* @__PURE__ */ Effect.fn("web/accountI
 
 /** One provider's connector as this deployment's environment configures it: the UID its variable names and the accounts its allowlist does, or none. */
 function connectorFromEnvironment(provider: IntegrationProvider) {
-  const { CONNECTOR_VARIABLE, ALLOWED_ACCOUNTS_VARIABLE } = INTEGRATION[provider];
+  const { CONNECTOR_VARIABLE, ALLOWED_ACCOUNTS_VARIABLE }: IntegrationDefinition =
+    INTEGRATION[provider];
+  // A provider granted by the account's own sign-in has no connector to read.
+  if (CONNECTOR_VARIABLE === undefined || ALLOWED_ACCOUNTS_VARIABLE === undefined) {
+    return Effect.succeed(UNCONFIGURED_CONNECTOR);
+  }
   return Effect.map(
     Config.all([
       Config.option(Config.String(CONNECTOR_VARIABLE)),

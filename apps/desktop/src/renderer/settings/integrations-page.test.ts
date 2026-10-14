@@ -20,13 +20,18 @@ import { IntegrationsSection } from "./integrations-page";
  * stands as the service would: a provider the deployment offers the
  * account has a row, and one it does not, which the service answers as
  * unavailable, has none; an account offered none is told so, and a read
- * that fails still offers to read again.
+ * that fails still offers to read again. GitHub, which the account's own
+ * GitHub sign-in grants, is connected by signing in with GitHub.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
 let withheld: readonly IntegrationProvider[] = [];
 /** Whether the next read of where they stand fails. */
 let refuseRead = false;
+/** Whether the account has signed in with GitHub, which is where GitHub stands. */
+let githubSignedIn = false;
+/** Every act the page sent, in order. */
+let sent: Act[] = [];
 
 const roots: Root[] = [];
 
@@ -38,7 +43,9 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
       provider,
       withheld.includes(provider)
         ? INTEGRATION_STATUS.UNAVAILABLE
-        : INTEGRATION_STATUS.DISCONNECTED,
+        : provider === INTEGRATION_PROVIDER.GITHUB && githubSignedIn
+          ? INTEGRATION_STATUS.CONNECTED
+          : INTEGRATION_STATUS.DISCONNECTED,
     ]),
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
@@ -46,11 +53,19 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
 beforeEach(() => {
   withheld = [];
   refuseRead = false;
+  githubSignedIn = false;
+  sent = [];
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
+      act: (request: Act): Promise<ActOutcome> => {
+        sent.push(request);
+        // The host's sign-in with GitHub, which lands.
+        if (request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN) {
+          githubSignedIn = true;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: true });
+        }
+        return Promise.resolve(
           request.kind !== ACT_KIND.INTEGRATIONS_STATUS
             ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
             : refuseRead
@@ -59,7 +74,8 @@ beforeEach(() => {
                   value: { failure: INTEGRATION_CALL_FAILURE.UNANSWERED },
                 }
               : { status: ACT_OUTCOME_STATUS.DONE, value: { integrations: serviceStatuses() } },
-        ),
+        );
+      },
       recordSurfaceEvent: () => undefined,
     },
   });
@@ -93,6 +109,7 @@ test("a provider the deployment does not offer the account has no row, and every
   const page = await mount();
 
   assert.deepEqual(rowNames(page), [
+    "GitHub",
     "Granola",
     "Linear",
     "Mercury",
@@ -133,4 +150,30 @@ test("a read that fails after one that offered nothing still says so and offers 
     [...page.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
     "Retry is offered",
   );
+});
+
+test("GitHub, granted by the account's own GitHub sign-in, offers Sign in with GitHub rather than Connect, and once that sign-in lands stands connected with no Disconnect", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
+  );
+  const page = await mount();
+  const buttonNamed = (name: string) =>
+    [...page.querySelectorAll("button")].find((button) => button.textContent === name);
+
+  const signIn = buttonNamed("Sign in with GitHub");
+  assert.ok(signIn, "Sign in with GitHub is offered");
+  assert.equal(buttonNamed("Connect"), undefined);
+  await act(async () => {
+    signIn.click();
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+
+  assert.ok(
+    sent.some(
+      (request) =>
+        request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN && request.payload.provider === "github",
+    ),
+  );
+  assert.equal(buttonNamed("Sign in with GitHub"), undefined);
+  assert.equal(page.querySelector('[aria-label="GitHub actions"]'), null);
 });

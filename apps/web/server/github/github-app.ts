@@ -85,7 +85,7 @@ const APP_JWT = {
  * handed out: a token good for less than this is refreshed first, so the
  * request it is handed to does not watch it expire mid-flight.
  */
-const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
+export const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
 

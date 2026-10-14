@@ -1,7 +1,4 @@
-import {
-  INTEGRATION_CALL_FAILURE,
-  type IntegrationStatusView,
-} from "@sidecar/hosted/integration-view";
+import type { IntegrationStatusView } from "@sidecar/hosted/integration-view";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -14,6 +11,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import {
   CONNECTION_HEALTH,
   type ConnectionHealth,
@@ -37,9 +35,10 @@ import { SettingsGroup } from "./settings-group";
  * connected only once its server answered with its tools; one whose server
  * answered why it would not says why instead, and offers Reconnect where
  * that mends it (`integration-health.ts`). A Connect sends the browser to
- * sign in with the provider; a
- * connected row's ⋯ (or a right-click on it) offers Disconnect, which asks
- * first in the confirm dialog. The window never sees a sign-in address; the
+ * sign in with the provider; a connected row's ⋯ (or a right-click on it)
+ * offers Disconnect, which asks first in the confirm dialog. GitHub is
+ * granted by the account's own GitHub sign-in (`integration-grant.ts`), so
+ * its row offers Sign in with GitHub instead, and no Disconnect. The window never sees a sign-in address; the
  * host opens it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
@@ -116,6 +115,21 @@ function rowLine(
   }
 }
 
+/** What a row's grant button says: a Connect, or for GitHub the sign-in it is, and so on once one stands. */
+function grantLabel(
+  signIn: boolean,
+  status: IntegrationStatus | undefined,
+  broken: boolean,
+  connecting: boolean,
+): string {
+  if (signIn) {
+    if (connecting) return "Waiting for browser…";
+    return status === INTEGRATION_STATUS.DISCONNECTED ? "Sign in with GitHub" : "Sign in again";
+  }
+  if (status === INTEGRATION_STATUS.DISCONNECTED) return "Connect";
+  return broken ? "Reconnect" : "Connect again";
+}
+
 function IntegrationRow({
   provider,
   status,
@@ -131,28 +145,27 @@ function IntegrationRow({
 }): React.JSX.Element {
   const { act } = useAct();
   const name = INTEGRATION_NAME[provider];
-  const { settle, signInBegun } = statuses;
+  const { settle } = statuses;
+  const grant = useIntegrationGrant(statuses);
+  const signIn = grantedBySignIn(provider);
   const [connecting, setConnecting] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
   const connect = useCallback(() => {
     setConnecting(true);
     setRejection(undefined);
-    act(ACT_KIND.INTEGRATIONS_CONNECT, { provider })
-      .catch(() => undefined)
-      .then((answer) => {
-        setConnecting(false);
-        if (answer === undefined || "failure" in answer) {
-          setRejection(
-            answer?.failure === INTEGRATION_CALL_FAILURE.NOT_OPENED
-              ? PAGE_LINE.NOT_OPENED
-              : `Luke could not start connecting ${name}. Try again in a moment.`,
-          );
-          return;
-        }
-        signInBegun(provider);
-      });
-  }, [act, provider, name, signInBegun]);
+    void grant.begin(provider).then((outcome) => {
+      setConnecting(false);
+      if (outcome === GRANT_OUTCOME.NOT_OPENED) setRejection(PAGE_LINE.NOT_OPENED);
+      if (outcome === GRANT_OUTCOME.REFUSED) {
+        setRejection(
+          signIn
+            ? "Luke could not sign in with GitHub. Try again in a moment."
+            : `Luke could not start connecting ${name}. Try again in a moment.`,
+        );
+      }
+    });
+  }, [grant, provider, name, signIn]);
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
@@ -175,9 +188,11 @@ function IntegrationRow({
 
   const line = rowLine(provider, status, health);
   const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect;
-  const actions = connected
-    ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
-    : [];
+  // A grant that is the account's GitHub sign-in ends with that sign-in, never here.
+  const actions =
+    connected && !signIn
+      ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
+      : [];
   return (
     <>
       <MenuRow label={`${name} actions`} actions={actions} anchor={provider}>
@@ -195,19 +210,26 @@ function IntegrationRow({
         {status === undefined ||
         status === INTEGRATION_STATUS.UNAVAILABLE ||
         (connected && !broken) ? null : (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={connecting}
-            title={`Sign in to ${name} in your browser`}
-            onClick={connect}
-          >
-            {status === INTEGRATION_STATUS.DISCONNECTED
-              ? "Connect"
-              : broken
-                ? "Reconnect"
-                : "Connect again"}
-          </button>
+          <>
+            {connecting && signIn ? (
+              <button type="button" className="toolbar-button" onClick={grant.cancel}>
+                Cancel
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="toolbar-button bordered-button"
+              disabled={connecting}
+              title={
+                signIn
+                  ? "Sign in to Luke with GitHub in your browser"
+                  : `Sign in to ${name} in your browser`
+              }
+              onClick={connect}
+            >
+              {grantLabel(signIn, status, broken, connecting)}
+            </button>
+          </>
         )}
       </MenuRow>
       {rejection === undefined ? null : (

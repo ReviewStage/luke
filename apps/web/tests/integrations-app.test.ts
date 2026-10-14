@@ -15,6 +15,7 @@ import type { WireBoundaryInput } from "@sidecar/wire";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { GitHubApp } from "../server/github/github-app";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   beginIntegrationSignIn,
@@ -24,6 +25,7 @@ import {
   readIntegrationSignIn,
 } from "../server/hosted/integration-store";
 import { integrationsApp, mintIntegrationState } from "../server/integrations-app";
+import { GITHUB_APP_SETTINGS, openGithubUser } from "./support/github-app-fake";
 import { GRANTING_SIGN_IN_URL, integrationConnectOver } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 
@@ -34,10 +36,13 @@ import { noNetwork } from "./support/no-network";
  * it is offered to, and every other account is answered as though the
  * deployment never set the provider up. The store is the real one over the
  * migrations on PGlite; the connectors are the production read of the
- * test's variables, asking a Connect that grants everything.
+ * test's variables, asking a Connect that grants everything. GitHub has no
+ * connector: it stands where the account's own GitHub sign-in does, read
+ * through the real GitHub App over the account rows a sign-in leaves.
  */
 
 const ORIGIN = "https://luke.test";
+const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
 
@@ -50,8 +55,14 @@ const openAccount = (email: string) =>
     return userId;
   });
 
-/** The group over the test's database and a deployment with these variables, each bearer the account it names. */
-const standing = (variables: Readonly<Record<string, string>>) =>
+/**
+ * The group over the test's database and a deployment with these variables
+ * and this GitHub App, none unless given, each bearer the account it names.
+ */
+const standing = (
+  variables: Readonly<Record<string, string>>,
+  githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
+) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
     const services = Layer.mergeAll(
@@ -59,6 +70,7 @@ const standing = (variables: Readonly<Record<string, string>>) =>
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, clock),
       integrationConnectOver(variables),
+      githubApp,
       noNetwork,
     );
     const app = HttpRouter.toWebHandler(
@@ -102,6 +114,13 @@ const standing = (variables: Readonly<Record<string, string>>) =>
           ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
           // SAFETY: a statuses answer is a record of every provider's word.
           ({ body }) => (body as { integrations: Record<string, string> }).integrations[SLACK],
+        ),
+      /** Where GitHub stands for the account. */
+      githubStatus: (userId: string) =>
+        Effect.map(
+          ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          // SAFETY: a statuses answer is a record of every provider's word.
+          ({ body }) => (body as { integrations: Record<string, string> }).integrations[GITHUB],
         ),
       connectSlack: (userId: string) =>
         ask(`/api/account/integrations/connect?provider=${SLACK}`, { method: "POST", userId }),
@@ -190,6 +209,21 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           const group = yield* standing({ ...SLACK_CONNECTOR, SLACK_ALLOWED_ACCOUNTS: listed });
           assert.equal(yield* group.slackStatus(anyone), INTEGRATION_STATUS.UNAVAILABLE, listed);
         }
+      }),
+  );
+
+  it.effect(
+    "GitHub, which has no connector, stands connected while the account's own GitHub sign-in does and disconnected for an account that never signed in with GitHub, and a deployment without the GitHub App does not offer it",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing({}, GitHubApp.layer(GITHUB_APP_SETTINGS));
+        const signedIn = yield* openGithubUser();
+        const googleOnly = yield* openAccount("devon@google-only.example");
+
+        assert.equal(yield* group.githubStatus(signedIn), INTEGRATION_STATUS.CONNECTED);
+        assert.equal(yield* group.githubStatus(googleOnly), INTEGRATION_STATUS.DISCONNECTED);
+        const withoutApp = yield* standing({});
+        assert.equal(yield* withoutApp.githubStatus(signedIn), INTEGRATION_STATUS.UNAVAILABLE);
       }),
   );
 });

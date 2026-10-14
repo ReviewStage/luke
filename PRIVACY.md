@@ -364,10 +364,10 @@ own retention policy.
 address, the address of your profile picture, and which of the two you used.
 Signing in with GitHub authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
-permissions (reading a repository's details; reading and writing its contents
-and pull requests; reading its checks, commit statuses, and Actions runs with
-their logs where the installation has accepted them; and reading your email
-addresses), and none until you install it. We keep that token and its refresh
+permissions (reading a repository's details; reading and writing its contents,
+pull requests, issues, and discussions; reading its checks, commit statuses,
+and Actions runs with their logs where the installation has accepted them;
+and reading your email addresses), and none until you install it. We keep that token and its refresh
 token sealed under a server-only secret, read them only on our service, and
 never hand them to your Mac, a browser, or anyone else; they go when you
 delete your account, and you can revoke the App in GitHub's settings under
@@ -520,6 +520,24 @@ using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed there,
 and the record of it, stays, and a grant Vercel Connect could not revoke
 stays until you remove Luke in that service's own settings.
+
+**GitHub, if you signed in with GitHub.** GitHub needs no connecting of its
+own: while your GitHub sign-in stands, Luke's planning model, its workers, and
+every coding agent and its workers, as for Linear, can do whatever the Luke
+GitHub App's token allows, through GitHub's own MCP server
+(`api.githubcopilot.com`), without asking you first: read and change
+repositories, files, branches, issues, pull requests and their reviews,
+discussions, and Actions runs where the App is installed and you have access.
+Our service reads that token from where your sign-in left it, as it does for
+everything else it reads from GitHub, sends it only to GitHub's MCP server,
+never to your Mac, a model, or a sandbox, and keeps no other record of the
+connection. What GitHub answers goes to the model that made the call, and each
+call, with its input and everything GitHub answered, is written to the plan's
+conversation or the agent's transcript like any other tool call. An account
+that signed in with Google alone is offered Sign in with GitHub in Settings ›
+Integrations instead. Luke stops using it when your GitHub sign-in ends: when
+you revoke the App in GitHub's settings, or delete your account; what agents
+already changed on GitHub, and the record of it, stays.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
@@ -710,6 +728,9 @@ only when you press Send.
 - Vercel Connect and Slack, if you connect Slack where it is offered: Vercel
   Connect keeps Slack's token, and our service sends each Slack call, with its
   input, to Slack's MCP server, which keeps it under Slack's own policy.
+- GitHub's MCP server, if you signed in with GitHub: our service sends each
+  GitHub call, with its input and your Luke GitHub App token, to GitHub's MCP
+  server, which keeps it under GitHub's own policy.
 - Vercel Connect and Granola, Mercury, Neon, PostHog, Supabase, Vercel, or Y
   Combinator, for each you connect: Vercel Connect keeps its token, and our
   service sends each call, with its input, to that service's MCP server,

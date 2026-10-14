@@ -23,6 +23,7 @@ import { Schema as EffectSchema } from "effect";
  * agent's `connections/`, and the path segment its routes are addressed by.
  */
 export const INTEGRATION_PROVIDER = {
+  GITHUB: "github",
   GRANOLA: "granola",
   LINEAR: "linear",
   MERCURY: "mercury",
@@ -44,6 +45,7 @@ export const INTEGRATION_PROVIDER_LIST: readonly IntegrationProvider[] =
 
 /** What each provider is called wherever Luke names it, to the developer and to a model alike. */
 export const INTEGRATION_NAME = {
+  [INTEGRATION_PROVIDER.GITHUB]: "GitHub",
   [INTEGRATION_PROVIDER.GRANOLA]: "Granola",
   [INTEGRATION_PROVIDER.LINEAR]: "Linear",
   [INTEGRATION_PROVIDER.MERCURY]: "Mercury",
@@ -56,6 +58,36 @@ export const INTEGRATION_NAME = {
   [INTEGRATION_PROVIDER.VERCEL]: "Vercel",
   [INTEGRATION_PROVIDER.YCOMBINATOR]: "Y Combinator",
 } as const satisfies Record<IntegrationProvider, string>;
+
+/** How an account grants Luke's agents a provider. */
+export const INTEGRATION_GRANT = {
+  /** A sign-in to the provider through Vercel Connect, begun from Settings › Integrations and ended there. */
+  CONNECT: "connect",
+  /**
+   * The account's own sign-in to Luke with GitHub, whose GitHub App user
+   * token the provider's server takes: the provider stands connected
+   * whenever that sign-in does, and is connected by signing in with GitHub.
+   */
+  GITHUB_SIGN_IN: "github-sign-in",
+} as const;
+
+export type IntegrationGrant = (typeof INTEGRATION_GRANT)[keyof typeof INTEGRATION_GRANT];
+
+/** How each provider is granted. */
+export const INTEGRATION_GRANT_OF = {
+  [INTEGRATION_PROVIDER.GITHUB]: INTEGRATION_GRANT.GITHUB_SIGN_IN,
+  [INTEGRATION_PROVIDER.GRANOLA]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.MERCURY]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.NEON]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.NOTION]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.POSTHOG]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.SENTRY]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.SUPABASE]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.VERCEL]: INTEGRATION_GRANT.CONNECT,
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: INTEGRATION_GRANT.CONNECT,
+} as const satisfies Record<IntegrationProvider, IntegrationGrant>;
 
 const PROVIDERS: ReadonlySet<string> = new Set(INTEGRATION_PROVIDER_LIST);
 
