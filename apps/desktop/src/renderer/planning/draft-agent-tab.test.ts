@@ -27,7 +27,7 @@ import type { AgentDraft } from "./use-coding-agents";
  * Start GitHub refused offers the sign-in itself, which once it lands sends
  * the message again by itself; a sign-in withdrawn leaves the refusal and
  * its press; any other refusal offers Retry; a server the agent has on
- * whose sign-in expired is offered to reconnect. The sign-ins the bridge is
+ * whose sign-in expired offers Settings › Integrations. The sign-ins the bridge is
  * asked for are held until the test answers them.
  */
 
@@ -93,10 +93,14 @@ async function settle(): Promise<void> {
 function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
+  const settings = { integrationsOpened: false };
   const control = codingAgentsControl({
     startTask: (_draftId, task) => {
       starts.push(task);
       return Promise.resolve(answers.shift());
+    },
+    onOpenIntegrations: () => {
+      settings.integrationsOpened = true;
     },
   });
   const container = document.createElement("div");
@@ -122,6 +126,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   return {
     starts,
     links,
+    settings,
     send: async () => {
       const field = container.querySelector("textarea");
       assert.ok(field, "the draft's box is drawn");
@@ -166,19 +171,40 @@ test("a refusal Settings does not mend offers Retry, and no Open Settings", asyn
   assert.deepEqual(tab.links, []);
 });
 
-test("a server the agent has on whose sign-in expired is offered to reconnect under the box, and one it has off is not", async () => {
+test("a server the agent has on whose sign-in expired offers Settings › Integrations under the box, and one it has off does not", async () => {
   slack = INTEGRATION_STATUS.EXPIRED;
   const tab = mount([]);
   await settle();
   assert.match(tab.note() ?? "", /^Slack's sign-in expired\./u);
 
-  await tab.press("Reconnect Slack");
+  await tab.press("Open Settings");
+  assert.ok(tab.settings.integrationsOpened, "Settings opens on Integrations");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.INTEGRATIONS_CONNECT),
-    [{ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: { provider: INTEGRATION_PROVIDER.SLACK } }],
+    [],
+    "the composer signs in to nothing itself",
   );
 
   const off = mount([], { ...DRAFT, disabledServers: [INTEGRATION_PROVIDER.SLACK] });
   await settle();
-  assert.equal(off.button("Reconnect Slack"), undefined);
+  assert.equal(off.note(), undefined);
+});
+
+test("the MCP popover offers Open Settings for a server not connected, and no Connect of its own", async () => {
+  slack = INTEGRATION_STATUS.DISCONNECTED;
+  const tab = mount([]);
+  await settle();
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  assert.ok(servers, "the MCP button is drawn");
+  act(() => servers.click());
+  await settle();
+  assert.equal(tab.button("Connect"), undefined);
+  assert.equal(tab.button("Reconnect"), undefined);
+
+  await tab.press("Open Settings");
+  assert.ok(tab.settings.integrationsOpened, "Settings opens on Integrations");
+  assert.deepEqual(
+    sent.filter((each) => each.kind === ACT_KIND.INTEGRATIONS_CONNECT),
+    [],
+  );
 });

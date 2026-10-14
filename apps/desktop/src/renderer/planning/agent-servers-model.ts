@@ -15,8 +15,8 @@ import {
  * it off, which is all the agent's row keeps: a server connected later is on
  * for every agent. Its row names how many tools the server offers once they
  * have been read, and that count opens the list of them. A server not
- * connected offers to connect it, there and then; one whose sign-in expired
- * offers to reconnect; one this deployment does not offer is a dimmed row
+ * connected, or whose sign-in expired, offers Settings › Integrations, the one
+ * place a server is connected; one this deployment does not offer is a dimmed row
  * with nothing to press. No row says where it stands in words: the switch,
  * the count, and the button are what say it. A read of the connections that
  * failed is the one error, offered as a way to read again.
@@ -26,10 +26,8 @@ import {
 export const SERVER_ROW = {
   /** Connected: a switch for this agent, and the count of its tools. */
   SWITCH: "switch",
-  /** Not connected, or a sign-in under way: connect it from here. */
-  CONNECT: "connect",
-  /** Its sign-in expired: connect it again from here. */
-  RECONNECT: "reconnect",
+  /** Not connected, a sign-in under way, or its sign-in expired: connected in Settings. */
+  SETTINGS: "settings",
   /** Nothing to do from here: this deployment offers no such server, or the read has not answered yet. */
   QUIET: "quiet",
   /** The read of the connections failed: read again. */
@@ -40,8 +38,7 @@ type ServerRowKind = (typeof SERVER_ROW)[keyof typeof SERVER_ROW];
 
 /** What a row offers at its end where it offers a press but no switch. */
 export const SERVER_ACTION = {
-  CONNECT: "Connect",
-  RECONNECT: "Reconnect",
+  SETTINGS: "Open Settings",
   RETRY: "Try again",
 } as const;
 
@@ -70,9 +67,8 @@ function kindOf(status: IntegrationStatus | undefined, readFailed: boolean): Ser
       return SERVER_ROW.SWITCH;
     case INTEGRATION_STATUS.PENDING:
     case INTEGRATION_STATUS.DISCONNECTED:
-      return SERVER_ROW.CONNECT;
     case INTEGRATION_STATUS.EXPIRED:
-      return SERVER_ROW.RECONNECT;
+      return SERVER_ROW.SETTINGS;
     case INTEGRATION_STATUS.UNAVAILABLE:
       return SERVER_ROW.QUIET;
   }
@@ -96,7 +92,7 @@ export function serverRows(input: {
   }));
 }
 
-/** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */
+/** The first server this agent has on whose sign-in expired, which its composer sends to Settings to reconnect; none while every one stands. */
 export function lapsedServer(input: {
   statusOf: (provider: IntegrationProvider) => IntegrationStatus | undefined;
   disabled: readonly IntegrationProvider[];
