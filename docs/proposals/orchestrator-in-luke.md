@@ -1,7 +1,8 @@
 # Proposal: Dean's orchestrator workflow, in Luke
 
 Status: planning only, written 2026-10-14 against main at `203299d0`. Nothing
-here is built until Dean answers the decisions in §7. The design show (the
+here is built until Dean answers the decisions in §7. Revised the same
+day for Dean's decision that agents and the Inbox work with no plan (§2.8). The design show (the
 thread, the decision card, the batch view, and these decisions as a form) is
 served from the planning workspace at https://stage-w2169.conductor.show/
 for as long as that workspace stands.
@@ -44,6 +45,17 @@ we missing for me to migrate my workflow to Luke? Let's plan that out."
      events never wake an existing agent, nothing merges through the queue,
      and nothing archives an agent when its PRs merge.
   5. A spend cap and a cap on live agents.
+- **It builds on the no-plan foundation.** On 2026-10-14 Dean decided that
+  agents and the Inbox work with no plan. Worker 259 (automations, session
+  `a8e3fe9e`) is planning that rework:
+  - `coding_agent.plan_id` becomes nullable;
+  - where planless agents appear;
+  - the Inbox's breadcrumbs for a planless item;
+  - the brief with no plan document.
+
+  Every place this plan starts, lists or groups an agent or an Inbox item
+  without a plan uses 259's foundation; none invents a second one. §2.8
+  lists what is taken from 259 and what is added on top.
 - **Phase 1 is decisions in the Inbox,** before any of the orchestrator moves.
   Today Dean's workers are Conductor workspaces, not Luke agents. So phase 1
   adds:
@@ -107,8 +119,8 @@ Conductor chat's replacement:
   channel's `STEER` policy already does;
 - Luke's tool rows, drawn as the transcript draws them;
 - the agents' reports, folded into "While you were away";
-- a side panel listing every live agent across plans, with the day's spend.
-  This panel is the tracker that replaces `.context/workers.md`.
+- a side panel listing every live agent, in any plan or in none, with the
+  day's spend. This panel is the tracker that replaces `.context/workers.md`.
 
 Each plan keeps its own conversation for the work of that plan. The account
 thread is the one place that reaches across plans.
@@ -116,21 +128,32 @@ thread is the one place that reaches across plans.
 Why not a plan named "Orchestrator"? It would reuse the plan conversation
 for free, but it would carry a plan document nobody writes. Its tools would
 still have to reach other plans, so it saves one migration and costs a
-permanent oddity.
+permanent oddity. Once agents can run with no plan (§2.8), Luke never needs
+a plan just to hold the agents he starts.
 
 ### 2.2 How Luke briefs and starts agents
 
-- **An agent still lives in a plan.** A topic of Dean's (@-mentions,
-  Terminal, Automations) is a plan, so its agents, Inbox group, Stack tab and
-  automations stay together. When Dean's ask names no plan, Luke picks the
-  plan by name or makes one.
-- **The coding-agent tools take a `planId`.** In a plan's own conversation it
-  defaults to that plan; in the account thread it is required.
-  `start_coding_agent` also gains `base` (from rollout #2245) and
-  `contextWindow`.
-- **The brief is the `task`** (16,000 chars). A design worker is a coding
-  agent whose brief asks for a doc and a page. A rollout is the
-  `luke-rollout` builder-and-keeper pair.
+- **An agent lives in a plan when the work has one, and in none when it
+  doesn't.**
+  - A topic of Dean's that has a plan (@-mentions, Terminal, Automations)
+    keeps its agents, Inbox group, Stack tab and automations together.
+  - A one-off ask ("find out why the Vercel connector fails") starts a
+    planless agent, on 259's foundation.
+  - Luke never makes a plan only to hold an agent.
+- **The coding-agent tools take an optional `planId`.**
+  - In a plan's own conversation it defaults to that plan.
+  - In the account thread, leaving it out starts a planless agent, which
+    then needs a `repository`, since today the plan supplies one. That
+    repository is checked against the GitHub installation the same way,
+    from wherever 259 settles a planless agent's repository.
+  - `start_coding_agent` also gains `base` (from rollout #2245) and
+    `contextWindow`.
+- **The brief is the `task`** (16,000 chars).
+  - A planless agent's brief is the task alone, in 259's no-plan-document
+    brief.
+  - A design worker is a coding agent whose brief asks for a doc and a page.
+  - A rollout is the `luke-rollout` builder-and-keeper pair, and stays per
+    plan.
 - **Luke gains `stop_coding_agent` and `archive_coding_agent`.** These are
   the desktop's routes, offered as tools.
 - **Guards:**
@@ -143,9 +166,12 @@ permanent oddity.
 ### 2.3 How reports arrive
 
 - **Every agent reports to the conversation that started it,** using the
-  rollout series' report turn (Decision 10). An agent Luke started from the
-  account thread reports there; an agent started inside a plan reports to
-  that plan's conversation.
+  rollout series' report turn (Decision 10).
+  - An agent Luke started from the account thread reports there, planless or
+    not.
+  - An agent started inside a plan reports to that plan's conversation.
+  - An automation's run reports wherever the automations rework lands its
+    runs. The account thread is one candidate (scope proposal D5).
 - **Report kinds:**
   - from the agent, through #2265's tool: `pr_opened`, `ci_green`,
     `blocked`, `question`, plus `page_ready` for a design round;
@@ -162,7 +188,9 @@ permanent oddity.
 ### 2.4 The decision card
 
 This is main's Inbox pane, the D/E layout: the list grouped by plan, and the
-chosen item read as a thread with a docked composer. It gains:
+chosen item read as a thread with a docked composer. For a planless item, the
+list group and the pane's crumbs follow 259's Inbox breadcrumbs rather than a
+scheme of this plan's. The card gains:
 
 - **an asker that can be Luke or an outside agent,** named by an AgentRef
   whose hover card shows the model, effort, plan, turns, PRs and spend;
@@ -180,8 +208,10 @@ chosen item read as a thread with a docked composer. It gains:
 
 ### 2.5 The batch view
 
-- **How it opens:** press a plan's group header, or its **Answer all**.
-- **What it shows:** every open choice of that plan, as one form in the
+- **How it opens:** press a group header in the list, or its **Answer
+  all**. A group is a plan, or whatever group 259's rework gives planless
+  items (Decision 14).
+- **What it shows:** every open choice in that group, as one form in the
   pane. Each question starts on its recommendation, with an optional note.
 - **The button:** reads **Accept 7 recommendations** until Dean changes
   one, then **Send 7 answers · 1 changed**.
@@ -219,9 +249,9 @@ Decision 3 is whether an Inbox-wide accept-all exists as well.
 
 - **What it is:** a scoped **Inbox token**, minted in Settings › Inbox
   access. The service stores only its hash and shows the token once.
-- **What it may do:** post, close and read its own items on the account's
-  plans, read their answers with a held read, and list plan names. Nothing
-  else. A leaked token can ask Dean questions; it cannot read a plan, a
+- **What it may do:** post, close and read its own items, in a plan the
+  account can reach or in none, read their answers with a held read, and
+  list plan names. Nothing else. A leaked token can ask Dean questions; it cannot read a plan, a
   transcript or a key.
 - **How it is used:** the Conductor orchestrator holds the token and posts
   each open decision under a stable key, so a re-post keeps the item
@@ -232,6 +262,42 @@ Decision 3 is whether an Inbox-wide accept-all exists as well.
 - **When it goes:** it becomes unnecessary once phase 2 moves the
   orchestrator into Luke. It could stay as "any agent can ask you in Luke"
   (Decision 2).
+- **Where its items group:** a topic that has a Luke plan posts into it;
+  anything else is a planless item, grouped as 259 groups planless items
+  (Decision 14).
+
+### 2.8 Built on the no-plan foundation (worker 259)
+
+Dean's decision of 2026-10-14: "if we want to support automations as
+first-class, they should be able to run agents outside of a plan." Worker
+259 (automations, session `a8e3fe9e`) is planning the rework. This plan
+needs the same foundation for Luke's planless starts, the tracker, and
+planless decisions, so it takes 259's and adds only what is Luke's own.
+
+| Piece | 259 owns | This plan takes it for | This plan adds |
+| --- | --- | --- | --- |
+| **`coding_agent.plan_id` nullable** | The column, the store, every read that assumed a plan | 2.4: Luke starts a planless agent | Nothing to the column |
+| **Where a planless agent appears** | The sidebar, Home, and wherever its tab opens | 2.8's tracker: the same account-wide agent read, widened with the last report (#2379) and spend, never a second read | The thread's side panel over that read |
+| **Inbox breadcrumbs, and `inbox_item.plan_id` nullable** | How a planless item is listed, grouped and crumbed | 1.4's batch groups, 1.6's planless asks from Luke, 1.7's planless token items | 1.1's asker columns on the same table (see below) |
+| **The brief with no plan document** | What a planless agent is briefed with, and how `read_plan` / `edit_plan` answer with no plan | 2.4: a planless start's brief is its `task` | Nothing |
+| **A planless agent's repository** | Where it comes from (an automation names one) | 2.4's `repository` input, checked the same way | Nothing |
+| **A planless agent's pages** | Where `show_page` writes when there is no plan: the page store keys pages by plan today | Design workers, which are often planless, show their rounds as pages | Nothing, but this plan depends on the answer |
+
+Two things go the other way, owned here and offered to 259:
+- **The planner with no plan.** The account thread (2.1) is a planning
+  conversation no plan references. It is the planner-side twin of 259's
+  planless coder. Both should bind a tool call with `planId: string | null`
+  rather than adding a second "account" binding. Each plan-bound tool says
+  plainly what it does with no plan:
+  - `draw_on_board` and `look_at_board` refuse;
+  - `show_code` and `run_in_repository` need a named repository;
+  - `show_page` follows 259's answer for planless pages.
+- **1.1 and 259's Inbox migration touch the same table.** 1.1 makes
+  `inbox_item.agent_id` nullable and adds `asker_kind` / `asker_id`. 259
+  makes `inbox_item.plan_id` nullable. They should be one expand migration
+  if they land together, or the second rebases onto the first, with one
+  check constraint covering both. Nothing here makes a planless item.
+  Whichever lands first, a planless item is whatever 259 says it is.
 
 ## 3. Phasing
 
@@ -245,10 +311,10 @@ The goal is that Dean stops using the Conductor chat for decisions.
 
 | # | PR | Size | Depends on |
 | --- | --- | --- | --- |
-| 1.1 | **The asker.** `inbox_item.agent_id` becomes nullable, with an `asker_kind` (`agent`, `luke`, `token`) and `asker_id`, held by a check constraint. Store, wire and the account read name the asker. Expand-only migration; a sibling `__tests__/` store test, including a cross-account read refusal | M | none |
+| 1.1 | **The asker.** `inbox_item.agent_id` becomes nullable, with an `asker_kind` (`agent`, `luke`, `token`) and `asker_id`, held by a check constraint. Store, wire and the account read name the asker. Expand-only migration; a sibling `__tests__/` store test, including a cross-account read refusal | M | 259's `inbox_item.plan_id` migration: one migration with it, or rebased onto it (§2.8) |
 | 1.2 | **Batch answers.** `POST /api/inbox/answers`: up to 25 `{itemId, revision, reply, clientKey}`, an outcome per item, idempotent per client key | M | none |
 | 1.3 | **Recommended picked up front** in the pane, and the Send hint. Desktop only | S | none |
-| 1.4 | **The batch view:** a plan group's Answer all, Accept N recommendations / Send N answers, and stale items marked | L | 1.2, 1.3 |
+| 1.4 | **The batch view:** a group's Answer all (a plan, or 259's planless group), Accept N recommendations / Send N answers, and stale items marked | L | 1.2, 1.3; 259's Inbox groups for planless items |
 | 1.5 | **Page and PR blocks** (`INBOX_WIRE_VERSION` 5, JSON Schema goldens re-recorded). The desktop draws them; an older desktop draws its "newer Luke" placeholder | M | none |
 | 1.6 | **Luke asks.** The planner role gets `post_to_inbox`, `close_inbox_item` and `read_inbox` as registry entries (`roles: [PLANNER, CODER]`). An answer opens a turn on the asking conversation (`ASK_ORIGIN.INBOX`). Luke's open-item bound is 40, not an agent's 20 | M | 1.1; lands after rollout #2249, whose `acceptAsk` origin it mirrors |
 | 1.7 | **The Inbox token.** Settings › Inbox access mints, names and revokes a token, stored as a hash. `/api/inbox/external/{items,answers,plans}` under it, with the rate brake | M | 1.1 |
@@ -264,14 +330,14 @@ series #2241–#2269 and the typed line #2381/#2385 landing first.
 
 | # | PR | Size | Depends on |
 | --- | --- | --- | --- |
-| 2.1 | **The account conversation.** The account row references one conversation no plan references (`openAccountConversation`). Planning tools answer it rather than refusing with "this plan no longer exists" | M | none |
+| 2.1 | **The account conversation.** The account row references one conversation no plan references (`openAccountConversation`). Planning tools bind `planId: null`, as 259's planless coder does, and each says what it does with no plan rather than refusing with "this plan no longer exists" | M | 259's no-plan binding, if it lands first |
 | 2.2 | **Its typed route.** `POST /api/luke/messages`, #2381's shape without a plan, steering a running turn | S | 2.1, #2381 |
 | 2.3 | **Desktop: the Luke row, thread and composer,** on the agent tab's transcript parts (`one-agent-runtime.md`'s one part view) | L | 2.2 |
-| 2.4 | **Cross-plan tools:** `list_plans`, `create_plan`, and a `planId` on the coding-agent tools. Workspace plans act as Dean, as the desktop does | M | 2.1 |
+| 2.4 | **Tools across plans, and with none:** `list_plans`, `create_plan` (only when Dean asks for a plan), and an optional `planId` on the coding-agent tools; none means a planless agent with a `repository`. Workspace plans act as Dean, as the desktop does | M | 2.1; 259's nullable `coding_agent.plan_id` and no-plan brief |
 | 2.5 | **`stop_coding_agent`, `archive_coding_agent`** for Luke | S | 2.4 |
 | 2.6 | **Every agent reports:** #2265's tool and #2269's end hook, widened past rollout workers and aimed at the starter conversation (a `started_by_conversation_id` column), plus `page_ready` | M | rollout #2269 |
 | 2.7 | **The fold and the instructions:** "While you were away", verify-before-relay, and the decisions count in place of restating | M | 2.6 |
-| 2.8 | **The tracker:** an account-wide agents read (live and recently archived, with plan, PRs, last report from #2379, and spend), and the thread's side panel | M | 2.3, stack #2379 |
+| 2.8 | **The tracker:** 259's account-wide agent read (planless agents included), widened with live and recently archived agents, PRs, the last report from #2379, and spend; and the thread's side panel over it | M | 2.3, stack #2379, 259's planless-agent read |
 | 2.9 | **Standing instructions:** a Settings field read into Luke's standing context. Luke may propose an edit as an Inbox approval | S | 2.1 |
 | 2.10 | **Spend and spawn caps:** a daily spend cap and a live-agent cap per account, checked at every start (Luke's, the desktop's, automations'), with a refusal Luke reads | M | none |
 
@@ -301,6 +367,12 @@ The goal is no babysitting.
 
 ### Overlaps with in-flight work
 
+- **Worker 259, agents and the Inbox with no plan** (session `a8e3fe9e`):
+  the largest overlap, set out piece by piece in §2.8.
+  - 1.1, 1.4, 2.1, 2.4 and 2.8 depend on its rework.
+  - 1.1 shares its Inbox migration.
+  - Its answer on planless pages decides where planless design workers show
+    their rounds.
 - **`luke-rollout` 1–15:** phase 2 is its consumer. Its report turn, tool,
   hook and standing context land first. Its "Running the rollout"
   instructions stay per plan, and 2.7 adds the account thread's.
@@ -314,13 +386,15 @@ The goal is no babysitting.
   Luke's inbox tools are the coder's, under one implementation.
 - **Automations** (backend 1–5 on main, 6–12 frozen drafts, scope proposal
   open):
-  - The scope proposal's D4 ("a plan Luke makes to hold its runs") and D5
-    ("run in the plan's Luke conversation, later") meet 2.1 and 2.6. An
+  - Dean's no-plan decision replaces the scope proposal's D4 ("a plan Luke
+    makes to hold its runs"): a planless automation's runs are planless
+    agents, on 259's rework.
+  - D5 ("run in the plan's Luke conversation, later") meets 2.1 and 2.6. An
     automation could target the account thread.
   - 3.1 and `automation-github.ts` should share one reading of a delivery.
   - 2.10's caps apply to automation starts too.
-- **Factory** (design only): phase 4. Its data comes from 2.8, so its
-  design should not invent a second read.
+- **Factory** (design only): phase 4. Its data comes from 2.8, which is
+  259's agent read widened, so its design should not invent a third read.
 - **@-mentions** (planned): the account thread's composer is where Dean
   names an agent or plan ("@Factory round 4"). Section links are what an
   Inbox context line links to.
@@ -394,7 +468,8 @@ The goal is no babysitting.
   - A stopped sandbox's snapshot can expire during a long wait (3.6).
 - **Two orchestrators for a while.** During phase 1 the Conductor
   orchestrator posts and Luke's own agents post. Items stay one list
-  because both are grouped by plan; the asker's glyph says which is which.
+  because both are grouped as the Inbox groups everything, by plan or 259's
+  planless group; the asker's glyph says which is which.
 
 ## 5. What this does not do
 
@@ -423,8 +498,8 @@ drawn that way.
    - C. A plan named "Orchestrator", reusing the plan conversation.
 
    *Why A:* a hundreds-of-turns thread needs its own place. B crowds the page
-   that just shipped, and C carries a plan document nobody writes while
-   still needing cross-plan tools.
+   that just shipped. C carries a plan document nobody writes, and since
+   agents can now run with no plan, nothing needs a plan to hold them.
 2. **How does phase 1 get decisions into the Inbox while the workers are
    still in Conductor?**
    - A. A scoped Inbox token: the Conductor orchestrator posts and reads
@@ -491,3 +566,13 @@ drawn that way.
 
     *Why A:* 1.1–1.5, 1.7 and 1.8 touch nothing the rollout series touches,
     so waiting delays Dean's relief for no gain.
+14. **How do planless decisions group in the Inbox and the batch view?** This
+    only matters for the bridge and for Luke's own asks; 259's rework decides
+    the planless breadcrumbs themselves.
+    - A. As 259 groups planless items. The bridge posts into a plan wherever
+      a topic of Dean's has one, and posts planless otherwise.
+      *(Recommended)*
+    - B. A free topic label on every item, with a plan or without.
+
+    *Why A:* B invents a second grouping beside plans and 259's planless
+    group, which is what building on one foundation rules out.
