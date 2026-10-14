@@ -23,7 +23,8 @@
         "agent-retired",
         "plan-archived",
         "not-permitted",
-        "already-invited"
+        "already-invited",
+        "sandbox-stopped"
       ]
     }
   },

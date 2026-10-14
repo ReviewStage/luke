@@ -80,6 +80,8 @@ export const HOSTED_API_ERROR = {
   NOT_PERMITTED: "not-permitted",
   /** The address is already a member of the workspace, or already holds a pending invitation to it; nothing was sent. */
   ALREADY_INVITED: "already-invited",
+  /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
+  SANDBOX_STOPPED: "sandbox-stopped",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

@@ -11,12 +11,9 @@ import { getTestDB } from "@sidecar/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { inArray } from "drizzle-orm";
 import { Duration, Effect, Layer } from "effect";
-import {
-  SandboxUnavailable,
-  SessionSandboxes,
-  type SessionSandboxesService,
-} from "../server/hosted/session-sandboxes";
+import { SessionSandboxes, type SessionSandboxesService } from "../server/hosted/session-sandboxes";
 import { sweepTerminalLeases, TERMINAL_LEASE_SWEEP } from "../server/hosted/terminal-lease-sweep";
+import { SandboxUnavailable } from "../server/hosted/vercel-sandbox-api";
 
 /**
  * The scheduled sweep's stop of a coding agent's sandbox once no terminal
