@@ -21,9 +21,9 @@
  */
 
 import type { TerminalSummary } from "@luke/features/terminal-wire";
+import { unparsedWire, wireUuidSchema } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";
-import { unparsedWire, wireUuidSchema } from "../../core.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 

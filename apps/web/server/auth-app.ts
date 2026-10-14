@@ -1,7 +1,7 @@
+import { hostedNotFoundRoute } from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer } from "effect";
 import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { hostedNotFoundRoute } from "./hosted/http-effect.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The auth surface as the one route group this function serves: Better Auth's

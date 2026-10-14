@@ -2,11 +2,11 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { writeDrawing } from "@luke/database/models/board-store";
 import { DRAW_ON_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import { type DrawingElement, drawingElementsSchema } from "@luke/features/board-wire";
+import { logStoreFailure } from "@luke/service/http/store-failure";
 import type { UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { layoutFindings } from "./board-layout.js";
-import { logStoreFailure } from "./store-failure.js";
 
 /**
  * board-tool.ts -- `draw_on_board`, the planning model's hand on the plan's whiteboard.

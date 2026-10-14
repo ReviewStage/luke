@@ -26,6 +26,8 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
@@ -34,8 +36,6 @@ import { SqlClient } from "effect/sql";
 import { GITHUB_PROVIDER_ID, GitHubApp } from "../server/github/github-app";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { LINK_OUTCOME } from "../server/hosted/github-installations";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,

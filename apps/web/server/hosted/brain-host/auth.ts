@@ -1,8 +1,8 @@
+import { isWireString } from "@luke/service/core";
+import { bearerMatchesSecret } from "@luke/service/http/http";
 import type { Redacted } from "effect";
 import { type AuthFn, ForbiddenError, withAuthChallenges } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
-import { isWireString } from "../../core.js";
-import { bearerMatchesSecret } from "../http.js";
 import {
   ACCOUNT_ID_PATTERN,
   BRAIN_HOST_ATTRIBUTE,

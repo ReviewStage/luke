@@ -23,13 +23,14 @@ import {
   type LiveClientEvent,
   type LiveServerEventType,
 } from "@luke/live";
+import { MESSAGE_ROLE } from "@luke/service/core";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -43,7 +44,6 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";

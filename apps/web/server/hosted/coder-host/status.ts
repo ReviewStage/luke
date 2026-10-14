@@ -8,8 +8,8 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "@luke/service/core";
 import { Duration } from "effect";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 

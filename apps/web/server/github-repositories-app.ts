@@ -21,18 +21,8 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
 import { workspaceIdSchema } from "@luke/features/plan-wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
-import { type GitHubRepository, unparsedWire } from "./core.js";
-import { GitHubApp } from "./github/github-app.js";
-import { githubReadOrRefusal } from "./github/github-refusal.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
+import { type GitHubRepository, unparsedWire } from "@luke/service/core";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -42,8 +32,18 @@ import {
   hostedRefusing,
   hostedStoreOrUnavailable,
   type UserIdResolver,
-} from "./hosted/http-effect.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
+} from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Layer, Option, Result } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
+import { GitHubApp } from "./github/github-app.js";
+import { githubReadOrRefusal } from "./github/github-refusal.js";
 
 const HTTP_METHOD = { GET: "GET" } as const;
 

@@ -8,18 +8,19 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { SessionAuth, SessionAuthContext } from "eve/context";
-import type { ToolContext as EveToolContext } from "eve/tools";
-import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
   type WireRecord,
-} from "../server/core";
+} from "@luke/service/core";
+import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SessionAuth, SessionAuthContext } from "eve/context";
+import type { ToolContext as EveToolContext } from "eve/tools";
+import { afterAll, test } from "vitest";
 import type { GitHubApp } from "../server/github/github-app";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -44,7 +45,6 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
-import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import {
   connectWorkspaceGitHub,

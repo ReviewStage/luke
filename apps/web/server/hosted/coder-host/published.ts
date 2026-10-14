@@ -8,6 +8,7 @@ import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
+import type { StoreFailure } from "@luke/service/http/store-failure";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -22,7 +23,6 @@ import {
   type PullRequestReadFailure,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import type { StoreFailure } from "../store-failure.js";
 import { planWorkspace } from "../workspace-repository.js";
 import { CODER } from "./bounds.js";
 

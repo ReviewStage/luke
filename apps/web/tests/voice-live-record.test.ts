@@ -26,6 +26,12 @@ import {
   type LiveAppendEvent,
   type LiveClientEvent,
 } from "@luke/live";
+import {
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type UserMessageMetadata,
+} from "@luke/service/core";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -47,12 +53,6 @@ import { type ToolSet, tool } from "ai";
 import { Deferred, Effect, Layer, Result, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { z } from "zod";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  type UserMessageMetadata,
-} from "../server/core";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";

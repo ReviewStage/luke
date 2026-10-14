@@ -19,11 +19,11 @@
  * OIDC token answers every call as unavailable.
  */
 
+import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Data, Effect, Result, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
 /** The tag eve sets on every session's sandbox, its value the session's id. */
 const SESSION_TAG = "sessionId";

@@ -1,4 +1,4 @@
-import type { Route } from "./route.js";
+import type { Route } from "@luke/service/route";
 
 /**
  * The query parameters a `vercel.json` rewrite adds when it lands a client

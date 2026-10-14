@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
-import { forgetPosthogPersonEffect, type PosthogForgetOptions } from "../server/hosted/posthog.js";
+import { forgetPosthogPersonEffect, type PosthogForgetOptions } from "./posthog.js";
 
 const PERSONAL_KEY = "phx_personal";
 const PROJECT_ID = "12345";

@@ -21,6 +21,7 @@ import {
   workspaceGithubConnectAnswerSchema,
   workspacesAnswerSchema,
 } from "@luke/features/workspace-wire";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -29,7 +30,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../server/github-install-app";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { type WorkspacesAppSeams, workspacesApp } from "../server/workspaces-app";
 import {
   type FakeGitHub,

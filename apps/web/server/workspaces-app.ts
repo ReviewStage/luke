@@ -29,23 +29,13 @@ import {
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
 } from "@luke/features/workspace-wire";
-import { readEither } from "@luke/wire/effect";
-import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
-import { unparsedWire } from "./core.js";
-import { GitHubApp } from "./github/github-app.js";
-import { logGitHubReadFailure } from "./github/github-refusal.js";
+import { unparsedWire } from "@luke/service/core";
 import {
   createConnectIntent,
   disconnectInstallation,
   GITHUB_CONNECT_ROLES,
-} from "./hosted/github-installations.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
+} from "@luke/service/github/github-installations";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -56,10 +46,20 @@ import {
   readJsonBodyEffect,
   type SessionUserIdResolver,
   type UserIdResolver,
-} from "./hosted/http-effect.js";
-import type { StoreFailure } from "./hosted/store-failure.js";
+} from "@luke/service/http/http-effect";
+import type { StoreFailure } from "@luke/service/http/store-failure";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
+import { readEither } from "@luke/wire/effect";
+import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
+import { GitHubApp } from "./github/github-app.js";
+import { logGitHubReadFailure } from "./github/github-refusal.js";
 import { listMembers, memberIdOf } from "./hosted/workspace-members.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.

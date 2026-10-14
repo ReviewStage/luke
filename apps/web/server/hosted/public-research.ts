@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { BRAIN_OPENAI_DEFAULTS } from "@luke/features/brain";
 import { failureKind } from "@luke/runtime/effect";
+import { HOSTED_OPENAI_DEFAULTS } from "@luke/service/providers/openai";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import {
@@ -22,7 +23,6 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { providerModelOf } from "./model-catalog.js";
-import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";
 
 /**
  * public-research.ts -- the planning model's two public reads: a cited web search and one page's text, each bounded and each answered as data.

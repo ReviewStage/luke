@@ -42,6 +42,25 @@ import {
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import {
+  BRAIN_REQUEST_STATUS,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  isRecord,
+  isWireString,
+  MESSAGE_ROLE,
+  sessionKey,
+  TURN_ORIGIN,
+  userMessage,
+  userMetadataOf,
+} from "@luke/service/core";
+import {
+  disconnectInstallation,
+  LINK_OUTCOME,
+  linkInstallation,
+} from "@luke/service/github/github-installations";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
@@ -60,19 +79,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { codingAgentsApp } from "../server/coding-agents-app";
-import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  isRecord,
-  isWireString,
-  MESSAGE_ROLE,
-  sessionKey,
-  TURN_ORIGIN,
-  userMessage,
-  userMetadataOf,
-} from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_CANCEL_OUTCOME,
@@ -85,12 +91,6 @@ import {
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import {
-  disconnectInstallation,
-  LINK_OUTCOME,
-  linkInstallation,
-} from "../server/hosted/github-installations";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";

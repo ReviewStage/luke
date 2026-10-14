@@ -1,8 +1,8 @@
+import { wireValidatedTool } from "@luke/service/core";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import type { MessageStreamEvent } from "eve/client";
-import { wireValidatedTool } from "../../core.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import { connectionToolEntries } from "../connection-tools.js";

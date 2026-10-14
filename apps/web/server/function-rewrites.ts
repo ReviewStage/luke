@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isRecord, unparsedWire, type WireBoundaryInput } from "@luke/service/core";
 import { Schema } from "effect";
-import { isRecord, unparsedWire, type WireBoundaryInput } from "./core.js";
 import { DISPATCH_QUERY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";

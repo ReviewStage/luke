@@ -11,11 +11,11 @@ import {
   type FastAccess,
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Logger, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { type ModelCatalog, modelCatalogOf } from "../server/hosted/model-catalog";
 import { modelsApp } from "../server/models-app";
 

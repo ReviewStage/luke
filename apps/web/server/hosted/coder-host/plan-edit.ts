@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { NOTE_KIND, type PlanNote, planNotesSchema, readNotes } from "@luke/features/plan-template";
 import { PLAN_ACTOR } from "@luke/features/plan-wire";
+import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@luke/service/core";
 import { Effect } from "effect";
-import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
 import {
   PLAN_SAVE_STATUS,
   type PlanDocumentBinding,

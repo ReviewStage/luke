@@ -1,5 +1,9 @@
 /**
  * The one re-export surface server code reaches the workspace packages through.
+ *
+ * It is the package's own door, not a subpath a consumer builds on: the
+ * `./core` export stands only while modules still under `apps/web/server`
+ * import it, and goes when the last of them has moved here.
  */
 
 export * from "@luke/features";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@luke/database/testing/no-database";
+import { HOSTED_API_ERROR } from "@luke/service/http/http";
 import { Effect, Redacted } from "effect";
-import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { MAINTENANCE_SWEEP_PATH } from "../server/hosted/maintenance-bounds";
 import {
   handleMaintenanceSweep,

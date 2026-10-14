@@ -1,6 +1,6 @@
 import type { VoiceSecondsOutcome } from "@luke/database/models/quota";
+import type { HostedApiError } from "@luke/service/core";
 import type { LiveSessionTrace } from "@luke/voice/live-session";
-import type { HostedApiError } from "../core.js";
 
 /**
  * What the service writes down about itself: status codes, close codes,

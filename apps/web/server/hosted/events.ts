@@ -1,23 +1,28 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { Clock, Effect, type Layer, Option, type Schema } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
 import {
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
   type ProductEventBatch,
   productEventBatchFromWire,
   text as trimmedText,
   type UnparsedWireValue,
-} from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { UserIdResolver } from "./http-effect.js";
+} from "@luke/service/core";
+import {
+  errorResponse,
+  HOSTED_API_ERROR,
+  HOSTED_HTTP_STATUS,
+  jsonResponse,
+} from "@luke/service/http/http";
+import type { UserIdResolver } from "@luke/service/http/http-effect";
 import {
   type PosthogBatch,
   type PosthogBatchItem,
   type PosthogPerson,
   type PosthogUpstreamOptions,
   postBatchEffect,
-} from "./posthog.js";
+} from "@luke/service/providers/posthog";
+import { Clock, Effect, type Layer, Option, type Schema } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { makeRateBrake } from "./rate-brake.js";
 
 /**

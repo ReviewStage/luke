@@ -15,6 +15,12 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import { failureKind } from "@luke/runtime/effect";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrArchived,
+  hostedStoreOrUnavailable,
+} from "@luke/service/http/http-effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -25,12 +31,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedStoreOrArchived,
-  hostedStoreOrUnavailable,
-} from "../http-effect.js";
 import { mentionedContext } from "../mentioned-context.js";
 import {
   acceptedModelChoice,

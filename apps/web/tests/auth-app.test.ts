@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { authApp, type WebRequestHandler } from "../server/auth-app.js";
-import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { recordedResponse, settleResponseGolden } from "./support/response-golden.js";

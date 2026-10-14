@@ -13,8 +13,8 @@ import { accountProviderKey } from "@luke/database/schemas/account-provider-key"
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { Effect, Redacted, Result } from "effect";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   handleProviderKeyRewrap,
   type ProviderKeyRewrapOptions,

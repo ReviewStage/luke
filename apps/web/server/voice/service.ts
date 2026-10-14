@@ -13,9 +13,6 @@ import {
   planningOpeningInstruction,
 } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
-import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -26,7 +23,10 @@ import {
   type PlanDraftFrame,
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
-} from "../core.js";
+} from "@luke/service/core";
+import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import { type WebSocket, WebSocketServer } from "ws";
 import type { VoiceAccounts } from "./accounts.js";
 import { isVoicePath } from "./frames.js";
 import {

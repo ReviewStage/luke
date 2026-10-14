@@ -9,12 +9,7 @@ import {
   GITHUB_CONNECT_PAGE,
   githubConnectClaimRequestSchema,
 } from "@luke/features/github-connection-wire";
-import { HTTP_METHOD } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type { GitHubUnlink } from "./hosted/github-unlink.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -26,8 +21,13 @@ import {
   readJsonBodyEffect,
   type SessionUserIdResolver,
   type UserIdResolver,
-} from "./hosted/http-effect.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
+} from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
+import { HTTP_METHOD } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Layer, Option, Result } from "effect";
+import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import type { GitHubUnlink } from "./hosted/github-unlink.js";
 
 /**
  * github-connection-app.ts -- connecting the account's GitHub: the Mac's connect intent, the page's claim of it, and whether GitHub is connected.

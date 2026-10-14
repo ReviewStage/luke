@@ -7,18 +7,18 @@ import {
   pageHtmlSchema,
   pageTitleSchema,
 } from "@luke/features/page-wire";
-import { describeWire, readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
-import type { SandboxSession } from "eve/sandbox";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
   type WireRecord,
   wireUuidSchema,
-} from "../core.js";
+} from "@luke/service/core";
+import { logStoreFailure } from "@luke/service/http/store-failure";
+import { describeWire, readEither } from "@luke/wire/effect";
+import { Effect, Option, Result, Schema } from "effect";
+import type { SandboxSession } from "eve/sandbox";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { isSecretFile } from "./shown-file.js";
-import { logStoreFailure } from "./store-failure.js";
 
 /**
  * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document written for the plan and shown in the developer's side panel.

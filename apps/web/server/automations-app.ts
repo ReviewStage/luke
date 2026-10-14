@@ -37,6 +37,18 @@ import {
   automationCreateRequestSchema,
   automationRunRequestSchema,
 } from "@luke/features/automation-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedNotFoundRoute,
+  hostedRefusing,
+  hostedStoreOrUnavailable,
+  readJsonBodyEffect,
+  type UserIdResolver,
+} from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
@@ -47,19 +59,7 @@ import { executeAutomationRun } from "./hosted/automation-runs.js";
 import { acceptedAgentChoice } from "./hosted/coder-host/start.js";
 import { type AgentTurnStanding, codingAgentStatusOf } from "./hosted/coder-host/status.js";
 import { type EveReach, eveFor, standingsOf } from "./hosted/coder-host/stop.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
-  hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-  type UserIdResolver,
-} from "./hosted/http-effect.js";
 import type { ModelCatalog } from "./hosted/model-catalog.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * automations-app.ts -- the account's automations: list and make them, change and delete one, run one now, and read its runs.

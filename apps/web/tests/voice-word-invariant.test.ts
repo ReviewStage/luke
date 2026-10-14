@@ -26,6 +26,14 @@ import {
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
 } from "@luke/live";
+import {
+  ASK_ORIGIN,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  sessionKey,
+  UI_PART_TYPE,
+} from "@luke/service/core";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -46,14 +54,6 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterAll } from "vitest";
 import { z } from "zod";
-import {
-  ASK_ORIGIN,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  sessionKey,
-  UI_PART_TYPE,
-} from "../server/core";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";

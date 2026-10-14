@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
+import { POSTHOG_ENVIRONMENT } from "@luke/service/providers/posthog";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import { test } from "vitest";
 import {
@@ -7,8 +9,6 @@ import {
   hostedEnvironment,
 } from "../server/hosted/environment";
 import { CRON_ENVIRONMENT } from "../server/hosted/maintenance-bounds";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../server/hosted/openai";
-import { POSTHOG_ENVIRONMENT } from "../server/hosted/posthog";
 
 /**
  * The environment layer read over a record of this test's own, in place of

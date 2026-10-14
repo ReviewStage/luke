@@ -7,8 +7,6 @@ import {
   receivedMessageId,
 } from "@luke/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import { Effect, Option, Result, Schema } from "effect";
-import type { MessageStreamEvent } from "eve/client";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -36,7 +34,9 @@ import {
   unparsedWire,
   userMessage,
   userMetadataOf,
-} from "../../core.js";
+} from "@luke/service/core";
+import { Effect, Option, Result, Schema } from "effect";
+import type { MessageStreamEvent } from "eve/client";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 import { CONNECTION_TOOL, isRemoteToolName, storedRemoteCall } from "../connection-tools.js";

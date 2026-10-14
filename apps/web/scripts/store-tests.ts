@@ -33,7 +33,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const doorImport = /from\s+["']@luke\/database\/testing(?:\.js)?["']/;
 
 /** Where store tests live, from the repository root. */
-const STORE_TEST_ROOTS = ["apps/web/tests"];
+const STORE_TEST_ROOTS = ["apps/web/tests", "packages/service/src"];
 
 const TEST_FILE_SUFFIX = ".test.ts";
 

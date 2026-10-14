@@ -1,5 +1,6 @@
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import type { HostedRefusal } from "@luke/service/http/http-effect";
 import { Duration, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import {
@@ -9,7 +10,6 @@ import {
   type EveMount,
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
-import type { HostedRefusal } from "./http-effect.js";
 
 /**
  * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a plan's at its delete, an account's at its deletion.

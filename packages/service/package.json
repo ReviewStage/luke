@@ -1,0 +1,42 @@
+{
+  "name": "@luke/service",
+  "version": "0.13.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./core": "./src/core.js",
+    "./db": "./src/db/index.js",
+    "./db/sql-client": "./src/db/sql-client.js",
+    "./github/github-installations": "./src/github/github-installations.js",
+    "./http/http": "./src/http/http.js",
+    "./http/http-effect": "./src/http/http-effect.js",
+    "./http/store-failure": "./src/http/store-failure.js",
+    "./providers/openai": "./src/providers/openai.js",
+    "./providers/posthog": "./src/providers/posthog.js",
+    "./route": "./src/route.js",
+    "./run": "./src/run.js"
+  },
+  "scripts": {
+    "test:vitest:1": "vitest run --shard=1/3",
+    "test:vitest:2": "vitest run --shard=2/3",
+    "test:vitest:3": "vitest run --shard=3/3",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@effect/sql-pg": "catalog:",
+    "@luke/database": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/runtime": "workspace:*",
+    "@luke/wire": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "8.21.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

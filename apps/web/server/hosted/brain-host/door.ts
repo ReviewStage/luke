@@ -1,9 +1,9 @@
+import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { type AuthFn, ForbiddenError, routeAuth } from "eve/channels/auth";
 import type { EveMessageContext } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
-import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { actedForAccount, conversationIdOf, sessionAuthFor, turnKindOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL } from "./bounds.js";
 

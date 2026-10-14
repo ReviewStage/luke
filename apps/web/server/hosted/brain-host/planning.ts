@@ -10,13 +10,13 @@ import {
   type PlanNote,
 } from "@luke/features/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
+import { ACTION_RESULT_STATUS, wireValidatedTool } from "@luke/service/core";
 import type { UnparsedWireValue, WireRecord } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { ToolDefinition } from "eve/tools";
-import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";

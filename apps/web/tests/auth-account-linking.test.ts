@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
+import type { WireValue } from "@luke/service/core";
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Schema } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { authDatabaseAdapter } from "../server/auth-database";
 import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "../server/auth-policy";
-import type { WireValue } from "../server/core";
 import { clearRevokedAuthorization } from "../server/github/github-app";
 
 /**

@@ -17,10 +17,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
-import { describeWire } from "@luke/wire/effect";
-import { isTextUIPart } from "ai";
-import { Clock, Effect, Option, Result, Schema } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -33,7 +29,13 @@ import {
   type UnparsedWireValue,
   type WireRecord,
   wireUuidSchema,
-} from "../core.js";
+} from "@luke/service/core";
+import type { HostedRefusal } from "@luke/service/http/http-effect";
+import { logStoreFailure, type StoreFailure } from "@luke/service/http/store-failure";
+import { describeWire } from "@luke/wire/effect";
+import { isTextUIPart } from "ai";
+import { Clock, Effect, Option, Result, Schema } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
@@ -42,10 +44,8 @@ import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
-import type { HostedRefusal } from "./http-effect.js";
 import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
-import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
  * coding-agent-tools.ts -- the planning model's four tools about the plan's coding agents: list them, read one's recent progress, message one, start one.

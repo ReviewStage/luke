@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import type { WireValue } from "@luke/service/core";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { jwt, oAuthProxy } from "better-auth/plugins";
@@ -11,7 +12,6 @@ import {
   denyOAuthClientPrivileges,
   JWT_KEY_STORAGE,
 } from "../server/auth-policy";
-import type { WireValue } from "../server/core";
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
 
 /**

@@ -16,6 +16,7 @@
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
 import { account, user } from "@luke/database/schemas/auth";
+import { linkInstallation } from "@luke/service/github/github-installations";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { Clock, Effect, Layer, Redacted } from "effect";
@@ -26,7 +27,6 @@ import {
   GitHubApp,
   type GitHubAppSettings,
 } from "../../server/github/github-app";
-import { linkInstallation } from "../../server/hosted/github-installations";
 
 export const GITHUB_FIXTURE = {
   HOUR_MS: 60 * 60 * 1000,

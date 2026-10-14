@@ -1,6 +1,6 @@
 /**
  * The response vocabulary the admin dashboard endpoint answers in. It is its
- * own, deliberately not `server/hosted/http.ts`: that module's error slugs are
+ * own, deliberately not `@luke/service/http/http`: that module's error slugs are
  * the desktop's wire contract in `@luke/features`, validated on the desktop
  * side, and this endpoint is browser-only. Widening the desktop contract with a
  * `forbidden` the desktop never sees would be the wrong seam — the admin gate

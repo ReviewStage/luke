@@ -75,6 +75,18 @@ import {
   integrationLandingPath,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedMethod,
+  hostedNotFoundRoute,
+  hostedRefusalResponse,
+  hostedStoreOrUnavailable,
+  type UserIdResolver,
+} from "@luke/service/http/http-effect";
+import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -85,17 +97,6 @@ import {
   githubOffered,
   githubSignInGrant,
 } from "./hosted/github-integration.js";
-import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedMethod,
-  hostedNotFoundRoute,
-  hostedRefusalResponse,
-  hostedStoreOrUnavailable,
-  type UserIdResolver,
-} from "./hosted/http-effect.js";
 import {
   accountIntegrationConnect,
   CONNECT_SIGN_IN_RESULT,
@@ -117,7 +118,6 @@ import {
   type McpToolsFailure,
   type McpToolsFailureReason,
 } from "./hosted/mcp-tools.js";
-import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
 const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;

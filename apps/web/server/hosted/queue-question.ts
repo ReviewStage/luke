@@ -1,12 +1,12 @@
-import { describeWire } from "@luke/wire/effect";
-import { Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
   type StoredToolPart,
   TOOL_PART_STATE,
   type UnparsedWireValue,
   type WireRecord,
-} from "../core.js";
+} from "@luke/service/core";
+import { describeWire } from "@luke/wire/effect";
+import { Result, Schema } from "effect";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**

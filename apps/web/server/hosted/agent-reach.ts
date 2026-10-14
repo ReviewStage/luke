@@ -10,15 +10,15 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
-import { unparsedWire, wireUuidSchema } from "../core.js";
+import { unparsedWire, wireUuidSchema } from "@luke/service/core";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
   type UserIdResolver,
-} from "./http-effect.js";
+} from "@luke/service/http/http-effect";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Option, Result } from "effect";
 
 /** What resolves a request's bearer to the account it answers for. */
 export interface AccountResolving {

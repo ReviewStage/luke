@@ -16,8 +16,8 @@ import {
   type PlanShownCode,
   type PlanWorkAnswer,
 } from "@luke/features/planning-view";
+import { isStoredToolPart, storedToolName } from "@luke/service/core";
 import { Effect, Option } from "effect";
-import { isStoredToolPart, storedToolName } from "../core.js";
 import {
   callsSendingToEarlierTasks,
   planWorkOf,

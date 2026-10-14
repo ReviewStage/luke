@@ -9,8 +9,8 @@ import {
   liveErrorCommand,
   parseLiveServerEvent,
 } from "@luke/live";
+import { type SessionReportFrame, sessionReportFrameFromWire } from "@luke/service/core";
 import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
-import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
 import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
 import {

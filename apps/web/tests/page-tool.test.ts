@@ -5,9 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan } from "@luke/database/testing";
+import { ACTION_RESULT_STATUS } from "@luke/service/core";
 import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import { Effect, Option, Schema } from "effect";
-import { ACTION_RESULT_STATUS } from "../server/core";
 import { type PageToolBinding, runShowPage, SHOW_PAGE_REFUSAL } from "../server/hosted/page-tool";
 
 /**

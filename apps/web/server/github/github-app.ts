@@ -2,7 +2,7 @@
  * github-app.ts -- the Luke GitHub App as the server speaks for it: its own JWT, the installation a workspace connected, and the tokens it mints there.
  *
  * A workspace's repositories are the repositories of the one installation of
- * the App connected to it (`hosted/github-installations.ts`), and nothing
+ * the App connected to it (`@luke/service/github/github-installations`), and nothing
  * else: nobody's own GitHub account is asked what it reaches. The App speaks
  * with a JWT signed by its private key, which reads an installation
  * (`GET /app/installations/{id}`) and mints its tokens (`POST
@@ -54,6 +54,9 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import { type GitHubRepository, text } from "@luke/service/core";
+import { installationOfWorkspace } from "@luke/service/github/github-installations";
+import type { StoreFailure } from "@luke/service/http/store-failure";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";
@@ -76,9 +79,6 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
-import { type GitHubRepository, text } from "../core.js";
-import { installationOfWorkspace } from "../hosted/github-installations.js";
-import type { StoreFailure } from "../hosted/store-failure.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";

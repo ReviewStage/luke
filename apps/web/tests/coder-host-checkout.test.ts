@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startPlan } from "@luke/database/testing";
+import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { Effect, Option, Redacted } from "effect";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
-import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
 import {
   connectWorkspaceGitHub,
