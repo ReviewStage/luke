@@ -21,6 +21,7 @@ import { followSettingsLink } from "./settings-link";
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };

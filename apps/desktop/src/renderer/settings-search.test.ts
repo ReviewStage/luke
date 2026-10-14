@@ -16,12 +16,14 @@ import { type SettingsSearchInput, searchSettings, settingsSearchEntries } from 
 const TEAM: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
 const FIRST: Workspace = {
   id: "workspace-personal",
   name: "Dana",
+  slug: "dana",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };

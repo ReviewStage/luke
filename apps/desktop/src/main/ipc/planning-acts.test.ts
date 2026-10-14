@@ -45,6 +45,7 @@ const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent
 const ACME = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: { login: "acme", active: true },
 };

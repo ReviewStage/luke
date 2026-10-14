@@ -282,6 +282,7 @@ it.effect(
           {
             id: first[0]?.id,
             name: "Ada Lovelace",
+            slug: `personal-${ada}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
@@ -314,11 +315,13 @@ it.effect(
           {
             id: undefined,
             name: "Acme Platform",
+            slug: "acme-platform",
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
         );
         assert.notEqual(again.id, acme.id);
+        assert.match(again.slug ?? "", /^acme-platform-[0-9a-f]{8}$/u);
         assert.deepEqual(
           (yield* workspacesOf(seams, github, ada)).map(({ name }) => name),
           ["Ada Lovelace", "Acme Platform", "Acme Platform"],
@@ -336,6 +339,31 @@ it.effect(
           { status: blank.status, body: blank.body },
           { status: 400, body: { error: HOSTED_API_ERROR.INVALID_REQUEST } },
         );
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "a workspace named as one of Luke's own pages, or as an account's first, is slugged apart from it",
+  () =>
+    Effect.gen(function* () {
+      const { seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const github = githubReaching([]);
+
+        const named = [];
+        for (const name of ["Admin", "Sign in", "Changelog", "Personal team", "Acme"]) {
+          named.push((yield* createAs(seams, github, ada, name)).slug);
+        }
+
+        assert.deepEqual(named, [
+          "workspace-admin",
+          "workspace-sign-in",
+          "workspace-changelog",
+          "workspace-personal-team",
+          "acme",
+        ]);
       }).pipe(Effect.provide(database));
     }),
 );

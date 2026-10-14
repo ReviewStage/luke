@@ -10,12 +10,14 @@ import { WORKSPACE_ROLE } from "./workspace-wire.js";
 const PERSONAL = {
   id: "org-personal-1",
   name: "Ada Lovelace",
+  slug: "ada-lovelace",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME = {
   id: "org-acme-1",
   name: "Acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: false },
 };
@@ -78,6 +80,17 @@ it.effect(
       assert.deepEqual(api.credentials(), ["token-1"]);
       assert.equal(yield* Effect.provide(client().list(), malformed.layer), undefined);
     }),
+);
+
+it.effect("reads a workspace from a service before slugs travelled, its slug left out", () =>
+  Effect.gen(function* () {
+    const { slug: _slug, ...older } = ACME;
+    const api = fakeCloudApi({
+      "GET /api/workspaces": { answer: () => ({ workspaces: [older] }) },
+    });
+
+    assert.deepEqual(yield* Effect.provide(client().list(), api.layer), { workspaces: [older] });
+  }),
 );
 
 it.effect("creates a workspace with its name trimmed, and a blank name never travels", () =>

@@ -58,14 +58,10 @@ const openSharedWorkspace = (
   teammates: readonly string[],
 ) =>
   Effect.gen(function* () {
-    const { id } = yield* seams.createOrganization({
-      name,
-      slug: `${name.toLowerCase()}-${randomUUID()}`,
-      userId: owner,
-      metadata: {},
-    });
+    const slug = `${name.toLowerCase()}-${randomUUID()}`;
+    const { id } = yield* seams.createOrganization({ name, slug, userId: owner, metadata: {} });
     for (const teammate of teammates) yield* joinWorkspace(id, teammate, WORKSPACE_ROLE.MEMBER);
-    return id;
+    return { id, slug };
   });
 
 it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) => {
@@ -85,6 +81,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         {
           id: first.value,
           name: "Ada Lovelace",
+          slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
         },
@@ -119,6 +116,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         {
           id: raced[0],
           name: "Grace Hopper",
+          slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
         },
@@ -150,6 +148,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           {
             id: raced[0],
             name: "Katherine Johnson",
+            slug: `personal-${userId}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
@@ -175,10 +174,13 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
 
         assert.ok(Option.isSome(ensured));
         assert.notEqual(ensured.value, squatted.id);
+        const [listed] = yield* listWorkspaces(victim);
+        assert.ok(listed?.slug?.startsWith(`personal-${victim}-`));
         assert.deepEqual(yield* listWorkspaces(victim), [
           {
             id: ensured.value,
             name: "Grace Hopper",
+            slug: listed?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
@@ -203,21 +205,23 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           {
             id: ownerPersonal.value,
             name: "Owner",
+            slug: `personal-${owner}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
-          { id: acme, name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null },
-          { id: zeta, name: "Zeta", role: WORKSPACE_ROLE.OWNER, github: null },
+          { ...acme, name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null },
+          { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.OWNER, github: null },
         ]);
         assert.deepEqual(yield* listWorkspaces(teammate), [
           {
             id: teammatePersonal.value,
             name: "Teammate",
+            slug: `personal-${teammate}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },
-          { id: acme, name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
-          { id: zeta, name: "Zeta", role: WORKSPACE_ROLE.MEMBER, github: null },
+          { ...acme, name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
+          { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.MEMBER, github: null },
         ]);
       }),
   );
@@ -282,6 +286,7 @@ it.effect(
           {
             id: graces.value,
             name: "Grace Hopper",
+            slug: gracesSlug?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
           },

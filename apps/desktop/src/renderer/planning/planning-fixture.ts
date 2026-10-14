@@ -51,12 +51,14 @@ import {
 const FIXTURE_FIRST: Workspace = {
   id: "workspace-personal",
   name: "Personal",
+  slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
   name: "Acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };
