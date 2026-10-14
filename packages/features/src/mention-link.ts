@@ -34,8 +34,10 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  *   a branch's would point at whatever moved into them. Its path is from
  *   the repository's root and never climbs out of it: no leading `/`, no
  *   `..` step, no backslash. A GitHub page is a file of the plan only when
- *   it is of the plan's own repository, which a reader is handed, and is
- *   read as that before anything else a GitHub address might name.
+ *   it is of the plan's own repository, which a reader is handed, and only
+ *   on `HEAD` or a commit, since a branch's name may hold a slash and leave
+ *   no telling where it ends and the path begins; it is read as that before
+ *   anything else a GitHub address might name.
  *
  * The forms written before the link was settled, `luke://plan/<id>`
  * (`#<heading>` after it, the heading's own words), `luke://file/<path>`,
@@ -53,8 +55,10 @@ export const MENTION_KIND = {
 } as const;
 
 const MENTION_BOUNDS = {
-  /** The most characters a mention's target may spell: a heading or a path at its bound, every character encoded as UTF-8's widest, and the plan's id. */
-  MAX_TARGET_CHARS: 12_000,
+  /** The most characters a mention's target may spell: an anchor or a path at its bound, every character encoded as UTF-8's widest, and the plan's id. */
+  MAX_TARGET_CHARS: 24_000,
+  /** The most characters an anchor may spell: a heading at its bound, each character lowered into as many as two, and a suffix telling it from an earlier one. */
+  MAX_ANCHOR_CHARS: PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
   /** The most characters a plan's id may spell; the service mints them far shorter. */
   MAX_PLAN_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
@@ -184,7 +188,7 @@ const mentionSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(MENTION_KIND.SECTION),
     planId: planIdSchema,
     anchor: EffectSchema.String.check(
-      EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+      EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_ANCHOR_CHARS),
       EffectSchema.isPattern(ANCHOR),
     ),
   }),
@@ -305,10 +309,12 @@ function linesOf(ref: string, hash: string): MentionLines | undefined {
   return { commit: ref, startLine, endLine };
 }
 
-/** The fields a page of the plan's repository on GitHub spells, a file's or a folder's; nothing for any other page. */
+/** The fields a page of the plan's repository on GitHub spells, a file's or a folder's on `HEAD` or a commit; nothing for any other page. */
 function repositoryFields(url: URL, repository: string | null) {
   const [first, owner, name, step, ref, ...path] = url.pathname.split("/");
-  if (first !== "" || repository === null || ref === undefined || ref === "") return undefined;
+  if (first !== "" || repository === null || ref === undefined) return undefined;
+  // Note that a branch's page is no file of the plan, since `feature/rollout` spells two steps and the path's first is not to be told from its last.
+  if (ref !== GITHUB.DEFAULT_BRANCH && !COMMIT.test(ref)) return undefined;
   // GitHub reads an owner and a name in any case, so a link spelled in another names the same repository.
   if (`${owner}/${name}`.toLowerCase() !== repository.toLowerCase()) return undefined;
   if (step === GITHUB.FOLDER_STEP) {

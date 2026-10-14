@@ -83,6 +83,17 @@ test("a heading's anchor is spelled as GitHub spells a Markdown heading's, a hea
   );
 });
 
+test("a heading at its bound, borne twice, still has an anchor that reads back from its target", () => {
+  const heading = "語".repeat(1_000);
+  const anchors = sectionAnchors([heading, heading]);
+
+  for (const anchor of anchors) {
+    const section: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor };
+    assert.deepEqual(decodeMention(encodeMention(section, PLACE), null), section);
+  }
+  assert.equal(anchors[1]?.endsWith("-1"), true);
+});
+
 test("a section's anchor keeps every character it is spelled in through its target, which never closes the link", () => {
   for (const heading of ["Größe & Ölçü — 次の手順", "a) b (c", "語".repeat(1_000)]) {
     const [anchor = ""] = sectionAnchors([heading]);
@@ -109,12 +120,22 @@ test("a file and a folder are their pages on GitHub on the default branch, and r
   assert.deepEqual(decodeMention(encodeMention(file, PLACE), REPOSITORY), file);
   assert.deepEqual(decodeMention(encodeMention(folder, PLACE), REPOSITORY), folder);
   assert.deepEqual(
-    decodeMention("https://github.com/Acme/Checkout/blob/main/src/a.ts", REPOSITORY),
+    decodeMention("https://github.com/Acme/Checkout/blob/HEAD/src/a.ts", REPOSITORY),
     { kind: MENTION_KIND.FILE, path: "src/a.ts" },
   );
 });
 
-test("a file's lines are pinned to the commit they were read at, and a branch's lines read as the file alone", () => {
+test("a branch's page is no file of the plan, since a branch's name may hold a slash", () => {
+  for (const target of [
+    "https://github.com/acme/checkout/blob/main/src/a.ts",
+    "https://github.com/acme/checkout/blob/feature/rollout/src/a.ts",
+    "https://github.com/acme/checkout/tree/feature/rollout/src",
+  ]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});
+
+test("a file's lines are pinned to the commit they were read at, and lines on HEAD read as the file alone", () => {
   const lines: Mention = {
     kind: MENTION_KIND.FILE,
     path: "src/a.ts",
@@ -137,7 +158,7 @@ test("a file's lines are pinned to the commit they were read at, and a branch's 
   assert.deepEqual(decodeMention(encodeMention(lines, PLACE), REPOSITORY), lines);
   assert.deepEqual(decodeMention(encodeMention(line, PLACE), REPOSITORY), line);
   assert.deepEqual(
-    decodeMention("https://github.com/acme/checkout/blob/main/src/a.ts#L3-L5", REPOSITORY),
+    decodeMention("https://github.com/acme/checkout/blob/HEAD/src/a.ts#L3-L5", REPOSITORY),
     { kind: MENTION_KIND.FILE, path: "src/a.ts" },
   );
   assert.equal(
