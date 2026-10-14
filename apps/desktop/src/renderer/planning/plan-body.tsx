@@ -400,11 +400,15 @@ function attributed(
   menu: React.JSX.Element | null,
 ): React.JSX.Element {
   if (byline === null && menu === null) return drawn;
+  // Note that the byline and the ⋯ share one row, because a row centres the
+  // line on the button's box where two separately placed boxes never quite do.
   return (
     <div className="plan-unit-attributed">
       {drawn}
-      {byline}
-      {menu}
+      <div className="plan-unit-row">
+        {byline}
+        {menu}
+      </div>
     </div>
   );
 }
