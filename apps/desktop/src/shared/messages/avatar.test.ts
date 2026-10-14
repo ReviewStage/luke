@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { AVATAR_FEED_BOUNDS, AVATAR_FEED_KIND, avatarFeedFromWire } from "./avatar";
+import {
+  AVATAR_END_REASON,
+  AVATAR_FEED_BOUNDS,
+  AVATAR_FEED_KIND,
+  AVATAR_OFF,
+  AVATAR_STATUS,
+  avatarFeedFromWire,
+  avatarTiled,
+} from "./avatar";
 
 /** Base64 of `bytes` zero bytes, as the voice window's tee would encode that much silence. */
 function silence(bytes: number): string {
@@ -41,4 +49,22 @@ test("a malformed feed message is refused", () => {
     undefined,
   ];
   for (const value of refused) assert.equal(avatarFeedFromWire(value), undefined);
+});
+
+test("the tile stands while the avatar comes up and is up, and through an end it can be restarted from", () => {
+  const tiled = [
+    { status: AVATAR_STATUS.STARTING },
+    { status: AVATAR_STATUS.LIVE },
+    { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED },
+    { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.ERROR },
+    { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.NO_CAPACITY },
+    { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.UNAVAILABLE },
+  ];
+  for (const avatar of tiled) assert.equal(avatarTiled(avatar), true, JSON.stringify(avatar));
+  const untiled = [
+    AVATAR_OFF,
+    { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER },
+    { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.CALL_ENDED },
+  ];
+  for (const avatar of untiled) assert.equal(avatarTiled(avatar), false, JSON.stringify(avatar));
 });

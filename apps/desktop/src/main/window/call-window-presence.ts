@@ -7,13 +7,13 @@
  * minimised or hidden), the floating window draws the same card over
  * whatever is in front, for as long as the call is in progress. Luke's
  * avatar is the exception: it is drawn in the floating window alone, so while
- * it is starting or live that window stands whoever has the keyboard, at the
- * video tile's size. Nothing here calls Electron, so the rule is read and
+ * its tile is up (starting, live, or offering a restart) that window stands
+ * whoever has the keyboard, at the video tile's size. Nothing here calls Electron, so the rule is read and
  * tested as the plain decision it is.
  */
 
 import type { WebContents } from "electron";
-import { AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
+import { AVATAR_OFF, type AvatarState, avatarTiled } from "#shared/messages/avatar";
 import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
 
 /** The card's window, its shadow's room included, and its gap from the screen's corner. */
@@ -39,11 +39,6 @@ export interface CallWindowSurface {
   hide(): void;
   /** The video tile's size while the avatar is up, and the card's otherwise. */
   fitVideo(video: boolean): void;
-}
-
-/** The statuses the avatar's tile is drawn in: coming up, and up. */
-function videoUp(status: AvatarStatus): boolean {
-  return status === AVATAR_STATUS.STARTING || status === AVATAR_STATUS.LIVE;
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -108,13 +103,13 @@ export function callWindowFrame(input: {
 
 /**
  * The decision, held over what moves it: the voice view the voice window
- * reports, the avatar's status the call window reports, and which panel, if
+ * reports, the avatar as the document holds it, and which panel, if
  * any, has the keyboard. The surface is told only when an answer changes.
  */
 export class CallWindowPresence {
   readonly #surface: CallWindowSurface;
   #view: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined;
-  #avatar: AvatarStatus = AVATAR_STATUS.OFF;
+  #avatar: AvatarState = AVATAR_OFF;
   #focused: WebContents | undefined;
   #standing = false;
   #video = false;
@@ -125,7 +120,7 @@ export class CallWindowPresence {
 
   voiceChanged(
     view: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined,
-    avatar: AvatarStatus,
+    avatar: AvatarState,
   ): void {
     this.#view = view;
     this.#avatar = avatar;
@@ -146,7 +141,7 @@ export class CallWindowPresence {
   #decide(): void {
     const view = this.#view;
     const calling = view !== undefined && callInProgress(view);
-    const video = calling && videoUp(this.#avatar);
+    const video = calling && avatarTiled(this.#avatar);
     const wanted = calling && (video || this.#focused === undefined);
     // Note that the window is sized while it is hidden where it can be:
     // after a hide and before a show, so neither size is seen in passing.

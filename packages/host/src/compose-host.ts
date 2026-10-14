@@ -19,7 +19,7 @@ import {
 } from "@sidecar/hosted";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
-import { Effect, Layer } from "effect";
+import { Config, Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
@@ -35,8 +35,8 @@ import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
-  type AppIdentity,
-  type Environment,
+  AppIdentity,
+  Environment,
   Reporter,
   type SecretCipher,
   ShutdownSignal,
@@ -44,6 +44,12 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
+
+/**
+ * The development switch that opens every call with Luke's avatar, until the
+ * `voiceVideo` setting (#12) takes its place. A packaged build never reads it.
+ */
+const VOICE_VIDEO_VARIABLE = "LUKE_VOICE_VIDEO";
 
 /** The seven concerns, by the name each is built under. */
 const HOST_CONCERN = {
@@ -98,8 +104,15 @@ export const hostAssemblyLayer: Layer.Layer<
     const hostService = yield* HostService;
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
+    const identity = yield* AppIdentity;
+    const environment = yield* Environment;
 
     const settings = yield* composeSettings();
+    const videoForced =
+      !identity.packaged &&
+      (yield* Effect.orDie(
+        Config.withDefault(Config.String(VOICE_VIDEO_VARIABLE), "").parse(environment),
+      )) === "1";
     const account = yield* composeAccount({ settings });
     // No brain runs on this Mac: the exchange is the service's, and Luke
     // speaks only on a planning call the developer opened.
@@ -113,7 +126,10 @@ export const hostAssemblyLayer: Layer.Layer<
     let showPlanCode: (code: PlanCodeFrame) => void = () => undefined;
     let showPlanWork: (work: PlanWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
-      settings,
+      settings: {
+        recordProductEvent: settings.recordProductEvent,
+        videoOnCall: Effect.succeed(videoForced),
+      },
       account,
       activePlanId: () => activePlanId(),
       showPlanDraft: (draft) => showPlanDraft(draft),
@@ -303,6 +319,11 @@ export const hostAssemblyLayer: Layer.Layer<
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
       drain,
+      avatar: {
+        states: live.service.avatarStates,
+        grants: live.service.avatarGrants,
+        closed: (reason) => live.service.closed(reason),
+      },
     };
     return assembly;
   }),

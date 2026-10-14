@@ -13,6 +13,7 @@ import {
   type VoiceReportLiveTransportParams,
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
+  voiceSetVideoResultSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
 import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
@@ -226,6 +227,8 @@ export interface HostOperator {
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
   stopSpeaking(): Effect.Effect<boolean>;
+  /** Luke's avatar asked for on the standing call, or taken down as the developer's own; answers whether the service was asked. */
+  setVideo(on: boolean): Effect.Effect<boolean>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
   recordAgentTrace(trace: AgentWireTrace): Effect.Effect<void>;
   recordEvent<Name extends ProductEventName>(
@@ -617,6 +620,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 answer.result,
               ),
             )?.stopped ?? false)
+          : false,
+      ),
+    setVideo: (on) =>
+      Effect.map(client.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on }), (answer) =>
+        answer.ok
+          ? (Result.getOrUndefined(
+              readEither(voiceSetVideoResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+            )?.requested ?? false)
           : false,
       ),
     recordAgentTrace: (trace) =>

@@ -51,19 +51,50 @@ export interface AvatarState {
 export const AVATAR_OFF: AvatarState = { status: AVATAR_STATUS.OFF };
 
 /**
- * The avatar as the call window reports it: a status, and a reason beside
- * `ENDED` and nowhere else, so a report cannot say the avatar is live for a
- * reason or ended for none.
+ * The avatar as the call window reports it: starting, live, or ended with a
+ * reason beside `ENDED` and nowhere else, so a report cannot say the avatar
+ * is live for a reason or ended for none. It never reports `OFF`: whether
+ * video was asked for is main's to say, from the host.
  */
 export const avatarStateSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    status: EffectSchema.Literals([AVATAR_STATUS.OFF, AVATAR_STATUS.STARTING, AVATAR_STATUS.LIVE]),
+    status: EffectSchema.Literals([AVATAR_STATUS.STARTING, AVATAR_STATUS.LIVE]),
   }),
   EffectSchema.Struct({
     status: EffectSchema.Literal(AVATAR_STATUS.ENDED),
     endReason: EffectSchema.Literals(Object.values(AVATAR_END_REASON)),
   }),
 ]);
+
+/**
+ * The ends the tile stays up through to offer "Restart video": a session the
+ * service or Keyframe could not put up or keep up. The developer's own off
+ * and the call's end take the tile down.
+ */
+const AVATAR_RESTART_REASONS: ReadonlySet<AvatarEndReason> = new Set([
+  AVATAR_END_REASON.SERVER_CLOSED,
+  AVATAR_END_REASON.ERROR,
+  AVATAR_END_REASON.NO_CAPACITY,
+  AVATAR_END_REASON.UNAVAILABLE,
+]);
+
+/**
+ * Whether the avatar's tile is drawn in place of the call card: while the
+ * avatar is starting or live, and once it ended for a reason the tile offers
+ * to restart it from. Read beside whether the call stands, which the tile
+ * never outlives.
+ */
+export function avatarTiled(avatar: AvatarState): boolean {
+  switch (avatar.status) {
+    case AVATAR_STATUS.STARTING:
+    case AVATAR_STATUS.LIVE:
+      return true;
+    case AVATAR_STATUS.ENDED:
+      return avatar.endReason !== undefined && AVATAR_RESTART_REASONS.has(avatar.endReason);
+    case AVATAR_STATUS.OFF:
+      return false;
+  }
+}
 
 /** What one feed message says: a chunk of Luke's voice, the end of his turn, or the developer cutting in. */
 export const AVATAR_FEED_KIND = {
