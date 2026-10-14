@@ -56,7 +56,7 @@ export const SETTINGS_SECTION = {
   GITHUB_REPOSITORIES: "workspace-github-repositories",
 } as const;
 
-export type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];
+type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];
 
 /**
  * Where an Open Settings press lands: a page, a section on it, and on the

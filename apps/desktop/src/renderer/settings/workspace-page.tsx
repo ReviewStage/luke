@@ -49,7 +49,7 @@ function refusedWith(refused: Error): ActionResult {
 }
 
 /** Whether the account's role lets it manage the workspace's members and GitHub organization. */
-export function managesWorkspace(workspace: Workspace): boolean {
+function managesWorkspace(workspace: Workspace): boolean {
   return workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN;
 }
 
@@ -197,63 +197,83 @@ function TeamMembers({
   );
 }
 
+/** A row whose button opens a page in the browser for the workspace, the act's refusal said under it. */
+function OpenerRow({
+  name,
+  line,
+  verb,
+  className,
+  open,
+  children,
+}: {
+  name: string;
+  line?: string | undefined;
+  verb: string;
+  className: string;
+  open: () => Promise<void>;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  const [refusal, setRefusal] = useState<string>();
+  return (
+    <Row className={className} name={name} line={refusal ?? line}>
+      {children}
+      <button
+        type="button"
+        className="toolbar-button bordered-button"
+        onClick={() => {
+          setRefusal(undefined);
+          open().catch((refused: Error) => setRefusal(refused.message));
+        }}
+      >
+        {verb}
+      </button>
+    </Row>
+  );
+}
+
 /**
  * The workspace's GitHub repositories, for an owner or an admin: Connect
  * while none is, which installs the Luke GitHub App on a GitHub organization
  * for this workspace, or the connected account's repositories with
- * Disconnect, and the App's page on GitHub where its repositories are
- * chosen. Both GitHub pages open in the browser through the one connect,
- * whose return to Luke links the installation to this workspace.
+ * Disconnect and Choose repositories…, the App's page on GitHub where its
+ * repositories are chosen. Both GitHub pages open in the browser through
+ * the one connect, whose return to Luke links the installation to this
+ * workspace.
  */
 function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
-  const [refusal, setRefusal] = useState<string>();
   const { github } = workspace;
-  const openGitHub = () => {
-    setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: workspace.id }).catch((refused: Error) =>
-      setRefusal(refused.message),
-    );
-  };
-  if (github === null) {
-    return (
-      <Row
-        className="workspace-github"
-        name="No GitHub organization connected"
-        line={refusal ?? "Connect one to use its repositories in this workspace's plans."}
-      >
-        <button type="button" className="toolbar-button bordered-button" onClick={openGitHub}>
-          Connect…
-        </button>
-      </Row>
-    );
-  }
-  return (
-    <>
-      <Row
-        className="workspace-github"
-        name={`Repositories from ${github.login}`}
-        line={github.active ? undefined : "Suspended or removed on GitHub."}
-      >
-        <ConfirmedButton
-          verb="Disconnect"
-          running="Disconnecting"
-          title={`Disconnect ${github.login} from ${workspace.name}?`}
-          body="Its plans lose the organization's repositories until one is connected again."
-          action={() =>
-            act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId: workspace.id }).then(
-              () => ACCEPTED,
-              refusedWith,
-            )
-          }
-        />
-      </Row>
-      <Row className="workspace-github-choose" name="Choose repositories on GitHub" line={refusal}>
-        <button type="button" className="toolbar-button bordered-button" onClick={openGitHub}>
-          Open GitHub…
-        </button>
-      </Row>
-    </>
+  const workspaceId = workspace.id;
+  const open = () => act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId });
+  return github === null ? (
+    <OpenerRow
+      className="workspace-github"
+      name="No GitHub organization connected"
+      line="Connect one to use its repositories in this workspace."
+      verb="Connect…"
+      open={open}
+    />
+  ) : (
+    <OpenerRow
+      className="workspace-github"
+      name={`Repositories from ${github.login}`}
+      line={github.active ? undefined : "Suspended or removed on GitHub."}
+      verb="Choose repositories…"
+      open={open}
+    >
+      <ConfirmedButton
+        verb="Disconnect"
+        running="Disconnecting"
+        title={`Disconnect ${github.login} from ${workspace.name}?`}
+        body="Its plans lose the organization's repositories until one is connected again."
+        action={() =>
+          act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId }).then(
+            () => ACCEPTED,
+            refusedWith,
+          )
+        }
+      />
+    </OpenerRow>
   );
 }
 
@@ -304,28 +324,6 @@ function WorkspaceHead({
   );
 }
 
-/** Invite people: the service's invite page for the workspace, in the browser, and a refusal said under it. */
-function InviteRow({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const { act } = useAct();
-  const [refusal, setRefusal] = useState<string>();
-  return (
-    <Row className="workspace-invite" name="Invite people" line={refusal}>
-      <button
-        type="button"
-        className="toolbar-button bordered-button"
-        onClick={() => {
-          setRefusal(undefined);
-          act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: workspace.id }).catch((refused: Error) =>
-            setRefusal(refused.message),
-          );
-        }}
-      >
-        Invite people…
-      </button>
-    </Row>
-  );
-}
-
 /**
  * The page for one workspace: its head, a team's members, and, for an owner
  * or an admin, its GitHub repositories; nothing before the workspaces are read.
@@ -335,6 +333,7 @@ export function WorkspacePage({
 }: {
   control: WorkspaceSettingsControl;
 }): React.JSX.Element | null {
+  const { act } = useAct();
   const workspace =
     control.workspaces.find((each) => each.id === control.workspaceId) ?? control.workspaces[0];
   if (workspace === undefined) return null;
@@ -344,7 +343,12 @@ export function WorkspacePage({
       {workspace.personal ? null : (
         <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
           <Fragment key={workspace.id}>
-            <InviteRow workspace={workspace} />
+            <OpenerRow
+              className="workspace-invite"
+              name="Invite people"
+              verb="Invite people…"
+              open={() => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: workspace.id })}
+            />
             <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
           </Fragment>
         </SettingsGroup>

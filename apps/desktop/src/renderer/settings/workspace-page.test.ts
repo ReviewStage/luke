@@ -287,9 +287,8 @@ test("an owner of a workspace with no GitHub organization is offered Connect, a 
     role: WORKSPACE_ROLE.ADMIN,
     github: { login: "acme", active: true },
   });
-  const choose =
-    admin.page.querySelector(".workspace-github-choose") ?? assert.fail("no Choose row");
-  act(() => button(choose, "Open GitHub…").click());
+  const choose = admin.page.querySelector(".workspace-github") ?? assert.fail("no GitHub row");
+  act(() => button(choose, "Choose repositories…").click());
   const member = await mount({ ...ACME, github: { login: "acme", active: true } });
   await settle();
 
