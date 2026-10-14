@@ -2035,9 +2035,11 @@ button.agent-ref:hover .agent-ref-name {
    tools shows its chevron while it holds the highlight; a row with nothing
    to press is dimmed as the menu's other disabled rows are. The list is
    taller than the searchable menu's, as tall as a server's page, so going
-   in and back keeps the popover's size. */
+   in and back keeps the popover's size, and never taller than the window
+   leaves above the composer once the field and the foot are drawn, so the
+   field stays on screen in the shortest window. */
 .agent-servers-menu .agent-servers-list {
-  max-height: 400px;
+  max-height: clamp(160px, 100vh - 320px, 400px);
 }
 
 .agent-servers-row[data-opens="true"] {

@@ -211,3 +211,27 @@ test("the arrows move the highlight, and Space on an empty search flips the high
 
   assert.deepEqual(switched, [[VERCEL]]);
 });
+
+test("a pointer's press on a server page's switch leaves the focus in the filter, so Backspace still goes back", async () => {
+  const { container, key, switched } = await opened();
+  act(() =>
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
+      .find((row) => row.textContent?.includes("Vercel"))
+      ?.click(),
+  );
+  const toggle =
+    container.querySelector<HTMLButtonElement>(".agent-servers-page-head .agent-servers-switch") ??
+    assert.fail("no switch on the page");
+
+  // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.
+  const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  act(() => {
+    toggle.dispatchEvent(press);
+    toggle.click();
+  });
+  key("Backspace");
+
+  assert.equal(press.defaultPrevented, true);
+  assert.deepEqual(switched, [[VERCEL]]);
+  assert.equal(container.querySelector(".agent-servers-page-title"), null);
+});

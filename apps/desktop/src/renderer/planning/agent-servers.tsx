@@ -100,6 +100,15 @@ const PAGE = {
 /** How far the arrows scroll a server's page, about one tool. */
 const PAGE_STEP = 44;
 
+/**
+ * A pointer's press that leaves the focus in the field, so the keys the
+ * field hears go on working after a row, a switch, or a button is clicked;
+ * Tab still reaches every control, which takes the focus as it should.
+ */
+function keepFieldFocus(event: React.MouseEvent): void {
+  event.preventDefault();
+}
+
 /** One thing the home's highlight can land on: a server's row, or a tool a search found. */
 type Pick = { readonly row: ServerRow; readonly tool?: IntegrationTool };
 
@@ -116,6 +125,7 @@ function ServerSwitch({
       type="button"
       className="agent-servers-switch"
       role="switch"
+      onMouseDown={keepFieldFocus}
       aria-checked={row.on}
       aria-label={`${row.name} for this agent`}
       onClick={(event) => {
@@ -360,6 +370,7 @@ function ServersPopover({
           <button
             type="button"
             className="agent-servers-connect"
+            onMouseDown={keepFieldFocus}
             disabled={connecting === row.provider}
             title={
               grantedBySignIn(row.provider)
@@ -380,6 +391,7 @@ function ServersPopover({
             <button
               type="button"
               className="agent-servers-connect"
+              onMouseDown={keepFieldFocus}
               disabled={connecting === row.provider}
               title={`Open the ${row.name} sign-in in your browser again`}
               onClick={(event) => {
@@ -392,6 +404,7 @@ function ServersPopover({
             <button
               type="button"
               className="agent-servers-connect"
+              onMouseDown={keepFieldFocus}
               data-tone="quiet"
               disabled={connecting === row.provider}
               onClick={(event) => {
@@ -408,6 +421,7 @@ function ServersPopover({
           <button
             type="button"
             className="agent-servers-connect"
+            onMouseDown={keepFieldFocus}
             disabled={connecting === row.provider}
             title={`Sign in to ${row.name} in your browser`}
             onClick={(event) => {
@@ -423,6 +437,7 @@ function ServersPopover({
           <button
             type="button"
             className="agent-servers-connect"
+            onMouseDown={keepFieldFocus}
             onClick={(event) => {
               event.stopPropagation();
               void statuses.read();
@@ -453,7 +468,7 @@ function ServersPopover({
         data-opens={opensTools(row) ? "true" : undefined}
         aria-disabled={row.kind === SERVER_ROW.QUIET ? "true" : undefined}
         onMouseMove={() => index >= 0 && index !== at && setHighlight(index)}
-        onMouseDown={(event) => event.preventDefault()}
+        onMouseDown={keepFieldFocus}
         onClick={() => opensTools(row) && open(row)}
       >
         <IntegrationMark provider={row.provider} />
@@ -498,7 +513,7 @@ function ServersPopover({
         className="plan-compose-menu-row agent-servers-row agent-servers-hit"
         data-highlighted={index === at ? "true" : undefined}
         onMouseMove={() => index !== at && setHighlight(index)}
-        onMouseDown={(event) => event.preventDefault()}
+        onMouseDown={keepFieldFocus}
         onClick={() => open(row, query)}
       >
         <IntegrationMark provider={row.provider} />
@@ -561,7 +576,7 @@ function ServersPopover({
               type="button"
               className="icon-button agent-servers-back"
               aria-label={PAGE.BACK}
-              onMouseDown={(event) => event.preventDefault()}
+              onMouseDown={keepFieldFocus}
               onClick={back}
             >
               <ArrowLeftIcon />
@@ -619,7 +634,7 @@ function ServersPopover({
         <button
           type="button"
           className="plan-compose-menu-row agent-servers-manage"
-          onMouseDown={(event) => event.preventDefault()}
+          onMouseDown={keepFieldFocus}
           onClick={() => {
             onClose();
             servers.onOpenSettings();

@@ -228,7 +228,12 @@ export interface ServerSearch {
   readonly tools: readonly ToolHit[];
 }
 
-/** The servers and tools a query finds; a blank query is every server and no tool. */
+/**
+ * The servers and tools a query finds; a blank query is every server and no
+ * tool. Note that the tools found stay together by server, in the provider
+ * list's order and alphabetical within each, because a server's tools read
+ * best beside each other and each names its server once in the same place.
+ */
 export function searchServers(rows: readonly ServerRow[], query: string): ServerSearch {
   const tokens = searchTokens(query);
   if (tokens.length === 0) return { rows, tools: [] };
