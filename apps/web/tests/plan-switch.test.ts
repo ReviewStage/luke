@@ -6,7 +6,9 @@ import { writePlanTemplate } from "@sidecar/database/models/account-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
+import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
+import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { Effect, Option } from "effect";
 import { startPlan } from "./support/workspaces";
 
@@ -30,6 +32,22 @@ const opened = (userId: string, planId: string) =>
   Effect.map(readPlan(userId, planId), (stored) => Option.getOrThrow(stored).plan);
 
 it.layer(getTestDB())("a new plan as one document", (it) => {
+  it.effect(
+    "a new plan holds no section for the steps the work lands in: those are its rollout, beside the text and empty",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+
+        const started = yield* startPlan(userId, RELAY);
+
+        const headings = planSections(started.document.body).map((section) => section.heading);
+        assert.ok(headings.includes(PLAN_HEADING.TESTING));
+        assert.ok(!headings.includes("Plan of attack"));
+        assert.ok(!headings.includes(PLAN_HEADING.ROLLOUT));
+        assert.deepEqual(started.rollout, []);
+      }),
+  );
+
   it.effect(
     "a new plan copies the account's own template, and an edit of the template leaves every plan started from it as it stands",
     () =>

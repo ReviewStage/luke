@@ -270,6 +270,14 @@ const START_REFUSAL_ACTIONS = [
   .join("\n");
 
 /**
+ * Where the steps the work lands in live, told alike to the planning model
+ * and the notetaker. Note that the default template once held them in a plan
+ * of attack, and that a plan written before still may: the developer's text
+ * is theirs, so the sentence names where steps go and leaves that section be.
+ */
+const STEPS_ARE_THE_ROLLOUT = `The steps the work lands in, and the order they land in, are the plan's ${PLAN_HEADING.ROLLOUT}, which stands beside the text: never write them as a section of the text.`;
+
+/**
  * The instructions a plan conversation's session runs under. "How to plan"
  * is adapted from Matt Pocock's grilling skill,
  * https://github.com/mattpocock/skills/blob/c55ee46073ed923f86ce59a5eb3b6d895095d1b7/skills/productivity/grilling/SKILL.md
@@ -334,6 +342,8 @@ The document follows the developer's own template: its headings are its sections
 ${PLAN_SECTIONS}
 
 Where the developer's template names its sections differently, hold each to the bar of the default section it stands for; a section with no counterpart is held to what its heading and guidance ask.
+
+${STEPS_ARE_THE_ROLLOUT}
 
 Context and goal come first: don't design an approach for a problem you don't understand yet. Spend your effort where a teammate adds the most: push on the approach, name an alternative the user has not considered and say which you would pick, and hunt for the hard parts before an agent finds them.
 
@@ -520,6 +530,7 @@ The rollout stands beside the text, never in it: the pull requests the work land
 
 - Never rewrite or strike a heading: the headings are the developer's.
 - When Luke cuts the work into pull requests and the developer does not push back, write the cut as rollout notes, one per pull request in order, never as prose or a bullet under any heading. A pull request regrouped, renamed, or rebased is a replace of that one; one folded into another is a replace of the one that absorbs it, then a remove of the folded one.
+- ${STEPS_ARE_THE_ROLLOUT}
 - Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.

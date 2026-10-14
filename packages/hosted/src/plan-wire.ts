@@ -174,7 +174,8 @@ export function rolloutStacksOf(rollout: Rollout): readonly RolloutStack[] {
 /**
  * The default template's sections, in its order, by the names the fixed
  * template once kept them under: what its guidance and the prompts are keyed
- * by (`plan-template.ts`).
+ * by (`plan-template.ts`). The steps the work lands in and their order are
+ * no section: they are the rollout above, which stands beside the text.
  */
 export const PLAN_FIELD = {
   CONTEXT: "context",
@@ -184,7 +185,6 @@ export const PLAN_FIELD = {
   ALTERNATIVES: "alternatives",
   HARD_PARTS: "hardParts",
   NOT_DOING: "notDoing",
-  PLAN_OF_ATTACK: "planOfAttack",
   TESTING: "testing",
   OPEN_QUESTIONS: "openQuestions",
   ASSUMPTIONS: "assumptions",

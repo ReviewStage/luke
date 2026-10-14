@@ -53,11 +53,10 @@ Luke asks for microphone access the first time you start a call.
 | Alternatives | Other approaches and why they lost (when there were any) |
 | Hard parts | Each tricky case and exactly what the change does in it |
 | Not doing | What's out of scope, and why |
-| Plan of attack | The order the work lands in (when order matters) |
 | Testing | "When …, then …" cases for every goal and hard part, and the end-to-end check |
 | Open questions | Anything not yet decided |
 | Assumptions | Defaults Luke chose that you didn't state |
-| Rollout | The pull requests the work lands as, each on main or on an earlier one |
+| Rollout | The pull requests the work lands as, in order, each on main or on an earlier one |
 
 The plan reads like the design doc two engineers would write after talking a
 task through, and holds each section to the bar a coding agent needs to build

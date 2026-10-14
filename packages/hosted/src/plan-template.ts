@@ -26,8 +26,9 @@ import {
  * (`plan-document.ts`, `docs/PLANNING.md`). The default template is the
  * design doc two engineering teammates would write after talking a task
  * through: why it matters, what done looks like, how they will build it and
- * what they weighed against it, the hard parts, what they leave out, how the
- * work lands, and how they will know it works. Each section is a question a
+ * what they weighed against it, the hard parts, what they leave out, and how
+ * they will know it works; how the work lands is the rollout beside the text
+ * (`rolloutSection`), not a section of it. Each section is a question a
  * good teammate asks, so the sections are what the planning model asks
  * about, and each is described once here: its heading, what it holds
  * (`PLAN_FIELD_PURPOSE`), and when it is good enough for a coding agent to
@@ -60,7 +61,6 @@ export const PLAN_HEADING = {
   ALTERNATIVES: "Alternatives",
   HARD_PARTS: "Hard parts",
   NOT_DOING: "Not doing",
-  PLAN_OF_ATTACK: "Plan of attack",
   TESTING: "Testing",
   OPEN_QUESTIONS: "Open questions",
   ASSUMPTIONS: "Assumptions",
@@ -209,7 +209,6 @@ export const PLAN_FIELD_HEADING = {
   alternatives: PLAN_HEADING.ALTERNATIVES,
   hardParts: PLAN_HEADING.HARD_PARTS,
   notDoing: PLAN_HEADING.NOT_DOING,
-  planOfAttack: PLAN_HEADING.PLAN_OF_ATTACK,
   testing: PLAN_HEADING.TESTING,
   openQuestions: PLAN_HEADING.OPEN_QUESTIONS,
   assumptions: PLAN_HEADING.ASSUMPTIONS,
@@ -247,9 +246,6 @@ export const PLAN_FIELD_PURPOSE = {
   notDoing:
     "What is out of scope, one bullet each with why, including anything a capable agent " +
     "might otherwise build unasked.",
-  planOfAttack:
-    "The steps the work lands in, in order, each one testable on its own, and why the order " +
-    "matters. Data migration, backfill, and rollout where they apply.",
   testing:
     'The cases that prove the change, one bullet each written as "When <situation>, then ' +
     '<exact observable result>", then the end-to-end check a person or a script runs to ' +
@@ -281,7 +277,6 @@ export const PLAN_FIELD_BAR = {
     "Optional. Every alternative the developer raised or Luke suggested has the reason it lost.",
   hardParts: "Every case says exactly what the change does, not only that it is hard.",
   notDoing: "Anything a capable agent might add unasked is listed.",
-  planOfAttack: "Optional. Needed when the order of the steps matters or stored data moves.",
   testing:
     "Every goal and every hard part has at least one When/then case with an exact result, " +
     "and there is an end-to-end check.",
