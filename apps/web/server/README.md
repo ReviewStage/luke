@@ -171,18 +171,24 @@ opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left through
-`server/workspaces-app.ts` under the bearer, since the plugin's own
-`listMembers`, `removeMember`, and `leaveOrganization` take a session cookie
-a Mac never holds. `GET /api/workspaces/members?workspaceId=` answers a
-workspace's members to a member, read through Drizzle
-(`hosted/workspace-members.ts`), owners first, then admins, then members.
+`server/workspaces-app.ts`. `GET /api/workspaces/members?workspaceId=`
+answers a workspace's members to a member under the Mac's OAuth token, read
+through Drizzle (`hosted/workspace-members.ts`), owners first, then admins,
+then members, since the plugin's own `listMembers` takes a session.
 `POST /api/workspaces/members/remove` lets an owner or an admin remove a
 member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
-an owner leave; both delete the `member` row through Drizzle, no
-organization hook being configured that the plugin's own delete would run.
-A workspace the account is not in is `not-found`; a personal one, or a role
-that does not allow it, `not-permitted`. `tests/workspaces-app.test.ts` holds each over the plugin on
-PGlite.
+an owner leave. Both are the plugin's own `removeMember` and
+`leaveOrganization` (`memberSeams` in `workspace-seams.ts`), called with the
+request's headers, which carry the Mac's own Better Auth session as a signed
+bearer token that the bearer plugin reads as the session cookie. So these two
+paths take the session, not the OAuth token, and the plugin checks the
+caller's role and membership again behind Luke's own rules. A workspace the
+account is not in is `not-found`; a personal one, or a role that does not
+allow it, `not-permitted`; a session the service does not take,
+`invalid-token`, which is the Mac's cue to ask for a new one through the
+hand-off page (`desktop-session.html`). `tests/workspaces-app.test.ts` holds
+each over the plugin on PGlite, and `tests/member-seams.test.ts` the
+plugin's own refusals.
 
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It

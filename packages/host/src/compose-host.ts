@@ -125,6 +125,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       ...account.token,
+      ...account.sessionToken,
     });
     const codingAgentClient = new HostedCodingAgentClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,

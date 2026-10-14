@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
-import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import {
+  type MemberSeams,
+  OrganizationRefused,
+  type WorkspaceSeams,
+} from "@sidecar/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-store";
 import { member, organization, user } from "@sidecar/database/schemas/auth";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
@@ -23,7 +27,7 @@ import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../server/github-install-app";
 import { createConnectIntent } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { workspacesApp } from "../server/workspaces-app";
+import { type WorkspacesAppSeams, workspacesApp } from "../server/workspaces-app";
 import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
 import { openWorkspacePlugin } from "./support/workspace-plugin";
 
@@ -60,8 +64,32 @@ const openGithubAccount = (name: string) =>
     return userId;
   });
 
-/** One request answered by the workspaces group and the install group over the ambient database and the GitHub given; a bearer stands for the account it names. */
-const send = (seams: WorkspaceSeams, github: FakeGitHub, request: Request) =>
+/** The plugin's member writes and the session they are made under, for the paths that write through the plugin. */
+interface SessionSeams {
+  readonly members: MemberSeams;
+  readonly resolveSessionUserId: WorkspacesAppSeams["resolveSessionUserId"];
+}
+
+/** No session at all: a path that takes one finds none, and nothing writes through the plugin. */
+const NO_SESSION: SessionSeams = {
+  members: {
+    removeMember: () => Effect.die("no member write without a session"),
+    leaveOrganization: () => Effect.die("no member write without a session"),
+  },
+  resolveSessionUserId: () => Effect.succeed(Option.none()),
+};
+
+/**
+ * One request answered by the workspaces group and the install group over
+ * the ambient database and the GitHub given; an OAuth bearer stands for the
+ * account it names, and a session bearer is read by the plugin itself.
+ */
+const send = (
+  seams: WorkspaceSeams,
+  github: FakeGitHub,
+  request: Request,
+  session: SessionSeams = NO_SESSION,
+) =>
   Effect.gen(function* () {
     // The handler runs on the router's own fiber, so it is handed the test's clock: an intent's expiry and a token's are read off it.
     const services = Layer.mergeAll(
@@ -76,7 +104,9 @@ const send = (seams: WorkspaceSeams, github: FakeGitHub, request: Request) =>
           Effect.succeed(
             Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
           ),
+        resolveSessionUserId: session.resolveSessionUserId,
         workspaces: seams,
+        members: session.members,
       }),
       githubInstallApp(),
     );
@@ -558,23 +588,36 @@ const readMembers = (seams: WorkspaceSeams, userId: string, path: string) =>
 
 const refusedAs = (status: number, error: string) => ({ status, body: { error } });
 
-/** A POST under the bearer's account, as its status and body. */
-const posted = (seams: WorkspaceSeams, userId: string, path: string, body: WireBoundaryInput) =>
-  Effect.map(
-    send(seams, NO_GITHUB_TO_READ, bearerRequest(path, userId, body)),
-    ({ status, body }) => ({ status, body }),
-  );
+type WorkspacePlugin = Effect.Success<typeof openWorkspacePlugin>;
 
-/** One member removed by the bearer's account. */
-const removing = (seams: WorkspaceSeams, userId: string, workspaceId: string, removed: string) =>
-  posted(seams, userId, HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE, {
+/** A POST under a fresh session of the account's, signed as the Mac carries one, as its status and body. */
+const postedInSession = (
+  plugin: WorkspacePlugin,
+  userId: string,
+  path: string,
+  body: WireBoundaryInput,
+) =>
+  Effect.gen(function* () {
+    const sessionBearer = yield* plugin.sessionBearerOf(userId);
+    const { status, body: answered } = yield* send(
+      plugin.seams,
+      NO_GITHUB_TO_READ,
+      bearerRequest(path, sessionBearer, body),
+      plugin,
+    );
+    return { status, body: answered };
+  });
+
+/** One member removed by the account, under its session. */
+const removing = (plugin: WorkspacePlugin, userId: string, workspaceId: string, removed: string) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE, {
     workspaceId,
     userId: removed,
   });
 
-/** The bearer's account leaving the workspace. */
-const leaving = (seams: WorkspaceSeams, userId: string, workspaceId: string) =>
-  posted(seams, userId, HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, { workspaceId });
+/** The account leaving the workspace, under its session. */
+const leaving = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, { workspaceId });
 
 /** Who is in a workspace, by account and role, as the plugin's rows hold them. */
 const membersOf = (organizationId: string) =>
@@ -663,7 +706,8 @@ it.effect(
   "a member cannot remove another, an admin cannot remove the owner, and an admin removes a member",
   () =>
     Effect.gen(function* () {
-      const { api, seams, database } = yield* openWorkspacePlugin;
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
       yield* Effect.gen(function* () {
         const ada = yield* openGithubAccount("Ada Lovelace");
         const grace = yield* openGithubAccount("Grace Hopper");
@@ -673,9 +717,9 @@ it.effect(
           { userId: alan, role: "member" },
         ]);
 
-        const byMember = yield* removing(seams, alan, acme, grace);
-        const ofOwner = yield* removing(seams, grace, acme, ada);
-        const byAdmin = yield* removing(seams, grace, acme, alan);
+        const byMember = yield* removing(plugin, alan, acme, grace);
+        const ofOwner = yield* removing(plugin, grace, acme, ada);
+        const byAdmin = yield* removing(plugin, grace, acme, alan);
 
         const notPermitted = refusedAs(
           HOSTED_HTTP_STATUS.FORBIDDEN,
@@ -702,14 +746,15 @@ it.effect(
 
 it.effect("an owner cannot leave, and a member leaves", () =>
   Effect.gen(function* () {
-    const { api, seams, database } = yield* openWorkspacePlugin;
+    const plugin = yield* openWorkspacePlugin;
+    const { api, database } = plugin;
     yield* Effect.gen(function* () {
       const ada = yield* openGithubAccount("Ada Lovelace");
       const grace = yield* openGithubAccount("Grace Hopper");
       const acme = yield* openTeam(api, ada, [{ userId: grace, role: "member" }]);
 
-      const byOwner = yield* leaving(seams, ada, acme);
-      const byMember = yield* leaving(seams, grace, acme);
+      const byOwner = yield* leaving(plugin, ada, acme);
+      const byMember = yield* leaving(plugin, grace, acme);
 
       assert.deepEqual(
         byOwner,
@@ -723,15 +768,16 @@ it.effect("an owner cannot leave, and a member leaves", () =>
 
 it.effect("a personal workspace's members are neither read, removed, nor left", () =>
   Effect.gen(function* () {
-    const { seams, database } = yield* openWorkspacePlugin;
+    const plugin = yield* openWorkspacePlugin;
+    const { seams, database } = plugin;
     yield* Effect.gen(function* () {
       const ada = yield* openGithubAccount("Ada Lovelace");
       const personal = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, seams));
 
       const answers = [
         yield* readMembers(seams, ada, membersAt(personal)),
-        yield* removing(seams, ada, personal, ada),
-        yield* leaving(seams, ada, personal),
+        yield* removing(plugin, ada, personal, ada),
+        yield* leaving(plugin, ada, personal),
       ];
 
       const notPermitted = refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED);
@@ -739,4 +785,85 @@ it.effect("a personal workspace's members are neither read, removed, nor left", 
       assert.deepEqual(yield* membersOf(personal), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "a removal or a leaving under the Mac's OAuth token rather than its session is refused as unauthenticated",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(api, ada, [{ userId: grace, role: "member" }]);
+
+        // The OAuth bearer stands for its account on every other path here.
+        const underToken = (path: string, body: WireBoundaryInput) =>
+          Effect.map(
+            send(plugin.seams, NO_GITHUB_TO_READ, bearerRequest(path, ada, body), plugin),
+            ({ status, body }) => ({ status, body }),
+          );
+        const removed = yield* underToken(HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE, {
+          workspaceId: acme,
+          userId: grace,
+        });
+        const left = yield* underToken(HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, {
+          workspaceId: acme,
+        });
+
+        const unauthenticated = refusedAs(
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          HOSTED_API_ERROR.INVALID_TOKEN,
+        );
+        assert.deepEqual(removed, unauthenticated);
+        assert.deepEqual(left, unauthenticated);
+        assert.deepEqual(yield* membersOf(acme), [
+          { userId: grace, role: WORKSPACE_ROLE.MEMBER },
+          { userId: ada, role: WORKSPACE_ROLE.OWNER },
+        ]);
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "the plugin's refusal of a member write is not permitted, its refusal of the session unauthenticated, and its failure unavailable",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(api, ada, [{ userId: grace, role: "member" }]);
+        const leavingAgainst = (members: MemberSeams) =>
+          leaving({ ...plugin, members }, grace, acme);
+        const answering = (
+          write: Effect.Effect<void, OrganizationRefused | Cause.UnknownError>,
+        ): MemberSeams => ({ removeMember: () => write, leaveOrganization: () => write });
+
+        const forbidden = yield* leavingAgainst(
+          answering(Effect.fail(new OrganizationRefused({ status: 403 }))),
+        );
+        const signedOut = yield* leavingAgainst(
+          answering(Effect.fail(new OrganizationRefused({ status: 401 }))),
+        );
+        const broken = yield* leavingAgainst(
+          answering(Effect.fail(new Cause.UnknownError("the plugin threw"))),
+        );
+
+        assert.deepEqual(
+          forbidden,
+          refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
+        assert.deepEqual(
+          signedOut,
+          refusedAs(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          broken,
+          refusedAs(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+      }).pipe(Effect.provide(database));
+    }),
 );
