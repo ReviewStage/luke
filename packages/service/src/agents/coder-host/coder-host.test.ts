@@ -863,6 +863,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
               input: unparsedWire({ text: "Still here." }),
               clientKey: "call-left",
               postsInTurn: 0,
+              sandbox: () => Promise.reject(new Error("the sandbox was opened")),
             })
             .pipe(Effect.provide(reachingRelay()));
         const stamped = (userId: string, agentId: string) =>

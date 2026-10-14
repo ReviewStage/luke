@@ -18,9 +18,11 @@ import {
   ensureMember,
   ensurePlanChannel,
   findOrMakeDm,
+  history,
   memberNamed,
   postAsk,
   postMessage,
+  readAttachment,
   roster,
   unreadFor,
 } from "@luke/database/models/chat-store";
@@ -67,10 +69,12 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  ASK_STATUS,
   CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   MEMBER_KIND,
   mentionedHandles,
@@ -171,8 +175,16 @@ import {
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { CODER } from "./coder-host/bounds.js";
-import { CHAT_TOOL_REFUSAL, type ChatAgent, postAsAgent, readAsAgent } from "./coder-host/chat.js";
+import {
+  CHAT_TOOL_REFUSAL,
+  type ChatAgent,
+  postAsAgent,
+  readAsAgent,
+  resolveAsAgent,
+} from "./coder-host/chat.js";
+import { ASK_REFUSAL } from "./coder-host/chat-ask.js";
 import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
+import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
@@ -3504,6 +3516,41 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 });
 
+/** A sandbox door no post with words alone opens: one that fails if it is. */
+const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
+
+/** A sandbox holding the files given by absolute path, each read as one stream. */
+function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxDoor {
+  return () =>
+    Promise.resolve({
+      readFile: ({ path }: { path: string }) => {
+        const bytes = files[path];
+        if (bytes === undefined) return Promise.resolve(null);
+        return Promise.resolve(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(bytes);
+              controller.close();
+            },
+          }),
+        );
+      },
+    });
+}
+
+/** An ask as an agent posts one: a choice between two queues, the first recommended. */
+const QUEUE_ASK = {
+  text: "Which queue sends the invitation emails?",
+  key: "invite-queue",
+  ask: {
+    response: {
+      type: CHAT_ASK.CHOICE,
+      options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
+      recommended: "Postgres outbox",
+    },
+  },
+} as const;
+
 it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   /**
    * The owner's plan with two agents on it, each session claimed so a notice
@@ -3532,17 +3579,26 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           userId: opened.owner,
           agentId: started.agent.id,
           planId: opened.task.id,
+          repository: RELAY_FULL_NAME,
           telling,
         });
       }
       const [first, second] = agents;
       assert.ok(first && second);
-      const post = (agent: ChatAgent, value: WireBoundaryInput, postsInTurn = 0) =>
-        postAsAgent(agent, unparsedWire(value), randomUUID(), postsInTurn).pipe(
-          Effect.provide(opened.github.layer),
-        );
+      const post = (
+        agent: ChatAgent,
+        value: WireBoundaryInput,
+        call: { readonly postsInTurn?: number; readonly sandbox?: InboxSandboxDoor } = {},
+      ) =>
+        postAsAgent(agent, unparsedWire(value), {
+          clientKey: randomUUID(),
+          postsInTurn: call.postsInTurn ?? 0,
+          sandbox: call.sandbox ?? noSandbox,
+        }).pipe(Effect.provide(opened.github.layer));
       const read = (agent: ChatAgent, value: WireBoundaryInput = {}) =>
         readAsAgent(agent, unparsedWire(value));
+      const resolve = (agent: ChatAgent, value: WireBoundaryInput) =>
+        resolveAsAgent(agent, unparsedWire(value));
       // Note that the handles are read back rather than assumed, because two agents started at one instant mint in either order.
       const handleOf = (agent: ChatAgent) =>
         Effect.map(read(agent, { channel: "#teammate-invitations" }), (answer) => {
@@ -3550,7 +3606,13 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           return answer.you;
         });
       const handles = { first: yield* handleOf(first), second: yield* handleOf(second) };
-      return { ...opened, first, second, handles, post, read };
+      /** The chat member an agent's handle names. */
+      const memberOf = (handle: string) =>
+        Effect.map(
+          memberNamed(opened.owner, opened.task.workspaceId, handle.slice(1)),
+          Option.getOrThrow,
+        );
+      return { ...opened, first, second, handles, post, read, resolve, memberOf };
     });
 
   it.effect(
@@ -3593,6 +3655,18 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok("messages" in again);
         assert.deepEqual(again.messages, [], "a message read is read once");
 
+        const underneath = yield* chat.post(chat.first, {
+          text: "One more thing.",
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: `${chat.handles.second} owns the emails.` }],
+        });
+        assert.ok("told" in underneath);
+        assert.deepEqual(
+          underneath.told,
+          [chat.handles.second],
+          "a mention under the words tells too",
+        );
+        // The first notice stands until its member reads, so it reads before the next is told.
+        yield* chat.read(chat.second);
         const mentioned = yield* chat.post(chat.first, {
           text: `${chat.handles.second} take the invite table; @nobody FYI`,
         });
@@ -3601,7 +3675,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           [mentioned.told, mentioned.unresolved],
           [[chat.handles.second], ["@nobody"]],
         );
-        assert.equal(eve.sent.length, 1);
+        assert.equal(eve.sent.length, 2);
       }),
   );
 
@@ -3737,7 +3811,11 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           refused(CHAT_TOOL_REFUSAL.UNREADABLE_POST),
         );
         assert.deepEqual(
-          yield* chat.post(chat.first, { text: "One more." }, CHAT_BOUNDS.MAX_POSTS_PER_TURN),
+          yield* chat.post(
+            chat.first,
+            { text: "One more." },
+            { postsInTurn: CHAT_BOUNDS.MAX_POSTS_PER_TURN },
+          ),
           refused(CHAT_TOOL_REFUSAL.TOO_MANY_POSTS),
         );
         assert.deepEqual(
@@ -3820,6 +3898,225 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: true } });
         yield* chat.read(chat.first);
         assert.equal(yield* seated(), true);
+      }),
+  );
+
+  it.effect(
+    "an ask posted twice under its key is one ask at a moved-on revision, answered in its thread by another member, resolved by its poster, and every read carries the agent's asks",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const asked = yield* chat.post(chat.first, QUEUE_ASK);
+        assert.ok("asks" in asked && asked.asks !== undefined && "seq" in asked);
+        assert.deepEqual(asked.asks, [
+          {
+            key: QUEUE_ASK.key,
+            seq: asked.seq,
+            in: "#teammate-invitations",
+            status: ASK_STATUS.OPEN,
+            revision: 1,
+            response: QUEUE_ASK.ask.response,
+            needsReply: true,
+          },
+        ]);
+        const again = yield* chat.post(chat.first, {
+          ...QUEUE_ASK,
+          text: "Which queue, now that Redis is gone?",
+        });
+        assert.ok("asks" in again && again.asks !== undefined);
+        assert.deepEqual(
+          again.asks.map((ask) => [ask.key, ask.revision, ask.status]),
+          [[QUEUE_ASK.key, 2, ASK_STATUS.OPEN]],
+          "one ask per key",
+        );
+        const [standing] = again.asks;
+        assert.ok(standing);
+
+        const answerer = yield* chat.memberOf(chat.handles.second);
+        const answered = yield* answerAsk(chat.owner, chat.task.workspaceId, {
+          answererMemberId: answerer.id,
+          seq: standing.seq,
+          revision: 2,
+          reply: { reply: CHAT_REPLY.CHOSE, choices: ["Postgres outbox"] },
+          clientKey: randomUUID(),
+        });
+        assert.ok(Result.isSuccess(answered) && answered.success.taken);
+        const read = yield* chat.read(chat.first);
+        assert.ok("asks" in read);
+        assert.deepEqual(read.asks, [
+          {
+            key: QUEUE_ASK.key,
+            seq: read.asks[0]?.seq ?? 0,
+            in: "#teammate-invitations",
+            status: ASK_STATUS.ANSWERED,
+            revision: 2,
+            answer: { reply: CHAT_REPLY.CHOSE, choices: ["Postgres outbox"] },
+            answeredBy: chat.handles.second,
+          },
+        ]);
+
+        const resolved = yield* chat.resolve(chat.first, {
+          key: QUEUE_ASK.key,
+          reason: "Shipped on the outbox.",
+        });
+        assert.ok("asks" in resolved);
+        assert.deepEqual(
+          resolved.asks.map((ask) => [ask.status, ask.closedReason]),
+          [[ASK_STATUS.CLOSED, "Shipped on the outbox."]],
+        );
+        assert.deepEqual(yield* chat.resolve(chat.first, { key: "nothing", reason: "No." }), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: ASK_REFUSAL.NO_ASK,
+        });
+        const others = yield* chat.read(chat.second);
+        assert.ok("asks" in others);
+        assert.deepEqual(others.asks, [], "another agent's asks are not its own");
+      }),
+  );
+
+  it.effect(
+    "an ask stays where it was first posted, and one whose shape asks what it cannot is refused before anything is posted",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        yield* chat.post(chat.first, QUEUE_ASK);
+        assert.deepEqual(
+          yield* chat.post(chat.first, { ...QUEUE_ASK, to: "#general" }),
+          refused(ASK_REFUSAL.ELSEWHERE),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, {
+            ...QUEUE_ASK,
+            key: "twice",
+            ask: {
+              response: {
+                type: CHAT_ASK.CHOICE,
+                options: [{ label: "Redis" }, { label: "Redis" }],
+              },
+            },
+          }),
+          refused(ASK_REFUSAL.NO_OPTIONS),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, {
+            ...QUEUE_ASK,
+            key: "nowhere",
+            ask: { response: { ...QUEUE_ASK.ask.response, recommended: "Kafka" } },
+          }),
+          refused(ASK_REFUSAL.UNKNOWN_RECOMMENDATION),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, {
+            text: "These lines.",
+            blocks: [
+              {
+                type: CHAT_BLOCK.CODE,
+                repo: "acme/other",
+                path: "src/invite.ts",
+                startLine: 1,
+                endLine: 4,
+                sha: "a".repeat(40),
+              },
+            ],
+          }),
+          refused(ASK_REFUSAL.CODE_REPOSITORY),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "An ask with no key.", ask: QUEUE_ASK.ask }),
+          refused(ASK_REFUSAL.NEEDS_KEY),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "An ask that does not read.", ask: null }),
+          refused(CHAT_TOOL_REFUSAL.UNREADABLE_POST),
+          "a key would not mend an ask that does not read",
+        );
+        const link = {
+          type: CHAT_BLOCK.LINK,
+          url: "https://github.com/acme/relay",
+          label: "Relay",
+        };
+        assert.deepEqual(
+          yield* chat.post(chat.first, {
+            text: "Every link.",
+            blocks: Array.from({ length: CHAT_BOUNDS.MAX_BLOCKS }, () => link),
+          }),
+          refused(ASK_REFUSAL.TOO_MANY_BLOCKS),
+          "the words are a block of the message's own",
+        );
+        const read = yield* chat.read(chat.first);
+        assert.ok("asks" in read);
+        assert.deepEqual(
+          read.asks.map((ask) => ask.key),
+          [QUEUE_ASK.key],
+        );
+      }),
+  );
+
+  it.effect(
+    "an image block's picture is read from the sandbox and kept with the message, and a file that is not there refuses the post naming its path",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const sandbox = sandboxWith({ [`${CODER.CHECKOUT_PATH}/shot.png`]: PNG });
+        const posted = yield* chat.post(
+          chat.first,
+          {
+            text: "The invite form as it renders.",
+            blocks: [{ type: CHAT_BLOCK.IMAGE, path: "shot.png", alt: "The invite form." }],
+          },
+          { sandbox },
+        );
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in posted);
+        const poster = yield* chat.memberOf(chat.handles.first);
+        const [message] = Option.getOrThrow(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+        );
+        const image = message?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
+        assert.ok(image !== undefined && "attachmentId" in image);
+        assert.equal(image.alt, "The invite form.");
+        const kept = Option.getOrThrow(
+          yield* readAttachment(
+            chat.owner,
+            chat.task.workspaceId,
+            message?.id ?? "",
+            image.attachmentId,
+          ),
+        );
+        assert.deepEqual([kept.contentType, kept.bytes], [CHAT_IMAGE_TYPE.PNG, PNG]);
+
+        const asked = yield* chat.post(
+          chat.first,
+          {
+            ...QUEUE_ASK,
+            blocks: [{ type: CHAT_BLOCK.IMAGE, path: "shot.png", alt: "The queue's dashboard." }],
+          },
+          { sandbox },
+        );
+        assert.ok("seq" in asked);
+        const [ask] = Option.getOrThrow(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, { thread: asked.seq }),
+        );
+        const shown = ask?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
+        assert.ok(ask !== undefined && shown !== undefined && "attachmentId" in shown);
+        yield* chat.post(chat.first, { ...QUEUE_ASK, text: "Which queue? No picture now." });
+        assert.deepEqual(
+          yield* readAttachment(chat.owner, chat.task.workspaceId, ask.id, shown.attachmentId),
+          Option.none(),
+          "a picture an ask dropped when posted again is dropped from the store",
+        );
+
+        const missing = yield* chat.post(
+          chat.first,
+          {
+            text: "Another.",
+            blocks: [{ type: CHAT_BLOCK.IMAGE, path: "missing.png", alt: "Nothing." }],
+          },
+          { sandbox },
+        );
+        assert.ok(missing.status === ACTION_RESULT_STATUS.REJECTED && "reason" in missing);
+        assert.ok(missing.reason.endsWith("missing.png"), missing.reason);
       }),
   );
 });

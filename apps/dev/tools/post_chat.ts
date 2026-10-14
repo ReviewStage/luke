@@ -18,8 +18,10 @@ import { chatPostsMade } from "../session-prompt.js";
  * posts is the session's own state, pinned before anything awaits, and
  * reserved before the post goes out, as `edit_plan` reserves its notes,
  * because calls one step makes run at once and each must see the other's
- * reservation. It is offered at each turn's start only where the agent's
- * starter turned Chat on (`offeredChatTools`).
+ * reservation. An image block's picture is read from the session's
+ * sandbox through the same door eve hands every file tool, opened on first
+ * use, so a post with no image opens none. It is offered at each turn's
+ * start only where the agent's starter turned Chat on (`offeredChatTools`).
  */
 export default defineDynamic({
   events: {
@@ -39,6 +41,7 @@ export default defineDynamic({
                 input: unparsedWire(input as WireBoundaryInput),
                 clientKey: toolContext.callId,
                 postsInTurn: before,
+                sandbox: () => toolContext.getSandbox(),
               });
               const posted = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? 1 : 0;
               made.update((held) => settleNotes(held, turnId, 1, posted));

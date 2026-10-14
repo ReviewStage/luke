@@ -1,7 +1,9 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
+import { Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
@@ -65,6 +67,7 @@ export const CODER_TOOL = {
   LIST_TASKS: AGENT_TOOL.LIST_TASKS,
   POST_CHAT: AGENT_TOOL.POST_CHAT,
   READ_CHAT: AGENT_TOOL.READ_CHAT,
+  RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   READ_PAGE: AGENT_TOOL.READ_PAGE,
@@ -118,10 +121,17 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.SHOW_IMAGE,
 ]);
 
+/** What a chat post's input is read for here: the types of its blocks, an image's among them. */
+const readPostedBlocks = Schema.decodeUnknownOption(
+  Schema.Struct({ blocks: Schema.Array(Schema.Struct({ type: Schema.String })) }),
+);
+
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
- * a sandbox tool, for a page read from a file in the sandbox, or for an
- * edit of the plan adding a picture read from one, or a message received with files, which eve stages in the sandbox before the
+ * a sandbox tool, for a page read from a file in the sandbox, for an
+ * edit of the plan adding a picture read from one, or for a chat post with
+ * a picture, which is read from a file in the sandbox, or a message
+ * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
  */
 export function opensSandbox(event: MessageStreamEvent): boolean {
@@ -134,7 +144,11 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
             (action.toolName === CODER_TOOL.SHOW_PAGE && "path" in action.input) ||
             (action.toolName === CODER_TOOL.EDIT_PLAN &&
               Array.isArray(action.input.pictures) &&
-              action.input.pictures.length > 0)),
+              action.input.pictures.length > 0) ||
+            (action.toolName === CODER_TOOL.POST_CHAT &&
+              Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
+                blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
+              ))),
       );
     case "message.received":
       return event.data.parts?.some((part) => part.type === "file") ?? false;
