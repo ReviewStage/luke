@@ -263,18 +263,16 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         });
         const now = yield* DateTime.nowAsDate;
         yield* Database.use((db) =>
-          Database.use((db) =>
-            db.insert(githubInstallation).values({
-              organizationId: workspaceId,
-              installationId,
-              accountId: installationId + 1,
-              accountLogin: login,
-              accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
-              status: GITHUB_INSTALLATION_STATUS.ACTIVE,
-              createdAt: now,
-              updatedAt: now,
-            }),
-          ),
+          db.insert(githubInstallation).values({
+            organizationId: workspaceId,
+            installationId,
+            accountId: installationId + 1,
+            accountLogin: login,
+            accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+            status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+            createdAt: now,
+            updatedAt: now,
+          }),
         );
         const connected = () =>
           Effect.map(listWorkspaces(owner), (workspaces) =>
