@@ -191,9 +191,9 @@ Everything else is an act or a JSON route.
 
 - **In the relay,** it pauses reading upstream above 1 MB buffered
   (`bufferedAmount`).
-- **On the Mac,** the host acks every 5,000 characters xterm has written and
-  pauses the socket above 100,000 unacked characters. These are VS Code's
-  constants.
+- **On the Mac,** the tab acks every 5,000 bytes xterm has written, and the
+  host pauses the socket above 100,000 unacked bytes. These are VS Code's
+  constants. Both ends count the port's `Uint8Array` bytes, not characters.
 
 **Resize:** fit computes `cols` and `rows`, debounced to 100 ms. The resize
 goes over the port to the relay as `{ type: "resize" }`, then to the PTY's
@@ -421,7 +421,7 @@ preload's port entry. Every message on it is an object.
 | main → renderer | `{ type: "state", state, code? }`: the connection state, below |
 | renderer → main | `{ type: "input", data: string }`: xterm's `onData` |
 | renderer → main | `{ type: "resize", cols, rows }`: the fit addon, debounced to 100 ms |
-| renderer → main | `{ type: "ack", chars }`: sent every 5,000 characters xterm has written. Main pauses the socket above 100,000 unacked |
+| renderer → main | `{ type: "ack", bytes }`: sent every 5,000 bytes of output xterm has written (bytes, as the port's `Uint8Array` carries them). Main pauses the socket above 100,000 unacked bytes |
 
 **Connection states** (`TERMINAL_CONNECTION`, the `state` message). The
 first message on a new port is `connecting`.

@@ -64,16 +64,16 @@ export const TERMINAL_PORT_MESSAGE = {
   INPUT: "input",
   /** renderer → main: the terminal's size, from the fit addon. */
   RESIZE: "resize",
-  /** renderer → main: how many characters xterm has written since the last ack. */
+  /** renderer → main: how many bytes of output xterm has written since the last ack. */
   ACK: "ack",
 } as const;
 
 /** @public Read by the Terminal tab and the host's terminal client, above this contract. */
 export const TERMINAL_FLOW = {
-  /** How many characters xterm writes between acks. */
-  ACK_EVERY_CHARS: 5_000,
-  /** How many characters may stand unacked before main pauses the socket. */
-  PAUSE_ABOVE_CHARS: 100_000,
+  /** How many bytes of output xterm writes between acks: both ends count the port's `Uint8Array` bytes, never characters. */
+  ACK_EVERY_BYTES: 5_000,
+  /** How many bytes of output may stand unacked before the host pauses the socket. */
+  PAUSE_ABOVE_BYTES: 100_000,
   /** The most characters one input message carries: a paste is cut into messages of this size. */
   MAX_INPUT_CHARS: 65_536,
   /** The widest and tallest a terminal is taken to be. */
@@ -177,7 +177,7 @@ export const terminalPortInboundSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.ACK),
-    chars: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+    bytes: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
   }),
 ]);
 
