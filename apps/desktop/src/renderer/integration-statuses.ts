@@ -187,8 +187,13 @@ export function useIntegrationStatuses(): IntegrationStatuses {
         : await act(ACT_KIND.INTEGRATIONS_CANCEL, { provider }).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return false;
       settle(provider, answer.status);
-      // A sign-in begun again while the Cancel was out still stands, and is still waited on.
-      if (answer.status === INTEGRATION_STATUS.PENDING) return true;
+      // A sign-in begun again while the Cancel was out still stands, and is waited on for its own whole wait.
+      if (answer.status === INTEGRATION_STATUS.PENDING) {
+        marks.current += 1;
+        const begun = begunSignIn(marks.current, now(), true);
+        setSignIns((standing) => new Map(standing).set(provider, begun));
+        return true;
+      }
       setSignIns((standing) => {
         const rest = new Map(standing);
         rest.delete(provider);
@@ -196,7 +201,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       });
       return true;
     },
-    [act, settle],
+    [act, settle, now],
   );
 
   return {

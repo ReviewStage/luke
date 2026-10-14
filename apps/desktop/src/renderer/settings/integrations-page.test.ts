@@ -49,6 +49,8 @@ let sent: Act[] = [];
 let links: SettingsLink[] = [];
 /** How many times the account's GitHub connect was begun. */
 let githubConnects = 0;
+/** Whether another window begins the sign-in again while the next Cancel is out, so the Cancel finds it pending. */
+let reopenedDuringCancel = false;
 /** Where the service stands a provider a Connect or a Cancel has touched, over where it would otherwise. */
 const touched = new Map<IntegrationProvider, IntegrationStatus>();
 
@@ -81,6 +83,7 @@ beforeEach(() => {
   links = [];
   githubConnects = 0;
   touched.clear();
+  reopenedDuringCancel = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -113,7 +116,7 @@ function answerOf(request: Act): ActOutcome {
     // A Cancel ends a sign-in still pending; one that finished first stays connected.
     case ACT_KIND.INTEGRATIONS_CANCEL: {
       const provider = request.payload.provider;
-      if (touched.get(provider) === INTEGRATION_STATUS.PENDING) {
+      if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
         touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
       }
       return { status: DONE, value: { status: serviceStatuses()[provider] } };
@@ -375,6 +378,31 @@ it.effect(
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
       yield* Effect.promise(focusWindow);
       assert.equal(granolaRow(page).line, "Connected");
+    }),
+);
+
+it.effect(
+  "a Cancel that a sign-in begun again elsewhere overtakes keeps waiting on that one, for its own whole wait",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const page = yield* Effect.promise(() => mount(registry));
+      yield* Effect.promise(() => pressOnGranola(page, "Connect"));
+      yield* TestClock.adjust("2 minutes");
+
+      reopenedDuringCancel = true;
+      yield* Effect.promise(() => pressOnGranola(page, "Cancel"));
+      yield* TestClock.adjust("2 minutes");
+      yield* Effect.promise(settle);
+      assert.deepEqual(
+        granolaRow(page),
+        WAITING,
+        "past the first sign-in's deadline, still waiting",
+      );
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.promise(settle);
+      assert.equal(granolaRow(page).line, "Sign-in didn't finish.");
     }),
 );
 
