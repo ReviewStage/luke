@@ -9,7 +9,7 @@ import {
   TerminalIcon,
   UserIcon,
 } from "@luke/ui";
-import { BellIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { BellIcon, FlaskConicalIcon, InfoIcon, UsersIcon } from "lucide-react";
 
 /**
  * What each page is called in the Settings sidebar and at its own head. One
@@ -30,6 +30,10 @@ const SETTINGS_PAGE = {
     icon: <BellIcon className="settings-icon" />,
   },
   [SETTINGS_VIEW.THIS_MAC]: { title: "This Mac", icon: <LaptopIcon /> },
+  [SETTINGS_VIEW.EXPERIMENTAL]: {
+    title: "Experimental",
+    icon: <FlaskConicalIcon className="settings-icon" />,
+  },
   [SETTINGS_VIEW.ABOUT]: { title: "About", icon: <InfoIcon className="settings-icon" /> },
   [SETTINGS_VIEW.SHORTCUTS]: { title: "Keyboard shortcuts", icon: <KeyboardIcon /> },
 } satisfies Record<SettingsView, { title: string; icon: React.JSX.Element }>;

@@ -42,6 +42,7 @@ const PAGE_TITLES = [
   "Appearance",
   "Notifications",
   "This Mac",
+  "Experimental",
   "About",
   "Keyboard shortcuts",
 ];

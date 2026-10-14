@@ -227,10 +227,29 @@
   line-height: 1.4;
 }
 
-.settings-copy small a {
+.settings-copy small a,
+.settings-detail-act {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* A press among a row's detail words, drawn as the links beside it are: an
+   experiment's Send feedback, which opens a dialog rather than a page. */
+.settings-detail-act {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* A Settings page with nothing on it (Experimental, between experiments):
+   the window's empty state, centred in the page's own measure. */
+.settings-empty {
+  display: flex;
+  max-width: var(--settings-width);
+  min-height: min(420px, 60vh);
 }
 
 /* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so

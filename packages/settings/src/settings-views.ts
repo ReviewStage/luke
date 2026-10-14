@@ -10,9 +10,10 @@ export { SETTINGS_VIEW };
 
 /**
  * The pages in the order the Settings sidebar lists them, Account first since
- * Settings opens on it. Every option has one home among them; Keyboard
- * shortcuts, which only lists the window's own chords, comes last. The
- * command palette lists them in the same order.
+ * Settings opens on it. Every option has one home among them; Experimental
+ * follows This Mac, so About and Keyboard shortcuts, which only lists the
+ * window's own chords, stay last. The command palette lists them in the same
+ * order.
  */
 export const SETTINGS_PAGE_LIST = [
   SETTINGS_VIEW.ACCOUNT,
@@ -24,6 +25,7 @@ export const SETTINGS_PAGE_LIST = [
   SETTINGS_VIEW.APPEARANCE,
   SETTINGS_VIEW.NOTIFICATIONS,
   SETTINGS_VIEW.THIS_MAC,
+  SETTINGS_VIEW.EXPERIMENTAL,
   SETTINGS_VIEW.ABOUT,
   SETTINGS_VIEW.SHORTCUTS,
 ] as const satisfies readonly SettingsView[];

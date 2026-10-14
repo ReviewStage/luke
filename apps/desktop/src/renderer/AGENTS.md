@@ -113,3 +113,21 @@ the same change.
 - A credential is never described beyond whether a provider is connected, so no
   setting's description may carry a key, a key's shape, or an environment
   variable's value.
+
+## Experiments
+
+A feature still behind Settings › Experimental is gated by its key in
+`@luke/settings`'s `EXPERIMENT`, the one registry the page, the store, and the
+counting read; the account's choice is the service's, carried to every window
+on the settings snapshot.
+
+- A surface asks with `useExperiment(EXPERIMENT.X)`, or `experimentOnNow` in a
+  callback, never by reading the document itself.
+- A list gates an entry by a tag on its declaration (`AppShortcut.experiment`)
+  and filters it where the list is built, never by a check at a call site, so
+  the menu bar, the Keyboard shortcuts page, and the settings search agree.
+- While off, the feature stands nowhere: no row, no ⌘K entry (its
+  `useAppCommand` offers `undefined`), no chord, no menu item, and no place
+  the history can reach (`navigation-history.ts`'s `reachable`).
+- Graduating one deletes its key, which makes every gate left behind fail to
+  compile, so the one PR that graduates it deletes them all.
