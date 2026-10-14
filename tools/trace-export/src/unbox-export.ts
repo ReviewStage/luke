@@ -21,7 +21,7 @@ import {
   TRACE_ENTRY_KIND,
   TRACE_LIVE_EVENT,
   TraceEntryKindSchema,
-} from "@sidecar/devtrace/vocabulary";
+} from "@sidecar/gateway/devtrace";
 import {
   LIVE_DEFAULTS,
   TRANSCRIPT_SPEAKER,

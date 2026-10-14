@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./devtrace": "./src/devtrace.js",
     "./protocol": "./src/protocol.js"
   },
   "types": "./src/index.ts",
@@ -13,6 +14,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@sidecar/live": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
   },

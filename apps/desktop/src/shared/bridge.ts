@@ -6,8 +6,8 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/analytics";
-import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
+import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/gateway/devtrace";
 import { liveExchangeActive } from "@sidecar/live";
 import {
   EXCESS_KEYS,

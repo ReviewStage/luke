@@ -1,4 +1,3 @@
-import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import {
   LIVE_PEER_END_REASON,
   LIVE_TRANSPORT_STATE,
@@ -7,6 +6,7 @@ import {
   type VoiceReportLiveTransportParams,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/gateway/devtrace";
 import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
 import {
   decodeLivePayload,

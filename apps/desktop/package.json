@@ -46,7 +46,6 @@
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/credentials": "workspace:*",
-    "@sidecar/devtrace": "workspace:*",
     "@sidecar/features": "workspace:*",
     "@sidecar/feedback": "workspace:*",
     "@sidecar/gateway": "workspace:*",
