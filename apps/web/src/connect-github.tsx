@@ -57,7 +57,7 @@ type View =
 const WORKING: View = { kind: VIEW.WORKING };
 const RETURN = "Return to Luke. You can close this tab.";
 const RETRY_CONNECT = "Reload this page to try again, or return to Luke and choose Connect GitHub.";
-const SIGN_IN_BODY = "Sign in to the Luke account you use on your Mac, and you'll come back here.";
+const SIGN_IN_BODY = "Sign in to the Luke account you use on your Mac.";
 
 /** A claim that did not settle: the browser has no session, or the service gave no answer. */
 const CLAIM_UNSETTLED = { SIGNED_OUT: "signed-out", UNANSWERED: "unanswered" } as const;

@@ -169,7 +169,7 @@ export const AGENT_LEAD: TranscriptLead = {
       <DocumentIcon />
     </span>
   ),
-  startingLine: "The agent is starting. Its transcript appears here.",
+  startingLine: "The agent is starting.",
   grouped: true,
 };
 
@@ -180,7 +180,7 @@ const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
 const WORKER_LEAD: TranscriptLead = {
   label: "Task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
-  startingLine: "The worker is starting. Its transcript appears here.",
+  startingLine: "The worker is starting.",
   grouped: false,
 };
 

@@ -57,7 +57,6 @@ export function useNewWorkspaceDialog(
       field={field}
       question={{
         title: "New workspace",
-        body: "You will be its owner, and can invite people to it.",
         verb: "Create workspace",
         running: "Creating workspace",
         tone: DIALOG_TONE.PRIMARY,

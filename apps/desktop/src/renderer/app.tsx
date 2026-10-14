@@ -532,8 +532,7 @@ export function App(): React.JSX.Element {
                   } catch {
                     return {
                       status: ACTION_RESULT_STATUS.REJECTED,
-                      reason:
-                        "Luke's service could not delete the account, so it still stands. Try again in a moment.",
+                      reason: "Luke could not delete the account. Try again in a moment.",
                     };
                   }
                 },

@@ -34,13 +34,6 @@
   letter-spacing: -0.015em;
 }
 
-.sign-in-lede {
-  margin: var(--space-8) 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .sign-in-actions {
   display: flex;
   width: 100%;

@@ -43,10 +43,10 @@ const ACT_BUTTON_CLASS = {
   [DIALOG_TONE.PRIMARY]: "primary-button",
 } as const satisfies Record<DialogTone, string>;
 
-/** What the dialog says: its title, what the act takes with it, and the act's word, and what a reader is told while it runs, under the spinner; the act is red unless its tone says otherwise. */
+/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs, under the spinner; the act is red unless its tone says otherwise. */
 export interface DialogQuestion {
   title: string;
-  body: string;
+  body?: string;
   verb: string;
   running: string;
   tone?: DialogTone;
@@ -122,7 +122,7 @@ export function ConfirmDialog({
       role={MODAL_ROLE.ALERT_DIALOG}
       className="confirm-dialog"
       labelledBy={titleId}
-      describedBy={bodyId}
+      {...(question.body ? { describedBy: bodyId } : undefined)}
       busy={acting}
       initialFocus={field ?? cancel}
       onDismiss={dismiss}
@@ -131,9 +131,11 @@ export function ConfirmDialog({
       <h2 id={titleId} className="confirm-dialog-title">
         {question.title}
       </h2>
-      <p id={bodyId} className="confirm-dialog-body">
-        {question.body}
-      </p>
+      {question.body ? (
+        <p id={bodyId} className="confirm-dialog-body">
+          {question.body}
+        </p>
+      ) : null}
       {children}
       {rejection !== undefined && !acting ? (
         <p className="error-message" role="alert">

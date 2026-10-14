@@ -21,8 +21,7 @@ import type { VoiceView } from "#shared/messages/voice-view";
  */
 
 /** What the tab says before anything was said on any call about the plan. */
-export const TRANSCRIPT_EMPTY_LINE =
-  "Nothing said yet — start a call and the transcript appears here.";
+export const TRANSCRIPT_EMPTY_LINE = "Nothing said yet.";
 
 /** The quiet line a call that has ended closes with, and the one for a call Luke ended himself. */
 const CALL_ENDED_LINE = {

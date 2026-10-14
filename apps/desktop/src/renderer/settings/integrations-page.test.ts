@@ -369,7 +369,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub, says it lets agents use GitHub tools as you and offers Connect, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
+test("GitHub, granted by the account's own GitHub, offers Connect, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -377,10 +377,6 @@ test("GitHub, granted by the account's own GitHub, says it lets agents use GitHu
   const buttonNamed = (name: string) =>
     [...page.querySelectorAll("button")].find((button) => button.textContent === name);
 
-  assert.equal(
-    page.querySelector(".settings-copy small")?.textContent,
-    "Lets agents use GitHub tools as you.",
-  );
   const connect = buttonNamed("Connect") ?? assert.fail("Connect is offered");
   act(() => connect.click());
   await settle();

@@ -32,13 +32,13 @@ const LANDING_CARD = {
     badge: "Installed",
     settled: true,
     title: "Luke can see your repositories",
-    body: "Return to Luke and choose a repository for your plan. You can close this tab.",
+    body: "Return to Luke. You can close this tab.",
   },
   [GITHUB_INSTALL_STATUS.UPDATED]: {
     badge: "Updated",
     settled: true,
     title: "Luke's repositories were updated",
-    body: "Return to Luke to see the change. You can close this tab.",
+    body: "Return to Luke. You can close this tab.",
   },
   [GITHUB_INSTALL_STATUS.REQUESTED]: {
     badge: "Requested",

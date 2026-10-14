@@ -69,7 +69,7 @@ const ROW_MARK = new Map<string, DiffRowKind>([
 export const CHANGES_WORDS = {
   READING: "Reading changes",
   FAILED: "The changes could not be read.",
-  NO_PULL_REQUEST: "No pull request yet. Its changes show here once the agent opens one.",
+  NO_PULL_REQUEST: "No pull request yet.",
   EMPTY: "This pull request changes no files.",
   TRUNCATED: "Only the first files are shown; this pull request has more.",
   OMITTED: {

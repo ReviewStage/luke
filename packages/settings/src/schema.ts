@@ -107,9 +107,7 @@ export const APP_SETTING_SCHEMA = {
     field: "agentNotifications",
     id: APP_SETTING_ID.AGENT_NOTIFICATIONS,
     label: "Notify me when a coding agent finishes or needs me",
-    detail:
-      "Sent only while Luke's window is in the background. System Settings can also turn off " +
-      "Luke's notifications and the Dock's Inbox count.",
+    detail: "Sent only while Luke's window is in the background.",
     default: true,
     page: SETTINGS_PAGE.NOTIFICATIONS,
     order: 1,
@@ -120,7 +118,7 @@ export const APP_SETTING_SCHEMA = {
     field: "voice",
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
-    detail: "Choosing one ends the conversation in progress. The next one opens in the new voice.",
+    detail: "Choosing one ends the conversation in progress.",
     values: OFFERED_VOICE_LIST,
     token: (voice) => voice,
     optionLabel: voiceOptionLabel,

@@ -86,11 +86,11 @@ function SignIn(): React.JSX.Element {
         <h1 id="auth-title" className={AUTH_TITLE}>
           Sign in to Luke
         </h1>
-        <p className="m-0 text-muted-foreground">
-          {provider
-            ? `Continue with the ${SOCIAL_PROVIDER_LABEL[provider]} account you want Luke to know you by.`
-            : "Luke could not verify which provider you chose. Return to Luke and try again."}
-        </p>
+        {provider ? null : (
+          <p className="m-0 text-muted-foreground">
+            Luke could not verify which provider you chose. Return to Luke and try again.
+          </p>
+        )}
         {provider ? (
           <div className="mt-8 mb-4 grid gap-3">
             <button

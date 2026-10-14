@@ -149,10 +149,7 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  */
 
 /** What the Code tab says while Luke has shown no code on the plan. */
-const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
-
-/** What the panel says on a plan that has used none of its tabs, each of which adds itself once it holds something. */
-const NOTHING_YET_LINE = "Luke's board, code, transcript, and work appear here as you plan.";
+const NO_CODE_LINE = "No code yet.";
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -1520,16 +1517,11 @@ export function SidePanel({
             onToggle={panel.onToggleFullScreen}
           />
         </div>
-        {/* A plan that has used no tab says what will stand here, the "+"
-            above offering any meanwhile; one whose tabs were closed offers
-            them again in place. */}
+        {/* A plan that has used no tab stands empty, the "+" above offering
+            any; one whose tabs were closed offers them again in place. */}
         {tab === undefined ? (
           <div className="side-panel-content">
-            {panel.closedTabs.length === 0 ? (
-              <p className="side-panel-empty">{NOTHING_YET_LINE}</p>
-            ) : (
-              <NoTabs onChoose={panel.onChoose} />
-            )}
+            {panel.closedTabs.length === 0 ? null : <NoTabs onChoose={panel.onChoose} />}
           </div>
         ) : (
           // The Board is drawn on a canvas, which keeps a find of its own, and

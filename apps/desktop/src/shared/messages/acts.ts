@@ -640,7 +640,7 @@ export const ACT = {
       provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
     }),
     result: wireResult<boolean>(isWireBoolean),
-    refusal: "Sign-in did not finish.",
+    refusal: "Sign-in didn't finish.",
   },
   [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
   [ACT_KIND.ACCOUNT_SIGN_OUT]: {

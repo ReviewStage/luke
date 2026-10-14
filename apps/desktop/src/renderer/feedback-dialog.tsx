@@ -69,8 +69,8 @@ const FEEDBACK_COPY = {
  * beside the field rather than thrown, because attaching is the user's action.
  */
 const IMAGE_REFUSAL = {
-  UNREADABLE: "That file could not come along as a screenshot.",
-  FULL: `Up to ${FEEDBACK_LIMITS.MAX_IMAGES} screenshots can come along.`,
+  UNREADABLE: "That file could not be attached.",
+  FULL: `You can attach up to ${FEEDBACK_LIMITS.MAX_IMAGES} screenshots.`,
 } as const;
 
 const SEND_REFUSAL = "Could not send that. Try again.";
@@ -80,7 +80,7 @@ const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
 /** The toast a delivered note is thanked with: read on the way back from the Send button, gone before anyone wonders. */
 const SENT_NOTICE: ToastNotice = {
-  words: "Thanks — sent",
+  words: "Sent",
   tone: TOAST_TONE.DONE,
   hold: Duration.seconds(3),
 };

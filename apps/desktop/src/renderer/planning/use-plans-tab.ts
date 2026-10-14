@@ -435,7 +435,7 @@ const DELETE_REFUSED: ActionResult = {
 function secondCallQuestion(planName: string): DialogQuestion {
   return {
     title: `End your call on ${planName} and start one here?`,
-    body: "Only one plan is talked through at a time. What was said on that call stays in its transcript.",
+    body: "What was said on that call stays in its transcript.",
     verb: "Start new call",
     running: "Starting",
     tone: DIALOG_TONE.PRIMARY,

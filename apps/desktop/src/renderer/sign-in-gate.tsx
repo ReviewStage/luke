@@ -155,7 +155,6 @@ export function SignInGate({
         <WingFace key={face.play} {...(face.motion ? { motion: face.motion } : undefined)} />
       </span>
       <h1 id="sign-in-title">Welcome to Luke</h1>
-      <p className="sign-in-lede">Talk a feature through and Luke writes the plan.</p>
       <div className="sign-in-actions">
         <ProviderButton
           provider={ACCOUNT_PROVIDER.GOOGLE}
