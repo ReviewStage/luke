@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { account } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
@@ -38,6 +38,7 @@ import {
 import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The one connection per integration all four agents register, through the
@@ -147,7 +148,7 @@ const plannedSession = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+    const plan = yield* startPlan(userId, { name: "Teammate invitations" });
     const opened = yield* openPlanConversation(userId, plan.id);
     assert.ok(Option.isSome(opened));
     const conversationId = opened.value;

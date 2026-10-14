@@ -134,6 +134,14 @@ no deletion without a session: `deleteOrganization` requires session cookies
 and is off under `disableOrganizationDeletion`, and `user.deleteUser` wants a
 fresh session.
 
+Every plan belongs to one workspace: `plan.organization_id`, not null and
+cascading with the organization (`20261013231728_plan_organization` adds the
+column nullable, the custom `20261013231735_plan_organization_backfill` after
+it moves every plan standing into its starter's personal workspace, and
+`20261013231809_plan_organization_not_null` then sets the column not null). A plan's summary on the wire names it as `workspaceId`.
+`memberOfWorkspace` is the one membership condition, a `member` row, which a
+statement joins into its own where clause.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
@@ -1184,7 +1192,10 @@ started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
 template as its document, and the repository it is about where one is
-chosen, `GET /api/plans/{id}` opens one with its saved document,
+chosen, in the workspace its `workspaceId` names, which the account must be
+a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
+in the account's personal workspace, ensured first, where it names none,
+`GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, or several at once, each pin and archive a
 stamp on the row (`pinned_at`, `archived_at`) answered as `pinnedAt` and

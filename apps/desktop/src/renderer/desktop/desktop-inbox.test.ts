@@ -31,6 +31,7 @@ import { DesktopInbox } from "./desktop-inbox";
 
 const BILLING: PlanSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Billing usage alerts",
   createdAt: 1,
   updatedAt: 2,

@@ -3,7 +3,6 @@ import { Database, type DatabaseServices } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { type CodingAgent, createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CODING_AGENT_TODO_STATUS } from "@sidecar/hosted/coding-agent-wire";
@@ -31,6 +30,7 @@ import {
   readTurnById,
   readTurnsByConversation,
 } from "../../tests/support/store-rows";
+import { startPlan } from "../../tests/support/workspaces";
 import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
@@ -148,7 +148,7 @@ export default defineEval({
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
-      const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
+      const plan = await run(startPlan(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
       const agent = await startAgent(run, plan.id);
 
       /** The Start as the route makes it: the first message of a typed turn on the agent's conversation, answered once the door has recorded the session on the conversation row. */

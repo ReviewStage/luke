@@ -7,7 +7,7 @@ import {
   latestTurnsOf,
 } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
-import { createPlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
+import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
@@ -42,6 +42,7 @@ import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalo
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -133,7 +134,7 @@ const unclaimedAgent = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, {
+    const plan = yield* startPlan(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });
@@ -308,7 +309,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { admitted } = yield* openAgent(host);
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
-        const plan = yield* createPlan(userId, { name: "Billing export" });
+        const plan = yield* startPlan(userId, { name: "Billing export" });
         const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, plan.id));
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);

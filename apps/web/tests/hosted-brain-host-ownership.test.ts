@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { hostTurnId } from "@sidecar/database/models/ids";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Option, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -30,6 +30,7 @@ import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, setConversationDeletedAt } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and
@@ -270,7 +271,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const SESSION = sessions();
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userA, started.id)),
   );

@@ -302,7 +302,14 @@ test("a settled choice keeps every option the agent offered with the developer's
 
 /** A plan of the account's, holding inbox items. */
 function plan(id: string, name: string): PlanSummary {
-  return { id, name, createdAt: 1, updatedAt: 2, repository: null };
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name,
+    createdAt: 1,
+    updatedAt: 2,
+    repository: null,
+  };
 }
 
 const BILLING = plan("7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", "Billing alerts");
