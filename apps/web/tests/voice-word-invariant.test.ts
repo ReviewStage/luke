@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { askRecord } from "@sidecar/database/models/asks";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { type VoiceTarget, voiceWriter } from "@sidecar/database/models/voice-writer";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
+import { Database } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { type VoiceTarget, voiceWriter } from "@luke/database/models/voice-writer";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@luke/database/voice-vocabulary";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DEFAULTS,
@@ -17,8 +17,8 @@ import {
   TranscriptLedger,
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
-} from "@sidecar/live";
-import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
+} from "@luke/live";
+import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_SUBMISSION,
@@ -30,8 +30,8 @@ import {
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
   sidebandOverSocket,
-} from "@sidecar/voice/live-session";
-import { FakeLiveSocket } from "@sidecar/voice/testing";
+} from "@luke/voice/live-session";
+import { FakeLiveSocket } from "@luke/voice/testing";
 import { type ToolSet, tool } from "ai";
 import { Duration, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";

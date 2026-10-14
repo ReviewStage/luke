@@ -3,8 +3,8 @@ import type {
   AppSettingValue,
   SettingsResetScope,
   SettingsUpdateResult,
-} from "@sidecar/settings/wire";
-import type { ActionResult } from "@sidecar/wire";
+} from "@luke/settings/wire";
+import type { ActionResult } from "@luke/wire";
 import { useMemo } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";

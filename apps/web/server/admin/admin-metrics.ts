@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { utcDayKey } from "@sidecar/database/models/quota";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { utcDayKey } from "@luke/database/models/quota";
 import { Clock, Effect } from "effect";
 import { DAY_MS } from "../core.js";
 import {

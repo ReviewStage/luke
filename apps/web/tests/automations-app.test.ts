@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { createPlan } from "@sidecar/database/models/plan-store";
-import { member as memberTable } from "@sidecar/database/schemas/auth";
-import { automation as automationTable } from "@sidecar/database/schemas/automation";
-import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { createPlan } from "@luke/database/models/plan-store";
+import { member as memberTable } from "@luke/database/schemas/auth";
+import { automation as automationTable } from "@luke/database/schemas/automation";
+import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
+import { getTestDB } from "@luke/database/testing";
 import {
   automationPath,
   automationRunPath,
   automationRunsPath,
   HOSTED_API_ERROR,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/features";
-import { SCHEDULE_PRESET } from "@sidecar/features/automation-schedule";
+} from "@luke/features";
+import { SCHEDULE_PRESET } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
@@ -29,12 +29,12 @@ import {
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
-} from "@sidecar/features/automation-wire";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
-import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/automation-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";

@@ -3,10 +3,10 @@ import {
   lineParts,
   MENTIONED_HEADING,
   receivedPartsOf,
-} from "@sidecar/database/models/attached-file-parts";
-import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
-import { MENTION_KIND, mentionMarkdown } from "@sidecar/features/mention-link";
-import type { Plan } from "@sidecar/features/plan-wire";
+} from "@luke/database/models/attached-file-parts";
+import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import type { Plan } from "@luke/features/plan-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "../server/hosted/attached-files";
 import { MENTIONED_BOUNDS, mentionedContext } from "../server/hosted/mentioned-context";

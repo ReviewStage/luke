@@ -4,7 +4,7 @@
  * layer was built in closes, so that scope is the composer's lifetime and
  * closing it is its stop.
  */
-import type { GatewayMethodTable } from "@sidecar/gateway";
+import type { GatewayMethodTable } from "@luke/gateway";
 import { Effect, Layer, type Scope } from "effect";
 import { type Composer, type DuplicateGatewayMethod, foldMethods } from "../composer.js";
 

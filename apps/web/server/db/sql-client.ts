@@ -1,5 +1,5 @@
 import { PgClient } from "@effect/sql-pg";
-import { databaseOverPgClient } from "@sidecar/database/core/query";
+import { databaseOverPgClient } from "@luke/database/core/query";
 import { Duration, Effect, Layer } from "effect";
 import { databaseUrl, POOL_LIMITS } from "./index.js";
 

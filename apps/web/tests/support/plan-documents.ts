@@ -1,5 +1,5 @@
-import { Database } from "@sidecar/database/core/query";
-import { plan } from "@sidecar/database/schemas/plan";
+import { Database } from "@luke/database/core/query";
+import { plan } from "@luke/database/schemas/plan";
 import { eq, sql } from "drizzle-orm";
 
 /**

@@ -1,5 +1,5 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER } from "@luke/credentials/snapshot";
 import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
@@ -51,12 +51,12 @@ import {
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
-} from "@sidecar/features/feedback";
+} from "@luke/features/feedback";
 import {
   type IntegrationConnectView,
   type IntegrationStatusesView,
@@ -67,8 +67,8 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@sidecar/features/integration-view";
-import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/features/plan-markdown";
+} from "@luke/features/integration-view";
+import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
@@ -118,17 +118,17 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
 import {
   type WorkspaceInvitation,
   workspaceInvitationSchema,
-} from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/workspace-invitation-wire";
 import {
   type Workspace,
   type WorkspaceMember,
   workspaceMemberSchema,
   workspaceSchema,
-} from "@sidecar/features/workspace-wire";
+} from "@luke/features/workspace-wire";
 import {
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
@@ -136,16 +136,16 @@ import {
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
-} from "@sidecar/gateway";
-import type { LiveDiagnostics } from "@sidecar/live";
+} from "@luke/gateway";
+import type { LiveDiagnostics } from "@luke/live";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
   isAppSettingField,
   SETTINGS_RESET_SCOPE,
-} from "@sidecar/settings";
-import type { SettingsUpdateResult } from "@sidecar/settings/wire";
+} from "@luke/settings";
+import type { SettingsUpdateResult } from "@luke/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -155,8 +155,8 @@ import {
   type SchemaPath,
   type SchemaRead,
   type UnparsedWireValue,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import {
@@ -413,7 +413,7 @@ export const ACT_KIND = {
 export type ActKind = (typeof ACT_KIND)[keyof typeof ACT_KIND];
 
 /**
- * One act payload's parser. The `s` combinators from `@sidecar/wire` satisfy
+ * One act payload's parser. The `s` combinators from `@luke/wire` satisfy
  * it, and every structural payload below is declared as one. It is the
  * reading alone rather than the whole `Schema` because no model is ever
  * offered an act: a JSON Schema node written here would be a second statement

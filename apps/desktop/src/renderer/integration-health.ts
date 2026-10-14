@@ -1,11 +1,11 @@
-import type { IntegrationToolsView } from "@sidecar/features/integration-view";
+import type { IntegrationToolsView } from "@luke/features/integration-view";
 import {
   INTEGRATION_NAME,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
   type IntegrationToolAnnotations,
   type IntegrationToolsProblemReason,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 
 /**
  * integration-health.ts -- whether a connected integration works, read from what its server answered when asked for its tools.

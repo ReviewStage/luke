@@ -1,25 +1,25 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import {
   type VoiceTarget,
   type VoiceWriteResult,
   voiceWriter,
-} from "@sidecar/database/models/voice-writer";
+} from "@luke/database/models/voice-writer";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
   storeWriter,
-} from "@sidecar/database/models/writer";
-import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
+} from "@luke/database/models/writer";
+import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DEFAULTS,
   type LiveAppendEvent,
   type LiveClientEvent,
-} from "@sidecar/live";
-import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
+} from "@luke/live";
+import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -34,8 +34,8 @@ import {
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
   sidebandOverSocket,
-} from "@sidecar/voice/live-session";
-import { FakeLiveSocket } from "@sidecar/voice/testing";
+} from "@luke/voice/live-session";
+import { FakeLiveSocket } from "@luke/voice/testing";
 import { type ToolSet, tool } from "ai";
 import { Deferred, Effect, Layer, Result, Schema, Scope } from "effect";
 import { afterAll } from "vitest";

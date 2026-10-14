@@ -1,10 +1,10 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { readBoard, writeScene } from "@sidecar/database/models/board-store";
-import { childTitlesOf } from "@sidecar/database/models/child-titles";
-import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
-import { childConversationId } from "@sidecar/database/models/ids";
-import { listPages, readPageVersion } from "@sidecar/database/models/plan-pages";
-import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { readBoard, writeScene } from "@luke/database/models/board-store";
+import { childTitlesOf } from "@luke/database/models/child-titles";
+import { listCodingAgents } from "@luke/database/models/coding-agent-store";
+import { childConversationId } from "@luke/database/models/ids";
+import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
+import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import {
   createPlan,
   deletePlan,
@@ -12,24 +12,21 @@ import {
   readPlan,
   type StoredPlan,
   updatePlan,
-} from "@sidecar/database/models/plan-store";
-import { standingSessionsNamed } from "@sidecar/database/models/recorded-session";
-import { readTranscript } from "@sidecar/database/models/transcript-store";
-import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
-import {
-  ensurePersonalWorkspace,
-  isWorkspaceMember,
-} from "@sidecar/database/models/workspace-store";
-import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
-import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/features/board-wire";
+} from "@luke/database/models/plan-store";
+import { standingSessionsNamed } from "@luke/database/models/recorded-session";
+import { readTranscript } from "@luke/database/models/transcript-store";
+import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
+import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
+import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
+import { BOARD_BOUNDS, boardSaveRequestSchema } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
-} from "@sidecar/features/coding-agent-wire";
-import { pageVersionNumberSchema } from "@sidecar/features/page-wire";
-import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/features/plan-edit";
+} from "@luke/features/coding-agent-wire";
+import { pageVersionNumberSchema } from "@luke/features/page-wire";
+import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@luke/features/plan-edit";
 import {
   PLAN_BOUNDS,
   type PlanFileRequest,
@@ -37,8 +34,8 @@ import {
   planFileRequestSchema,
   planRevisionSeqSchema,
   planTreeRequestSchema,
-} from "@sidecar/features/plan-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/plan-wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
@@ -127,9 +124,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`@sidecar/database/models/board-store`). `/api/plans/{id}/transcript` is what was
+ * winning (`@luke/database/models/board-store`). `/api/plans/{id}/transcript` is what was
  * said on the plan's calls, read and never written here
- * (`@sidecar/database/models/transcript-store`). `/api/plans/{id}/work` is what Luke's
+ * (`@luke/database/models/transcript-store`). `/api/plans/{id}/work` is what Luke's
  * planning model wrote and ran on them, a page at a time, and every code he
  * showed, read back from the plan's conversation
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
@@ -144,11 +141,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's, answered with the
- * plan (`@sidecar/database/models/plan-revisions`). `/api/plans/{id}/pages`
+ * plan (`@luke/database/models/plan-revisions`). `/api/plans/{id}/pages`
  * is the pages agents wrote for the plan, each by its newest version, and
  * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
  * answered inside JSON so no page is ever a document of this origin
- * (`@sidecar/database/models/plan-pages`).
+ * (`@luke/database/models/plan-pages`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once

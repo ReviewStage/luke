@@ -1,5 +1,5 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { childTitlesOf } from "@sidecar/database/models/child-titles";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { childTitlesOf } from "@luke/database/models/child-titles";
 import {
   latestTurnsOf,
   listMessagesPast,
@@ -10,8 +10,8 @@ import {
   spokenAskRowsOf,
   turnsBefore,
   turnsNamed,
-} from "@sidecar/database/models/message-reads";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
+} from "@luke/database/models/message-reads";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -19,12 +19,8 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSubagentTitle,
-} from "@sidecar/features/coding-agent-wire";
-import {
-  PLAN_WORK_BOUNDS,
-  PLAN_WORK_STATE,
-  type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/coding-agent-wire";
+import { PLAN_WORK_BOUNDS, PLAN_WORK_STATE, type PlanWorkTurn } from "@luke/features/planning-view";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";

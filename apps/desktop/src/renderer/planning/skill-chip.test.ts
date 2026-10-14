@@ -1,11 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type {
-  CodingAgentAttachment,
-  CodingAgentMessage,
-} from "@sidecar/features/coding-agent-wire";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

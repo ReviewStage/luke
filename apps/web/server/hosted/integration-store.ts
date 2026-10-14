@@ -12,13 +12,13 @@
  * is an effect over the ambient `SqlClient`.
  */
 
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { integrationConnection } from "@sidecar/database/schemas/integration";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { InstantColumnSchema } from "@luke/database/models/columns";
+import { integrationConnection } from "@luke/database/schemas/integration";
 import {
   type IntegrationProvider,
   integrationProviderSchema,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

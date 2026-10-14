@@ -1,4 +1,4 @@
-import { GITHUB_CONNECT_PAGE } from "@sidecar/features/github-connection-wire";
+import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
 
 /**
  * connect-github-step.ts -- what the connect page was opened to do, read from its address, and Better Auth's refusals in words.

@@ -1,5 +1,5 @@
 import { PgClient } from "@effect/sql-pg";
-import { databaseOverPgClient } from "@sidecar/database/core/query";
+import { databaseOverPgClient } from "@luke/database/core/query";
 import { Effect, Layer, Stream } from "effect";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as SqlClient from "effect/sql/SqlClient";

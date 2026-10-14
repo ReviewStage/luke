@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
-import { FAST_ACCESS } from "@sidecar/features/provider-key-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import {
   type JsonValue,
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@sidecar/wire/testing";
+} from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment } from "../server/hosted/environment";

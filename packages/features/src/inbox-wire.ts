@@ -1,4 +1,4 @@
-import { isWireBoolean, isWireNumber, isWireString } from "@sidecar/wire";
+import { isWireBoolean, isWireNumber, isWireString } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";

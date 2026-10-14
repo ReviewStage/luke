@@ -11,13 +11,9 @@ import {
   type NodeCapabilityResult,
   type NodeRegistry,
   type RemoteNodeInvoker,
-} from "@sidecar/gateway";
-import {
-  HOST_NATIVE_NODE_ID,
-  HOST_NODE_CAPABILITY,
-  HOST_NODE_CAPABILITY_LIST,
-} from "@sidecar/host";
-import { isWireString } from "@sidecar/wire";
+} from "@luke/gateway";
+import { HOST_NATIVE_NODE_ID, HOST_NODE_CAPABILITY, HOST_NODE_CAPABILITY_LIST } from "@luke/host";
+import { isWireString } from "@luke/wire";
 import { Effect, type Scope } from "effect";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";

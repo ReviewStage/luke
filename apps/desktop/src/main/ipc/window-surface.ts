@@ -6,7 +6,7 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
   type RecordProductEvent,
-} from "@sidecar/features/analytics";
+} from "@luke/features/analytics";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import {
   MICROPHONE_STATUS,
@@ -20,7 +20,7 @@ import type { PanelManager } from "../window/panel-manager";
 
 /**
  * Which microphone answers a count can be built from. A total `Record` like
- * the bridges in `@sidecar/settings`, so a sixth status does not build until
+ * the bridges in `@luke/settings`, so a sixth status does not build until
  * someone has said whether the ask decided it — the three that map to nothing
  * are the point rather than an oversight.
  */

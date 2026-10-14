@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { highlightSnippet } from "@sidecar/host";
+import { highlightSnippet } from "@luke/host";
 import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";

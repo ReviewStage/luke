@@ -17,7 +17,7 @@ import {
   type SandboxState,
   type TerminalSummary,
   type TerminalsAnswer,
-} from "@sidecar/features/terminal-wire";
+} from "@luke/features/terminal-wire";
 import { Context, Effect, Layer, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {

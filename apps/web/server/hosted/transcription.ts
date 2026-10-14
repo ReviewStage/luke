@@ -1,5 +1,5 @@
-import { DICTATION_AUDIO_TYPE } from "@sidecar/features/dictation-wire";
-import { readEither } from "@sidecar/wire/effect";
+import { DICTATION_AUDIO_TYPE } from "@luke/features/dictation-wire";
+import { readEither } from "@luke/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";

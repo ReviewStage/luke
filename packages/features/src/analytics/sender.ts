@@ -1,5 +1,5 @@
-import { scheduleRepeat } from "@sidecar/runtime/effect";
-import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
+import { scheduleRepeat } from "@luke/runtime/effect";
+import { HTTP_METHOD, positiveInteger } from "@luke/wire";
 import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

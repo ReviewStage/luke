@@ -1,5 +1,5 @@
-import { WORKSPACE_BOUNDS } from "@sidecar/features/workspace-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { WORKSPACE_BOUNDS } from "@luke/features/workspace-wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import {
   ConfirmDialog,

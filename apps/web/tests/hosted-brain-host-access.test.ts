@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Database } from "@sidecar/database/core/query";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { openPlanConversation } from "@luke/database/models/plan-store";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { eq } from "drizzle-orm";
 import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";

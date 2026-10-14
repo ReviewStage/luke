@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
-import { askRecord } from "@sidecar/database/models/asks";
-import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/features";
+import { askRecord } from "@luke/database/models/asks";
+import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
@@ -17,8 +17,8 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
   sessionInstructions,
-} from "@sidecar/live";
-import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
+} from "@luke/live";
+import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../server/core";

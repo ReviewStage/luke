@@ -1,4 +1,4 @@
-import { TURN_ORIGIN } from "@sidecar/wire";
+import { TURN_ORIGIN } from "@luke/wire";
 
 /**
  * The origins a developer's question may open a turn under on the hosted

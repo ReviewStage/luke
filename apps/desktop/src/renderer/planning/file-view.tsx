@@ -1,10 +1,6 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type {
-  PlanCode,
-  PlanCodeShowing,
-  PlanningTreeAnswer,
-} from "@sidecar/features/planning-view";
-import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@luke/panel";
 import {
   Fragment,
   type ReactNode,

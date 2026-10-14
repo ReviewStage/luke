@@ -1,9 +1,6 @@
-import type { PlanDocument, PlanRevisionLine } from "@sidecar/features/plan-wire";
-import type {
-  PlanningRevisionAnswer,
-  PlanningRevisionsAnswer,
-} from "@sidecar/features/planning-view";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import type { PlanDocument, PlanRevisionLine } from "@luke/features/plan-wire";
+import type { PlanningRevisionAnswer, PlanningRevisionsAnswer } from "@luke/features/planning-view";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { revisionOfSave } from "./plan-history-model";
 

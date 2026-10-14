@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 
 export interface JsonStateFileOptions<T> {
   /** The directory the record sits in: the app's own state root. */
@@ -37,7 +37,7 @@ export interface JsonStateFile<T> {
  * writer here waits on anything a promise could carry.
  *
  * The synchronous `node:fs` face beside `jsonStateFileEffect` in
- * `@sidecar/host/effect`, for the callers that still read and write
+ * `@luke/host/effect`, for the callers that still read and write
  * synchronously: the desktop's own last-run-version file, read before
  * `whenReady` resolves (`apps/desktop/src/main/services/update-service-host.ts`).
  */

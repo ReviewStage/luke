@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
-import { storeWriter } from "@sidecar/database/models/writer";
-import { account } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import {
-  INTEGRATION_PROVIDER,
-  INTEGRATION_PROVIDER_LIST,
-} from "@sidecar/features/integration-wire";
+import { Database } from "@luke/database/core/query";
+import { openPlanConversation } from "@luke/database/models/plan-store";
+import { storeWriter } from "@luke/database/models/writer";
+import { account } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";

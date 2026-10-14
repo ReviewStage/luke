@@ -1,4 +1,4 @@
-import { readEither } from "@sidecar/wire/effect";
+import { readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { type AuthFn, ForbiddenError, routeAuth } from "eve/channels/auth";
 import type { EveMessageContext } from "eve/channels/eve";

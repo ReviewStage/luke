@@ -3,9 +3,9 @@ import {
   type AccountProvider,
   type AccountSnapshot,
   isAccountProvider,
-} from "@sidecar/credentials/snapshot";
-import { LIVE_DEFAULTS } from "@sidecar/live";
-import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@sidecar/settings/wire";
+} from "@luke/credentials/snapshot";
+import { LIVE_DEFAULTS } from "@luke/live";
+import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@luke/settings/wire";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -15,8 +15,8 @@ import {
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
-} from "@sidecar/wire";
-import { declareReader } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { declareReader } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema, Semaphore, type Types } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -24,9 +24,9 @@ import type { PlatformError } from "effect/PlatformError";
 import type { SettingsEnvironmentOverrides } from "./effect/settings-overrides.js";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
 
-export type { StoredAccount } from "@sidecar/credentials";
+export type { StoredAccount } from "@luke/credentials";
 
-import type { StoredAccount } from "@sidecar/credentials";
+import type { StoredAccount } from "@luke/credentials";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
@@ -37,7 +37,7 @@ import {
   type AppSettingValue,
   accountPreferencesFromStored,
   type StoredAppSettings,
-} from "@sidecar/settings";
+} from "@luke/settings";
 
 const SETTINGS_FILE_VERSION = 2;
 

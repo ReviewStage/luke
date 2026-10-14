@@ -1,18 +1,18 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
   ASK_DISPATCH_REFUSAL,
   type AskRecord,
   type AskRow,
   type AskVoice,
-} from "@sidecar/database/models/asks";
-import type { HostedStore } from "@sidecar/database/models/hosted-store";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
+} from "@luke/database/models/asks";
+import type { HostedStore } from "@luke/database/models/hosted-store";
+import { hostTurnId } from "@luke/database/models/ids";
+import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import {
   conversationReachableBy,
   recordedRuntimeSession,
-} from "@sidecar/database/models/recorded-session";
-import type { StoreWriter } from "@sidecar/database/models/writer";
+} from "@luke/database/models/recorded-session";
+import type { StoreWriter } from "@luke/database/models/writer";
 import {
   Cause,
   Clock,
@@ -48,7 +48,7 @@ import { HOSTED_HTTP_STATUS } from "./http.js";
  * eve: one ask, one delivery. A Stop on a turn eve is running is eve's
  * cancel of that turn, named by the eve turn id the relay wrote on its row at
  * the start; a Stop on an ask still waiting is a stamp on the record,
- * honoured when its turn starts. Every id read here is one `@sidecar/database/models/ids` mints.
+ * honoured when its turn starts. Every id read here is one `@luke/database/models/ids` mints.
  *
  * The ask and the standing read answer effects over the ambient SQL client,
  * as the record they are handed does: a caller composes them into the one

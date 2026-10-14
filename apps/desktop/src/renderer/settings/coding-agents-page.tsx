@@ -1,16 +1,16 @@
-import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import {
   type CatalogModel,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@sidecar/features/models-wire";
+} from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/provider-key-wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";

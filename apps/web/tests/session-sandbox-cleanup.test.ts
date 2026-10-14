@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
-import { user } from "@sidecar/database/schemas/auth";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { standingSessionsOf } from "@luke/database/models/recorded-session";
+import { user } from "@luke/database/schemas/auth";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { getTestDB } from "@luke/database/testing";
 import { Effect } from "effect";
 
 /**

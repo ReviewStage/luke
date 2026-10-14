@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { jwks as jwksTable, oauthClient as oauthClientTable } from "@sidecar/database/schemas/auth";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { jwks as jwksTable, oauthClient as oauthClientTable } from "@luke/database/schemas/auth";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
 import { Effect, Redacted } from "effect";

@@ -3,14 +3,14 @@ import { createOpenAI } from "@ai-sdk/openai";
 import {
   PROVIDER_KEY_UNREADABLE,
   type ProviderKeyUnreadable,
-} from "@sidecar/database/models/provider-key-seal";
-import { MODEL_PROVIDER, type ModelChoice } from "@sidecar/features/models-wire";
+} from "@luke/database/models/provider-key-seal";
+import { MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
-} from "@sidecar/features/provider-key-wire";
+} from "@luke/features/provider-key-wire";
 import {
   APICallError,
   type LanguageModel,

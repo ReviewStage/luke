@@ -1,4 +1,4 @@
-import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@sidecar/database/models/provider-key-seal";
+import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
 import { GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { text } from "../core.js";

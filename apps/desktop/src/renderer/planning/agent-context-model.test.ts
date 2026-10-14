@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF, type CodingAgentContext } from "@sidecar/features/coding-agent-wire";
+import { CODING_AGENT_BRIEF, type CodingAgentContext } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
   contextFullLine,

@@ -1,4 +1,4 @@
-import type { Plan } from "@sidecar/features/plan-wire";
+import type { Plan } from "@luke/features/plan-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

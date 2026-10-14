@@ -3,8 +3,8 @@ import type {
   PlanCodeFrame,
   PlanDraftFrame,
   PlanWorkFrame,
-} from "@sidecar/features";
-import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@sidecar/features/analytics";
+} from "@luke/features";
+import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@luke/features/analytics";
 import {
   carried,
   GATEWAY_EVENT,
@@ -16,11 +16,11 @@ import {
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
-} from "@sidecar/gateway";
-import { isAgentWireTrace } from "@sidecar/gateway/devtrace";
-import { unavailableLiveDiagnostics } from "@sidecar/voice";
-import { LiveSessionHolder } from "@sidecar/voice/live-session";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/gateway";
+import { isAgentWireTrace } from "@luke/gateway/devtrace";
+import { unavailableLiveDiagnostics } from "@luke/voice";
+import { LiveSessionHolder } from "@luke/voice/live-session";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";

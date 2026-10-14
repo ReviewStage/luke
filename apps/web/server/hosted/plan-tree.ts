@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { type PlanStoreFailure, readPlan } from "@luke/database/models/plan-store";
 import {
   CODE_PATH_MAX_CHARS,
   PLAN_FILE_REFUSAL,
@@ -7,7 +7,7 @@ import {
   PLAN_TREE_ENTRY,
   type PlanTreeAnswer,
   type PlanTreeRequest,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@sidecar/features/coding-agent-view";
-import { MENTION_KIND, type Mention, mentionMarkdown } from "@sidecar/features/mention-link";
-import { PLAN_TREE_ENTRY } from "@sidecar/features/plan-wire";
+import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import { MENTION_KIND, type Mention, mentionMarkdown } from "@luke/features/mention-link";
+import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

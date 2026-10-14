@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@sidecar/live";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
 import type { UIMessage } from "ai";
 import { test } from "vitest";
 import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";

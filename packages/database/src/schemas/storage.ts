@@ -1,12 +1,12 @@
-import type { BrainModelUsage, BrainRunUsage } from "@sidecar/features/brain";
+import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
 import {
   type MessageRole,
   type StoredMessageMetadata,
   TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
-} from "@sidecar/wire";
-import type { StoredUIMessage } from "@sidecar/wire/ui-messages";
+} from "@luke/wire";
+import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -128,7 +128,7 @@ export const messages = pgTable(
     role: text("role").$type<MessageRole>().notNull(),
     /** The message's parts exactly as the SDK shapes them; read back through `readStoredUIMessages`, never the SDK's validator alone. */
     parts: jsonb("parts").$type<StoredUIMessage["parts"]>().notNull(),
-    /** The `@sidecar/wire` metadata for the row's role; a system row carries none. */
+    /** The `@luke/wire` metadata for the row's role; a system row carries none. */
     metadata: jsonb("metadata").$type<StoredMessageMetadata>(),
     createdAt: createdAt(),
     finishedAt: timestamptz("finished_at"),

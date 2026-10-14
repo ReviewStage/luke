@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { LIVE_VOICE } from "@sidecar/live";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { LIVE_VOICE } from "@luke/live";
+import type { UnparsedWireValue } from "@luke/wire";
 import { test } from "vitest";
 import {
   HOSTED_VOICE_SERVICE_ORIGIN,

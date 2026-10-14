@@ -1,17 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import {
-  INBOX_BLOCK,
-  INBOX_REPLY,
-  INBOX_RESPONSE,
-  INBOX_STATUS,
-} from "@sidecar/features/inbox-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../server/core";

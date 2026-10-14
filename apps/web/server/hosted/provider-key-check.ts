@@ -4,7 +4,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   type ProviderKeyProvider,
-} from "@sidecar/features/provider-key-wire";
+} from "@luke/features/provider-key-wire";
 import { Duration, Effect, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

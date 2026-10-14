@@ -1,34 +1,28 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Database } from "@sidecar/database/core/query";
-import { askRecord } from "@sidecar/database/models/asks";
-import { fillChildTitle } from "@sidecar/database/models/child-titles";
-import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
-import { listJournals } from "@sidecar/database/models/message-reads";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { turns } from "@sidecar/database/schemas/storage";
-import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
+import { Database } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
+import { fillChildTitle } from "@luke/database/models/child-titles";
+import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import { listJournals } from "@luke/database/models/message-reads";
+import { openPlanConversation } from "@luke/database/models/plan-store";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { turns } from "@luke/database/schemas/storage";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   TURN_ENDING,
   type TurnRecord,
-} from "@sidecar/features/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
+} from "@luke/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_STATE,
   type PlanWorkAnswer,
   type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
-import {
-  isRecord,
-  isWireString,
-  TURN_ORIGIN,
-  type WireRecord,
-  type WireValue,
-} from "@sidecar/wire";
+} from "@luke/features/planning-view";
+import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";

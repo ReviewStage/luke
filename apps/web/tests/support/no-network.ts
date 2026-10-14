@@ -2,7 +2,7 @@
  * no-network.ts -- the HttpClient a suite that reaches no network hands where production reads one.
  */
 
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import type { Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 

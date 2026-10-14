@@ -1,11 +1,11 @@
-import { cssCustomProperties } from "@sidecar/brand/react-css";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { PRODUCT_SURFACE_EVENT } from "@sidecar/features/analytics";
-import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/features/feedback";
-import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
-import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
-import { appSettingsView } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { cssCustomProperties } from "@luke/brand/react-css";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
+import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
+import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@luke/settings";
+import { appSettingsView } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import {

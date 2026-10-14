@@ -6,7 +6,7 @@ import {
   type PlanDraftFrame,
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
-} from "@sidecar/features";
+} from "@luke/features";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -14,7 +14,7 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
   type VoiceReportLiveTransportParams,
-} from "@sidecar/gateway";
+} from "@luke/gateway";
 import {
   generalLiveError,
   LIVE_CLOSE_REASON,
@@ -22,8 +22,8 @@ import {
   type LiveServerEvent,
   type LiveSessionClosed,
   liveErrorFields,
-} from "@sidecar/live";
-import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+} from "@luke/live";
+import { causeKind, type SerialQueue, serialQueue } from "@luke/runtime/effect";
 import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Scope, Stream } from "effect";
 import {
   createdOf,

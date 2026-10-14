@@ -2,7 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
   CODING_AGENT_CURSOR_START,
@@ -12,7 +12,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentUsage,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type AgentRun, agentStillWriting, followsAgent } from "./coding-agent-model";
 

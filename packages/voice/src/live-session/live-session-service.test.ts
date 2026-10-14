@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { PlanShownCode } from "@sidecar/features/planning-view";
+import type { PlanShownCode } from "@luke/features/planning-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DELEGATION_TARGET,
@@ -9,8 +9,8 @@ import {
   type LiveServerEventType,
   parseLiveServerEvent,
   TRANSCRIPT_SPEAKER,
-} from "@sidecar/live";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/live";
+import type { WireRecord } from "@luke/wire";
 import { Deferred, Duration, Effect, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";

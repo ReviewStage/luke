@@ -1,19 +1,19 @@
-import type { AccountRefreshFailed } from "@sidecar/features";
+import type { AccountRefreshFailed } from "@luke/features";
 import {
   PRODUCT_EVENT,
   type ProductEventPropertiesFor,
   productEventFromWire,
   type RecordProductEvent,
-} from "@sidecar/features/analytics";
-import { ProductEventSender } from "@sidecar/features/analytics/sender";
+} from "@luke/features/analytics";
+import { ProductEventSender } from "@luke/features/analytics/sender";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
-} from "@sidecar/gateway";
-import { catchAllButInterrupt } from "@sidecar/runtime/effect";
+} from "@luke/gateway";
+import { catchAllButInterrupt } from "@luke/runtime/effect";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
@@ -24,9 +24,9 @@ import {
   isAppSettingField,
   isSettingsResetScope,
   settingAnalytics,
-} from "@sidecar/settings";
-import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@sidecar/wire";
+} from "@luke/settings";
+import type { SettingsUpdateResult } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@luke/wire";
 import { Cause, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

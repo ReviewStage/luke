@@ -14,7 +14,7 @@
  * that memory has nothing to add to.
  */
 
-import { APP_SETTING_SCHEMA, type ZoomPercent, zoomFactor } from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, type ZoomPercent, zoomFactor } from "@luke/settings";
 import { Context, Effect } from "effect";
 import type { Point, WebContents } from "electron";
 

@@ -15,10 +15,10 @@ import {
   type InboxReplyKind,
   knownBlock,
   knownResponse,
-} from "@sidecar/features/inbox-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import type { CodeRef, PlanSummary } from "@sidecar/features/plan-wire";
-import { ChevronRightIcon } from "@sidecar/panel";
+} from "@luke/features/inbox-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import type { CodeRef, PlanSummary } from "@luke/features/plan-wire";
+import { ChevronRightIcon } from "@luke/panel";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Message, MessageContent } from "../ai-elements/message";

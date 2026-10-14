@@ -1,4 +1,4 @@
-import { holdSocket, type OpenSocket, SOCKET_OPEN_FAULT, type SocketOpening } from "@sidecar/voice";
+import { holdSocket, type OpenSocket, SOCKET_OPEN_FAULT, type SocketOpening } from "@luke/voice";
 import { Effect } from "effect";
 import { type RawData, WebSocket } from "ws";
 
@@ -6,7 +6,7 @@ import { type RawData, WebSocket } from "ws";
 const CLOSE_REASON_MAX_BYTES = 123;
 
 /**
- * The host's half of the trusted sideband: the socket seam `@sidecar/voice`'s
+ * The host's half of the trusted sideband: the socket seam `@luke/voice`'s
  * sources open their connections through, implemented here over `ws` so that
  * package stays free of it. What arrives on the socket is read by the
  * source's own `sidebandOverSocket`: every frame parsed with the Live

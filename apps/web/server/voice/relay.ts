@@ -8,7 +8,7 @@ import {
   type LiveSessionClosed,
   liveErrorCommand,
   parseLiveServerEvent,
-} from "@sidecar/live";
+} from "@luke/live";
 import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
 import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
 import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";

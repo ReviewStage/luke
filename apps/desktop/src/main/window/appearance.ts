@@ -1,4 +1,4 @@
-import { APP_SETTING_SCHEMA, type Theme } from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, type Theme } from "@luke/settings";
 import { Context, Effect, type Scope } from "effect";
 
 /**

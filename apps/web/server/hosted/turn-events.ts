@@ -1,4 +1,4 @@
-import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
+import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import {
   isSettledToolPartState,
   isStoredToolPart,

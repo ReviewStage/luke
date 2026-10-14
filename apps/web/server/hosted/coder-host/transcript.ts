@@ -1,4 +1,4 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
   awaitingLinesOf,
   type CodingAgent,
@@ -12,8 +12,8 @@ import {
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
-} from "@sidecar/database/models/coding-agent-store";
-import { childConversationId } from "@sidecar/database/models/ids";
+} from "@luke/database/models/coding-agent-store";
+import { childConversationId } from "@luke/database/models/ids";
 import {
   type LatestTurn,
   listMessagesPast,
@@ -22,8 +22,8 @@ import {
   type StoredMessageRecord,
   turnsBefore,
   turnsNamed,
-} from "@sidecar/database/models/message-reads";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
+} from "@luke/database/models/message-reads";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -37,7 +37,7 @@ import {
   type CodingAgentSubagentTitle,
   type CodingAgentUsage,
   type TurnRecord,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import {

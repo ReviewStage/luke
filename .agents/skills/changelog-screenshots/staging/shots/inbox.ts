@@ -13,7 +13,7 @@
  * through `CODING_AGENTS_INBOX_ATTACHMENT` (`expired-invite-picture.ts`).
  */
 
-import type { CodeToken } from "@sidecar/features/planning-view";
+import type { CodeToken } from "@luke/features/planning-view";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
@@ -23,7 +23,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxAnswer,
   type InboxItem,
-} from "@sidecar/features/inbox-wire";
+} from "@luke/features/inbox-wire";
 import { ACT_KIND } from "#shared/messages/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { MAIN_TAB } from "../planning/use-main-tabs";

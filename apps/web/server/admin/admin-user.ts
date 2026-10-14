@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { Clock, Effect } from "effect";
 import { DAY_MS } from "../core.js";
 import {

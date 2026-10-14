@@ -1,5 +1,5 @@
-import { planNotesSchema } from "@sidecar/features/plan-template";
-import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
+import { planNotesSchema } from "@luke/features/plan-template";
+import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@luke/wire/testing";
 import { test } from "vitest";
 
 /**

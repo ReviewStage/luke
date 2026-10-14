@@ -4,14 +4,14 @@ import {
   type DatabaseServices,
   type QueryError,
   queryBuilder,
-} from "@sidecar/database/core/query";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { planReachableBy } from "@sidecar/database/models/workspace-store";
-import { codingAgent } from "@sidecar/database/schemas/coding-agent";
-import { inboxItem } from "@sidecar/database/schemas/inbox";
-import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
-import { plan } from "@sidecar/database/schemas/plan";
-import type { AccountInboxEntry, AccountInboxPlan } from "@sidecar/features/account-inbox-wire";
+} from "@luke/database/core/query";
+import { InstantColumnSchema } from "@luke/database/models/columns";
+import { planReachableBy } from "@luke/database/models/workspace-store";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { inboxItem } from "@luke/database/schemas/inbox";
+import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
+import { plan } from "@luke/database/schemas/plan";
+import type { AccountInboxEntry, AccountInboxPlan } from "@luke/features/account-inbox-wire";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -27,7 +27,7 @@ import {
   inboxImageTypeSchema,
   inboxReplySchema,
   inboxResponseSchema,
-} from "@sidecar/features/inbox-wire";
+} from "@luke/features/inbox-wire";
 import {
   and,
   count,
@@ -62,7 +62,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * is posted by a path and kept by an attachment: the caller reads the
  * file's bytes from the agent's sandbox and hands them in beside the post,
  * and the post writes each as a row of the item's
- * (`@sidecar/database/schemas/inbox-attachment`) under an id minted here, which the
+ * (`@luke/database/schemas/inbox-attachment`) under an id minted here, which the
  * block kept on the item names in the path's place; the item's attachments
  * its new blocks no longer name go with the same write, so a picture the
  * agent dropped from an item is dropped from the store. A post counts the agent's open items against the bound

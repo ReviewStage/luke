@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -13,12 +13,12 @@ import {
   readAutomation,
   recordAutomationRun,
   updateAutomation,
-} from "@sidecar/database/models/automation-store";
-import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { readPlan } from "@sidecar/database/models/plan-store";
-import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
-import { wireUuidSchema } from "@sidecar/features";
-import { nextScheduledRun, readSchedule } from "@sidecar/features/automation-schedule";
+} from "@luke/database/models/automation-store";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readPlan } from "@luke/database/models/plan-store";
+import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { wireUuidSchema } from "@luke/features";
+import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
@@ -36,9 +36,9 @@ import {
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationRunRequestSchema,
-} from "@sidecar/features/automation-wire";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/automation-wire";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";

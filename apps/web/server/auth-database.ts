@@ -1,5 +1,5 @@
 import { type DB, drizzleAdapter } from "@better-auth/drizzle-adapter";
-import * as schema from "@sidecar/database/schemas/auth";
+import * as schema from "@luke/database/schemas/auth";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import type { Pool, PoolClient } from "pg";
 import { getPool } from "./db/index.js";

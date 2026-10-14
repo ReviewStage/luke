@@ -1,5 +1,5 @@
-import { WireValueSchema } from "@sidecar/wire";
-import { declareReader, describeWire, emitJsonSchema, readEither } from "@sidecar/wire/effect";
+import { WireValueSchema } from "@luke/wire";
+import { declareReader, describeWire, emitJsonSchema, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "./board-vocabulary.js";
 

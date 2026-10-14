@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { readAccountPreferences } from "@sidecar/database/models/account-store";
+import { Database } from "@luke/database/core/query";
+import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   type Automation,
   createAutomation,
@@ -10,11 +10,11 @@ import {
   readAutomation,
   recordAutomationRun,
   updateAutomation,
-} from "@sidecar/database/models/automation-store";
-import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { automationRun, automation as automationTable } from "@sidecar/database/schemas/automation";
-import { turns } from "@sidecar/database/schemas/storage";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/automation-store";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
+import { turns } from "@luke/database/schemas/storage";
+import { getTestDB } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -24,9 +24,9 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationGuards,
   GITHUB_TRIGGER_EVENT,
-} from "@sidecar/features/automation-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
-import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+} from "@luke/features/automation-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { executeAutomationRun, recoverStrandedRun } from "../server/hosted/automation-runs";

@@ -1,5 +1,5 @@
-import { EXCESS_KEYS } from "@sidecar/wire";
-import { readEither, verbatimJsonSchema } from "@sidecar/wire/effect";
+import { EXCESS_KEYS } from "@luke/wire";
+import { readEither, verbatimJsonSchema } from "@luke/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 
 /**
@@ -11,7 +11,7 @@ import { Schema as EffectSchema, SchemaTransformation } from "effect";
  * Every declaration below is composed directly as an Effect `Schema` and
  * exported under its own name: a caller reads a request through `readEither`,
  * an answer through `readServiceAnswer` below, and shows either through
- * `emitJsonSchema` from `@sidecar/wire/effect`.
+ * `emitJsonSchema` from `@luke/wire/effect`.
  */
 
 /** Every refusal a hosted endpoint answers with, by its reason. */

@@ -1,4 +1,4 @@
-import { decodeLivePayload, LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
+import { decodeLivePayload, LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
 import {
   isWireString,
   type UnparsedWireValue,

@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { readAccountPerson } from "./hosted/account-person.js";

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { LIVE_VOICE } from "@sidecar/live";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { LIVE_VOICE } from "@luke/live";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -12,14 +12,14 @@ import {
   type AppSettingField,
   type AppSettingValue,
   THEME,
-} from "@sidecar/settings";
+} from "@luke/settings";
 import {
   type AppSettings,
   appSettingsView,
   type SettingsResetScope,
   type SettingsUpdateResult,
-} from "@sidecar/settings/wire";
-import { temporaryDirectory } from "@sidecar/wire/testing";
+} from "@luke/settings/wire";
+import { temporaryDirectory } from "@luke/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

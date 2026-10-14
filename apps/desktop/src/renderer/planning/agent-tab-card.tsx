@@ -1,5 +1,5 @@
-import type { CodingAgentMessage, CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
+import type { CodingAgentMessage, CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { agentParts, agentStillWriting, isDelegation } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";

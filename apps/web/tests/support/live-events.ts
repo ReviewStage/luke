@@ -1,4 +1,4 @@
-import { LIVE_DELEGATION_TARGET, LIVE_SERVER_EVENT, type LiveServerEvent } from "@sidecar/live";
+import { LIVE_DELEGATION_TARGET, LIVE_SERVER_EVENT, type LiveServerEvent } from "@luke/live";
 
 /**
  * The server events of a synthetic Live stream, as the tests over the voice

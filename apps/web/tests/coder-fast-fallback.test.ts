@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { jsonResponse } from "@sidecar/wire/testing";
+import { jsonResponse } from "@luke/wire/testing";
 import { generateText, streamText } from "ai";
 import { Redacted, Result, Schema } from "effect";
 import { test } from "vitest";

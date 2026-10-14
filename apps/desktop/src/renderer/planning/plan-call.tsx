@@ -1,9 +1,9 @@
-import type { CodingAgentMessage } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
-import { CallIcon } from "@sidecar/panel";
-import { isRecord, isWireString, MESSAGE_ROLE } from "@sidecar/wire";
+import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { CallIcon } from "@luke/panel";
+import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {

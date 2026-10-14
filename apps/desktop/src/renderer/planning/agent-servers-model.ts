@@ -4,7 +4,7 @@ import {
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import {
   CONNECTION_HEALTH,
   type ConnectionHealth,

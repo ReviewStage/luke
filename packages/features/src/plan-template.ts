@@ -4,8 +4,8 @@ import {
   isWireString,
   type UnparsedWireValue,
   unparsedWire,
-} from "@sidecar/wire";
-import { describeWire, readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { encodeMention, mentionsIn } from "./mention-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";

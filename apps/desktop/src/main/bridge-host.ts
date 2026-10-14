@@ -1,4 +1,4 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@luke/wire";
 import type { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import {

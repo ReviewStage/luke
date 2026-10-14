@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { writePlanTemplate } from "@sidecar/database/models/account-store";
-import { readPlan } from "@sidecar/database/models/plan-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
+import { Database } from "@luke/database/core/query";
+import { writePlanTemplate } from "@luke/database/models/account-store";
+import { readPlan } from "@luke/database/models/plan-store";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { Effect, Option } from "effect";
 import { startPlan } from "./support/workspaces";
 

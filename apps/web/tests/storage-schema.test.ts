@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
-import { conversations, messages, turns } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";

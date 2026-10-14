@@ -1,4 +1,4 @@
-import { MESSAGE_ROLE } from "@sidecar/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 
 /** Why a session ended, as the Live API's `session.closed` names it. */
 export const VOICE_CLOSE_REASON = {

@@ -1,18 +1,18 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import type {
   MemberSeams,
   OrganizationRefused,
   PluginInvitation,
   WorkspaceSeams,
-} from "@sidecar/database/models/workspace-seams";
+} from "@luke/database/models/workspace-seams";
 import {
   createWorkspace,
   ensurePersonalWorkspace,
   listWorkspaces,
   type Workspace,
   workspaceOf,
-} from "@sidecar/database/models/workspace-store";
-import { workspaceIdSchema } from "@sidecar/features/plan-wire";
+} from "@luke/database/models/workspace-store";
+import { workspaceIdSchema } from "@luke/features/plan-wire";
 import {
   INVITATION_ROLE,
   invitationAcceptUrl,
@@ -20,7 +20,7 @@ import {
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
-} from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_ROLE,
@@ -28,8 +28,8 @@ import {
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
-} from "@sidecar/features/workspace-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/workspace-wire";
+import { readEither } from "@luke/wire/effect";
 import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,

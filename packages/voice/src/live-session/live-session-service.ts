@@ -1,6 +1,6 @@
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@sidecar/features/planning-view";
-import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@luke/features/planning-view";
+import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@luke/gateway";
 import {
   chunkForAppend,
   commentaryAppend,
@@ -20,8 +20,8 @@ import {
   type TranscriptSpeaker,
   type TranscriptUtterance,
   thinkingAppend,
-} from "@sidecar/live";
-import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+} from "@luke/live";
+import { causeKind, type SerialQueue, serialQueue } from "@luke/runtime/effect";
 import {
   Clock,
   Deferred,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { atInstant, fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { atInstant, fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Option } from "effect";
 import { test } from "vitest";
 import { PRODUCT_EVENT, type WireValue } from "../server/core";

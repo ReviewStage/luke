@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Redacted } from "effect";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {

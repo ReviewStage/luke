@@ -3,8 +3,8 @@
  */
 
 import assert from "node:assert/strict";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { storeWriter } from "@sidecar/database/models/writer";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";

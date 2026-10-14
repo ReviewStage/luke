@@ -1,4 +1,4 @@
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set.js";

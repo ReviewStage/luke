@@ -1,15 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
-import { Database, type DatabaseServices } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
   type GitHubAccountType,
   type GitHubInstallationStatus,
-} from "@sidecar/database/github-installation-vocabulary";
-import { member, organization } from "@sidecar/database/schemas/auth";
-import { githubInstallIntent } from "@sidecar/database/schemas/github-install-intent";
-import { githubInstallation } from "@sidecar/database/schemas/github-installation";
-import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
+} from "@luke/database/github-installation-vocabulary";
+import { member, organization } from "@luke/database/schemas/auth";
+import { githubInstallIntent } from "@luke/database/schemas/github-install-intent";
+import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { and, eq, gt, ne, or, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

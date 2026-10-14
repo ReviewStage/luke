@@ -1,16 +1,16 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   claimGitHubConnectIntent,
   githubConnection,
   openGitHubConnectIntent,
-} from "@sidecar/database/models/github-connection-store";
-import { HOSTED_SERVICE_PATH } from "@sidecar/features";
+} from "@luke/database/models/github-connection-store";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   GITHUB_CONNECT_PAGE,
   githubConnectClaimRequestSchema,
-} from "@sidecar/features/github-connection-wire";
-import { HTTP_METHOD } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/github-connection-wire";
+import { HTTP_METHOD } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type { GitHubUnlink } from "./hosted/github-unlink.js";

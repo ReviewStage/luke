@@ -1,7 +1,7 @@
-import { encodeMention, MENTION_KIND, type Mention } from "@sidecar/features/mention-link";
-import { planSections } from "@sidecar/features/plan-document";
-import { PLAN_TREE_ENTRY } from "@sidecar/features/plan-wire";
-import { DocumentIcon } from "@sidecar/panel";
+import { encodeMention, MENTION_KIND, type Mention } from "@luke/features/mention-link";
+import { planSections } from "@luke/features/plan-document";
+import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { DocumentIcon } from "@luke/panel";
 import { defaultFilter } from "cmdk";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
@@ -27,7 +27,7 @@ import { FileTypeIcon } from "./file-type-icon";
  * (`ACT_KIND.PLANNING_TREE`, the whole tree at the default branch).
  *
  * A pick hands the editor the mention's name and its target
- * (`@sidecar/features/mention-link`), which the editor writes in place of
+ * (`@luke/features/mention-link`), which the editor writes in place of
  * the word; the name is the file's or folder's own name, the heading, or
  * the plan's name.
  */

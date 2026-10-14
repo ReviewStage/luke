@@ -2,9 +2,9 @@ import {
   PRODUCT_EVENT,
   PRODUCT_UPDATE_ACTION,
   type RecordProductEvent,
-} from "@sidecar/features/analytics";
-import { jsonStateFile } from "@sidecar/host";
-import { text } from "@sidecar/wire";
+} from "@luke/features/analytics";
+import { jsonStateFile } from "@luke/host";
+import { text } from "@luke/wire";
 import { Effect, type Scope } from "effect";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { type UpdateMenuAct, updateMenuAct } from "../app-menu";

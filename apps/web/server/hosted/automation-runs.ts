@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type Automation,
   type AutomationRun,
@@ -14,13 +14,13 @@ import {
   settleAutomationRun,
   startedRunAgents,
   withAutomationLocked,
-} from "@sidecar/database/models/automation-store";
+} from "@luke/database/models/automation-store";
 import {
   awaitingLinesOfReached,
   discardCodingAgent,
   latestTurnsOfReached,
   readCodingAgentByKey,
-} from "@sidecar/database/models/coding-agent-store";
+} from "@luke/database/models/coding-agent-store";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
@@ -29,9 +29,9 @@ import {
   type AutomationRunReason,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
-} from "@sidecar/features/automation-wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
-import { failureKind } from "@sidecar/runtime/effect";
+} from "@luke/features/automation-wire";
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import { failureKind } from "@luke/runtime/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { EveSessions } from "./brain-host/eve-sessions.js";

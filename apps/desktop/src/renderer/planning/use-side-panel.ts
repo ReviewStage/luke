@@ -1,5 +1,5 @@
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { BoardIcon, CallIcon, CodeIcon } from "@sidecar/panel";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { BoardIcon, CallIcon, CodeIcon } from "@luke/panel";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fileName } from "./code-pane-model";

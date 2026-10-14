@@ -1,5 +1,5 @@
-import type { PageLine } from "@sidecar/features/page-wire";
-import type { CodeLines, PlanningPageSourceAnswer } from "@sidecar/features/planning-view";
+import type { PageLine } from "@luke/features/page-wire";
+import type { CodeLines, PlanningPageSourceAnswer } from "@luke/features/planning-view";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,

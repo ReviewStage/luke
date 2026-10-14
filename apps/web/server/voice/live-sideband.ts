@@ -1,5 +1,5 @@
-import type { LiveServerEvent } from "@sidecar/live";
-import { holdSocket, type LiveSideband, sidebandOverSocket } from "@sidecar/voice/live-session";
+import type { LiveServerEvent } from "@luke/live";
+import { holdSocket, type LiveSideband, sidebandOverSocket } from "@luke/voice/live-session";
 import { Effect, type Scope, Stream } from "effect";
 import type { RawData, WebSocket } from "ws";
 import { SOCKET_CLOSE_CODE } from "./socket.js";
@@ -7,7 +7,7 @@ import { SOCKET_CLOSE_CODE } from "./socket.js";
 /**
  * The service's half of the trusted sideband: the socket the upstream
  * attached to a session, read as the `LiveSideband` the live session service
- * consumes. `@sidecar/voice` names no socket library — its sources open
+ * consumes. `@luke/voice` names no socket library — its sources open
  * connections through an injected seam — so the `ws` binding lives here,
  * where the relay already reaches it, and the web reaches that package only
  * through its live-session door, never the barrel, so nothing the package

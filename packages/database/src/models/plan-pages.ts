@@ -4,7 +4,7 @@ import {
   type PageVersion,
   type PageWrite,
   pageWriteSchema,
-} from "@sidecar/features/page-wire";
+} from "@luke/features/page-wire";
 import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

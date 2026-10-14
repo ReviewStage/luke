@@ -10,7 +10,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
-} from "@sidecar/features/automation-wire";
+} from "@luke/features/automation-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";

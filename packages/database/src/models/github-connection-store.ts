@@ -3,7 +3,7 @@ import {
   GITHUB_CONNECT_CLAIM,
   type GitHubConnectClaim,
   type GitHubConnection,
-} from "@sidecar/features/github-connection-wire";
+} from "@luke/features/github-connection-wire";
 import { and, desc, eq, gt, lte } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

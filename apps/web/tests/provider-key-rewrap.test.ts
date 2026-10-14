@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   type KeyRing,
   openProviderKey,
   parseKeyRing,
   sealProviderKey,
-} from "@sidecar/database/models/provider-key-seal";
-import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
-import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import {
-  PROVIDER_KEY_PROVIDER,
-  type ProviderKeyProvider,
-} from "@sidecar/features/provider-key-wire";
+} from "@luke/database/models/provider-key-seal";
+import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
+import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {

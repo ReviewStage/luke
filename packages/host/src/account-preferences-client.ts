@@ -4,8 +4,8 @@ import {
   accountBearer,
   accountCall,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/features";
-import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
+} from "@luke/features";
+import { type AccountPreferences, accountPreferencesFromWire } from "@luke/settings";
 import {
   HTTP_METHOD,
   isRecord,
@@ -14,7 +14,7 @@ import {
   unparsedWire,
   type WireValue,
   WireValueSchema,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import { Effect, Schema as EffectSchema, type Layer, SchemaGetter, SchemaIssue } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

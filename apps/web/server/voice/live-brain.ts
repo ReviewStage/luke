@@ -1,13 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
-import { Database, type DatabaseServices } from "@sidecar/database/core/query";
-import { TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
-import { childTitlesByCall } from "@sidecar/database/models/child-titles";
-import type { HostedStore } from "@sidecar/database/models/hosted-store";
-import { childConversationId } from "@sidecar/database/models/ids";
-import { listJournals, type SpokenAskRow } from "@sidecar/database/models/message-reads";
-import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
-import type { TurnRecord } from "@sidecar/features/coding-agent-wire";
-import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/features/planning-view";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
+import { childTitlesByCall } from "@luke/database/models/child-titles";
+import type { HostedStore } from "@luke/database/models/hosted-store";
+import { childConversationId } from "@luke/database/models/ids";
+import { listJournals, type SpokenAskRow } from "@luke/database/models/message-reads";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import type { TurnRecord } from "@luke/features/coding-agent-wire";
+import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@luke/features/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -20,7 +20,7 @@ import {
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
-} from "@sidecar/voice/live-session";
+} from "@luke/voice/live-session";
 import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
 import { SqlClient } from "effect/sql";
 import {

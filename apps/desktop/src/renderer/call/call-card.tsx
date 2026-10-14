@@ -10,8 +10,8 @@
  * holds the call.
  */
 
-import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
-import { ReturnIcon } from "@sidecar/panel";
+import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { ReturnIcon } from "@luke/panel";
 import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";

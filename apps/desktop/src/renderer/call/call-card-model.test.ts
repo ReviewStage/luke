@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
-import {
-  IDLE_PLANNING_VIEW,
-  PLANNING_READ,
-  type PlanningView,
-} from "@sidecar/features/planning-view";
-import { LIVE_STATUS } from "@sidecar/live";
+import { IDLE_PLANNING_VIEW, PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
+import { LIVE_STATUS } from "@luke/live";
 import { test } from "vitest";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { callBarPlanId, callCard, callCardShown } from "./call-card-model";

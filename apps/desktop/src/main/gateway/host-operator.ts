@@ -1,6 +1,6 @@
-import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
-import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/features/analytics";
+import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
+import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -55,7 +55,7 @@ import {
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationConnectView,
@@ -67,8 +67,8 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@sidecar/features/integration-view";
-import type { ModelChoice } from "@sidecar/features/models-wire";
+} from "@luke/features/integration-view";
+import type { ModelChoice } from "@luke/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -136,8 +136,8 @@ import {
   planningWorkspaceInvitationsAnswerSchema,
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
-} from "@sidecar/features/planning-view";
-import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
+} from "@luke/features/planning-view";
+import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@luke/gateway";
 import {
   carried,
   GATEWAY_EVENT,
@@ -150,11 +150,11 @@ import {
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
-} from "@sidecar/gateway";
-import type { AgentWireTrace } from "@sidecar/gateway/devtrace";
-import type { LiveDiagnostics } from "@sidecar/live";
-import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings";
-import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
+} from "@luke/gateway";
+import type { AgentWireTrace } from "@luke/gateway/devtrace";
+import type { LiveDiagnostics } from "@luke/live";
+import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@luke/settings";
+import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -162,8 +162,8 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 
 /**

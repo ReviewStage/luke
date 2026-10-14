@@ -56,8 +56,8 @@
  */
 
 import { randomBytes } from "node:crypto";
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { HOSTED_SERVICE_PATH } from "@sidecar/features";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -74,7 +74,7 @@ import {
   type IntegrationToolsProblemReason,
   integrationLandingPath,
   integrationProviderFromWire,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";

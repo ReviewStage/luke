@@ -1,28 +1,28 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   type MemberSeams,
   OrganizationRefused,
   type WorkspaceSeams,
-} from "@sidecar/database/models/workspace-seams";
-import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-store";
-import { member, organization, user } from "@sidecar/database/schemas/auth";
-import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/features";
+} from "@luke/database/models/workspace-seams";
+import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
+import { member, organization, user } from "@luke/database/schemas/auth";
+import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   workspaceInvitationAnswerSchema,
   workspaceInvitationsAnswerSchema,
-} from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   workspaceAnswerSchema,
   workspaceGithubConnectAnswerSchema,
   workspacesAnswerSchema,
-} from "@sidecar/features/workspace-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/workspace-wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";

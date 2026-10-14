@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Database } from "@sidecar/database/core/query";
-import { EpochMillisColumnSchema } from "@sidecar/database/models/columns";
+import { Database } from "@luke/database/core/query";
+import { EpochMillisColumnSchema } from "@luke/database/models/columns";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriteResult,
   storeWriter,
-} from "@sidecar/database/models/writer";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+} from "@luke/database/models/writer";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
 import { Option, Result, Schema } from "effect";

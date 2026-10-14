@@ -1,4 +1,4 @@
-import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
+import type { VoiceCreateLiveSessionResult } from "@luke/gateway/protocol";
 import { Duration, Effect, type Scope } from "effect";
 
 /**

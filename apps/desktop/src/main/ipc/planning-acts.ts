@@ -1,5 +1,5 @@
-import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@sidecar/features";
-import type { CodingAgentMessagesAnswerView } from "@sidecar/features/coding-agent-view";
+import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
+import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import type {
   CodeLines,
   PlanningArchiveParams,
@@ -46,8 +46,8 @@ import type {
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
-} from "@sidecar/features/planning-view";
-import { GITHUB_DISCONNECT_FAILURE } from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
+import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
 import { Effect } from "effect";
 import {
   ACT,

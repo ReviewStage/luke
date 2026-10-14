@@ -1,6 +1,6 @@
-import { type AccountRefreshFailed, HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/features";
-import type { LiveDiagnostics } from "@sidecar/live";
-import { APP_SETTING_SCHEMA, type AppSettingField, type AppSettingValue } from "@sidecar/settings";
+import { type AccountRefreshFailed, HOSTED_VOICE_SERVICE_ORIGIN } from "@luke/features";
+import type { LiveDiagnostics } from "@luke/live";
+import { APP_SETTING_SCHEMA, type AppSettingField, type AppSettingValue } from "@luke/settings";
 import { Effect } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import {

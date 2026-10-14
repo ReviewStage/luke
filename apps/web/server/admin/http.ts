@@ -1,14 +1,14 @@
 /**
  * The response vocabulary the admin dashboard endpoint answers in. It is its
  * own, deliberately not `server/hosted/http.ts`: that module's error slugs are
- * the desktop's wire contract in `@sidecar/features`, validated on the desktop
+ * the desktop's wire contract in `@luke/features`, validated on the desktop
  * side, and this endpoint is browser-only. Widening the desktop contract with a
  * `forbidden` the desktop never sees would be the wrong seam — the admin gate
  * distinguishes "sign in" from "you are signed in but not an admin", which the
  * desktop tier has no notion of.
  */
 
-import { HTTP_STATUS } from "@sidecar/wire";
+import { HTTP_STATUS } from "@luke/wire";
 
 export const ADMIN_HTTP_STATUS = {
   ...HTTP_STATUS,

@@ -1,17 +1,17 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import type {
   DetachedVoiceSession,
   VoiceSessionRecord,
-} from "@sidecar/database/models/voice-session-record";
-import { VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
-import { LIVE_SERVER_EVENT } from "@sidecar/live";
+} from "@luke/database/models/voice-session-record";
+import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
+import { LIVE_SERVER_EVENT } from "@luke/live";
 import {
   closeGracefully,
   type LiveSideband,
   SIDEBAND_CLOSE_OUTCOME,
   type SidebandCloseResult,
-} from "@sidecar/voice/live-session";
+} from "@luke/voice/live-session";
 import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";

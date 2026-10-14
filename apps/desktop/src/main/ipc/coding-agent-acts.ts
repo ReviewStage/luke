@@ -34,8 +34,8 @@ import {
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
-} from "@sidecar/features/coding-agent-view";
-import type { ModelChoice } from "@sidecar/features/models-wire";
+} from "@luke/features/coding-agent-view";
+import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect } from "effect";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";

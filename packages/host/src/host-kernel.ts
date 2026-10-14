@@ -1,7 +1,7 @@
 import path from "node:path";
-import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
-import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
-import type { WireValue } from "@sidecar/wire";
+import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@luke/gateway";
+import { type AgentId, DEFAULT_AGENT_ID } from "@luke/runtime/vocabulary";
+import type { WireValue } from "@luke/wire";
 import { Effect } from "effect";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
@@ -65,7 +65,7 @@ export interface HostKernel {
    *
    * A promise and not an effect: the composer that hands this on hands it to
    * a seam outside this package — the account session manager's consent, a
-   * promise-shaped callback owned by `@sidecar/credentials` — and what would
+   * promise-shaped callback owned by `@luke/credentials` — and what would
    * end that is a decision about that seam rather than anything this kernel
    * holds.
    */

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_CALL_FAILURE } from "@sidecar/features/integration-view";
+import { INTEGRATION_CALL_FAILURE } from "@luke/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/features/integration-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
+import type { WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import { composeIntegrations, type IntegrationsClient } from "./compose-integrations.js";
 

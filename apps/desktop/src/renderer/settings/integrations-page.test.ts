@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
-} from "@sidecar/features/integration-view";
+} from "@luke/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -15,7 +15,7 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

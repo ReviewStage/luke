@@ -1,4 +1,4 @@
-# `@sidecar/live`
+# `@luke/live`
 
 The vocabulary a GPT Live session is created, driven, and read with, declared once
 so no consumer re-encodes it, and Node-free so it rides into the renderer bundle,

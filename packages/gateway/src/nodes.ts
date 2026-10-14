@@ -1,4 +1,4 @@
-import type { WireRecord } from "@sidecar/wire";
+import type { WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 

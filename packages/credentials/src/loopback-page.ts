@@ -1,4 +1,4 @@
-import { FACE_ART, GITHUB_PATH, GOOGLE_MARK_LAYERS } from "@sidecar/brand";
+import { FACE_ART, GITHUB_PATH, GOOGLE_MARK_LAYERS } from "@luke/brand";
 
 /**
  * The page the browser is left on after the OAuth redirect lands on the

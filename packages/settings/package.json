@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/settings",
+  "name": "@luke/settings",
   "version": "0.13.0",
   "private": true,
   "type": "module",
@@ -19,9 +19,9 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@sidecar/features": "workspace:*",
-    "@sidecar/live": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   }
 }

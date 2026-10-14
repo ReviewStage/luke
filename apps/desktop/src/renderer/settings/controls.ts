@@ -1,4 +1,4 @@
-import type { ActionResult } from "@sidecar/wire";
+import type { ActionResult } from "@luke/wire";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import type { RunningBuild, UpdateSnapshot } from "#shared/messages/update";
 

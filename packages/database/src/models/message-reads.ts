@@ -1,4 +1,4 @@
-import { toolPartType } from "@sidecar/features/brain";
+import { toolPartType } from "@luke/features/brain";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -10,12 +10,12 @@ import {
   unparsedWire,
   type WireBoundaryInput,
   WireValueSchema,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import {
   readStoredUIMessages,
   type StoredUIMessage,
   UNREGISTERED_TOOL_PART,
-} from "@sidecar/wire/ui-messages";
+} from "@luke/wire/ui-messages";
 import type { ToolSet } from "ai";
 import {
   and,

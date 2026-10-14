@@ -316,7 +316,7 @@ The App's registered Setup URL, with "Redirect on update", is
 `https://tryluke.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
-(`@sidecar/features`). Without a `state`, the route confirms the installation
+(`@luke/features`). Without a `state`, the route confirms the installation
 through `installation(id)` as the App and links nothing: `installed`,
 `updated`, `requested` (a member asked an organization's owner, so there is
 no installation yet), `not-found`, or `unavailable`.
@@ -421,7 +421,7 @@ removing a route, and `repository-checks.sh` refuses drift on either half. The
 same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
-scripts' — and the exports of `@sidecar/features`'s paths module, evaluated, must
+scripts' — and the exports of `@luke/features`'s paths module, evaluated, must
 resolve to a rewrite of the table or to an extensionless alias the Build Output
 emits, and a builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
@@ -556,7 +556,7 @@ where a statement is one expression. It takes no `relations` config, because not
 Drizzle's relational queries: a statement is the `db.select()` builder, never
 `db.query`, as the `drizzle` skill has it. The tables a statement names are
 named imports from their own module
-(`import { plan } from "@sidecar/database/schemas/plan"`), never the barrel,
+(`import { plan } from "@luke/database/schemas/plan"`), never the barrel,
 which is what makes a renamed column a type error at the call site.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
@@ -691,7 +691,7 @@ what leaves them external to the bundles rather than inlined into each of them,
 so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
 `pg`, which is external on the same terms and already was.
 
-A test reads the same client through `@sidecar/database/testing`, which
+A test reads the same client through `@luke/database/testing`, which
 chooses its dialect the way `tests/support/hosted-store-database.ts` does:
 PGlite in process, so `check.sh` needs no service, or the Postgres named by
 `LUKE_STORE_TEST_DATABASE_URL`, which the CI job points at its service
@@ -855,7 +855,7 @@ The plan template is the group's third path, `/api/account/plan-template`:
 `GET` answers `{ template, custom }`, the account's own Markdown or
 `DEFAULT_PLAN_TEMPLATE` with `custom: false`, and `PUT { template }` keeps a
 string verbatim (untrimmed, empty allowed, at most 20,000 characters) or goes
-back to the default on null (`@sidecar/features/plan-document-template`). It is
+back to the default on null (`@luke/features/plan-document-template`). It is
 a path of its own rather than a third part of the snapshot, because the
 desktop syncs the snapshot over its own settings and a long text does not
 belong in that loop. It lives in `account_preference.plan_template`
@@ -869,7 +869,7 @@ the preferences part's own, so a row a template opened answers no snapshot.
 account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, and `DELETE
 ?provider=<provider>` removes one, each answered with the keys as they then
-stand (`@sidecar/features/provider-key-wire`). No answer carries a key: what
+stand (`@luke/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
 `verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
@@ -930,7 +930,7 @@ whose ring it would need.
 
 `server/dictation-app.ts` answers `POST /api/dictation`: one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
-(`@sidecar/features/dictation-wire`), answered `{ text }`. The clip is WebM
+(`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the plan's
@@ -984,7 +984,7 @@ server takes a GitHub App user token, and an account that signed in with
 GitHub already holds one: the Luke GitHub App's, which `GitHubApp.userToken`
 reads off the `account` row and refreshes ("The Luke GitHub App" above). So
 GitHub has no connector, no `integration_connection` row, and no Connect or
-Disconnect (`INTEGRATION_GRANT_OF` in `@sidecar/features/integration-wire`): the
+Disconnect (`INTEGRATION_GRANT_OF` in `@luke/features/integration-wire`): the
 statuses route answers it `connected` while that token reads, `disconnected`
 for an account with no usable GitHub sign-in, and `unavailable` on a
 deployment without the App, and a turn is handed GitHub's server wherever the
@@ -1568,7 +1568,7 @@ App or store the service could not read `unavailable`, the plan standing as
 it was. A change naming null clears it.
 
 A `repository-not-reachable` refusal says why in `unreached`
-(`@sidecar/features/repository-reach-wire`, read by `repositoryReach` on the
+(`@luke/features/repository-reach-wire`, read by `repositoryReach` on the
 `GitHubApp`), naming the repository: the workspace has nothing connected
 (`not-connected`); the installation GitHub no longer knows or its account
 suspended (`connection-lapsed`); the installation is on another account
@@ -1690,7 +1690,7 @@ session. Every call is a `/api/voice/sessions` session whose
 `session.create` names the plan (`planId`), which the service checks the
 account holds before anything is spent; a create naming none is refused. It is created under
 the planning call's instructions (`sessionInstructions()` in
-`@sidecar/live`), whose delegation policy hands the developer's planning words to the backend and says back the
+`@luke/live`), whose delegation policy hands the developer's planning words to the backend and says back the
 finding and its one next question. A call just created speaks first: on
 `session.started` the service sends `planningOpeningInstruction()` and, once
 it is acknowledged, a cue to begin (`greetingCue`), so Luke
@@ -1855,7 +1855,7 @@ the account outlives the request.
 the same bearer resolution. The desktop never talks to the analytics processor:
 it posts an allowlisted batch here, and this is the one place a `distinct_id`
 is attached, from the resolved account and never from the body, which has no
-place to name one. `productEventBatchFromWire` in `@sidecar/features/analytics` is the whole
+place to name one. `productEventBatchFromWire` in `@luke/features/analytics` is the whole
 admission policy, and it builds each event from that event's property
 allowlist, so nothing outside the vocabulary survives the read.
 
@@ -1890,11 +1890,11 @@ with it.
 `server/routes/voice/sessions.ts` is the hosted voice service: one Vercel
 Function serving WebSockets on Fluid compute, the part of this deployment
 that holds the GPT Live project key and owns each hosted voice session
-(`live-contract.ts` in `@sidecar/features` is the Mac's contract with it). The
+(`live-contract.ts` in `@luke/features` is the Mac's contract with it). The
 file exports the `http.Server` that `server/voice/service.ts`'s
 `voiceServer()` builds, with `ws` handling the upgrade on it, exactly as
 Vercel's WebSocket guide has it; the Mac opens `wss://` on this deployment's own origin,
-`HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/features`, at `VOICE_SERVICE_PATH`.
+`HOSTED_VOICE_SERVICE_ORIGIN` in `@luke/features`, at `VOICE_SERVICE_PATH`.
 A plain request to the path answers 426, since the path is a socket's.
 
 On `/api/voice/sessions` a signed-in Mac's handshake carries its account
@@ -1977,7 +1977,7 @@ to end. The voice never travels here: it is WebRTC's.
 The machinery that owns a session's exchange — the delegation adapter that
 hands each ask to the brain and speaks the reply as commentary once the run's
 actions settle, the append channel, idle, and the
-graceful close — is `@sidecar/voice`'s `LiveSessionService`, behind that
+graceful close — is `@luke/voice`'s `LiveSessionService`, behind that
 package's `./live-session` door, which names no socket library so a function
 bundle takes it without `ws`. This service composes it for every signed-in
 session (`server/voice/live-exchange.ts`, adopted over the same socket the
@@ -2245,7 +2245,7 @@ names none, attaches a fresh
 sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
 `session.attached`, and pipes as before. Nothing the session said between the
 two connections is replayed. The desktop's `HostedLiveSessionSource` in
-`@sidecar/voice` does the reconnecting: three tries over about ten seconds,
+`@luke/voice` does the reconnecting: three tries over about ten seconds,
 sends made in the gap held for the next connection, and only after the last
 failure does the host see the loss it already handles as `connection_lost`.
 
@@ -2485,13 +2485,13 @@ dialect an opening of the test database is a database of that opening's own:
 a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
 names, made with `create database ... template ...` on the cluster's
 `postgres` maintenance database and dropped when the file closes it
-(`@sidecar/database/testing`). Nothing writes to the named
+(`@luke/database/testing`). Nothing writes to the named
 database itself after `db:migrate`, so a statement a test forgets to scope by
 account or conversation reaches its own file's rows and no other file's.
 Which files `test:store` runs is read from the files, not kept
 in a list: `scripts/store-tests.ts` selects every `tests/**/*.test.ts` whose
 source imports one of the two doors, `tests/support/hosted-store-database`
-or `@sidecar/database/testing` (whose `getTestDB()` is the bare one), because
+or `@luke/database/testing` (whose `getTestDB()` is the bare one), because
 `LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
 door cannot meet a Postgres whatever it does. A new store test is therefore
 in the set the moment it imports its harness, and `package.json` is not
@@ -2580,7 +2580,7 @@ store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 budgeted per turn on Luke's key and counted on the account's meter, the page
 read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`coder-host/plan-edit.ts`), which takes the
-notetaker's own notes (`@sidecar/features/plan-template`'s `planNotesSchema`)
+notetaker's own notes (`@luke/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the plan
@@ -2732,7 +2732,7 @@ the plan's workspace no longer reaches, read at the start rather than when
 the plan named it (`repository-not-reachable`, 403;
 `server/hosted/workspace-repository.ts`), snapshots the
 plan's document as the Markdown Copy puts on the clipboard
-(`@sidecar/features/plan-markdown`), makes the agent and its conversation
+(`@luke/features/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
 naming a task, the developer's own words bounded as a message is, opens the
@@ -2917,7 +2917,7 @@ fired by a trigger (`docs/proposals/automations-research.md` is the
 research and the plan behind it). The account, the plan, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
-and the guards as `@sidecar/features/automation-wire`'s own JSON; every
+and the guards as `@luke/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
 run. The store is `packages/database/src/models/automation-store.ts`: an
@@ -2925,7 +2925,7 @@ automation is made only on a plan the account reaches, and every other
 statement an account makes names it.
 
 A schedule is five-field cron read in an IANA zone
-(`@sidecar/features/automation-schedule`), so nine o'clock stays nine o'clock
+(`@luke/features/automation-schedule`), so nine o'clock stays nine o'clock
 in that zone across a daylight-saving change; one that would fire more
 often than every fifteen minutes is refused. Its next due instant is the
 row's `next_run_at`, which the minute sweep claims by
@@ -2998,7 +2998,7 @@ workspace the account left, is `not-found`:
   most, each with its agent's title and status as the agent's tab reads
   them.
 
-`@sidecar/features/automation-wire` declares every body and `service-paths.ts`
+`@luke/features/automation-wire` declares every body and `service-paths.ts`
 the addresses; `tests/automations-app.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 

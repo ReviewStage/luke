@@ -1,4 +1,4 @@
-import { EllipsisIcon } from "@sidecar/panel";
+import { EllipsisIcon } from "@luke/panel";
 import { useRef } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";

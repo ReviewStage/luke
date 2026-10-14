@@ -7,8 +7,8 @@
  * without an evaluation-order cycle.
  */
 
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
-import type { PlanningView } from "@sidecar/features/planning-view";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
+import type { PlanningView } from "@luke/features/planning-view";
 import type { ActKind, ActPayload, ActResultFor } from "#shared/messages/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";

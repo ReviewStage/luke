@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@sidecar/gateway": "workspace:*",
-    "@sidecar/live": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/gateway": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import type { AppSettingsView } from "@sidecar/settings/wire";
-import type { ActionResult } from "@sidecar/wire";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { AppSettingsView } from "@luke/settings/wire";
+import type { ActionResult } from "@luke/wire";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
 import type { SettingsSearchInput } from "../settings-search";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";

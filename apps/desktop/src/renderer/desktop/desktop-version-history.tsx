@@ -1,7 +1,7 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { PlanRevisionLine } from "@sidecar/features/plan-wire";
-import { BackIcon, EllipsisIcon, WingFace } from "@sidecar/panel";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { PlanRevisionLine } from "@luke/features/plan-wire";
+import { BackIcon, EllipsisIcon, WingFace } from "@luke/panel";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";

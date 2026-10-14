@@ -8,8 +8,8 @@ import {
   SHOWN_CODE_BOUNDS,
   type ShownCode,
   shownCodeSchema,
-} from "@sidecar/features/plan-wire";
-import { describeWire } from "@sidecar/wire/effect";
+} from "@luke/features/plan-wire";
+import { describeWire } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,

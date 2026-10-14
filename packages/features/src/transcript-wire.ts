@@ -1,4 +1,4 @@
-import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { Schema as EffectSchema } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -8,7 +8,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * The service keeps a call's words as timed fragments
  * (`voice_transcript_segments`) and answers them grouped the way the live
  * captions group them, by the one ledger both sides keep
- * (`@sidecar/live`'s `TranscriptLedger`), so a call that ends reads back in
+ * (`@luke/live`'s `TranscriptLedger`), so a call that ends reads back in
  * the lines its captions drew. Each line is answered as an AI SDK
  * `UIMessage`: an id, a role, and its words as one text part. That is the
  * shape Luke's `messages` table keeps every conversation in and the shape

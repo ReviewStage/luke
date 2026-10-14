@@ -1,15 +1,12 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { sentLineId } from "@sidecar/database/models/ids";
-import { sentLineStands } from "@sidecar/database/models/message-reads";
-import { readPlan } from "@sidecar/database/models/plan-store";
-import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
-import type { StoreWriter } from "@sidecar/database/models/writer";
-import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
-} from "@sidecar/features/coding-agent-wire";
+import type { DatabaseServices } from "@luke/database/core/query";
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { sentLineId } from "@luke/database/models/ids";
+import { sentLineStands } from "@luke/database/models/message-reads";
+import { readPlan } from "@luke/database/models/plan-store";
+import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import type { StoreWriter } from "@luke/database/models/writer";
+import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
+import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";

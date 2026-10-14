@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   claimMacCommands,
   macCommandResult,
@@ -8,16 +8,16 @@ import {
   markMacListening,
   queueMacCommand,
   withdrawMacCommand,
-} from "@sidecar/database/models/mac-command-store";
-import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
+} from "@luke/database/models/mac-command-store";
+import type { PlanStoreEffect } from "@luke/database/models/plan-store";
 import {
   MAC_COMMAND_BOUNDS,
   type MacCommand,
   type MacCommandResult,
   macCommandSchema,
-} from "@sidecar/features/mac-command-wire";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { describeWire, readEither } from "@sidecar/wire/effect";
+} from "@luke/features/mac-command-wire";
+import type { UnparsedWireValue } from "@luke/wire";
+import { describeWire, readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";

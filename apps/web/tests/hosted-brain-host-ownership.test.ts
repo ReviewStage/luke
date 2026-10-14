@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { hostTurnId } from "@luke/database/models/ids";
+import { openPlanConversation } from "@luke/database/models/plan-store";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";

@@ -1,7 +1,7 @@
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import type { TurnPolicy } from "eve/channels";
 import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";

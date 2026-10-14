@@ -1,6 +1,6 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/features/plan-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";

@@ -23,15 +23,15 @@
  * app's words.
  */
 
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   FEEDBACK_KIND,
   FEEDBACK_LIMITS,
   type FeedbackImage,
   type FeedbackKind,
   type FeedbackSubmission,
-} from "@sidecar/features/feedback";
-import { ImageIcon, RemoveIcon } from "@sidecar/panel";
+} from "@luke/features/feedback";
+import { ImageIcon, RemoveIcon } from "@luke/panel";
 import { Duration } from "effect";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

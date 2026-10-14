@@ -1,6 +1,6 @@
-import type { CodingAgentInboxAnswerView } from "@sidecar/features/coding-agent-view";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
-import { INBOX_CURSOR_START, type InboxItem } from "@sidecar/features/inbox-wire";
+import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import type { InboxReader } from "./use-plan-inbox";

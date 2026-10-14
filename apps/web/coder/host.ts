@@ -1,6 +1,6 @@
-import { hostTurnId } from "@sidecar/database/models/ids";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { hostTurnId } from "@luke/database/models/ids";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";

@@ -1,4 +1,4 @@
-import { LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@sidecar/live";
+import { LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 
 /**

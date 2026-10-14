@@ -1,7 +1,7 @@
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
-import type { InboxItem } from "@sidecar/features/inbox-wire";
-import { PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { AppInboxWaitingItem } from "#shared/messages/app-state";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";

@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
+import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

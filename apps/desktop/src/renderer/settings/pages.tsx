@@ -7,7 +7,7 @@ import {
   SpeakerIcon,
   TerminalIcon,
   UserIcon,
-} from "@sidecar/panel";
+} from "@luke/panel";
 import { BellIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 

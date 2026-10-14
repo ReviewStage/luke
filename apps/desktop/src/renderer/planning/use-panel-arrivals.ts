@@ -1,6 +1,6 @@
-import type { Board } from "@sidecar/features/board-wire";
-import type { PageLine } from "@sidecar/features/page-wire";
-import type { PlanCodeShowing } from "@sidecar/features/planning-view";
+import type { Board } from "@luke/features/board-wire";
+import type { PageLine } from "@luke/features/page-wire";
+import type { PlanCodeShowing } from "@luke/features/planning-view";
 import { useEffect, useRef, useState } from "react";
 import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-side-panel";
 

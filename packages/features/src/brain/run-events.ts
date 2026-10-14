@@ -1,4 +1,4 @@
-import type { CompactionSource, SessionKey } from "@sidecar/runtime/vocabulary";
+import type { CompactionSource, SessionKey } from "@luke/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -6,7 +6,7 @@ import {
   type UnparsedWireValue,
   valueFromJsonText,
   type WireRecord,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import type { UIMessage } from "ai";
 import type {
   BrainModelUsage,

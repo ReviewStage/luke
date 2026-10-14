@@ -4,17 +4,17 @@ import {
   inlinedFile,
   isMentionedText,
   textOf,
-} from "@sidecar/database/models/attached-file-parts";
-import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
+} from "@luke/database/models/attached-file-parts";
+import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import type { FileUIPart, UserContent } from "ai";
 import type { MessageReceivedPart } from "eve/client";
 
 /**
- * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@sidecar/database/models/attached-file-parts`.
+ * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@luke/database/models/attached-file-parts`.
  *
  * A message is words, files, or both. eve is handed the words first where
  * there are any, then each text file inlined as its own text part, headed

@@ -1,4 +1,4 @@
-import type { FaceMotion } from "@sidecar/brand";
+import type { FaceMotion } from "@luke/brand";
 import { useEffect, useRef } from "react";
 import {
   ANIMATION_ROSTER,

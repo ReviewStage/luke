@@ -1,5 +1,5 @@
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { ChevronDownIcon, PlayIcon } from "@luke/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON } from "../failure-remedy";

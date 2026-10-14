@@ -2,18 +2,18 @@ import type {
   SpokenAskRow,
   StoredMessageRecord,
   StoredTurnRecord,
-} from "@sidecar/database/models/message-reads";
-import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
-import { TURN_ENDING, type TurnRecord } from "@sidecar/features/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
+} from "@luke/database/models/message-reads";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
+import { TURN_ENDING, type TurnRecord } from "@luke/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_STATE,
   type PlanWorkState,
   type PlanWorkTurn,
   type PlanWorkWorker,
-} from "@sidecar/features/planning-view";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+} from "@luke/features/planning-view";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
 import { Schema } from "effect";
 import {
   isStoredToolPart,

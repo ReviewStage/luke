@@ -16,8 +16,8 @@ import {
   type ZoomPercent,
   zoomFactor,
   zoomStepped,
-} from "@sidecar/settings";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/settings";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";

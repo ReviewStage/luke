@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import type { DatabaseServices } from "@luke/database/core/query";
+import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import {
   commentaryAppend,
   greetingCue,
@@ -11,8 +11,8 @@ import {
   LIVE_CLIENT_EVENT,
   type LiveClientEvent,
   planningOpeningInstruction,
-} from "@sidecar/live";
-import { catchAllButInterrupt } from "@sidecar/runtime/effect";
+} from "@luke/live";
+import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type WebSocket, WebSocketServer } from "ws";

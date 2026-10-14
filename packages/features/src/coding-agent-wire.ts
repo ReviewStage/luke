@@ -1,5 +1,5 @@
-import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@sidecar/wire";
-import { verbatimJsonSchema } from "@sidecar/wire/effect";
+import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
+import { verbatimJsonSchema } from "@luke/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 import {
   INTEGRATION_PROVIDER_LIST,

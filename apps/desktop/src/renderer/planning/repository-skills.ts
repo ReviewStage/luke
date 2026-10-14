@@ -1,5 +1,5 @@
-import { PLAN_FILE_REFUSAL, type PlanFileRefusal } from "@sidecar/features/plan-wire";
-import type { PlanningSkillsAnswer } from "@sidecar/features/planning-view";
+import { PLAN_FILE_REFUSAL, type PlanFileRefusal } from "@luke/features/plan-wire";
+import type { PlanningSkillsAnswer } from "@luke/features/planning-view";
 import type { SkillSource, SkillsRead } from "./skill-picker";
 
 /**

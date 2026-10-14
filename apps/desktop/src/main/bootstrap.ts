@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type RunMode, runModeFor } from "@sidecar/host";
+import { type RunMode, runModeFor } from "@luke/host";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import type { UpdateMenu } from "./app-menu";

@@ -25,7 +25,7 @@
 import {
   type IntegrationToolAnnotations,
   integrationToolAnnotationsSchema,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { Data, Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

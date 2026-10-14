@@ -1,14 +1,14 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   awaitingLinesOfReached,
   type CodingAgent,
   type CodingAgentLatestTurn,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
-} from "@sidecar/database/models/coding-agent-store";
-import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
-import type { StoreWriter } from "@sidecar/database/models/writer";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
+} from "@luke/database/models/coding-agent-store";
+import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import type { StoreWriter } from "@luke/database/models/writer";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {

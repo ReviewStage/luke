@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { runModeFor } from "@sidecar/host";
-import type { WireRecord } from "@sidecar/wire";
+import { runModeFor } from "@luke/host";
+import type { WireRecord } from "@luke/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import { ACT_KIND } from "#shared/messages/acts";

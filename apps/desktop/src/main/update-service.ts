@@ -1,4 +1,4 @@
-import { scheduleOnce } from "@sidecar/runtime/effect";
+import { scheduleOnce } from "@luke/runtime/effect";
 import { type Context, Duration, Effect, type Fiber, Schedule, Scope } from "effect";
 import {
   UPDATE_STATUS,

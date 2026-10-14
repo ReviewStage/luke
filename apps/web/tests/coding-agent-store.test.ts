@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   type CodingAgent,
   type CodingAgentBriefText,
@@ -15,17 +15,17 @@ import {
   recordCodingAgentPublished,
   renameCodingAgent,
   updateCodingAgentChoice,
-} from "@sidecar/database/models/coding-agent-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { codingAgent } from "@sidecar/database/schemas/coding-agent";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/coding-agent-store";
+import { user } from "@luke/database/schemas/auth";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { getTestDB } from "@luke/database/testing";
 import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { joinWorkspace, startPlan } from "./support/workspaces";

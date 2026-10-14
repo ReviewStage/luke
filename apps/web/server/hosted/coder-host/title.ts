@@ -1,17 +1,14 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { childTitlesOf, fillChildTitle } from "@sidecar/database/models/child-titles";
-import {
-  type CodingAgent,
-  fillCodingAgentTitle,
-} from "@sidecar/database/models/coding-agent-store";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { childTitlesOf, fillChildTitle } from "@luke/database/models/child-titles";
+import { type CodingAgent, fillCodingAgentTitle } from "@luke/database/models/coding-agent-store";
 import {
   listMessagesPast,
   listRecentMessages,
   turnsBefore,
-} from "@sidecar/database/models/message-reads";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { CODING_AGENT_BOUNDS } from "@sidecar/features/coding-agent-wire";
-import { failureKind } from "@sidecar/runtime/effect";
+} from "@luke/database/models/message-reads";
+import type { ConversationTarget } from "@luke/database/models/writer";
+import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { failureKind } from "@luke/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
 import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";

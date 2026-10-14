@@ -1,9 +1,9 @@
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { InstantColumnSchema, NumberFromBigIntColumn } from "@sidecar/database/models/columns";
-import { utcDayKey } from "@sidecar/database/models/quota";
-import { account, session, user } from "@sidecar/database/schemas/auth";
-import { adminFavorite } from "@sidecar/database/schemas/favorite";
-import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { InstantColumnSchema, NumberFromBigIntColumn } from "@luke/database/models/columns";
+import { utcDayKey } from "@luke/database/models/quota";
+import { account, session, user } from "@luke/database/schemas/auth";
+import { adminFavorite } from "@luke/database/schemas/favorite";
+import { hostedUsage } from "@luke/database/schemas/usage";
 import {
   and,
   asc,

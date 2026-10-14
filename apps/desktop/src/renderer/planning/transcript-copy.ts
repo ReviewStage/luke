@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
   CODING_AGENT_BOUNDS,
@@ -6,8 +6,8 @@ import {
   CODING_AGENT_CURSOR_START,
   type CodingAgentBrief,
   type CodingAgentMessage,
-} from "@sidecar/features/coding-agent-wire";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import {
   AGENT_PART,

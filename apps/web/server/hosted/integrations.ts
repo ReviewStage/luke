@@ -22,7 +22,7 @@ import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 
 export interface IntegrationDefinition {
   /**

@@ -1,4 +1,4 @@
-import { HTTP_METHOD, text } from "@sidecar/wire";
+import { HTTP_METHOD, text } from "@luke/wire";
 import { Data, Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpBody from "effect/http/HttpBody";

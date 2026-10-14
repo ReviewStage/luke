@@ -1,4 +1,4 @@
-import { PLAN_BOUNDS } from "@sidecar/features/plan-wire";
+import { PLAN_BOUNDS } from "@luke/features/plan-wire";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { ModalShell } from "../modal-shell";

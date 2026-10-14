@@ -1,4 +1,4 @@
-import type { HostSeams } from "@sidecar/host";
+import type { HostSeams } from "@luke/host";
 import { Effect } from "effect";
 import { safeStorage } from "electron";
 import type { EffectDesktopService } from "./service";

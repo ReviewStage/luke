@@ -10,8 +10,8 @@
  * plan's work read back and by the live follow.
  */
 
-import { turnsNamed } from "@sidecar/database/models/message-reads";
-import type { TurnRecord } from "@sidecar/features/coding-agent-wire";
+import { turnsNamed } from "@luke/database/models/message-reads";
+import type { TurnRecord } from "@luke/features/coding-agent-wire";
 import { Effect } from "effect";
 import type { SubagentJournal } from "../voice/plan-work.js";
 import { turnRecordOf } from "./turn-record.js";

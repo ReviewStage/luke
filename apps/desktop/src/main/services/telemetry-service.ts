@@ -1,12 +1,12 @@
-import * as Sentry from "@sentry/electron/main";
 import {
   PRODUCT_EVENT,
   productSessionCountBucket,
   type RecordProductEvent,
-} from "@sidecar/features/analytics";
-import type { FeedbackResult, FeedbackSubmission } from "@sidecar/features/feedback";
-import { feedbackDeliveryFromEnvironment } from "@sidecar/features/feedback";
-import { type RunMode, sentryReportingEnabled } from "@sidecar/host";
+} from "@luke/features/analytics";
+import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
+import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import { type RunMode, sentryReportingEnabled } from "@luke/host";
+import * as Sentry from "@sentry/electron/main";
 import { Effect } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 import type { EffectDesktopService } from "./service";
@@ -34,7 +34,7 @@ export function initializeCrashReporting(runMode: RunMode): void {
 export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
-   * `@sidecar/features/analytics` fixed. It travels to Luke's own service through the
+   * `@luke/features/analytics` fixed. It travels to Luke's own service through the
    * host, never to an analytics provider from here.
    */
   readonly recordProductEvent: RecordProductEvent;

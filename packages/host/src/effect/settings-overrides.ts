@@ -6,8 +6,8 @@
  * resolves every override absent, and the store answers from its own file and
  * this build's defaults alone.
  */
-import type { LiveVoice } from "@sidecar/live";
-import { environmentLiveVoice, LIVE_ENVIRONMENT } from "@sidecar/voice";
+import type { LiveVoice } from "@luke/live";
+import { environmentLiveVoice, LIVE_ENVIRONMENT } from "@luke/voice";
 import { Config, Effect, Option } from "effect";
 import { Environment } from "./seams.js";
 

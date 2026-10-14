@@ -1,5 +1,5 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { causeKind, unlessInterrupted } from "@sidecar/runtime/effect";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { causeKind, unlessInterrupted } from "@luke/runtime/effect";
 import { type Cause, Effect, type Schema } from "effect";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
 

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import { TURN_ORIGIN } from "@sidecar/wire";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import { TURN_ORIGIN } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";

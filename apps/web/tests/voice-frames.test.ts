@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { VOICE_SERVICE_FRAME } from "@sidecar/features";
-import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
+import { VOICE_SERVICE_FRAME } from "@luke/features";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
 import { test } from "vitest";
 import {
   deviceFrameDecision,

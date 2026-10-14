@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   ASK_DISPATCH_REFUSAL,
   type AskRecord,
   type AskRow,
   newestSession,
-} from "@sidecar/database/models/asks";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
+} from "@luke/database/models/asks";
+import { hostTurnId } from "@luke/database/models/ids";
+import { openPlanConversation } from "@luke/database/models/plan-store";
 import {
   conversationReachableBy,
   recordedRuntimeSession,
-} from "@sidecar/database/models/recorded-session";
-import { storeWriter } from "@sidecar/database/models/writer";
-import { conversations, turns } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { ASK_ORIGIN } from "@sidecar/features";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
+} from "@luke/database/models/recorded-session";
+import { storeWriter } from "@luke/database/models/writer";
+import { conversations, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { ASK_ORIGIN } from "@luke/features";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";

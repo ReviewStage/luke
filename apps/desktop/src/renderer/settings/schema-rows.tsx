@@ -6,8 +6,8 @@ import {
   type SettingsRowsInput,
   settingFromOption,
   settingRowsForPage,
-} from "@sidecar/settings";
-import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/wire/app-settings";
+} from "@luke/settings";
+import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
 import { SelectRow } from "./select-row";
 import { SwitchRow } from "./switch-row";
 import type { SettingsWrites } from "./writes";

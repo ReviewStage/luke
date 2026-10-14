@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import {

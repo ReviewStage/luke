@@ -6,9 +6,9 @@ import {
   type ProviderKeyRejection,
   type ProviderKeyStatus,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import { PencilIcon, TrashIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/provider-key-wire";
+import { PencilIcon, TrashIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";

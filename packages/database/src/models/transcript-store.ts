@@ -1,11 +1,11 @@
-import { catalogIdOf } from "@sidecar/features/model-label";
+import { catalogIdOf } from "@luke/features/model-label";
 import {
   type PlanTranscript,
   TRANSCRIPT_BOUNDS,
   TRANSCRIPT_PART_TYPE,
   type TranscriptCall,
-} from "@sidecar/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "@sidecar/live";
+} from "@luke/features/transcript-wire";
+import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "@luke/live";
 import { desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -22,7 +22,7 @@ import { reachablePlan } from "./workspace-store.js";
  * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.
  *
  * The voice writer keeps each call's words as timed fragments
- * (`@sidecar/database/models/voice-writer`); this reads the newest of them for one plan and
+ * (`@luke/database/models/voice-writer`); this reads the newest of them for one plan and
  * groups each call's through the ledger the live captions keep, so a call
  * reads back in the lines its captions drew, each line one `UIMessage`
  * whose id is its place on the call and whose metadata names the rows the

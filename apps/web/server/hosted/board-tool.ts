@@ -1,9 +1,9 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { writeDrawing } from "@sidecar/database/models/board-store";
-import { DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
-import { type DrawingElement, drawingElementsSchema } from "@sidecar/features/board-wire";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { writeDrawing } from "@luke/database/models/board-store";
+import { DRAW_ON_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
+import { type DrawingElement, drawingElementsSchema } from "@luke/features/board-wire";
+import type { UnparsedWireValue } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { layoutFindings } from "./board-layout.js";
 import { logStoreFailure } from "./store-failure.js";

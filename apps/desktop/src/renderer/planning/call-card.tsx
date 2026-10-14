@@ -1,4 +1,4 @@
-import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@sidecar/live";
+import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";

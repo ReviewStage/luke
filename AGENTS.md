@@ -88,9 +88,9 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Assert what a caller observes, never private state or call counts.
 - Use the shared builders before inline setup:
   `apps/web/tests/support/`, `packages/wire/src/testing/`, and
-  `temporaryDirectory` from `@sidecar/runtime/testing`.
+  `temporaryDirectory` from `@luke/runtime/testing`.
 - A test that needs a database provides `getTestDB()`
-  (`@sidecar/database/testing`), a migrated database of its own, and a query
+  (`@luke/database/testing`), a migrated database of its own, and a query
   over account rows tests that one user cannot read another's. A model or
   repository under `packages/database/src/` ships with a sibling
   `__tests__/<name>.test.ts` in the same PR.
@@ -246,7 +246,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### Vocabulary
 
-`SchemaRead` (`@sidecar/wire`) is the boundary result vocabulary a Schema
+`SchemaRead` (`@luke/wire`) is the boundary result vocabulary a Schema
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,

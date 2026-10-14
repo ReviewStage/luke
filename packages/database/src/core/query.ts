@@ -23,7 +23,7 @@ import type { SqlError } from "effect/sql/SqlError";
 export type DatabaseShape = PgEffectDatabase<EffectPgQueryEffectHKT, EffectPgQueryResultHKT>;
 
 export class Database extends Context.Service<Database, DatabaseShape>()(
-  "@sidecar/database/Database",
+  "@luke/database/Database",
 ) {}
 
 /** The database over the runtime's `PgClient`, without logging or caching (connect-effect-postgres step 3). */

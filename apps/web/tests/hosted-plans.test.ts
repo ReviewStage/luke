@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   attachPlanConversation,
   createPlan,
@@ -10,15 +10,15 @@ import {
   readPlan,
   savePlanText,
   updatePlan,
-} from "@sidecar/database/models/plan-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { getTestDB } from "@sidecar/database/testing";
-import { planSections } from "@sidecar/features/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { PLAN_HEADING, type PlanNote } from "@sidecar/features/plan-template";
-import type { PlanDocument } from "@sidecar/features/plan-wire";
+} from "@luke/database/models/plan-store";
+import { user } from "@luke/database/schemas/auth";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { getTestDB } from "@luke/database/testing";
+import { planSections } from "@luke/features/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
+import type { PlanDocument } from "@luke/features/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {

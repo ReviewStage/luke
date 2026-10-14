@@ -15,9 +15,9 @@
  * stands, which the File tab opens, never its body.
  */
 
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
-import { PLAN_FILE_REFUSAL, type PlanSkillsAnswer } from "@sidecar/features/plan-wire";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { type PlanStoreFailure, readPlan } from "@luke/database/models/plan-store";
+import { PLAN_FILE_REFUSAL, type PlanSkillsAnswer } from "@luke/features/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";

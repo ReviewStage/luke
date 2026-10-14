@@ -1,4 +1,4 @@
-import { ChevronDownIcon, WingFace } from "@sidecar/panel";
+import { ChevronDownIcon, WingFace } from "@luke/panel";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { lineRangeText } from "./code-pane-model";

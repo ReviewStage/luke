@@ -1,4 +1,4 @@
-# `@sidecar/host`
+# `@luke/host`
 
 ## Everything of the machine arrives as a seam
 
@@ -69,5 +69,5 @@ its next answer.
 ## One door that exists for the graph
 
 `account-preferences-client.ts` would belong beside the plan client in
-`@sidecar/features`, but the snapshot it carries is `@sidecar/settings` vocabulary
+`@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.

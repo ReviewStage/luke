@@ -1,12 +1,12 @@
-import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
+import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
 import {
   LIVE_STATUS,
   type LiveStatus,
   liveExchangeActive,
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
-} from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/wire/conversation";
+} from "@luke/live";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
 import { type Context, Deferred, Duration, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import type {
   LiveCaptionRow,

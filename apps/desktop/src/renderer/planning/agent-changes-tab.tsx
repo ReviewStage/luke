@@ -1,14 +1,14 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentChangedFile,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { CopyIcon, DownloadIcon } from "@sidecar/panel";
+} from "@luke/features/coding-agent-wire";
+import { CopyIcon, DownloadIcon } from "@luke/panel";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

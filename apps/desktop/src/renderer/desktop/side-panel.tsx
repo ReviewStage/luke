@@ -1,16 +1,16 @@
-import type { Board } from "@sidecar/features/board-wire";
+import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import type { PageLine } from "@sidecar/features/page-wire";
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/features/planning-view";
-import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
+} from "@luke/features/coding-agent-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import type { PageLine } from "@luke/features/page-wire";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
+import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/panel";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";

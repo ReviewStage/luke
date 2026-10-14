@@ -1,21 +1,21 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { askRecord } from "@sidecar/database/models/asks";
-import { type HostedStore, hostedStore } from "@sidecar/database/models/hosted-store";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
+import { type HostedStore, hostedStore } from "@luke/database/models/hosted-store";
 import {
   type VoiceTarget,
   type VoiceWriteResult,
   voiceWriter,
-} from "@sidecar/database/models/voice-writer";
-import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
-import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@sidecar/features/planning-view";
-import { serialQueue } from "@sidecar/runtime/effect";
-import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
+} from "@luke/database/models/voice-writer";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@luke/features/planning-view";
+import { serialQueue } from "@luke/runtime/effect";
+import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   type AdoptableSession,
   LiveSessionService,
   type LiveSessionStatus,
   type LiveSessionTrace,
-} from "@sidecar/voice/live-session";
+} from "@luke/voice/live-session";
 import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";

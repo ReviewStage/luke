@@ -1,4 +1,4 @@
-import { cssCustomProperties } from "@sidecar/brand/react-css";
+import { cssCustomProperties } from "@luke/brand/react-css";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";

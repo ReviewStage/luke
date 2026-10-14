@@ -19,7 +19,7 @@
  * OIDC token answers every call as unavailable.
  */
 
-import { readEither } from "@sidecar/wire/effect";
+import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Data, Effect, Result, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";

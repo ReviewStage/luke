@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, type JsonValue } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";

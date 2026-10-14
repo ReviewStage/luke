@@ -1,4 +1,4 @@
-import type { ActionResult } from "@sidecar/wire";
+import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings } from "./schema-access.js";
 import type { RuntimeStatus } from "./status.js";
 

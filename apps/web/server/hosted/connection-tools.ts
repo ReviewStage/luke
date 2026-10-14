@@ -21,9 +21,9 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
-import { WireValueSchema } from "@sidecar/wire";
-import { verbatimJsonSchema } from "@sidecar/wire/effect";
+} from "@luke/features/integration-wire";
+import { WireValueSchema } from "@luke/wire";
+import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { Tool } from "ai";
 import { Schema } from "effect";
 import { type UnparsedWireValue, wireValidatedTool } from "../core.js";

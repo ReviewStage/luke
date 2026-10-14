@@ -6,7 +6,7 @@ import {
   type IntegrationProvider,
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";

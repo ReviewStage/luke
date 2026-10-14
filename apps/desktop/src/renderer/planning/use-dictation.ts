@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@sidecar/features/dictation-wire";
+import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";

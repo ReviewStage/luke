@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
-import { runModeFor } from "@sidecar/host";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { runModeFor } from "@luke/host";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";

@@ -9,7 +9,7 @@ import { diffArrays } from "diff";
  * a line added or struck aligned to whole lines. The comparison itself is
  * jsdiff's (`diffArrays`, over this file's words); what is here is how its
  * changes are cut for a hand. The notetaker changes one place at a time
- * (`textNotesInProgress` in `@sidecar/features/plan-template`), so the words
+ * (`textNotesInProgress` in `@luke/features/plan-template`), so the words
  * compared are always final or still growing at their end. The version
  * history's version view reads the same comparison over the same words whole
  * (`wordChanges`), since a reader compares words rather than letters.

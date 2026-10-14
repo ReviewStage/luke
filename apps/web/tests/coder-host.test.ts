@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
-} from "@sidecar/database/models/coding-agent-store";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
-import { holdSandbox } from "@sidecar/database/models/sandbox-terminal-lease";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { turns } from "@sidecar/database/schemas/storage";
-import { getTestDB } from "@sidecar/database/testing";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
-import { planSections } from "@sidecar/features/plan-document";
-import { FAST_ACCESS } from "@sidecar/features/provider-key-wire";
+} from "@luke/database/models/coding-agent-store";
+import { hostTurnId } from "@luke/database/models/ids";
+import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
+import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { turns } from "@luke/database/schemas/storage";
+import { getTestDB } from "@luke/database/testing";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { planSections } from "@luke/features/plan-document";
+import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";

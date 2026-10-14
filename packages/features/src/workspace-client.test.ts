@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  fakeCloudApi,
-  HTTP_STATUS,
-  jsonResponse,
-  recordingHttpClient,
-} from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";

@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  type AccountSnapshot,
-} from "@sidecar/credentials/snapshot";
-import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@sidecar/features/feedback";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

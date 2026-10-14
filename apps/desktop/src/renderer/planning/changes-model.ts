@@ -3,7 +3,7 @@ import {
   type ChangedFileStatus,
   type CodingAgentChangedFile,
   PATCH_OMITTED,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { parsePatch } from "diff";
 import {
   FILE_MARK,

@@ -5,9 +5,9 @@ import {
   mentionMarkdown,
   mentionName,
   type PlanMention,
-} from "@sidecar/features/mention-link";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/features/plan-wire";
-import { EllipsisIcon } from "@sidecar/panel";
+} from "@luke/features/mention-link";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
+import { EllipsisIcon } from "@luke/panel";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";
@@ -61,7 +61,7 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  *
  * On a plan's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's mention
- * (`[@Heading](…)`, `@sidecar/features/mention-link`), and a mention in the
+ * (`[@Heading](…)`, `@luke/features/mention-link`), and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. Asked to show a section, the document scrolls its own
  * scroller to it, never `scrollIntoView`, which would scroll every box

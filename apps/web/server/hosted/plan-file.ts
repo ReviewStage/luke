@@ -1,11 +1,11 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { type PlanStoreFailure, readPlan } from "@luke/database/models/plan-store";
 import {
   PLAN_FILE_REFUSAL,
   type PlanFileAnswer,
   type PlanFileRefusal,
   type PlanFileRequest,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

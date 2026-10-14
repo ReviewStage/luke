@@ -40,11 +40,11 @@ import {
  */
 const WIRE_ANNOTATION = {
   /** The sentence a node carries as its `description`. */
-  DESCRIPTION: "@sidecar/wire/effect/WireDescription",
+  DESCRIPTION: "@luke/wire/effect/WireDescription",
   /** Which {@link SchemaRefusal} a failed check or transformation answers. */
-  REFUSAL: "@sidecar/wire/effect/WireRefusal",
+  REFUSAL: "@luke/wire/effect/WireRefusal",
   /** A node declared verbatim beside its reader, emitted as written. */
-  JSON_SCHEMA: "@sidecar/wire/effect/WireJsonSchema",
+  JSON_SCHEMA: "@luke/wire/effect/WireJsonSchema",
 } as const;
 
 const readDescription = Schema.decodeUnknownOption(Schema.String);

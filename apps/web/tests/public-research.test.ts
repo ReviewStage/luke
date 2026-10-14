@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { type RecordedRequest, recordingHttpClient } from "@sidecar/wire/testing";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { type RecordedRequest, recordingHttpClient } from "@luke/wire/testing";
 import { Effect, Redacted } from "effect";
 import {
   HostResolver,

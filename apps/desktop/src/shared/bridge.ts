@@ -5,18 +5,18 @@ import {
   type ProductExchangeKind,
   type ProductSurfaceEventName,
   productEventFromWire,
-} from "@sidecar/features/analytics";
-import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
-import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/gateway/devtrace";
-import { liveExchangeActive } from "@sidecar/live";
+} from "@luke/features/analytics";
+import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
+import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
+import { liveExchangeActive } from "@luke/live";
 import {
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
   isWireString,
   type UnparsedWireValue,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";

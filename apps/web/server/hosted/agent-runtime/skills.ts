@@ -15,8 +15,8 @@
  * than failing the start.
  */
 
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
+import type { DatabaseServices } from "@luke/database/core/query";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineSkill } from "eve/skills";

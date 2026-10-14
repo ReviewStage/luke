@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { unparsedWire } from "@sidecar/wire";
+import { unparsedWire } from "@luke/wire";
 import { test } from "vitest";
 import {
   applyNotesToText,

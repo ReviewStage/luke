@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/features/plan-wire";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

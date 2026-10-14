@@ -5,7 +5,7 @@ import {
   type RecordedJsonSchemaSource,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
-} from "@sidecar/wire/testing";
+} from "@luke/wire/testing";
 import { test } from "vitest";
 import * as accountInboxWire from "./account-inbox-wire.js";
 import * as boardWire from "./board-wire.js";

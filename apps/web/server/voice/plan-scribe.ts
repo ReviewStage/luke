@@ -1,19 +1,19 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { readPlan, readStartedText, type StoredPlan } from "@sidecar/database/models/plan-store";
-import { spendHostedMeter } from "@sidecar/database/models/quota";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { readPlan, readStartedText, type StoredPlan } from "@luke/database/models/plan-store";
+import { spendHostedMeter } from "@luke/database/models/quota";
 import {
   applyNotesToText,
   type PlanNote,
   planNotesSchema,
   readNotes,
   textNotesInProgress,
-} from "@sidecar/features/plan-template";
+} from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
   type PlanDocument,
   type PlanSectionEdit,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
@@ -21,15 +21,15 @@ import {
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   type TranscriptUtterance,
-} from "@sidecar/live";
-import { LIVE_BRAIN_RUN_EVENT, type LiveBrainRunEvent } from "@sidecar/voice/live-session";
+} from "@luke/live";
+import { LIVE_BRAIN_RUN_EVENT, type LiveBrainRunEvent } from "@luke/voice/live-session";
 import {
   jsonRoundTrip,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { jsonSchema, type LanguageModel, Output, streamText } from "ai";
 import { Cause, Clock, Data, Duration, Effect, Option, Queue, type Scope, Stream } from "effect";
 import { SqlClient } from "effect/sql";

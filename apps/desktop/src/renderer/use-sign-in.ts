@@ -1,4 +1,4 @@
-import type { AccountProvider } from "@sidecar/credentials/snapshot";
+import type { AccountProvider } from "@luke/credentials/snapshot";
 import { useCallback, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";

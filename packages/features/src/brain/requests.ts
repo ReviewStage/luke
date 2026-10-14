@@ -1,4 +1,4 @@
-import type { ModelUsage } from "@sidecar/runtime/vocabulary";
+import type { ModelUsage } from "@luke/runtime/vocabulary";
 
 /**
  * A developer ask as the brain owns it from acceptance to its end. The record

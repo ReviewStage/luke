@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/http";
 import { webSqlClient } from "./db/sql-client.js";

@@ -1,16 +1,16 @@
-import type { Board } from "@sidecar/features/board-wire";
-import type { GitHubConnection } from "@sidecar/features/github-connection-wire";
-import type { PlanEditRequest } from "@sidecar/features/plan-edit";
-import { planMarkdown } from "@sidecar/features/plan-markdown";
-import type { CodeRef } from "@sidecar/features/plan-wire";
+import type { Board } from "@luke/features/board-wire";
+import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { PlanEditRequest } from "@luke/features/plan-edit";
+import { planMarkdown } from "@luke/features/plan-markdown";
+import type { CodeRef } from "@luke/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningEditAnswer,
   type PlanningView,
-} from "@sidecar/features/planning-view";
-import type { Workspace } from "@sidecar/features/workspace-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/planning-view";
+import type { Workspace } from "@luke/features/workspace-wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";

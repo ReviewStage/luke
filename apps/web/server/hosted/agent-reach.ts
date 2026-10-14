@@ -7,10 +7,10 @@
  * workspace's agent reads as none at all.
  */
 
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { type CodingAgent, readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { readEither } from "@sidecar/wire/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import type { ConversationTarget } from "@luke/database/models/writer";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {

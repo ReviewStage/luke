@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { verify } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
-import { account } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import { REPOSITORY_UNREACHED } from "@sidecar/features/repository-reach-wire";
+import { Database } from "@luke/database/core/query";
+import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
+import { account } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted, Result } from "effect";

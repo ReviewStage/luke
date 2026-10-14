@@ -2,8 +2,8 @@ import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
-import { ArrowLeftIcon, ChevronRightIcon, GearIcon, McpIcon, SearchIcon } from "@sidecar/panel";
+} from "@luke/features/integration-wire";
+import { ArrowLeftIcon, ChevronRightIcon, GearIcon, McpIcon, SearchIcon } from "@luke/panel";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";

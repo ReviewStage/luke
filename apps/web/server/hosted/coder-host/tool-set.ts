@@ -1,5 +1,5 @@
-import { WireValueSchema } from "@sidecar/wire";
-import { verbatimJsonSchema } from "@sidecar/wire/effect";
+import { WireValueSchema } from "@luke/wire";
+import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";

@@ -25,12 +25,12 @@
  * (`accountIntegrationConnect`).
  */
 
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import {
   ConnectError,
   ConnectorInstallationRequiredError,

@@ -5,19 +5,19 @@ import {
   latestTurnsOfReached,
   listPublishedCodingAgents,
   type PublishedCodingAgent,
-} from "@sidecar/database/models/coding-agent-store";
+} from "@luke/database/models/coding-agent-store";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   PLAN_AGENTS_BOUNDS,
   type PlanAgentLine,
   type PlanAgentsSummary,
   type PlanPullRequestLine,
   type PlanSummary,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { Clock, Effect } from "effect";
 import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
 

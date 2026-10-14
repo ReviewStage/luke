@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
+import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Schema } from "effect";

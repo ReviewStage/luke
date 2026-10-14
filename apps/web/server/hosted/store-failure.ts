@@ -9,8 +9,8 @@
  * onward as the unavailable refusal.
  */
 
-import type { QueryError } from "@sidecar/database/core/query";
-import { failureKind } from "@sidecar/runtime/effect";
+import type { QueryError } from "@luke/database/core/query";
+import { failureKind } from "@luke/runtime/effect";
 import { Effect, type Schema } from "effect";
 
 export type StoreFailure = QueryError | Schema.SchemaError;

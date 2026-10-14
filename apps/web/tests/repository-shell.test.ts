@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { getTestDB } from "@sidecar/database/testing";
-import { unparsedWire } from "@sidecar/wire";
+import { getTestDB } from "@luke/database/testing";
+import { unparsedWire } from "@luke/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../server/github/github-app";

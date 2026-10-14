@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HTTP_STATUS, type RecordedRequest, recordingHttpClient } from "@sidecar/wire/testing";
+import { HTTP_STATUS, type RecordedRequest, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { PRODUCT_EVENT } from "./product-events.js";

@@ -2,7 +2,7 @@ import {
   type PlanSectionWriter,
   type PlanSectionWriterWho,
   sectionWritersOf,
-} from "@sidecar/features/plan-document";
+} from "@luke/features/plan-document";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -12,7 +12,7 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionLine,
   type PlanRevisionsAnswer,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";

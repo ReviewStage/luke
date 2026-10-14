@@ -3,14 +3,14 @@ import {
   type LiveServerEvent,
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
-} from "@sidecar/live";
+} from "@luke/live";
 import {
   type AssistantMessageMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type SpokenAskMetadata,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

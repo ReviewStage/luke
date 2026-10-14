@@ -1,7 +1,7 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { UserIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { UserIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ProviderMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";

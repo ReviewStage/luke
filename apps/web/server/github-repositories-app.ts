@@ -13,15 +13,15 @@
  * unavailable.
  */
 
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { isWorkspaceMember, personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/features";
-import { workspaceIdSchema } from "@sidecar/features/plan-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features";
+import { workspaceIdSchema } from "@luke/features/plan-wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,

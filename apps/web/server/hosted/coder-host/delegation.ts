@@ -1,9 +1,9 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { writeDelegation } from "@sidecar/database/models/coding-agent-store";
-import { childConversationId } from "@sidecar/database/models/ids";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { codingAgentDelegationInputSchema } from "@sidecar/features/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { writeDelegation } from "@luke/database/models/coding-agent-store";
+import { childConversationId } from "@luke/database/models/ids";
+import type { ConversationTarget } from "@luke/database/models/writer";
+import { codingAgentDelegationInputSchema } from "@luke/features/coding-agent-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { openChildConversation } from "../brain-host/conversation.js";

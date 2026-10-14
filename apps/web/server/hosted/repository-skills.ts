@@ -28,7 +28,7 @@
  * which is what a harness does with a key it does not know.
  */
 
-import { PLAN_SKILL_BOUNDS } from "@sidecar/features/plan-wire";
+import { PLAN_SKILL_BOUNDS } from "@luke/features/plan-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubUnavailable } from "../github/github-app.js";

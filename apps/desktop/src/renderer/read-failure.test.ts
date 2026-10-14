@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
-} from "@sidecar/features/coding-agent-view";
-import { INBOX_CURSOR_START } from "@sidecar/features/inbox-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+} from "@luke/features/coding-agent-view";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";

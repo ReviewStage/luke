@@ -5,8 +5,8 @@ import {
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
-} from "@sidecar/features";
-import type { Plan } from "@sidecar/features/plan-wire";
+} from "@luke/features";
+import type { Plan } from "@luke/features/plan-wire";
 import {
   LIVE_DEFAULTS,
   LIVE_DELEGATION_TARGET,
@@ -18,9 +18,9 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
   sessionInstructions,
-} from "@sidecar/live";
-import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/live";
+import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Exit, Result, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
 import type { LogEntry } from "../server/voice/log";

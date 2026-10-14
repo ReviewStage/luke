@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanCodeShowing } from "@sidecar/features/planning-view";
+import type { PlanCodeShowing } from "@luke/features/planning-view";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

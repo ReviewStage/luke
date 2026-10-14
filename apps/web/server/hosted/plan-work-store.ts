@@ -1,5 +1,5 @@
-import { childTitlesByCall } from "@sidecar/database/models/child-titles";
-import { childConversationId } from "@sidecar/database/models/ids";
+import { childTitlesByCall } from "@luke/database/models/child-titles";
+import { childConversationId } from "@luke/database/models/ids";
 import {
   listJournals,
   listJournalsCalling,
@@ -8,14 +8,14 @@ import {
   type StoredTurnRecord,
   spokenAskRowsOf,
   turnsBefore,
-} from "@sidecar/database/models/message-reads";
-import { type PlanStoreEffect, readPlan } from "@sidecar/database/models/plan-store";
-import { conversationOwnerOf } from "@sidecar/database/models/recorded-session";
+} from "@luke/database/models/message-reads";
+import { type PlanStoreEffect, readPlan } from "@luke/database/models/plan-store";
+import { conversationOwnerOf } from "@luke/database/models/recorded-session";
 import {
   PLAN_WORK_BOUNDS,
   type PlanShownCode,
   type PlanWorkAnswer,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
 import { Effect, Option } from "effect";
 import { isStoredToolPart, storedToolName } from "../core.js";
 import {

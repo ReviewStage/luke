@@ -11,7 +11,7 @@ import {
   type AutomationTargetKind,
   type AutomationTrigger,
   type AutomationTriggerKind,
-} from "@sidecar/features/automation-wire";
+} from "@luke/features/automation-wire";
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
@@ -24,7 +24,7 @@ import { plan } from "./plan.js";
  *
  * An automation is its account's and works on one plan: the trigger, the
  * action, and the guards are the wire's own JSON
- * (`@sidecar/features/automation-wire`), so a trigger kind added later is a
+ * (`@luke/features/automation-wire`), so a trigger kind added later is a
  * member of that JSON rather than a column. Two things are columns because a
  * statement reads them: `trigger_kind`, which a GitHub delivery finds its
  * automations by, and `next_run_at`, the instant a schedule is next due,
