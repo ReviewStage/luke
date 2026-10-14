@@ -208,6 +208,12 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
+  /**
+   * A workspace's chat as a person in it reads it past a cursor (GET), held
+   * open while nothing moved, the workspace and the cursor named in
+   * `chat-wire.ts`'s `CHAT_QUERY`, which declares the answer.
+   */
+  WORKSPACES_CHAT: "/api/workspaces/chat",
   /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */

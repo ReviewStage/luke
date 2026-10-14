@@ -216,6 +216,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
     codingAgentPictureParamsSchema: codingAgentView.codingAgentPictureParamsSchema,
     codingAgentInboxAttachmentViewSchema: codingAgentView.codingAgentInboxAttachmentViewSchema,
+    codingAgentChatAnswerViewSchema: codingAgentView.codingAgentChatAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "dictation-wire": {
     dictationRequestSchema: dictationWire.dictationRequestSchema,

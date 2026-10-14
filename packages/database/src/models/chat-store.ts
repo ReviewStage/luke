@@ -2173,6 +2173,23 @@ export function chatPast(
   });
 }
 
+/**
+ * The last place the workspace's chat sequence handed out, zero before its
+ * first post: what a held read of the window looks at between reads, since
+ * every post and every change to a message, an ask's re-post, answer,
+ * withdrawal, and resolve, takes the next place. Nothing where the account
+ * is not in the workspace.
+ */
+export function chatHead(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<number>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return Option.some(yield* headOf(organizationId));
+  });
+}
+
 /** Whose asks a read lists: one author's, or one channel's. */
 export type ChatAskScope = { readonly authorMemberId: string } | { readonly channelId: string };
 

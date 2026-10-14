@@ -368,6 +368,10 @@
     "dest": "/api/default.js?route=workspaces"
   },
   {
+    "src": "/api/workspaces/chat",
+    "dest": "/api/default.js?route=workspaces/chat"
+  },
+  {
     "src": "/api/workspaces/github/connect",
     "dest": "/api/default.js?route=workspaces/github/connect"
   },

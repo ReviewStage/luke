@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
@@ -15,6 +16,7 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
 
 const AGENT = {
   id: AGENT_ID,
@@ -298,5 +300,40 @@ it.effect(
       assert.deepEqual(read, { contentType: "image/png", base64: "iVBORw==" });
       assert.deepEqual(worker, read);
       assert.deepEqual(unexpected, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "reads a workspace's chat past the cursor it names, and a workspace the account is not in as not found",
+  () =>
+    Effect.gen(function* () {
+      const self = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
+      const chat = {
+        self,
+        readSeq: 0,
+        members: [
+          { id: self, kind: MEMBER_KIND.HUMAN, handle: "ada", userId: "user-1", left: false },
+        ],
+        channels: [],
+        messages: [],
+        cursor: "12",
+      };
+      const api = fakeCloudApi({ "GET /api/workspaces/chat": { answer: () => chat } });
+      const refusing = fakeCloudApi({
+        "GET /api/workspaces/chat": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().chat(WORKSPACE_ID, "7"), api.layer);
+      const refused = yield* Effect.provide(client().chat(WORKSPACE_ID, "0"), refusing.layer);
+
+      assert.deepEqual(read, chat);
+      assert.equal(
+        api.requests()[0]?.url,
+        `https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}&after=7`,
+      );
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );

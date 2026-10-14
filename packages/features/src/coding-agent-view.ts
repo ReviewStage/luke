@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
+import { chatAnswerSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
@@ -510,3 +511,8 @@ export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
+
+/** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
+export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
+
+export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
