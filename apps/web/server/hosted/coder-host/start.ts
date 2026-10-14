@@ -17,8 +17,7 @@ import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { GitHubApp } from "../../github/github-app.js";
-import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -37,6 +36,7 @@ import {
   type ModelCatalog,
   type ModelChoiceRefused,
 } from "../model-catalog.js";
+import { workspaceRepository } from "../workspace-repository.js";
 import { ownKeyProviders } from "./account-keys.js";
 
 /**
@@ -48,7 +48,9 @@ import { ownKeyProviders } from "./account-keys.js";
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
  * the voice tool can say which choices there are. The plan must name a
- * repository the account still reaches through the Luke GitHub App. The
+ * repository the account still reaches through the Luke GitHub App, and
+ * through its workspace's installation where it has one, read now rather
+ * than when the plan named it (`hosted/workspace-repository.ts`). The
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the plan's document as the Markdown Copy
@@ -122,9 +124,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const repository = plan.value.plan.repository;
   if (repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-  const app = yield* GitHubApp;
-  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, repository));
-  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  yield* workspaceRepository(userId, plan.value.plan.workspaceId, repository);
   const brief =
     ask.task === undefined
       ? { planSnapshot: planMarkdown(plan.value.plan), task: null }

@@ -16,7 +16,7 @@
  * (https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url).
  * So the intent is spent first, which names the account and the workspace
  * and refuses a state unknown, used, or expired; the account must still be
- * an owner or admin of the workspace; and the installation must be among
+ * an owner or admin of the workspace, which must not be its personal one; and the installation must be among
  * those the account's own GitHub token reaches (`GET /user/installations`).
  * Only then is it linked, and one already standing for another workspace is
  * refused. Without a state, the route only confirms the installation is
@@ -141,7 +141,11 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
   if (Option.isNone(intent)) return GITHUB_INSTALL_STATUS.EXPIRED;
   const { userId, organizationId } = intent.value;
   const workspace = yield* workspaceOf(userId, organizationId);
-  if (Option.isNone(workspace) || !GITHUB_CONNECT_ROLES.has(workspace.value.role)) {
+  if (
+    Option.isNone(workspace) ||
+    workspace.value.personal ||
+    !GITHUB_CONNECT_ROLES.has(workspace.value.role)
+  ) {
     return GITHUB_INSTALL_STATUS.EXPIRED;
   }
   if (installationId === undefined || !INSTALLATION_ID.test(installationId)) {

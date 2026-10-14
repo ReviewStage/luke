@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi } from "@sidecar/wire/testing";
+import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_BOUNDS } from "./plan-wire.js";
@@ -78,4 +78,23 @@ it.effect(
         [edit, edit],
       );
     }),
+);
+
+it.effect("the repositories of one workspace are asked by its id, and every one by none", () =>
+  Effect.gen(function* () {
+    const listed = {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    };
+    const api = fakeCloudApi({ "GET /api/github/repositories": { answer: () => listed } });
+
+    yield* Effect.provide(client().repositories("workspace-acme"), api.layer);
+    yield* Effect.provide(client().repositories(), api.layer);
+
+    assert.deepEqual(recordedRoutes(api.requests()), [
+      "GET /api/github/repositories?workspaceId=workspace-acme",
+      "GET /api/github/repositories",
+    ]);
+  }),
 );
