@@ -66,3 +66,24 @@ test("a developer's save the window cannot place counts as the reader's, as befo
   assert.deepEqual(changedFor(DEAN.userId, unnamed), []);
   assert.deepEqual(changedFor(undefined, EDITS), ["Context"]);
 });
+
+test("a reader's id arriving while the plan stays open lights a teammate's saves read without it", () => {
+  const plan: Plan = {
+    ...DOCUMENT_PLAN,
+    sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
+  };
+  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+  let changed: readonly string[] = [];
+  function Reader({ readerId }: { readerId: string | undefined }) {
+    changed = [...usePlanLooks(plan, readerId).changed];
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  act(() => root.render(onRegistry(registry, createElement(Reader, { readerId: undefined }))));
+  assert.deepEqual([...changed].sort(), ["Context"]);
+
+  act(() => root.render(onRegistry(registry, createElement(Reader, { readerId: DEAN.userId }))));
+  assert.deepEqual([...changed].sort(), ["Approach", "Context"]);
+});

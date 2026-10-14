@@ -72,9 +72,15 @@ const lookAtom = rendererRuntime.fn((visit: VisitToken) =>
   Effect.as(Effect.sleep(PLAN_LOOK), visit),
 );
 
-/** One stay on a plan: the sections changed since the last look as it opened, and its token for the look's wait. */
+/**
+ * One stay on a plan: the sections changed since the last look as it opened,
+ * and its token for the look's wait, as read for the reader it names. Note
+ * that a reader's id arriving mid-stay starts the stay over, because the
+ * sections read without it took every developer's save as the reader's.
+ */
 interface Visit {
   readonly planId: string | undefined;
+  readonly readerId: string | undefined;
   readonly token: VisitToken;
   readonly changed: ReadonlySet<string>;
 }
@@ -177,7 +183,7 @@ function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolea
 /** A visit to the plan as it opens: each section someone else, a teammate or Luke or an agent, saved after the last look; none while no plan is drawn. */
 function visited(plan: Plan | undefined, readerId: string | undefined): Visit {
   if (plan === undefined)
-    return { planId: undefined, token: { planId: undefined }, changed: NOTHING_CHANGED };
+    return { planId: undefined, readerId, token: { planId: undefined }, changed: NOTHING_CHANGED };
   const mark = readLooks()[plan.id];
   const changed =
     mark === undefined
@@ -187,7 +193,7 @@ function visited(plan: Plan | undefined, readerId: string | undefined): Visit {
             .filter((edit) => !readersOwn(edit, readerId) && edit.at > mark)
             .map((edit) => edit.section),
         );
-  return { planId: plan.id, token: { planId: plan.id }, changed };
+  return { planId: plan.id, readerId, token: { planId: plan.id }, changed };
 }
 
 /**
@@ -203,7 +209,7 @@ export function usePlanLooks(plan: Plan | undefined, readerId: string | undefine
   const keep = useAtomSet(looksAtom);
   const watch = useAtomSet(watchedAtom);
   let current = visit;
-  if (visit.planId !== plan?.id) {
+  if (visit.planId !== plan?.id || visit.readerId !== readerId) {
     current = visited(plan, readerId);
     setVisit(current);
   }
