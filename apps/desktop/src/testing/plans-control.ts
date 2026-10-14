@@ -110,6 +110,7 @@ export function codingAgentsControl(
 export function plansControl(overrides: Partial<PlansControl> = {}): PlansControl {
   return {
     page: PLANS_PAGE.HOME,
+    restoring: false,
     shown: true,
     signedIn: true,
     plans: [],

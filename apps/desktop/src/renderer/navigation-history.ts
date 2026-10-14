@@ -227,13 +227,17 @@ export function useWindowHistory(input: {
     | "onLeavePlan"
     | "history"
     | "inboxView"
+    | "restoring"
   >;
 }): WindowHistory {
-  const { known, tab, settingsView, plans } = input;
+  const { tab, settingsView, plans } = input;
   const { boundFor } = plans;
   const historyOpen = plans.history.open;
   const { spot } = plans.history;
   const inboxOpen = plans.inboxView.open;
+  // A launch reopening the plan last open stands nowhere until it opens, so
+  // the home page it waits on is no place to go back to.
+  const known = input.known && !plans.restoring;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const plan of [...plans.plans, ...plans.archived]) everListed.add(plan.id);
