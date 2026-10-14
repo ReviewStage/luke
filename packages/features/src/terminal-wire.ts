@@ -42,7 +42,7 @@ const title = EffectSchema.String.check(
  * or the shell's own, what its foreground process is, the folder it stands
  * in, and whether something other than the shell itself is running there.
  */
-export const terminalSummarySchema = EffectSchema.Struct({
+const terminalSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   title: EffectSchema.String,
   command: EffectSchema.String,

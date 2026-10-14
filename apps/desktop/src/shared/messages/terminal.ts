@@ -21,7 +21,12 @@ import { Schema as EffectSchema } from "effect";
 /** The channel each attached shell's port is posted on. */
 export const TERMINAL_PORT_CHANNEL = "terminal:port";
 
-/** How a shell's connection stands, as the port's `state` message says it. */
+/**
+ * How a shell's connection stands, as the port's `state` message says it.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export const TERMINAL_CONNECTION = {
   /** The socket is opening; the first message on a new port. */
   CONNECTING: "connecting",
@@ -41,9 +46,15 @@ export const TERMINAL_CONNECTION = {
   GONE: "gone",
 } as const;
 
+/** @public Read by the Terminal tab and the host's terminal client, above this contract. */
 export type TerminalConnection = (typeof TERMINAL_CONNECTION)[keyof typeof TERMINAL_CONNECTION];
 
-/** The kinds of message on a shell's port. */
+/**
+ * The kinds of message on a shell's port.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export const TERMINAL_PORT_MESSAGE = {
   /** main → renderer: what the shell printed, to `xterm.write`. */
   OUTPUT: "output",
@@ -57,6 +68,7 @@ export const TERMINAL_PORT_MESSAGE = {
   ACK: "ack",
 } as const;
 
+/** @public Read by the Terminal tab and the host's terminal client, above this contract. */
 export const TERMINAL_FLOW = {
   /** How many characters xterm writes between acks. */
   ACK_EVERY_CHARS: 5_000,
@@ -69,7 +81,12 @@ export const TERMINAL_FLOW = {
   MAX_ROWS: 1_000,
 } as const;
 
-/** Why a terminal act could not be done, where the tab has something to say of it; an outage is the act's own refusal. */
+/**
+ * Why a terminal act could not be done, where the tab has something to say of it; an outage is the act's own refusal.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export const TERMINAL_REFUSAL = {
   /** The sandbox is stopped, so no shell starts until the developer resumes it. */
   SANDBOX_STOPPED: "sandbox-stopped",
@@ -81,6 +98,7 @@ export const TERMINAL_REFUSAL = {
   GONE: "gone",
 } as const;
 
+/** @public Read by the Terminal tab and the host's terminal client, above this contract. */
 export type TerminalRefusal = (typeof TERMINAL_REFUSAL)[keyof typeof TERMINAL_REFUSAL];
 
 const id = EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(64));
@@ -135,18 +153,18 @@ export const terminalResumedActAnswerSchema = EffectSchema.Union([
 export type TerminalsActAnswer = typeof terminalsActAnswerSchema.Type;
 export type TerminalCreatedActAnswer = typeof terminalCreatedActAnswerSchema.Type;
 export type TerminalResumedActAnswer = typeof terminalResumedActAnswerSchema.Type;
-export type TerminalAgentParams = typeof terminalAgentParamsSchema.Type;
-export type TerminalShellParams = typeof terminalShellParamsSchema.Type;
-export type TerminalCreateParams = typeof terminalCreateParamsSchema.Type;
-export type TerminalRenameParams = typeof terminalRenameParamsSchema.Type;
-export type TerminalAttachParams = typeof terminalAttachParamsSchema.Type;
 
 /** The ticket a shell's port is posted with, naming the shell it carries. */
 export const terminalPortTicketSchema = terminalShellParamsSchema;
 
 export type TerminalPortTicket = typeof terminalPortTicketSchema.Type;
 
-/** What the renderer sends on a shell's port, read by main before anything is sent on. */
+/**
+ * What the renderer sends on a shell's port, read by main before anything is sent on.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export const terminalPortInboundSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.INPUT),
@@ -163,9 +181,15 @@ export const terminalPortInboundSchema = EffectSchema.Union([
   }),
 ]);
 
+/** @public Read by the Terminal tab and the host's terminal client, above this contract. */
 export type TerminalPortInbound = typeof terminalPortInboundSchema.Type;
 
-/** What main sends on a shell's port: bytes the shell printed, or how the connection stands. */
+/**
+ * What main sends on a shell's port: bytes the shell printed, or how the connection stands.
+ *
+ * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
+ * client (PR 4's implementation), which land above this contract.
+ */
 export type TerminalPortOutbound =
   | { readonly type: typeof TERMINAL_PORT_MESSAGE.OUTPUT; readonly data: Uint8Array }
   | {
