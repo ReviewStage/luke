@@ -1,7 +1,21 @@
+import {
+  decodeMention,
+  isMentionLabel,
+  MENTION_KIND,
+  type Mention,
+  mentionMarkdown,
+  mentionName,
+} from "@sidecar/hosted/mention-link";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
-import { useEffect, useRef, useState } from "react";
-import { MarkdownMessage } from "../markdown-message";
+import { EllipsisIcon } from "@sidecar/panel";
+import { LinkIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCopyToast } from "../copy-feedback";
+import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
+import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
+import { MentionChip, type MentionDoors } from "./mention-chip";
 import {
   DOCUMENT_BLOCK_CLASS,
   DocumentBlock,
@@ -43,7 +57,37 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
  * The plan's name is drawn as the title over its text (`plan-title.tsx`),
  * and each section is known by its heading.
+ *
+ * On a plan's own page each section has a link: its ⋯, shown while the
+ * pointer or the keyboard is on it, copies the section's mention
+ * (`[@Heading](…)`, `@sidecar/hosted/mention-link`), and a mention in the
+ * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
+ * section it names. Asked to show a section, the document scrolls its own
+ * scroller to it, never `scrollIntoView`, which would scroll every box
+ * around it too; a section the plan no longer holds leaves it at its top.
  */
+
+/** What a plan's own page does with its sections' links: opens what a mention names, and the section it was last asked to show. */
+export interface SectionLinks {
+  readonly onOpen: (mention: Mention) => void;
+  readonly reveal: SectionReveal | undefined;
+}
+
+/** One ask to show a section, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
+export interface SectionReveal {
+  readonly heading: string | undefined;
+  readonly ask: number;
+}
+
+/** What a section's ⋯ and its one item are called. */
+const SECTION_MENU = {
+  LABEL: "Section actions",
+  COPY_LINK: "Copy link to section",
+  COPIED: "Link to section copied",
+} as const;
+
+/** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
+const REVEAL_MARGIN = 16;
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
 interface Chase {
@@ -183,6 +227,9 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
   );
 }
 
+/** The class every unit of the text wears, one per section in the order the sections stand. */
+const UNIT_CLASS = "plan-unit";
+
 /** The class of a unit lit as it settles. */
 const FRESH_CLASS = "plan-fresh";
 
@@ -256,9 +303,43 @@ function usePlanChase(plan: Plan, live: boolean): PlanChase {
 
 function unitClass(view: UnitView, changed: boolean): string {
   const lit = changed ? ` ${CHANGED_CLASS}` : "";
-  if (view.writing) return `plan-unit ${WRITING_CLASS}${lit}`;
-  if (view.resting) return `plan-unit ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}${lit}`;
-  return view.fresh ? `plan-unit ${FRESH_CLASS}${lit}` : `plan-unit${lit}`;
+  if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
+  if (view.resting) {
+    return `${UNIT_CLASS} ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}${lit}`;
+  }
+  return view.fresh ? `${UNIT_CLASS} ${FRESH_CLASS}${lit}` : `${UNIT_CLASS}${lit}`;
+}
+
+/**
+ * What draws the plan's mentions as chips, on a plan's own page: a link
+ * whose label starts with `@` and whose destination names a mention, drawn
+ * against the plan's headings as they stand; nothing off a plan's page,
+ * where mentions stay words. Note that it is made again only when a
+ * heading changes, since every unit's words are drawn again when it is.
+ */
+function useMentionChips(
+  planId: string,
+  views: readonly UnitView[],
+  onOpen: ((mention: Mention) => void) | undefined,
+): LinkDrawer | undefined {
+  const opener = useRef(onOpen);
+  opener.current = onOpen;
+  const offered = onOpen !== undefined;
+  const headingKey = views.map((view) => view.heading).join("\n");
+  return useMemo(() => {
+    if (!offered) return undefined;
+    const doors: MentionDoors = {
+      planId,
+      headings: new Set(headingKey.split("\n").filter((heading) => heading !== "")),
+      onOpen: (mention) => opener.current?.(mention),
+    };
+    return (href: string, label: string) => {
+      if (!isMentionLabel(label)) return undefined;
+      const mention = decodeMention(href);
+      if (mention === undefined) return undefined;
+      return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
+    };
+  }, [offered, planId, headingKey]);
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
@@ -267,14 +348,66 @@ const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot b
 /** Where a title's draft goes when nothing else names the plan: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
 
-/** A unit drawn with its section's byline, where a save has changed the section. */
-function attributed(drawn: React.JSX.Element, byline: React.JSX.Element | null): React.JSX.Element {
-  if (byline === null) return drawn;
+/** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
+function attributed(
+  drawn: React.JSX.Element,
+  byline: React.JSX.Element | null,
+  menu: React.JSX.Element | null,
+): React.JSX.Element {
+  if (byline === null && menu === null) return drawn;
   return (
     <div className="plan-unit-attributed">
       {drawn}
       {byline}
+      {menu}
     </div>
+  );
+}
+
+/** A section's ⋯: the window's own menu, holding the one item that copies the section's link. */
+function SectionMenu({ planId, heading }: { planId: string; heading: string }): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const copy = useCopyToast();
+  const trigger = menu.trigger();
+  const copyLink = () =>
+    copy(
+      mentionMarkdown({ kind: MENTION_KIND.SECTION, planId, heading }, heading),
+      SECTION_MENU.COPIED,
+    );
+  return (
+    <>
+      <Tooltip label={SECTION_MENU.LABEL}>
+        <button
+          type="button"
+          className="icon-button plan-unit-more"
+          aria-label={SECTION_MENU.LABEL}
+          {...trigger}
+          onClick={(event) => {
+            // Note that the press stops here, because a click into a section opens its editor.
+            event.stopPropagation();
+            trigger.onClick(event);
+          }}
+        >
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={SECTION_MENU.LABEL}
+          menu={menu.drawn}
+          groups={[
+            [
+              {
+                label: SECTION_MENU.COPY_LINK,
+                icon: <LinkIcon aria-hidden="true" />,
+                onSelect: copyLink,
+              },
+            ],
+          ]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -283,12 +416,33 @@ function attributed(drawn: React.JSX.Element, byline: React.JSX.Element | null):
  * changed since the last look, and carrying the byline of the save that
  * last changed it, each by its heading.
  */
-function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }): React.JSX.Element {
+function DocumentUnit({
+  view,
+  marks,
+  link,
+  planId,
+}: {
+  view: UnitView;
+  marks: SectionMarks;
+  /** Draws the plan's mentions as chips; links are drawn as words without it. */
+  link: LinkDrawer | undefined;
+  /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
+  planId: string | undefined;
+}): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const drawn = (
-    <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
+    <MarkdownMessage
+      words={view.words}
+      className={unitClass(view, changed)}
+      edit={view.edit}
+      link={link}
+    />
   );
-  return attributed(drawn, bylineOf(marks, view.heading));
+  const menu =
+    planId === undefined || view.heading === "" ? null : (
+      <SectionMenu planId={planId} heading={view.heading} />
+    );
+  return attributed(drawn, bylineOf(marks, view.heading), menu);
 }
 
 /**
@@ -314,6 +468,7 @@ export function PlanBody({
   onDraftName = NO_DRAFT,
   looks = NO_LOOKS,
   page,
+  sectionLinks,
 }: {
   plan: Plan;
   live: boolean;
@@ -326,6 +481,8 @@ export function PlanBody({
   looks?: PlanLooks;
   /** The Settings page the document is drawn as: its actions and its note. */
   page?: { actions: React.ReactNode; note: React.ReactNode };
+  /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
+  sectionLinks?: SectionLinks;
 }): React.JSX.Element {
   const { views, behind, jumps } = usePlanChase(plan, live);
   const editable = onEdit !== undefined;
@@ -339,6 +496,8 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
+  const link = useMentionChips(plan.id, views, sectionLinks?.onOpen);
+  const linkedPlan = sectionLinks === undefined ? undefined : plan.id;
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
@@ -382,6 +541,28 @@ export function PlanBody({
     return () => window.removeEventListener("keydown", select);
   }, [editable]);
 
+  // An ask to show a section scrolls the document's own scroller to it, or
+  // to the top where the plan no longer holds it, and stops the caret being
+  // followed away from where the developer asked to be.
+  const revealed = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const reveal = sectionLinks?.reveal;
+    const element = scroller.current;
+    if (reveal === undefined || element === null || revealed.current === reveal.ask) return;
+    revealed.current = reveal.ask;
+    scrolledAway.current = true;
+    const at = views.findIndex((view) => view.heading !== "" && view.heading === reveal.heading);
+    const unit =
+      at === -1 ? undefined : element.querySelectorAll<HTMLElement>(`.${UNIT_CLASS}`)[at];
+    element.scrollTop =
+      unit === undefined
+        ? 0
+        : element.scrollTop +
+          unit.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          REVEAL_MARGIN;
+  });
+
   // A pause in the typing hands the view back: the next burst is followed again.
   useEffect(() => {
     if (!behind) scrolledAway.current = false;
@@ -420,10 +601,10 @@ export function PlanBody({
         entry={entry === view.id}
         editing={editing}
       >
-        <DocumentUnit view={view} marks={marks} />
+        <DocumentUnit view={view} marks={marks} link={link} planId={linkedPlan} />
       </DocumentBlock>
     ) : (
-      <DocumentUnit key={view.id} view={view} marks={marks} />
+      <DocumentUnit key={view.id} view={view} marks={marks} link={link} planId={linkedPlan} />
     ),
   );
   const editedNote =

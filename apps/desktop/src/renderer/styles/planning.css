@@ -181,6 +181,83 @@
   opacity: 1;
 }
 
+/* A section's ⋯, which copies its link (`plan-body.tsx`): the control's
+   width the byline ends short of, hanging past the column's edge by
+   `--space-6` at the heading's line, shown as the byline is. Note that it
+   stays drawn while its menu stands, as every ⋯ does. */
+.plan-unit-more {
+  position: absolute;
+  top: 0;
+  right: calc(var(--space-6) * -1);
+  height: var(--control-height);
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-attributed:hover .plan-unit-more,
+.plan-unit-attributed:focus-within .plan-unit-more,
+.plan-unit-more[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* A mention drawn in words (`mention-chip.tsx`): a pill on the words'
+   line, its kind's glyph and its name cut at a width so one long name
+   never takes the line, on the raised fill a skill's chip wears, washed
+   as a button is under the pointer. A mention whose subject is gone keeps
+   its name, struck through, on an outline alone. */
+.mention-chip {
+  display: inline-flex;
+  max-width: 240px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-6) 0 var(--space-4);
+  border: 0;
+  border-radius: 5px;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.35;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.mention-chip:hover,
+.mention-chip:focus-visible {
+  background: var(--selected);
+}
+
+.mention-chip-glyph {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  color: var(--text-secondary);
+}
+
+.mention-chip-glyph svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mention-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-chip[data-state="gone"] {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--text-tertiary);
+}
+
+.mention-chip[data-state="gone"] .mention-chip-label {
+  text-decoration: line-through;
+}
+
 /* Where the window offers the version history, the line opens it on the
    section's last change, so it is a press drawn as the quiet line it was,
    underlined only under the pointer or the keyboard, as the line over the

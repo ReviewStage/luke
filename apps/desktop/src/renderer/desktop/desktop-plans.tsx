@@ -1,4 +1,5 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import { MENTION_KIND, type Mention } from "@sidecar/hosted/mention-link";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -17,7 +18,7 @@ import {
   NEEDS_YOU,
 } from "../planning/inbox-model";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
-import { PlanBody } from "../planning/plan-body";
+import { PlanBody, type SectionLinks, type SectionReveal } from "../planning/plan-body";
 import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
@@ -279,6 +280,23 @@ function PlanDocument({
   // a hook that only the ready page reached would be one more hook than
   // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
+  // The last ask to show a section, under the plan it was asked of, so a
+  // mention of another plan's section shows it once that plan is drawn.
+  const [revealed, setRevealed] = useState<{ planId: string; reveal: SectionReveal } | undefined>(
+    undefined,
+  );
+  const openMention = (mention: Mention) => {
+    plans.onShowPlan(mention.planId);
+    const heading = mention.kind === MENTION_KIND.SECTION ? mention.heading : undefined;
+    setRevealed((last) => ({
+      planId: mention.planId,
+      reveal: { heading, ask: (last?.reveal.ask ?? 0) + 1 },
+    }));
+  };
+  const sectionLinksOf = (shown: string): SectionLinks => ({
+    onOpen: openMention,
+    reveal: revealed?.planId === shown ? revealed.reveal : undefined,
+  });
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.FAILED
@@ -493,6 +511,7 @@ function PlanDocument({
                       onDraftName: (name) => plans.onDraftName(plan.id, name),
                     })}
                 looks={looks}
+                sectionLinks={sectionLinksOf(plan.id)}
               />
             </section>
             {tab === MAIN_TAB.INBOX ? (
