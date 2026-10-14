@@ -5,6 +5,7 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
   deleteIntegrationConnection,
+  endIntegrationSignIn,
   readIntegrationConnections,
   readIntegrationSignIn,
 } from "./integration-store.js";
@@ -25,6 +26,7 @@ export function integrationsAppSeams(): IntegrationsAppSeams {
     readSignIn: readIntegrationSignIn,
     beginSignIn: beginIntegrationSignIn,
     completeSignIn: completeIntegrationSignIn,
+    endSignIn: endIntegrationSignIn,
     deleteConnection: deleteIntegrationConnection,
     mintState: mintIntegrationState,
     now: () => Date.now(),

@@ -19,10 +19,12 @@ import {
   toolsCount,
 } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
+import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration-sign-in";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
 import { RetryButton } from "../retry-button";
+import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
 import { SettingsGroup } from "./settings-group";
@@ -32,7 +34,9 @@ import { SettingsGroup } from "./settings-group";
  *
  * One row per provider: its mark and name, and under it where its connection
  * stands once that needs saying — connected with the count of its server's
- * tools, a sign-in under way, or one expired. A connection is said to be
+ * tools, a sign-in under way, or one expired. A sign-in begun waits on the
+ * browser with Reopen and Cancel, and one that failed or never finished
+ * says so with Try again (`integration-sign-in.ts`). A connection is said to be
  * connected only once its server answered with its tools; one whose server
  * answered why it would not says why instead, and offers Reconnect where
  * that mends it (`integration-health.ts`). A Connect sends the browser to
@@ -60,10 +64,11 @@ const PAGE_LINE = {
   NOT_OPENED: "Luke could not open your browser to sign in.",
 } as const;
 
-/** What a row's line looks like: connected with its dot, a problem in the attention tint, or plain. */
+/** What a row's line looks like: connected with its dot, a problem in the attention tint, a wait with its ring, or plain. */
 const LINE_STATE = {
   CONNECTED: "connected",
   ATTENTION: "attention",
+  WAITING: "waiting",
   PLAIN: "plain",
 } as const;
 
@@ -92,22 +97,31 @@ function connectedLine(health: ConnectionHealth): RowLine {
   }
 }
 
+/** A sign-in's line: its wait with the ring, a failure in the attention tint, or one unfinished, plain. */
+function signInRowLine(provider: IntegrationProvider, signIn: SignIn): RowLine {
+  const { text, problem } = signInLine(provider, signIn);
+  if (signIn.kind === SIGN_IN.WAITING) return { text, state: LINE_STATE.WAITING };
+  return { text, state: problem ? LINE_STATE.ATTENTION : LINE_STATE.PLAIN };
+}
+
 /**
- * The line under a row's name: where the connection stands, or nothing where
- * the row's own control already says it — a Connect, or a row whose status
- * has not been read.
+ * The line under a row's name: a sign-in the window waits on or last waited
+ * on, else where the connection stands, or nothing where the row's own
+ * control already says it — a Connect, or a row whose status has not been
+ * read. A connection that stands outranks a sign-in, which a read that
+ * finds it connected ends anyway.
  */
 function rowLine(
   provider: IntegrationProvider,
   status: IntegrationStatus | undefined,
   health: ConnectionHealth,
+  signIn: SignIn | undefined,
 ): RowLine | undefined {
-  const name = INTEGRATION_NAME[provider];
+  if (status === INTEGRATION_STATUS.CONNECTED) return connectedLine(health);
+  if (signIn !== undefined) return signInRowLine(provider, signIn);
   switch (status) {
-    case INTEGRATION_STATUS.CONNECTED:
-      return connectedLine(health);
     case INTEGRATION_STATUS.PENDING:
-      return { text: `Finish signing in to ${name} in your browser.`, state: LINE_STATE.PLAIN };
+      return undefined;
     case INTEGRATION_STATUS.EXPIRED:
       return { text: "Sign-in expired.", state: LINE_STATE.ATTENTION };
     case INTEGRATION_STATUS.DISCONNECTED:
@@ -117,15 +131,30 @@ function rowLine(
   }
 }
 
-/** What a row's grant button says: a Connect, and so on once one stands, or Connect GitHub for GitHub. */
+/** What a row's grant button says: Connect GitHub for GitHub, Try again after a sign-in that did not connect, else Connect or Reconnect. */
 function grantLabel(
-  signIn: boolean,
+  bySignIn: boolean,
   status: IntegrationStatus | undefined,
-  broken: boolean,
+  signIn: SignIn | undefined,
 ): string {
-  if (signIn) return CONNECT_GITHUB_LABEL;
-  if (status === INTEGRATION_STATUS.DISCONNECTED) return "Connect";
-  return broken ? "Reconnect" : "Connect again";
+  if (bySignIn) return CONNECT_GITHUB_LABEL;
+  if (status === INTEGRATION_STATUS.CONNECTED) return "Reconnect";
+  if (signIn !== undefined) return SIGN_IN_ACTION.TRY_AGAIN;
+  return status === INTEGRATION_STATUS.EXPIRED ? "Reconnect" : "Connect";
+}
+
+/** A row's line, with the ring before a wait's words. */
+function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
+  return (
+    <small className="settings-state" data-state={line.state}>
+      {line.state === LINE_STATE.WAITING ? (
+        <span className="spinner" data-size={SPINNER_SIZE.INLINE}>
+          <SpinnerRing />
+        </span>
+      ) : null}
+      {line.text}
+    </small>
+  );
 }
 
 function IntegrationRow({
@@ -143,9 +172,10 @@ function IntegrationRow({
 }): React.JSX.Element {
   const { act } = useAct();
   const name = INTEGRATION_NAME[provider];
-  const { settle } = statuses;
+  const { settle, cancelSignIn } = statuses;
   const grant = useIntegrationGrant(statuses);
-  const signIn = grantedBySignIn(provider);
+  const bySignIn = grantedBySignIn(provider);
+  const signIn = statuses.signInOf(provider);
   const [connecting, setConnecting] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
@@ -160,6 +190,16 @@ function IntegrationRow({
       }
     });
   }, [grant, provider, name]);
+
+  const cancel = useCallback(() => {
+    setConnecting(true);
+    setRejection(undefined);
+    void cancelSignIn(provider).then((cancelled) => {
+      setConnecting(false);
+      if (!cancelled)
+        setRejection(`Luke could not cancel connecting ${name}. Try again in a moment.`);
+    });
+  }, [cancelSignIn, provider, name]);
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
@@ -180,11 +220,12 @@ function IntegrationRow({
     },
   );
 
-  const line = rowLine(provider, status, health);
+  const line = rowLine(provider, status, health, signIn);
   const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect;
+  const waiting = !connected && signIn?.kind === SIGN_IN.WAITING;
   // A grant that is the account's GitHub sign-in ends with that sign-in, never here.
   const actions =
-    connected && !signIn
+    connected && !bySignIn
       ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
       : [];
   return (
@@ -195,23 +236,39 @@ function IntegrationRow({
         </span>
         <span className="settings-copy">
           <strong>{name}</strong>
-          {line === undefined ? null : (
-            <small className="settings-state" data-state={line.state}>
-              {line.text}
-            </small>
-          )}
+          {line === undefined ? null : <RowLineText line={line} />}
         </span>
-        {status === undefined ||
-        status === INTEGRATION_STATUS.UNAVAILABLE ||
-        (connected && !broken) ? null : (
+        {waiting ? (
+          <>
+            <button
+              type="button"
+              className="toolbar-button quiet-button"
+              disabled={connecting}
+              title={`Open the ${name} sign-in in your browser again`}
+              onClick={connect}
+            >
+              {SIGN_IN_ACTION.REOPEN}
+            </button>
+            <button
+              type="button"
+              className="toolbar-button bordered-button"
+              disabled={connecting}
+              onClick={cancel}
+            >
+              {SIGN_IN_ACTION.CANCEL}
+            </button>
+          </>
+        ) : status === undefined ||
+          status === INTEGRATION_STATUS.UNAVAILABLE ||
+          (connected && !broken) ? null : (
           <button
             type="button"
             className="toolbar-button bordered-button"
             disabled={connecting}
-            title={signIn ? "Connect GitHub in your browser" : `Sign in to ${name} in your browser`}
+            title={bySignIn ? "Connect GitHub in your browser" : `Sign in to ${name} in your browser`}
             onClick={connect}
           >
-            {grantLabel(signIn, status, broken)}
+            {grantLabel(bySignIn, status, signIn)}
           </button>
         )}
       </MenuRow>

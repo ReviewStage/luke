@@ -29,6 +29,7 @@ function slackRow(read: IntegrationToolsView | undefined) {
         : INTEGRATION_STATUS.DISCONNECTED,
     healthOf: (provider) =>
       connectionHealth(provider, provider === INTEGRATION_PROVIDER.SLACK ? read : undefined),
+    signInOf: () => undefined,
     readFailed: false,
     disabled: [],
   });

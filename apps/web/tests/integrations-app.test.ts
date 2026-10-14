@@ -22,6 +22,8 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
   deleteIntegrationConnection,
+  endIntegrationSignIn,
+  expireIntegrationConnection,
   readIntegrationConnections,
   readIntegrationSignIn,
 } from "../server/hosted/integration-store";
@@ -37,7 +39,8 @@ import { noNetwork } from "./support/no-network";
  * it is offered to, and every other account is answered as though the
  * deployment never set the provider up. The store is the real one over the
  * migrations on PGlite; the connectors are the production read of the
- * test's variables, asking a Connect that grants everything. GitHub has no
+ * test's variables, asking a Connect that grants everything, or one that
+ * holds no grant, as a sign-in declined or never finished leaves it. GitHub has no
  * connector: it stands where the account's own GitHub sign-in does, read
  * through the real GitHub App over the account rows a sign-in leaves.
  */
@@ -80,12 +83,14 @@ function githubServer(listed: () => readonly string[]) {
 
 /**
  * The group over the test's database and a deployment with these variables
- * and this GitHub App, none unless given, each bearer the account it names.
+ * and this GitHub App, none unless given, each bearer the account it names,
+ * over a Connect that grants everything unless it `declines`.
  */
 const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
   network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
+  connect: { readonly declines?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
@@ -93,7 +98,7 @@ const standing = (
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, clock),
-      integrationConnectOver(variables),
+      integrationConnectOver(variables, connect),
       githubApp,
       network,
     );
@@ -107,6 +112,7 @@ const standing = (
         readSignIn: readIntegrationSignIn,
         beginSignIn: beginIntegrationSignIn,
         completeSignIn: completeIntegrationSignIn,
+        endSignIn: endIntegrationSignIn,
         deleteConnection: deleteIntegrationConnection,
         mintState: mintIntegrationState,
         // The test's own clock, which also stamps a sign-in begun.
@@ -216,6 +222,32 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.UNAVAILABLE),
         );
         assert.equal(yield* group.slackStatus(outsider), INTEGRATION_STATUS.UNAVAILABLE);
+      }),
+  );
+
+  it.effect(
+    "a browser back from a sign-in without a grant ends it: the provider stands disconnected rather than pending, and an expired one expired again",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, { declines: true });
+        const first = yield* openAccount("alex@declined.example");
+        const lapsed = yield* openAccount("jo@declined.example");
+        yield* beginIntegrationSignIn(lapsed, SLACK, "state-before");
+        yield* completeIntegrationSignIn(lapsed, SLACK, "state-before");
+        yield* expireIntegrationConnection(lapsed, SLACK);
+
+        assert.equal((yield* group.connectSlack(first)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* group.slackStatus(first), INTEGRATION_STATUS.PENDING);
+        assert.equal((yield* group.connectSlack(lapsed)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.PENDING);
+        for (const account of [first, lapsed]) {
+          assert.equal(
+            yield* group.slackLanding(account),
+            integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.NOT_COMPLETED),
+          );
+        }
+        assert.equal(yield* group.slackStatus(first), INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
       }),
   );
 

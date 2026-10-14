@@ -1,0 +1,106 @@
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+  type IntegrationStatus,
+} from "@sidecar/hosted/integration-wire";
+import { Duration } from "effect";
+
+/**
+ * integration-sign-in.ts -- a Connect sign-in the window waits on, from the press to how it ended: still waiting, failed, or never finished.
+ *
+ * Settings › Integrations and the composer's MCP servers popover draw it
+ * alike (`integration-statuses.ts` holds it). A sign-in happens in the
+ * browser, and the window learns how it went only by reading where the
+ * provider stands again, so this is what each read says of it. A read that
+ * finds it connected ends it. A read that finds it no longer pending ends it
+ * as failed: the service ends a sign-in the browser came back from without a
+ * grant, which is all Vercel Connect ever says of one that did not connect —
+ * no error and no reason. A sign-in that failed on Connect's own page never
+ * comes back at all, so the window stops waiting on its own: three minutes
+ * after the press, or a few seconds after the developer comes back to the
+ * window, a read that still finds it pending ends it as unfinished. A
+ * failed or unfinished sign-in stands until it is begun again, or until a
+ * later read finds the provider connected after all.
+ */
+
+/** Where a sign-in the window waits on stands. */
+export const SIGN_IN = {
+  /** The browser is open on it and it has not ended. */
+  WAITING: "waiting",
+  /** The browser came back from it without a grant. */
+  FAILED: "failed",
+  /** It never came back: given up on after its wait. */
+  UNFINISHED: "unfinished",
+} as const;
+
+export type SignIn =
+  | {
+      readonly kind: typeof SIGN_IN.WAITING;
+      /** The mark taken as it began; only a read issued after it says how it ended. */
+      readonly since: number;
+    }
+  | { readonly kind: typeof SIGN_IN.FAILED | typeof SIGN_IN.UNFINISHED };
+
+/** How long a sign-in waits on the browser before the window stops waiting on it. */
+export const SIGN_IN_WAIT = Duration.minutes(3);
+
+/** How long a sign-in still under way is given to land once the developer is back in the window. */
+export const SIGN_IN_GRACE = Duration.seconds(10);
+
+/** What a row offers for a sign-in. */
+export const SIGN_IN_ACTION = {
+  CANCEL: "Cancel",
+  REOPEN: "Reopen",
+  TRY_AGAIN: "Try again",
+} as const;
+
+/** One read of where a provider stands, as a sign-in hears it. */
+export interface SignInRead {
+  readonly status: IntegrationStatus | undefined;
+  /** The mark taken as the read was issued. */
+  readonly mark: number;
+  /** Whether it is the read at the wait's end, which gives up on a sign-in still pending. */
+  readonly due: boolean;
+}
+
+/**
+ * What a read says of one provider's sign-in. A sign-in pending that the
+ * window did not begin, from another surface or before a relaunch, is
+ * waited on from the read that found it; a read issued before a sign-in
+ * began says nothing of it.
+ */
+export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): SignIn | undefined {
+  if (read.status === INTEGRATION_STATUS.CONNECTED) return undefined;
+  if (signIn === undefined) {
+    return read.status === INTEGRATION_STATUS.PENDING
+      ? { kind: SIGN_IN.WAITING, since: read.mark }
+      : undefined;
+  }
+  if (signIn.kind !== SIGN_IN.WAITING || read.mark <= signIn.since) return signIn;
+  if (read.status !== INTEGRATION_STATUS.PENDING) return { kind: SIGN_IN.FAILED };
+  return read.due ? { kind: SIGN_IN.UNFINISHED } : signIn;
+}
+
+/** The line a row draws for a sign-in. */
+export interface SignInLine {
+  readonly text: string;
+  /** Whether it is a problem, drawn in the attention tint. */
+  readonly problem: boolean;
+}
+
+/** The line a row draws for a sign-in. */
+export function signInLine(provider: IntegrationProvider, signIn: SignIn): SignInLine {
+  const name = INTEGRATION_NAME[provider];
+  switch (signIn.kind) {
+    case SIGN_IN.WAITING:
+      return { text: `Waiting for ${name} in your browser…`, problem: false };
+    case SIGN_IN.FAILED:
+      return {
+        text: `Couldn't connect to ${name}: the sign-in came back without access.`,
+        problem: true,
+      };
+    case SIGN_IN.UNFINISHED:
+      return { text: "Sign-in didn't finish.", problem: false };
+  }
+}

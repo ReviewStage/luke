@@ -997,7 +997,8 @@ that table.
   status } }`, each status `connected`, `pending`, `expired`,
   `disconnected`, or `unavailable` (no connector for it on this deployment).
   A sign-in still under way, begun within the last fifteen minutes, is
-  settled here by asking Connect for a token afresh.
+  settled here by asking Connect for a token afresh, and stands `pending`
+  until it settles, over an `expired` row as over none.
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account, with Luke's own user id as the
   subject and `/api/account/integrations/connected?state=…` as the callback,
@@ -1023,7 +1024,14 @@ that table.
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
   `/integration-connected.html` with the provider and one word: `connected`,
-  `not-completed` (declined or cancelled), `expired`, or `unavailable`.
+  `not-completed` (declined or cancelled), `expired`, or `unavailable`. A
+  `not-completed` ends the sign-in, so the desktop's next read finds it no
+  longer pending and says it failed. The callback carries the state Luke put
+  on it and nothing of Connect's: no error and no reason. A sign-in that
+  fails on Connect's own page ("Connection Failed", a token exchange the
+  provider refused) never sends the browser back here at all; Connect tells
+  only a server-side completion webhook of it, which Luke does not register,
+  so the desktop says such a sign-in did not finish once it stops waiting.
 
 The rewrite moves a provider's path segment into the `provider` query
 (`function-rewrites.ts`), as a plan's id is moved into `id`.

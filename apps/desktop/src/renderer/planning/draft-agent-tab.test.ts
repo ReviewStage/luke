@@ -86,12 +86,23 @@ beforeEach(() => {
             },
           });
         }
+        // A Connect stands Slack pending at the service, and a Cancel disconnects it.
         if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
+          if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
+            slack = INTEGRATION_STATUS.PENDING;
+          }
           return Promise.resolve(
             refuseConnect
               ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
               : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
           );
+        }
+        if (request.kind === ACT_KIND.INTEGRATIONS_DISCONNECT) {
+          slack = INTEGRATION_STATUS.DISCONNECTED;
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { status: INTEGRATION_STATUS.DISCONNECTED },
+          });
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
       },
@@ -338,4 +349,43 @@ test("the MCP popover's GitHub row connects GitHub in place, and the popover sta
   assert.equal(tab.github.connects, 1);
   assert.deepEqual(tab.links, [], "nothing leaves for Settings");
   assert.ok(githubRow(), "the popover stays");
+});
+
+test("the MCP popover waits on a Connect as Settings does, with Reopen and Cancel, and says why one came back without access", async () => {
+  slack = INTEGRATION_STATUS.DISCONNECTED;
+  const tab = mount([]);
+  await settle();
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  assert.ok(servers, "the MCP button is drawn");
+  act(() => servers.click());
+  await settle();
+  const slackRow = () => {
+    const row = document.querySelector(".agent-servers-row") ?? assert.fail("Slack has a row");
+    return {
+      words:
+        row.querySelector(".agent-servers-problem, .agent-servers-waiting")?.textContent ??
+        undefined,
+      buttons: [...row.querySelectorAll("button")].map((button) => button.textContent),
+    };
+  };
+
+  await tab.press("Connect");
+  assert.deepEqual(slackRow(), {
+    words: "Waiting for Slack in your browser…",
+    buttons: ["Reopen", "Cancel"],
+  });
+
+  slack = INTEGRATION_STATUS.DISCONNECTED;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  assert.deepEqual(slackRow(), {
+    words: "Couldn't connect to Slack: the sign-in came back without access.",
+    buttons: ["Try again"],
+  });
+
+  await tab.press("Try again");
+  await tab.press("Cancel");
+  assert.deepEqual(slackRow(), { words: undefined, buttons: ["Connect"] });
 });

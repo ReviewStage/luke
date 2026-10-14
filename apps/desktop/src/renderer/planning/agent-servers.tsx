@@ -9,8 +9,10 @@ import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
+import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
+import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
@@ -34,7 +36,10 @@ import {
  * answered why it lists none says why beside its name and ends with
  * Reconnect instead (`../integration-health.ts`). One not connected ends
  * with Connect, which sends the browser to sign in there and then, as
- * Settings does, and becomes the switch once the sign-in settles; Settings
+ * Settings does: the row waits on it with a ring, its line said only to a
+ * reader and in its title, since the row is too narrow to draw it, then Reopen and Cancel, and
+ * becomes the switch once the sign-in settles, or says it failed or did
+ * not finish and offers Try again (`../integration-sign-in.ts`); Settings
  * is one press away at the gear beside the title for everything else. Where
  * every connection stands is the composer's read (`../integration-statuses.ts`),
  * taken as it is drawn and again when the window is focused, which is how
@@ -132,6 +137,7 @@ function ServersPopover({
   const rows = serverRows({
     statusOf: statuses.statusOf,
     healthOf: (provider) => connectionHealth(provider, reads[provider]),
+    signInOf: statuses.signInOf,
     readFailed: statuses.readFailed,
     disabled: servers.disabled,
   });
@@ -155,6 +161,12 @@ function ServersPopover({
     void grant.begin(provider).then(() => setConnecting(undefined));
   };
 
+  /** A sign-in waited on, ended here; a Cancel the service refused leaves it waiting, to press again. */
+  const cancel = (provider: IntegrationProvider) => {
+    setConnecting(provider);
+    void statuses.cancelSignIn(provider).then(() => setConnecting(undefined));
+  };
+
   const end = (row: ServerRow): React.JSX.Element | null => {
     switch (row.kind) {
       case SERVER_ROW.SWITCH:
@@ -176,6 +188,40 @@ function ServersPopover({
               </span>
             </button>
           </>
+        );
+      case SERVER_ROW.SIGNING_IN:
+        return (
+          <>
+            <button
+              type="button"
+              className="toolbar-button quiet-button agent-servers-reopen"
+              disabled={connecting === row.provider}
+              title={`Open the ${row.name} sign-in in your browser again`}
+              onClick={() => connect(row.provider)}
+            >
+              {SIGN_IN_ACTION.REOPEN}
+            </button>
+            <button
+              type="button"
+              className="toolbar-button bordered-button agent-servers-cancel"
+              disabled={connecting === row.provider}
+              onClick={() => cancel(row.provider)}
+            >
+              {SIGN_IN_ACTION.CANCEL}
+            </button>
+          </>
+        );
+      case SERVER_ROW.TRY_AGAIN:
+        return (
+          <button
+            type="button"
+            className="toolbar-button bordered-button agent-servers-connect"
+            disabled={connecting === row.provider}
+            title={`Sign in to ${row.name} in your browser`}
+            onClick={() => connect(row.provider)}
+          >
+            {SIGN_IN_ACTION.TRY_AGAIN}
+          </button>
         );
       case SERVER_ROW.CONNECT:
       case SERVER_ROW.RECONNECT:
@@ -250,9 +296,25 @@ function ServersPopover({
           >
             <IntegrationMark provider={row.provider} />
             <span className="plan-compose-menu-name">{row.name}</span>
+            {row.kind === SERVER_ROW.SIGNING_IN ? (
+              <span
+                className="spinner agent-servers-waiting"
+                data-size={SPINNER_SIZE.INLINE}
+                role="status"
+                title={row.note}
+              >
+                <SpinnerRing />
+                <span className="visually-hidden">{row.note}</span>
+              </span>
+            ) : null}
             {row.problem !== undefined ? (
               <span className="agent-servers-problem" title={row.problem}>
                 {row.problem}
+              </span>
+            ) : null}
+            {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
+              <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
+                {row.note}
               </span>
             ) : null}
             {end(row)}

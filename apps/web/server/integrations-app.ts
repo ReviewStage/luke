@@ -31,7 +31,10 @@
  * - `GET /api/account/integrations/connected` is where Connect returns the
  *   browser from any provider: the sign-in's state names the account and the
  *   provider, Connect is asked for a token afresh, and the browser is sent
- *   on to the landing page with the provider and one word.
+ *   on to the landing page with the provider and one word. A browser back
+ *   without a grant ends the sign-in, so the provider no longer stands
+ *   pending. Connect sends nothing else back, no error and no reason, and a
+ *   sign-in that failed on Connect's own page never returns here at all.
  *
  * The rewrite moves a provider's path segment into the `provider` query, so
  * the two provider routes read it there. Root AGENTS.md pins that no
@@ -172,6 +175,12 @@ export interface IntegrationsAppSeams {
     provider: IntegrationProvider,
     state: string,
   ) => IntegrationStoreEffect<boolean>;
+  /** Ends the sign-in begun under `state` without a grant: the browser came back without one. */
+  endSignIn: (
+    userId: string,
+    provider: IntegrationProvider,
+    state: string,
+  ) => IntegrationStoreEffect<void>;
   deleteConnection: (userId: string, provider: IntegrationProvider) => IntegrationStoreEffect<void>;
   /** A fresh sign-in state; random in production, fixed in a test. */
   mintState: () => string;
@@ -251,12 +260,15 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (row.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
   // The state of a sign-in still under way, which is the one a settlement may complete.
   const underWay = signInStands(seams, row.stateIssuedAt) ? row.state : undefined;
-  if (underWay !== undefined && (yield* settledSignIn(seams, connector, row, underWay))) {
-    return INTEGRATION_STATUS.CONNECTED;
+  // Note that a sign-in under way stands pending even over an expired row, because the window waits on its end either way.
+  if (underWay !== undefined) {
+    const settled = yield* settledSignIn(seams, connector, row, underWay);
+    return settled ? INTEGRATION_STATUS.CONNECTED : INTEGRATION_STATUS.PENDING;
   }
-  if (row.status === INTEGRATION_ROW_STATUS.EXPIRED) return INTEGRATION_STATUS.EXPIRED;
   // A first sign-in that ran out of time never connected anything.
-  return underWay !== undefined ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.DISCONNECTED;
+  return row.status === INTEGRATION_ROW_STATUS.EXPIRED
+    ? INTEGRATION_STATUS.EXPIRED
+    : INTEGRATION_STATUS.DISCONNECTED;
 });
 
 /**
@@ -553,7 +565,9 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!connector.configured) return landed(INTEGRATION_LANDING_STATUS.UNAVAILABLE);
   const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
   if (Result.isFailure(issued)) {
+    // Back without a grant: the sign-in is over, so the window waiting on it hears so at its next read.
     if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
+      yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.provider, state));
       return landed(INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
     }
     yield* Effect.logWarning(

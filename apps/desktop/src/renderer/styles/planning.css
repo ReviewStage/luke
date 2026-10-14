@@ -2076,6 +2076,29 @@ button.attached-file-face:hover img {
   white-space: nowrap;
 }
 
+/* A sign-in's line in the same place is no problem: never finished, in the
+   muted detail colour. One still waiting on the browser is its small ring
+   alone after the name, its words in its title, with Reopen and Cancel at
+   the row's end. */
+.agent-servers-problem[data-tone="quiet"] {
+  color: var(--text-secondary);
+}
+
+.agent-servers-row .agent-servers-waiting {
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-8);
+}
+
+.agent-servers-reopen {
+  flex: none;
+  margin-left: auto;
+}
+
+.agent-servers-cancel {
+  flex: none;
+}
+
 /* The tools stand beside the popover, on its leading side since it hangs
    from the composer's trailing edge, up from the row's foot since it stands
    at the panel's foot, and scroll down inside themselves past a bounded

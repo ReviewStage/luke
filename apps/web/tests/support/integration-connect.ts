@@ -17,7 +17,9 @@ import {
 import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 import {
   type ConnectorService,
+  INTEGRATION_CONNECT_FAILURE,
   IntegrationConnect,
+  IntegrationConnectFailure,
   type IntegrationConnectService,
   integrationConnectFromEnvironment,
 } from "../../server/hosted/integration-connect.js";
@@ -44,15 +46,22 @@ export const CONNECTOR_ASKED_NOTHING: ConnectorService = {
 /** A sign-in address as the granting Connect below answers one. */
 export const GRANTING_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 
+/** A Connect that holds no account's grant, as one answers a sign-in the developer declined or never finished. */
+const NOT_AUTHORIZED = new IntegrationConnectFailure({
+  reason: INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED,
+});
+
 /**
  * Every provider's connector as a deployment with these variables
  * configures it, read by the production layer: a provider whose connector
  * variable is set keeps the accounts its allowlist names, and asks a Connect
  * that begins every sign-in, issues every account a token, and revokes
- * anything; one unset stays unconfigured.
+ * anything, or, where it `declines`, holds no grant at all; one unset stays
+ * unconfigured.
  */
 export function integrationConnectOver(
   variables: Readonly<Record<string, string>>,
+  { declines = false }: { readonly declines?: boolean } = {},
 ): Layer.Layer<IntegrationConnect, Config.ConfigError> {
   const granting = Effect.gen(function* () {
     const deployment = yield* IntegrationConnect;
@@ -67,7 +76,9 @@ export function integrationConnectOver(
             ...connector,
             authorize: () => Effect.succeed(GRANTING_SIGN_IN_URL),
             token: (userId) =>
-              Effect.succeed({ token: Redacted.make(`token_${userId}`), expiresAt: Infinity }),
+              declines
+                ? Effect.fail(NOT_AUTHORIZED)
+                : Effect.succeed({ token: Redacted.make(`token_${userId}`), expiresAt: Infinity }),
             revoke: () => Effect.void,
           },
         ];

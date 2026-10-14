@@ -6,6 +6,7 @@ import { Effect, Layer } from "effect";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
+  endIntegrationSignIn,
   expireIntegrationConnection,
   INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
@@ -17,7 +18,7 @@ import { noNetwork } from "./support/no-network";
 /**
  * An account's integration rows over the real migration on PGlite: a
  * sign-in is found by its state alone and by no other account's, it settles
- * once, an account reads only its own rows, and the rows go with the account
+ * once, whether with a grant or without one, an account reads only its own rows, and the rows go with the account
  * that owns them.
  */
 
@@ -55,5 +56,35 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         INTEGRATION_ROW_STATUS.PENDING,
       );
     }),
+  );
+
+  it.effect(
+    "a sign-in ended without a grant leaves alone a sign-in begun again since, and a row that stood before it",
+    () =>
+      Effect.gen(function* () {
+        const again = yield* openGithubUser();
+        const connected = yield* openGithubUser();
+        yield* beginIntegrationSignIn(again, LINEAR, "state-first");
+        yield* beginIntegrationSignIn(again, LINEAR, "state-again");
+        yield* beginIntegrationSignIn(connected, LINEAR, "state-connected");
+        yield* completeIntegrationSignIn(connected, LINEAR, "state-connected");
+        yield* beginIntegrationSignIn(connected, LINEAR, "state-reconnect");
+
+        yield* endIntegrationSignIn(again, LINEAR, "state-first");
+        yield* endIntegrationSignIn(connected, LINEAR, "state-reconnect");
+
+        const standing = yield* readIntegrationConnection(again, LINEAR);
+        assert.deepEqual(
+          [standing?.status, standing?.state],
+          [INTEGRATION_ROW_STATUS.PENDING, "state-again"],
+        );
+        const kept = yield* readIntegrationConnection(connected, LINEAR);
+        assert.deepEqual(
+          [kept?.status, kept?.state],
+          [INTEGRATION_ROW_STATUS.CONNECTED, undefined],
+        );
+        yield* endIntegrationSignIn(again, LINEAR, "state-again");
+        assert.equal(yield* readIntegrationConnection(again, LINEAR), undefined);
+      }),
   );
 });

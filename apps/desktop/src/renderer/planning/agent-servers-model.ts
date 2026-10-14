@@ -10,6 +10,7 @@ import {
   type ConnectionHealth,
   type IntegrationTool,
 } from "../integration-health";
+import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
 
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it.
@@ -25,10 +26,13 @@ import {
  * or connected but whose server refused it or answered an error of its own
  * (`../integration-health.ts`), offers to reconnect, the latter with the
  * server's reason beside its name; one whose server could not be reached
- * keeps its switch, with that said beside its name; one this deployment
+ * keeps its switch, with that said beside its name; one whose sign-in the
+ * window waits on offers to reopen or cancel it, and one whose sign-in
+ * failed or never finished says so and offers to try again, as Settings
+ * does (`../integration-sign-in.ts`); one this deployment
  * does not offer the account is not drawn at all, as the agent is never
  * handed it. No other row says where it stands in words: the switch, the
- * count, and the button are what say it. A read of the connections that
+ * count, and the buttons are what say it. A read of the connections that
  * failed is the one error, offered as a way to read again.
  */
 
@@ -40,6 +44,10 @@ export const SERVER_ROW = {
   CONNECT: "connect",
   /** Its sign-in expired, or its server will not list its tools: connect it again from here. */
   RECONNECT: "reconnect",
+  /** A sign-in the window waits on: reopen it in the browser, or cancel it. */
+  SIGNING_IN: "signing-in",
+  /** A sign-in that failed or never finished: begin it again from here. */
+  TRY_AGAIN: "try-again",
   /** Nothing to do from here yet: the read has not answered. */
   QUIET: "quiet",
   /** The read of the connections failed: read again. */
@@ -67,17 +75,27 @@ export interface ServerRow {
   readonly on: boolean;
   /** A connected server's tools, once it answered with them. */
   readonly tools?: readonly IntegrationTool[];
-  /** Why a connected server lists no tools, where it answered why. */
+  /** Why a connected server lists no tools, where it answered why, or why its sign-in failed. */
   readonly problem?: string;
+  /** Where a sign-in stands that is no problem: waiting on the browser, or never finished. */
+  readonly note?: string;
 }
 
-/** What a row is, from where its connection stands and how its server answered; nothing is a read that has not answered. */
+/**
+ * What a row is, from where its connection stands, how its server answered,
+ * and the sign-in the window waits on or last waited on; nothing is a read
+ * that has not answered.
+ */
 function kindOf(
   status: IntegrationStatus | undefined,
   health: ConnectionHealth,
+  signIn: SignIn | undefined,
   readFailed: boolean,
 ): ServerRowKind {
   if (status === undefined) return readFailed ? SERVER_ROW.RETRY : SERVER_ROW.QUIET;
+  if (status !== INTEGRATION_STATUS.CONNECTED && signIn !== undefined) {
+    return signIn.kind === SIGN_IN.WAITING ? SERVER_ROW.SIGNING_IN : SERVER_ROW.TRY_AGAIN;
+  }
   switch (status) {
     case INTEGRATION_STATUS.CONNECTED:
       return health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect
@@ -94,9 +112,25 @@ function kindOf(
   }
 }
 
+/** What a row says of where it stands in words: a connected server's problem, or its sign-in's line. */
+function wordsOf(
+  provider: IntegrationProvider,
+  status: IntegrationStatus | undefined,
+  health: ConnectionHealth,
+  signIn: SignIn | undefined,
+): Pick<ServerRow, "problem" | "note"> | undefined {
+  if (status === INTEGRATION_STATUS.CONNECTED) {
+    return health.kind === CONNECTION_HEALTH.BROKEN ? { problem: health.problem } : undefined;
+  }
+  if (signIn === undefined) return undefined;
+  const { text, problem } = signInLine(provider, signIn);
+  return problem ? { problem: text } : { note: text };
+}
+
 /**
  * Every offered server's row, from where each connection stands, how each
- * connected server answered, and the servers the agent switched off. A
+ * connected server answered, the sign-ins the window waits on or last
+ * waited on, and the servers the agent switched off. A
  * status read before is kept over a read that failed since, so a passing
  * failure does not take a server's switch away; a server whose status has
  * not been read is drawn until it is.
@@ -104,6 +138,7 @@ function kindOf(
 export function serverRows(input: {
   statusOf: (provider: IntegrationProvider) => IntegrationStatus | undefined;
   healthOf: (provider: IntegrationProvider) => ConnectionHealth;
+  signInOf: (provider: IntegrationProvider) => SignIn | undefined;
   readFailed: boolean;
   disabled: readonly IntegrationProvider[];
 }): readonly ServerRow[] {
@@ -113,18 +148,17 @@ export function serverRows(input: {
   return offered.map((provider) => {
     const status = input.statusOf(provider);
     const health = input.healthOf(provider);
+    const signIn = input.signInOf(provider);
     const connected = status === INTEGRATION_STATUS.CONNECTED;
     return {
       provider,
       name: INTEGRATION_NAME[provider],
-      kind: kindOf(status, health, input.readFailed),
+      kind: kindOf(status, health, signIn, input.readFailed),
       on: !input.disabled.includes(provider),
       ...(connected && health.kind === CONNECTION_HEALTH.WORKING
         ? { tools: health.tools }
         : undefined),
-      ...(connected && health.kind === CONNECTION_HEALTH.BROKEN
-        ? { problem: health.problem }
-        : undefined),
+      ...wordsOf(provider, status, health, signIn),
     };
   });
 }
