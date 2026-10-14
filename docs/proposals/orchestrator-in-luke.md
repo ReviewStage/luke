@@ -364,6 +364,27 @@ The goal is no babysitting.
 - **Voice in the account thread.** This needs a voice session without a
   `planId`.
 - **Company brain** (#2257), if Decision 12 picks it.
+- **Bots: later, not designed here.** Dean, 2026-10-14: "let's not do
+  dependency updates. We can maybe add an auto-approving/auto-merging bot
+  once we add bots (like also a code review bot)." So there is no
+  dependency-update work in any phase. A bot is a future feature; this is
+  only where it would fit:
+  - **What it is:** an agent with a standing role, as the rollout's keeper
+    is a role on `coding_agent`. It would most likely be planless, on 259's
+    foundation.
+  - **What starts or wakes it:** an automation (the GitHub and schedule
+    triggers on main) or a GitHub event, through 3.1's single reading of a
+    delivery.
+  - **An approve-and-merge bot** would act through 3.2's
+    `enqueue_pull_request`, under whatever merge rule Decision 7 sets.
+  - **A code-review bot** would answer the same review and PR events 3.1
+    reads.
+  - **Limits:** like any agent, it counts against 2.10's caps and shows in
+    2.8's tracker.
+  - **The one thing phase 3 should leave room for:** 3.1 skips events sent
+    by bots, to avoid loops. Once Luke has bots of its own, that guard must
+    tell their events apart from outside bots' events, rather than dropping
+    them all.
 
 ### Overlaps with in-flight work
 
@@ -537,6 +558,9 @@ drawn that way.
      *(Recommended)*
    - B. Every merge is an Inbox approval.
    - C. Agents never merge; Dean does.
+
+   A future auto-merge bot (§3, Phase 4, "Bots") would act under this same
+   rule rather than a second one.
 8. **What wakes an existing agent?**
    - A. Its own PR's failed checks, review comments and changes requested,
      and removal from the merge queue. A merge only reports to Luke.
