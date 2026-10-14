@@ -346,7 +346,9 @@ rework."
   - `plan_id` becomes nullable;
   - `automation_id` (set null), which labels the tab "⚡ <automation>";
   - `visibility` (`workspace` | `private`, default `workspace`).
-  - `repository` already lives on the row.
+  - `repositories`, an ordered list backfilled as `[repository]`.
+    `repository` stays as its first entry for readers until full
+    multi-repo (`automations-multi-repo.md`).
 - `inbox_item` and `inbox_attachment`: `organization_id`, with `plan_id`
   nullable.
 
@@ -454,7 +456,9 @@ There is no workspace scope there. The owner control is hidden.
 **Expand migration 1, `automation`:**
 - `organization_id`, backfilled from the plan;
 - `scope` (default `personal`);
-- `repository`, backfilled from the plan;
+- `repositories`, an ordered list whose first entry is where the agent
+  starts, backfilled as `[plan.repository]`; one entry in v1
+  (`automations-multi-repo.md`);
 - `target_kind` (default `new-agent`);
 - `target_agent_id` (set null);
 - `plan_id` becomes nullable.
