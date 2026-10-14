@@ -584,30 +584,11 @@ function insertedAt(
   return true;
 }
 
-/** The `/` word the caret ends written as the skill named, a space after it unless one follows, the caret after the space. */
-function choseSkill(editor: Editor, state: ComposerState, name: string): void {
-  const word = state.trigger;
+/** The word a trigger found written as the chip given, a space after it unless one follows, the caret after the space. */
+function choseChip(editor: Editor, word: ReturnType<typeof triggerAt>, chip: PmNode): void {
   if (word === undefined) return;
   const { doc, schema } = editor.state;
   const spaced = doc.textBetween(word.to, Math.min(word.to + 1, doc.content.size)) === SPACE;
-  const chip = schema.node(SKILL_NODE, { name });
-  const tr = editor.state.tr.replaceWith(
-    word.from,
-    word.to,
-    spaced ? [chip] : [chip, schema.text(SPACE)],
-  );
-  editor.view.dispatch(
-    tr.setSelection(TextSelection.create(tr.doc, word.from + 2)).scrollIntoView(),
-  );
-}
-
-/** The `@` word the caret ends written as the mention chosen, a space after it unless one follows, the caret after the space. */
-function choseMention(editor: Editor, state: ComposerState, mention: MentionNode): void {
-  const word = state.mentionTrigger;
-  if (word === undefined) return;
-  const { doc, schema } = editor.state;
-  const spaced = doc.textBetween(word.to, Math.min(word.to + 1, doc.content.size)) === SPACE;
-  const chip = schema.node(MENTION_NODE, { name: mention.name, target: mention.target });
   const tr = editor.state.tr.replaceWith(
     word.from,
     word.to,
@@ -688,8 +669,16 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     clear: () => laidIn(editor, state, ""),
     replace: (text) => laidIn(editor, state, text),
     mark: () => marked(editor, state, props.maxLength),
-    chooseSkill: (name) => choseSkill(editor, state, name),
-    chooseMention: (mention) => choseMention(editor, state, mention),
+    chooseSkill: (name) =>
+      choseChip(editor, state.trigger, editor.schema.node(SKILL_NODE, { name })),
+    chooseMention: (mention) =>
+      choseChip(
+        editor,
+        state.mentionTrigger,
+        editor.schema.node(MENTION_NODE, { name: mention.name, target: mention.target }),
+      ),
+    chooseSkillAtMention: (name) =>
+      choseChip(editor, state.mentionTrigger, editor.schema.node(SKILL_NODE, { name })),
     setSkills: (skills) => {
       state.skills = skills;
       const tr = chipped(editor.state, skills, true);

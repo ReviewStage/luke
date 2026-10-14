@@ -164,7 +164,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsVal
 }
 
 /** The box on the composer's own control, its sends answered by `sender`. */
-function Box({ sender }: { sender: MessageSender }): ReactNode {
+function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
     planId: PLAN_ID,
@@ -172,7 +172,7 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: noSkills });
+  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills });
 }
 
 /** The node drawn on a plan's page, or off any page where none is given; `redraw` draws it on the page given. */
@@ -197,13 +197,13 @@ function drawn(node: ReactNode, page: PlanMentionsValue | undefined): HTMLElemen
 }
 
 /** The box drawn, every message it sends written down. */
-async function box(page: PlanMentionsValue | undefined) {
+async function box(page: PlanMentionsValue | undefined, skills: SkillSource = noSkills) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
     return new Promise<CodingAgentAgentAnswer>(ignore);
   };
-  const { container, redraw } = drawing(createElement(Box, { sender }), page);
+  const { container, redraw } = drawing(createElement(Box, { sender, skills }), page);
   await settle();
   return { container, sent, redraw };
 }
@@ -340,4 +340,36 @@ test("an @ in the box offers the account's connected MCP servers, and once a wor
   assert.deepEqual(sent, [
     `Use ${mentionMarkdown({ kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" }, "Linear · list_issues", PLACE)}`,
   ]);
+});
+
+test("an @ in the box offers the repository's skills, a pick written as the /name chip the / list writes", async () => {
+  const release: SkillSource = () =>
+    Promise.resolve({
+      skills: [
+        {
+          name: "release",
+          description: "Use to cut a release.",
+          path: ".agents/skills/release/SKILL.md",
+        },
+      ],
+    });
+  const { container, sent } = await box(planPage([]), release);
+
+  typeInComposer(container, "Run @rel");
+  await settle();
+  const offered = [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) =>
+    group.getAttribute("aria-label"),
+  );
+  pressInComposer(container, "Enter");
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".skill-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["Skills"]);
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["/release"],
+  );
+  assert.deepEqual(sent, ["Run /release"]);
 });

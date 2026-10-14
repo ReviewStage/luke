@@ -4,7 +4,15 @@ import {
   type SkillOption,
   skillWord,
 } from "@luke/ui/skill-mention";
-import { type ReactNode, type RefObject, useEffect, useId, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../plan-editor/contract";
 
 /**
@@ -79,6 +87,10 @@ export interface SkillPicker {
   readonly onKey: (event: KeyboardEvent) => boolean;
   /** A chip the editor draws, as the box draws it. */
   readonly chip: (chip: ComposerChip) => ReactNode;
+  /** The repository's skills as read; nothing before they are, or where they could not be. */
+  readonly known: readonly SkillOption[] | undefined;
+  /** Asks for the skills to be read, as an `@` list offering them does once it opens. */
+  readonly ask: () => void;
 }
 
 /** The rows the list offers for the word under the caret; none while the skills are not read, or could not be. */
@@ -214,6 +226,8 @@ export function useSkillPicker({
   >();
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
+  const [asked, setAsked] = useState(false);
+  const ask = useCallback(() => setAsked(true), []);
 
   const skills = source !== undefined && read?.source === source ? read.read : undefined;
   const mention = source === undefined ? undefined : trigger;
@@ -233,7 +247,8 @@ export function useSkillPicker({
     [known],
   );
   // Note that a message already naming a skill reads them too, so its chips are drawn.
-  const wantsSkills = source !== undefined && skills === undefined && holdsSlashWord(draft);
+  const wantsSkills =
+    source !== undefined && skills === undefined && (asked || holdsSlashWord(draft));
 
   // A word closed with Escape stays closed only while the caret is in it.
   const inWord = mention !== undefined;
@@ -319,6 +334,8 @@ export function useSkillPicker({
     names,
     onTrigger: setTrigger,
     onKey,
+    known,
+    ask,
     chip: ({ name }) => (
       <BoxChip name={name} skill={known?.find((each) => each.name === name)} onOpen={onOpen} />
     ),
