@@ -581,14 +581,20 @@ body,
 }
 
 /* A plan's name reads in the body's weight, the open one too, whose fill is
-   what marks it; a plan saved since the developer last looked at it on this
-   Mac takes the heavier weight until they do. */
+   what marks it. */
 .sidebar-plan-name {
   font-size: 13px;
 }
 
-.sidebar-plan[data-unread="true"] .sidebar-plan-name {
-  font-weight: 600;
+/* The one unread mark: what arrived unseen, a plan saved since the developer
+   last looked at it on this Mac, an Inbox item that needs them, a tab that
+   moved while another was chosen, reads in the heavier weight and the
+   primary ink until they look, as a mail app's unread mail and a chat app's
+   channels do. There is no dot, so no row keeps a column for one. */
+.sidebar-plan[data-unread="true"] .sidebar-plan-name,
+.tab[data-unread="true"] .tab-label {
+  color: var(--text-primary);
+  font-weight: 680;
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
@@ -631,9 +637,16 @@ body,
 }
 
 /* A row's one mark leads its time, so it steps out with the time while the
-   row is hovered: a spinner, in the time's own ink, while an agent works on
-   the plan, else the pull request's mark, in its own colours
-   (`planning.css`). The card reuses the glyphs. */
+   row is hovered: the working mark, in the time's own ink and at the
+   glyph's size, while an agent works on the plan, else the pull request's
+   mark, in its own colours (`planning.css`). The card reuses the glyphs. */
+.sidebar-plan-time .state-glyph {
+  --state-glyph-size: 12px;
+
+  margin-right: var(--space-4);
+  vertical-align: -1.5px; /* off-scale */
+}
+
 .plan-mark-glyph {
   display: inline-block;
   width: 12px;
@@ -2558,30 +2571,6 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-6);
 }
 
-/* An item that needs the developer wears a mail app's unread dot in the system
-   blue, beside its title's heavier weight; an answered one wears neither. The
-   dots stand in a column of their own past the times, kept on every row, so
-   the times line up whether a row wears one or not. */
-.inbox-row {
-  --inbox-dot: 7px;
-}
-
-.inbox-row .sidebar-plan-line {
-  position: relative;
-  padding-right: calc(var(--inbox-dot) + var(--space-6));
-}
-
-.inbox-row-dot {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: var(--inbox-dot);
-  height: var(--inbox-dot);
-  border-radius: 50%;
-  background: var(--message-sent);
-  transform: translateY(-50%);
-}
-
 /* The pane's words under the agent's byline start where its name does, past its mark. */
 .inbox-indent {
   padding-left: calc(var(--control-glyph) + var(--glyph-gap));
@@ -3359,9 +3348,8 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
-/* Needs you's glyph is the rows' dot in a ring: the dot filled in the
-   glyph's ink, and in the rows' blue while the button is pressed, so the
-   filter says which rows it keeps. */
+/* Needs you's glyph is a dot in a ring: the dot filled in the glyph's ink,
+   and in the system blue while the button is pressed. */
 .inbox-needs-you-only svg circle[r="1"] {
   r: 3.5px;
   fill: currentColor;
@@ -4308,17 +4296,6 @@ body:has(.app-stage[data-capture="true"])
   width: var(--control-glyph);
   height: var(--control-glyph);
   flex: 0 0 auto;
-}
-
-/* Something arrived on a tab while another was chosen: its label reads in
-   semibold, in the primary colour, until the tab is chosen, as a plan saved
-   unseen reads in the sidebar. */
-.tab[data-unread="true"] {
-  color: var(--text-primary);
-}
-
-.tab[data-unread="true"] .tab-label {
-  font-weight: 680;
 }
 
 /* What follows a tab's label, the Inbox's count, is muted as a model's

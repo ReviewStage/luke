@@ -8,13 +8,13 @@ import { sinceText } from "../planning/plan-time";
 import { repositoryPageUrl } from "../planning/planning-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RepositoryPicture } from "../repository-picture";
-import { WorkingMark } from "../working-mark";
+import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 
 /**
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
  *
- * The mark is the working mark while an agent works on the plan
- * (`working-mark.tsx`), held mid-lap where motion is reduced, else the pull
+ * The mark is the working mark while an agent works on the plan, drawn and
+ * named as an agent's tab draws it (`state-glyph.tsx`), else the pull
  * request's mark (`pull-request-mark.tsx`), else nothing
  * (`plan-agents-model.ts`). The card names the plan, its repository, and
  * how long ago it was updated at its head, then a row for each of a few
@@ -40,21 +40,12 @@ const CARD_ROWS = {
   PULL_REQUESTS: 2,
 } as const;
 
-/** The mark an agent at work is drawn with, in the mark's own slot, so the row moves nothing as the work starts or ends. */
-function WorkingGlyph({ label }: { label: string }): React.JSX.Element {
-  return (
-    <span className="plan-mark-glyph" data-plan-mark="working" role="img" aria-label={label}>
-      <WorkingMark />
-    </span>
-  );
-}
-
 /** The one mark at a plan row's end, before its time: an agent at work, else its pull request, else nothing. */
 export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Element | null {
   const mark = planRowMark(plan.agents);
   switch (mark.kind) {
     case PLAN_ROW_MARK.WORKING:
-      return <WorkingGlyph label="Agent working" />;
+      return <StateGlyph state={GLYPH_STATE.WORKING} />;
     case PLAN_ROW_MARK.PULL_REQUEST:
       return <PullRequestMark pullRequest={mark.pullRequest} className="plan-mark-glyph" />;
     case PLAN_ROW_MARK.NONE:

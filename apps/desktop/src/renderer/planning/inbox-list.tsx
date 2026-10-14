@@ -13,10 +13,9 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import { AgentRef, lineSubject } from "./agent-ref";
-import { AgentGlyph, AgentMark } from "./agent-tab";
+import { AgentGlyph } from "./agent-tab";
 import {
   INBOX_GROUPING,
   type InboxGrouping,
@@ -40,15 +39,15 @@ import { cardTitle } from "./tool-call-model";
  * pane beside the list to show. The mark hangs the agent's tab's card
  * while the pointer rests on it (`agent-ref.tsx`), where the plan's row
  * names the agent, and leaves the press to its row, whose pane opens the
- * agent. An item that needs the developer's answer reads as a mail app's
- * unread mail does, its title in the heavier weight and a blue dot past
- * its time, in either grouping and filtered or not; an answered one is
- * settled, in the body's weight with no dot. A folded plan
+ * agent. An item that needs the developer's answer reads as unread mail
+ * does, its title in the heavier weight and the primary ink, as every
+ * unread row and tab in the window reads, in either grouping and filtered
+ * or not; an answered one is settled, in the body's weight. A folded plan
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
- * developer, the way a mail app shows unread mail only, its glyph the
- * rows' dot in a ring, filled blue while pressed; and one whose menu says
+ * developer, the way a mail app shows unread mail only, its glyph a dot
+ * in a ring, filled blue while pressed; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
  * checked; both are kept across launches. The plan page's own Inbox lists
  * one plan's items, so its list has neither head nor groups. Either list
@@ -76,7 +75,7 @@ function drawnWidth(width: number): string {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent of no known harness. */
+/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent this window does not list. */
 function ItemGlyph({
   plan,
   agentId,
@@ -87,9 +86,7 @@ function ItemGlyph({
   models: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   const agent = plan.agents?.agents.find((each) => each.id === agentId);
-  if (agent === undefined) {
-    return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
-  }
+  if (agent === undefined) return <AgentGlyph agent={undefined} />;
   return (
     <AgentRef subject={lineSubject(agent, models)} models={models} onOpen={undefined}>
       <AgentGlyph agent={agent} />
@@ -97,7 +94,7 @@ function ItemGlyph({
   );
 }
 
-/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the heavier weight with a dot past its time. */
+/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer marked unread, and said to need them. */
 function ItemRow({
   listed,
   chosen,
@@ -130,12 +127,8 @@ function ItemRow({
               <ItemGlyph plan={plan} agentId={item.agentId} models={models} />
             </span>
             <span className="sidebar-plan-name">{title}</span>
+            {needsYou ? <span className="visually-hidden">{NEEDS_YOU.LABEL}</span> : null}
             <span className="sidebar-plan-time">{sinceText(item.updatedAt, now)}</span>
-            {needsYou ? (
-              <span className="inbox-row-dot">
-                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-              </span>
-            ) : null}
           </span>
         </button>
       </Tooltip>

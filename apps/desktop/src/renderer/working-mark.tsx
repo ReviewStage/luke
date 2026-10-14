@@ -1,16 +1,15 @@
 /**
  * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the gray ink around it.
  *
- * Every place that says an agent is working draws this mark: an agent's or
- * a subagent's glyph (`state-glyph.tsx`), a sidebar plan's row, and a
- * call's row in a transcript. Its cells and the gap between them are whole
+ * Every place that says an agent is working draws this mark through the one
+ * seat that says so (`state-glyph.tsx`'s `StateGlyph`): an agent's or a
+ * subagent's glyph, a sidebar plan's row, and a call's row in a transcript. Its cells and the gap between them are whole
  * pixels, eight cells lapped round a 3×3 grid. Each cell steps to the next
  * on one beat, so the motion is stepped frames of `transform` alone and
  * never lays anything out. Reduced motion and a capture run hold it on
  * `--loop-motion`, on a frame chosen to show the chase mid-lap rather than
- * its first, so a still mark still reads as working. The mark is decorative
- * unless given a label, which is said in a fixed word, so nothing of the
- * work rides the attribute the screen recording keeps.
+ * its first, so a still mark still reads as working. The mark itself is
+ * decorative; the seat it stands in names it.
  */
 
 /** The pixels that move: each chaser and the fainter tail one cell behind it. */
@@ -56,13 +55,10 @@ function cellAt(column: number, row: number): CellCorner {
   return { x: INSET + column * PITCH, y: INSET + row * PITCH };
 }
 
-/**
- * The mark, said to a reader as `label` where it stands alone, or hidden
- * from one where the control around it already says it.
- */
-export function WorkingMark({ label }: { label?: string }): React.JSX.Element {
+/** The mark, hidden from a reader, since the seat it stands in says it. */
+export function WorkingMark(): React.JSX.Element {
   const start = cellAt(0, 0);
-  const mark = (
+  return (
     <svg
       className="working-mark"
       width={SIDE}
@@ -92,11 +88,5 @@ export function WorkingMark({ label }: { label?: string }): React.JSX.Element {
         />
       ))}
     </svg>
-  );
-  if (label === undefined) return mark;
-  return (
-    <span className="working-mark-said" role="img" aria-label={label}>
-      {mark}
-    </span>
   );
 }

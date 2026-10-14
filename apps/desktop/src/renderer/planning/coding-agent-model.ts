@@ -34,7 +34,7 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
-import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
+import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
@@ -160,9 +160,7 @@ export function agentGlyphState(status: CodingAgentStatus): GlyphState {
 
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: CodingAgentStatus): string | undefined {
-  return status === CODING_AGENT_STATUS.CANCELLED
-    ? "Stopped"
-    : GLYPH_STATE_WORDS[agentGlyphState(status)];
+  return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
 }
 
 /**

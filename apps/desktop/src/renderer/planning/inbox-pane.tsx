@@ -1,4 +1,3 @@
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -33,11 +32,10 @@ import {
 } from "../ai-elements/prompt-input";
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
-import { AgentGlyph, AgentMark } from "./agent-tab";
+import { AgentGlyph } from "./agent-tab";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
@@ -133,16 +131,6 @@ const NEWER_LUKE = {
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
-
-/**
- * The mark of the agent that posted an item: its harness's, where this
- * window lists it, else the mark an agent of no known harness wears, so an
- * item an agent of another Mac posted keeps the glyph's column.
- */
-function AuthorGlyph({ agent }: { agent: CodingAgentSummary | undefined }): React.JSX.Element {
-  if (agent !== undefined) return <AgentGlyph agent={agent} />;
-  return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
-}
 
 /** How long ago, muted in even figures, the moment itself in the shared tooltip, as a file note's time is. */
 function Moment({ at, now }: { at: number; now: number }): React.JSX.Element {
@@ -749,7 +737,7 @@ function Byline({
     <div className="flex min-w-0 items-center gap-(--glyph-gap) text-[12.5px] text-muted-foreground">
       <AgentRef subject={by.subject} models={by.models} onOpen={by.onOpen}>
         <span className="plan-summary-glyph">
-          <AuthorGlyph agent={by.subject.agent} />
+          <AgentGlyph agent={by.subject.agent} />
         </span>
         <span className="agent-ref-name truncate font-medium text-foreground">
           {by.subject.name}
@@ -947,7 +935,7 @@ function Crumbs({
           <ChevronRightIcon />
         </li>
         <Crumb
-          icon={<AuthorGlyph agent={by.subject.agent} />}
+          icon={<AgentGlyph agent={by.subject.agent} />}
           label={by.subject.name}
           card={<AgentCard subject={by.subject} models={by.models} />}
           onOpen={by.onOpen}

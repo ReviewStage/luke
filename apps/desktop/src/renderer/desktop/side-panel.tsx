@@ -113,8 +113,8 @@ import type { MenuRow } from "../searchable-menu";
 import { SpinnerRegion } from "../spinner";
 import {
   GLYPH_STATE,
-  GLYPH_STATE_WORDS,
   type GlyphState,
+  glyphStateWords,
   StateGlyph,
   stateEndMark,
 } from "../state-glyph";
@@ -770,14 +770,13 @@ interface DrawnSubagent {
  * end line says (`plan-work.tsx`), and no failure of its own.
  */
 function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | "stateWords"> {
-  if (worker.call.running) {
-    return { state: GLYPH_STATE.WORKING, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.WORKING] };
-  }
-  if (workFailed(worker.session?.record)) {
-    return { state: GLYPH_STATE.FAILED, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.FAILED] };
-  }
-  const stopped = worker.call.state === PLAN_WORK_STATE.FAILED;
-  return { state: GLYPH_STATE.REST, stateWords: stopped ? "Stopped" : undefined };
+  let state: GlyphState = GLYPH_STATE.REST;
+  if (worker.call.running) state = GLYPH_STATE.WORKING;
+  else if (workFailed(worker.session?.record)) state = GLYPH_STATE.FAILED;
+  return {
+    state,
+    stateWords: glyphStateWords(state, worker.call.state === PLAN_WORK_STATE.FAILED),
+  };
 }
 
 /**

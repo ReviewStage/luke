@@ -221,15 +221,15 @@ async function settle(): Promise<void> {
 }
 
 /**
- * What marks a row as needing the developer: `*` where it is drawn bold and
- * wears the dot read as "Needs you", nothing where it wears neither, and
- * `?` where it wears only one, so a half-drawn mark fails every listing.
+ * What marks a row as needing the developer: `*` where it is drawn unread
+ * and says "Needs you" to a reader, nothing where it does neither, and `?`
+ * where it does only one, so a half-drawn mark fails every listing.
  */
 function needsYouMark(row: HTMLElement): string {
-  const bold = row.dataset.unread === "true";
-  const dot = row.querySelector(".inbox-row-dot")?.textContent === "Needs you";
-  if (bold && dot) return "*";
-  return bold || dot ? "?" : "";
+  const unread = row.dataset.unread === "true";
+  const said = row.querySelector(".visually-hidden")?.textContent === "Needs you";
+  if (unread && said) return "*";
+  return unread || said ? "?" : "";
 }
 
 /** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */

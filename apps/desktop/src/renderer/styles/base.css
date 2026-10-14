@@ -727,13 +727,6 @@ svg.working-mark[viewBox] {
   fill: currentColor;
 }
 
-/* A mark standing alone, said to a reader on a box that keeps the mark's
-   own size, so it sits in a line of words as the bare mark does. */
-.working-mark-said {
-  display: inline-flex;
-  flex: none;
-}
-
 .working-mark-track {
   opacity: 0.16;
 }
