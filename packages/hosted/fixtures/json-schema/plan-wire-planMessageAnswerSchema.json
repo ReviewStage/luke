@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "ask": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "queuedAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "queuedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "ask"
+  ],
+  "additionalProperties": false
+}

@@ -6,6 +6,7 @@ import { writePage } from "@sidecar/database/models/plan-pages";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
 import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
 import { user } from "@sidecar/database/schemas/auth";
+import { plan } from "@sidecar/database/schemas/plan";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { getTestDB } from "@sidecar/database/testing";
 import {
@@ -14,9 +15,11 @@ import {
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
 } from "@sidecar/database/voice-vocabulary";
+import { planMessagesPath } from "@sidecar/hosted";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -31,6 +34,7 @@ import {
   planAnswerSchema,
   planFileAnswerSchema,
   planListAnswerSchema,
+  planMessageAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -43,16 +47,19 @@ import {
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
+import { eq } from "drizzle-orm";
+import { Clock, Duration, Effect, Layer, Option, Redacted, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "../server/hosted/board-tool";
+import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
+import { fakeEve } from "./support/eve-sessions-fake";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -114,6 +121,8 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
+type FakeEve = ReturnType<typeof fakeEve>;
+
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
 const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
 
@@ -122,7 +131,7 @@ const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
  * through the App; the other signed in with Google alone, and reaches
  * nothing on GitHub.
  */
-const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
+const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB, eve: FakeEve = fakeEve()) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openGithubUser();
@@ -132,12 +141,13 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const ask = (request: Request, landedAs?: string) => answer(bearers, github, request, landedAs);
+    const ask = (request: Request, landedAs?: string) =>
+      answer(bearers, github, eve, request, landedAs);
     return { owner, other, ask };
   });
 
 /**
- * The group over the test's own database and the GitHub given, answering
+ * The group over the test's own database, the GitHub given, and eve, answering
  * one request: at the route's own path, or, where a route key is named, as
  * a client sends it, landed by the platform on a function holding the group
  * under that key.
@@ -145,6 +155,7 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
 const answer = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
+  eve: FakeEve,
   request: Request,
   landedAs?: string,
 ) =>
@@ -165,8 +176,8 @@ const answer = (
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
         workspaces: yield* fakeWorkspaceSeams,
-        // A plan here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
-        eveOrigin: () => undefined,
+        eveOrigin: () => ORIGIN,
+        eve: (authorization) => eve.eve(Redacted.value(authorization)),
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -1263,6 +1274,88 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(PLANS, owner)),
         );
         assert.equal(listed.plans.length, 3);
+      }),
+  );
+
+  it.effect(
+    "a typed line opens a typed turn in the plan's conversation under the developer's own bearer, and a retry of its key asks once",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, ask } = yield* openAccounts(UNREACHED_GITHUB, eve);
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const body = { text: "  Roll out the plan.  ", clientKey: "line-1" };
+        // The first send is the client's own path, landed by the platform; the retry is the same line again.
+        const sent = request(planMessagesPath(planId), owner, { method: "POST", body });
+
+        const first = readAnswer(
+          planMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(sent, "plans/messages"),
+        );
+        const again = readAnswer(
+          planMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(request(MESSAGES, owner, { id: planId, method: "POST", body })),
+        );
+        const [row] = yield* Database.use((db) =>
+          db.select({ conversationId: plan.conversationId }).from(plan).where(eq(plan.id, planId)),
+        );
+
+        assert.deepEqual(again, first);
+        assert.deepEqual(
+          eve.opened.map(({ authorization, message }) => ({ authorization, message })),
+          [
+            {
+              authorization: `Bearer ${owner}`,
+              message: {
+                conversationId: row?.conversationId,
+                turn: BRAIN_HOST_TURN.TYPED,
+                message: "Roll out the plan.",
+              },
+            },
+          ],
+        );
+        assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "a typed line is refused on an archived plan, on another account's, and past a line's bound, and eve hears none of them",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, ask } = yield* openAccounts(UNREACHED_GITHUB, eve);
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const line = (userId: string, text: string) =>
+          ask(
+            request(MESSAGES, userId, {
+              id: planId,
+              method: "POST",
+              body: { text, clientKey: randomUUID() },
+            }),
+          );
+
+        const tooLong = yield* line(owner, "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1));
+        const othersPlan = yield* line(other, "Roll out the plan.");
+        yield* ask(
+          request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { archived: true } }),
+        );
+        const archived = yield* line(owner, "Roll out the plan.");
+
+        assert.deepEqual(
+          [tooLong, othersPlan, archived],
+          [
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.MESSAGE_TOO_LONG),
+            refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+            refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED),
+          ],
+        );
+        assert.deepEqual(eve.opened, []);
       }),
   );
 });

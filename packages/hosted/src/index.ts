@@ -106,6 +106,7 @@ export {
   automationRunsPath,
   HOSTED_SERVICE_PATH,
   planAgentsPath,
+  planMessagesPath,
   planPath,
   VOICE_SERVICE_PATH,
 } from "./service-paths.js";

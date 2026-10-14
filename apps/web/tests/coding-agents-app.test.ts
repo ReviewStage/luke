@@ -69,14 +69,6 @@ import {
   userMetadataOf,
 } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-  EveUnreachable,
-} from "../server/hosted/brain-host/eve-sessions";
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
@@ -85,6 +77,7 @@ import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
+import { fakeEve } from "./support/eve-sessions-fake";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -171,97 +164,6 @@ const CATALOG: readonly OfferedModel[] = [
 interface Answer {
   readonly status: number;
   readonly body: WireBoundaryInput;
-}
-
-/** One session opened, as the fake eve saw it. */
-interface Opened {
-  readonly authorization: string;
-  readonly message: EveMessage;
-  readonly sessionId: string;
-}
-
-/** One follow-up handed to a session, as the fake eve saw it. */
-interface Sent {
-  readonly authorization: string;
-  readonly sessionId: string;
-  readonly message: EveMessage;
-}
-
-/** How the fake eve answers a follow-up: accepted with a delivery of its own, or one of the refusals the client reads. */
-type SendAnswer =
-  | typeof EVE_SEND_OUTCOME.ACCEPTED
-  | typeof EVE_SEND_OUTCOME.NOT_READY
-  | typeof EVE_SEND_OUTCOME.RETIRED
-  | typeof EVE_SEND_OUTCOME.FAILED;
-
-/** eve as the group reaches it, answering from a script and writing down every open, send, and cancel. */
-function fakeEve(
-  options: {
-    readonly reachable?: boolean;
-    readonly cancels?: boolean;
-    readonly sends?: SendAnswer;
-  } = {},
-) {
-  const opened: Opened[] = [];
-  const sent: Sent[] = [];
-  const cancelled: (readonly [string, string])[] = [];
-  /** Every session eve was asked to retire, in order. */
-  const reset: string[] = [];
-  let sessions = 0;
-  let deliveries = 0;
-  const eve = (authorization: string): EveSessions => ({
-    open: (message) =>
-      Effect.suspend(() => {
-        if (options.reachable === false) {
-          return Effect.fail(
-            new EveUnreachable({
-              // SAFETY: the client's own error shape, built by the fake at the transport it stands for.
-              cause: {
-                _tag: "RequestError",
-                reason: { _tag: "TransportError" },
-                message: "refused",
-              } as never,
-            }),
-          );
-        }
-        sessions += 1;
-        const sessionId = `wrun_01M${String(sessions).padStart(22, "0")}`;
-        opened.push({ authorization, message, sessionId });
-        return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId });
-      }),
-    send: (sessionId, message) =>
-      Effect.sync(() => {
-        sent.push({ authorization, sessionId, message });
-        switch (options.sends ?? EVE_SEND_OUTCOME.ACCEPTED) {
-          case EVE_SEND_OUTCOME.ACCEPTED:
-            deliveries += 1;
-            return {
-              outcome: EVE_SEND_OUTCOME.ACCEPTED,
-              sessionId,
-              deliveryId: `delivery-${deliveries}`,
-            };
-          case EVE_SEND_OUTCOME.NOT_READY:
-            return { outcome: EVE_SEND_OUTCOME.NOT_READY };
-          case EVE_SEND_OUTCOME.RETIRED:
-            return { outcome: EVE_SEND_OUTCOME.RETIRED };
-          case EVE_SEND_OUTCOME.FAILED:
-            return { outcome: EVE_SEND_OUTCOME.FAILED, status: 500 };
-        }
-      }),
-    cancel: (sessionId, eveTurnId) =>
-      Effect.sync(() => {
-        cancelled.push([sessionId, eveTurnId]);
-        return options.cancels === false
-          ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-          : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
-      }),
-    reset: (sessionId) =>
-      Effect.sync(() => {
-        reset.push(sessionId);
-        return { outcome: EVE_RESET_OUTCOME.RESET };
-      }),
-  });
-  return { eve, opened, sent, cancelled, reset };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
