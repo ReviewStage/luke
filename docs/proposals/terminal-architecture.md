@@ -97,7 +97,7 @@ The show draws the same diagram, at https://stage-w2158.conductor.show/, §7.
 ### The rule in plain words
 
 > A terminal connects when you open its tab or switch to it. It disconnects
-> when you close the tab, quit Luke, or go **15 minutes without typing**
+> when you close the tab, quit Luke, or go **5 minutes without typing**
 > in that sandbox's terminals. Output doesn't count, so a chatty dev server
 > can't hold it.
 >
@@ -109,16 +109,20 @@ The show draws the same diagram, at https://stage-w2158.conductor.show/, §7.
 > as today, but not while a terminal is connected. If no turn is running,
 > it stops 2 minutes after the last terminal disconnects.
 
-### Why N = 15 minutes
+### Why N = 5 minutes (Dean, 2026-10-14)
 
-- **Long enough** to read a test run's output or a plan and come back,
-  without a reconnect each time.
-- **Short enough** that a walk-away costs at most about 17 minutes of a held
-  sandbox: 15 minutes idle plus the 2-minute grace, about $0.07 for the
+- **Long enough** to glance at the plan or a test run and come back to the
+  same connection.
+- **Cheap to get wrong.** A longer read costs only a key press: the shells
+  are still running in tmux, and reconnecting takes under a second.
+- **Short enough** that a walk-away costs at most about 7 minutes of a held
+  sandbox: 5 minutes idle plus the 2-minute grace, about $0.03 for the
   coder's 4 vCPU (§9).
+- **No cap.** There is no limit on terminals, shells, or held sandboxes per
+  account (Dean). The idle rule is the whole bound.
 - **"Typing" means** any input frame: keys, paste, or a resize from the
   user's own window. Output, focus and showing the tab do not count. A tab
-  left on screen overnight therefore disconnects after 15 minutes, as Dean
+  left on screen overnight therefore disconnects after 5 minutes, as Dean
   asked.
 
 ### How it is enforced
@@ -126,11 +130,11 @@ The show draws the same diagram, at https://stage-w2158.conductor.show/, §7.
 The server enforces it, so a desktop bug or a crashed Mac cannot hold a
 sandbox:
 
-- **On input,** the relay sets `held_until = now + 15 min` in the lease
+- **On input,** the relay sets `held_until = now + 5 min` in the lease
   row, writing at most once a minute.
 - **The relay closes every socket of that sandbox** when `held_until`
   passes, with close code `4000 idle`. The desktop then shows
-  "Disconnected after 15 minutes without typing" and does not reconnect
+  "Disconnected after 5 minutes without typing" and does not reconnect
   until the user acts.
 - **The lease lives in Postgres, not in the function,** so the 800 s
   function bound, a reconnect after sleep, or a second window all read one
@@ -141,7 +145,7 @@ sandbox:
 | Situation | Today | With terminals |
 | --- | --- | --- |
 | Agent turn ends (completed, failed, cancelled, or the Stop button) | Store hook stops the sandbox | Stops it **unless** `held_until > now`. If held, the sweep stops it after the lease lapses |
-| No turn running, terminal connected | (n/a) | Sandbox stays up while you type. 15 minutes after the last keystroke the socket closes; 2 minutes later the sweep stops it, if still no turn runs |
+| No turn running, terminal connected | (n/a) | Sandbox stays up while you type. 5 minutes after the last keystroke the socket closes; 2 minutes later the sweep stops it, if still no turn runs |
 | Turn running, terminal idle-closes | Sandbox runs for the turn | Unchanged. The turn's end stops it, the lease having lapsed |
 | Sandbox stopped, user opens the tab | (n/a) | "Resume and open a shell". Nothing resumes until the click (decision 4). The relay checks status first and mints with the **session-level** `openInteractive`, which never resumes |
 | User clicks Resume | (n/a) | `Sandbox.get({ name, resume: true })` resumes the same named sandbox eve resumes for a turn; it gets the configured timeout. Then attach. Old tmux sessions are gone (processes do not survive a stop) |
@@ -279,7 +283,7 @@ Both are added in PR 3, worded to the file's style.
 | --- | --- | --- | --- |
 | **Vercel changes or removes `openInteractive`** (the mint path, frames, token, health) | Medium. PR #222 calls it "experimental" and it is undocumented | High for the feature: no terminal attaches. None elsewhere: turns, files and plans are untouched | Only the relay speaks it; the desktop speaks Luke's own protocol, so a fix is one web deploy. The SDK is pinned and bumped deliberately. A preview-probe step opens a PTY and reads `exit` on every preview. The `runCommand` fallback layer sits behind the same `InteractiveShell` tag |
 | **The relay's function limits:** 800 s close, WebSocket beta, instance pinning, cold start | Certain for the 800 s close; low for the rest | Low: a sub-second redraw | tmux reattaches. Reconnect on a `Schedule`, and the notice shows only after 1 s. Move to 1,800 s when it leaves beta |
-| **Cost runaway:** forgotten tabs, chatty output, a crashed Mac | Low | Medium | Input-only 15-minute idle, enforced server-side. The sweep stops lapsed leases. A cap of 3 concurrently held sandboxes per account. A daily count of held sandbox-hours per workspace in the server log (ids and durations only) |
+| **Cost runaway:** forgotten tabs, chatty output, a crashed Mac | Low | Medium | Input-only 5-minute idle, enforced server-side by the relay's lease; the sweep stops a lapsed sandbox 2 minutes later. There is no cap (Dean); the idle rule bounds every terminal to about 7 minutes past its last keystroke. A daily count of held sandbox-hours per workspace goes to the server log (ids and durations only), so drift is visible |
 | **Secrets typed into or printed in the terminal** | High: people paste tokens and `cat .env` | Medium | Bytes never reach a trace, event, fixture, app state, the voice window, replay or the database. History off; scrollback in memory only. PRIVACY.md states the agent reads sandbox files. The firewall still keeps the GitHub token's bytes out |
 | **The terminal acts with the agent's GitHub write token** (decision 5) | Certain, by design | Medium: pushes are attributed to Luke's GitHub App | It is scoped to the agent's repository. Renewal happens only while connected, and the token lapses within 60 minutes after |
 | **Multiple windows or devices on one sandbox** | Medium | Low | Each window attaches its own PTY to the same tmux session (multi-client); `window-size latest`; typing in any window renews the shared lease. The list refreshes on focus and every 5 s while shown. The PTY limit is unknown, so only the shown terminal of each tab attaches |
@@ -313,19 +317,23 @@ otherwise be stopped. Relay hours count whenever a socket is open.
 
 - **Held sandbox, extra hour:** about **$0.25/h**.
 - **Relay:** about **$0.025/h** per connected terminal.
-- **A walk-away tail** (15 min idle plus 2 min grace): about **$0.07**.
+- **A walk-away tail** (5 min idle plus 2 min grace): about 7 minutes held, about **$0.03**.
 
 ### Worked monthly estimates (22 working days)
 
 | Profile | Assumptions | Sandbox (extra) | Relay | Total |
 | --- | --- | --- | --- | --- |
-| **One heavy user** | Terminals connected 5 h/day, 3 h of it outside agent turns; 6 walk-aways a day | (3 h × 22 + 6 × 2 min × 22) ≈ 70 h × $0.25 = **$17.50** | 110 h × $0.025 = **$2.75** | **≈ $20 / month**, or ≈ $30 if two agents' terminals are often connected at once |
-| **A team of 5** | 1 heavy user as above, plus 4 regular users connected 1.5 h/day, 1 h of it outside turns | $17.50 + 4 × (24 h × $0.25) = **$41.50** | (110 + 4 × 33) h × $0.025 = **$6.05** | **≈ $48 / month**, ≈ $65 with parallel agents |
+| **One heavy user** | In use 5 h/day, 3 h of it outside agent turns; 6 walk-aways a day, each held 7 min | (3 h + 6 × 7 min) × 22 ≈ 81 h × $0.25 = **$20.35** | (5 h + 6 × 5 min) × 22 = 121 h × $0.025 = **$3.03** | **≈ $23 / month**, or ≈ $35 if two agents' terminals are often connected at once |
+| **A team of 5** | 1 heavy user as above, plus 4 regular users in use 1.5 h/day, 1 h of it outside turns, 3 walk-aways a day | $20.35 + 4 × ((1 h + 3 × 7 min) × 22 ≈ 29.7 h × $0.25 = $7.43) = **$50.07** | $3.03 + 4 × ((1.5 h + 3 × 5 min) × 22 = 38.5 h × $0.025 = $0.96) = **$6.88** | **≈ $57 / month**, ≈ $75 with parallel agents |
 
-**The bound.** Each connected terminal can hold its sandbox at most 17
-minutes past the last keystroke. With the 3-held-sandboxes cap, a whole
-account's worst case is 3 × $0.25/h only while someone is actually typing.
-Pro's $20 monthly credit covers the heavy user alone.
+This model counts each walk-away's idle tail explicitly. At the earlier 15
+minutes, the same model gives about $29 for the heavy user and $75 for the
+team, so the 5-minute rule saves about a fifth.
+
+**The bound.** There is no cap. Each connected terminal can hold its
+sandbox at most 7 minutes past the last keystroke, so an account's held
+sandboxes are only those someone typed into in the last 5 minutes, plus the
+2-minute grace. Pro's $20 monthly credit covers most of the heavy user.
 
 ## 10. PR breakdown
 
@@ -338,7 +346,7 @@ one chain, since they touch `side-panel.tsx`, `use-side-panel.ts` and
 | --- | --- | --- | --- |
 | 1 | **`feat(web): a terminal's lease holds its agent's sandbox: the turn's end skips its stop, and the sweep stops it once the lease lapses`.** Schema, migration, model and its sibling test; the store-hook condition; the sweep step with the 2-minute grace and the turn check | M (~450) | `test:store` on Postgres: lease renew and lapse; the hook skips a held sandbox; the sweep stops a lapsed one and leaves a running turn's alone; one account cannot read another's lease |
 | 2 | **`feat(web): the sandbox image carries tmux, and an agent's terminals are listed, named, killed, and its sandbox resumed by route`.** `PREPARE_SCRIPT` and its digest; the resolver; `@vercel/sandbox` pinned; the routes | M (~550) | Routes against a fake `SandboxShell` layer: ownership, the stopped status, and resume only on its route |
-| 3 | **`feat(web): a WebSocket relay attaches a terminal to its agent's sandbox, closes it after 15 idle minutes, and keeps the GitHub token fresh while it is used`.** Function, duration, protocol, session-level mint (never resume), `tmux new -A`, lease writes, idle close, credential renewal, no frame logging, the probe step, **the two AGENTS.md lines**, and the edge row | L (~900) | A fake upstream PTY behind `InteractiveShell`; `TestClock` for idle close and renewal; a stopped sandbox answers `stopped` |
+| 3 | **`feat(web): a WebSocket relay attaches a terminal to its agent's sandbox, closes it after 5 idle minutes, and keeps the GitHub token fresh while it is used`.** Function, duration, protocol, session-level mint (never resume), `tmux new -A`, lease writes, idle close, credential renewal, no frame logging, the probe step, **the two AGENTS.md lines**, and the edge row | L (~850) | A fake upstream PTY behind `InteractiveShell`; `TestClock` for idle close and renewal; a stopped sandbox answers `stopped` |
 | 4 | **`feat(host): the desktop attaches, reconnects, and detaches terminals, their bytes on a port to the panel that asked`.** The `ws` client, `Schedule` reconnect, `powerMonitor`, flow control, acts, the port bridge entry, and the renderer guide's note | M (~550) | The client against a fake relay: reconnect after drop and wake, no reconnect after `4000 idle`, bytes only to the asking window |
 | 5 | **`feat(desktop): the xterm surface, themed from the window's tokens, in a lazy bundle`.** The `terminal.js` bundle, the `--terminal-*` tokens with light restatements, key handling, and the bundle-budget row | M (~400) | The key handler through its public seam: app chords pass through, Shift+Enter, ⌥ characters |
 | 6 | **`feat(desktop): a Terminal tab per coding agent, in the agent tab's look and card, with its connection states`.** The `{terminal}` kind; `tabLook` and the card; the bar with `AgentRef`; connecting, disconnected, stopped (Resume), resuming and reconnecting; `ph-no-capture`; PRIVACY.md | L (~800) | Model and tab-look tests; state rendering per connection state; the replay block on the root |
@@ -347,7 +355,7 @@ one chain, since they touch `side-panel.tsx`, `use-side-panel.ts` and
 | 9 | **`feat(desktop): ⌘F finds in a terminal's scrollback`.** The exported find bar with a pluggable source, over the search addon | S (~200) | Find and tally through the bar's public seam |
 | (later) | **`feat(web): the runCommand fallback behind the relay`.** Only if `openInteractive` breaks | M (~450) | The same relay tests against the fallback layer |
 
-**Totals:** about 4,650 lines over 9 PRs.
+**Totals:** about 4,600 lines over 9 PRs. Dropping the per-account cap removes its check and tests from PR 3, about 50 lines.
 
 **Parallel work:**
 - Chain A is 1 → 2 → 3, on the web.

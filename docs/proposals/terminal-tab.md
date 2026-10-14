@@ -17,10 +17,14 @@ architecture's text stands.
    replaces §3's "hold for 15 minutes after the last detach". The rule
    (architecture §3):
    - a terminal connects when its tab is opened or shown;
-   - it disconnects when the tab closes, or after 15 minutes without typing
-     (output doesn't count);
+   - it disconnects when the tab closes, or after 5 minutes without typing
+     (output doesn't count). Dean shortened this from 15 minutes on
+     2026-10-14;
    - the sandbox then stops on its normal schedule: at the turn's end, or 2
-     minutes after the last terminal disconnects when no turn runs.
+     minutes after the last terminal disconnects when no turn runs;
+   - there is no cap on terminals, shells, or held sandboxes per account.
+     The idle rule is the whole bound: about 7 minutes held after the last
+     keystroke.
 4. **A stopped sandbox resumes only on a click** ("Resume and open a
    shell").
 5. **GitHub access stays live while a terminal is connected.**
@@ -58,9 +62,10 @@ there is no file sync between the two. What he wants instead:
 - **Every shell is a tmux session inside the sandbox.** A dropped socket, the
   relay's 13-minute bound, a laptop sleeping, or a relaunch all reattach to
   the same running process.
-- **An attached terminal holds the sandbox.** While one is attached, the
-  turn's-end stop is skipped. The minute sweep stops the sandbox 15 minutes
-  after the last terminal detaches, unless a turn is running.
+- **A connected terminal holds the sandbox,** but only while it is used.
+  While one is connected, the turn's-end stop is skipped. A terminal
+  disconnects after 5 minutes without typing, and with no turn running the
+  sweep stops the sandbox 2 minutes later. There is no cap.
 - **Terminal bytes never land anywhere.** They are not stored and never reach
   a trace, an event, app state, or the voice window. GitHub reach is
   exactly the agent's, through the same firewall.
@@ -268,13 +273,17 @@ web deploy and no desktop release.
 - A stopped sandbox resumes from its snapshot with its files intact. Its
   processes are lost.
 
-### Decision: an attached terminal holds the sandbox, with a 15-minute idle grace
+### Decision: a connected terminal holds the sandbox, disconnecting after 5 minutes without typing
+
+This section is superseded by the architecture's §3; it is kept updated to
+match.
 
 **A lease.** A new table, `sandbox_terminal_lease`, holds
 `(conversation_id PK, held_until)`.
 
-- While at least one terminal socket is attached, the relay renews the lease
-  each minute to now + 15 minutes.
+- On input (typing, paste, or resize; output doesn't count), the relay
+  renews the lease to now + 5 minutes, writing at most once a minute. When
+  it lapses, the relay closes the terminal's socket.
 - It also calls `extendTimeout` so the sandbox's own clock stays ahead. The
   coder already opens at the platform's 24-hour maximum per session.
 
@@ -284,10 +293,10 @@ cancels the turn as today and leaves the sandbox up while a terminal holds
 it.
 
 **The idle stop.** Each minute, the sweep stops the sandbox of every lapsed
-lease whose agent has no running turn, then deletes the lease. This is one
-more step in `maintenance-sweep.ts`, beside `sweepSandboxes`. Fifteen
-minutes is long enough to read a plan and come back, and short enough to
-bound the cost at about $0.04 per agent per walk-away.
+lease whose agent has no running turn, 2 minutes after it lapsed, then
+deletes the lease. This is one more step in `maintenance-sweep.ts`, beside
+`sweepSandboxes`. A walk-away holds the sandbox about 7 minutes (5 idle plus
+2 grace), about $0.03. There is no per-account cap.
 
 **Opening a terminal on a stopped sandbox.** The tab says so, with a
 button: "Codex's sandbox is stopped. Its files are as the agent left them.
@@ -315,7 +324,8 @@ next turn finds the sandbox running, with the human's changes in it.
   from `CodingAgentSummary.status` (`agentStillWriting`,
   `coding-agent-model.ts:147`): "**Codex is working.** It shares these
   files; your shells don't pause it", with the working glyph. Idle, it reads
-  "The sandbox stops 15 min after the last terminal closes; files are kept".
+  "Disconnects 5 min after you last type. Shells run until the sandbox
+  stops".
 - **The agent is not told** that a human was in the sandbox (question 6).
 
 ## 4. Secrets
@@ -460,8 +470,8 @@ without it. Web PRs (1–3) run their store tests on a real Postgres
 their bodies say CI could not verify the Mac.
 
 1. **`feat(web): an attached terminal holds its agent's sandbox: the turn's
-   end skips its stop, and the sweep stops it 15 minutes after the last
-   detaches`.** Adds the `sandbox_terminal_lease` schema, migration, model
+   end skips its stop, and the sweep stops it 2 minutes after the lease
+   lapses`.** Adds the `sandbox_terminal_lease` schema, migration, model
    with a sibling test, the store-hook condition, and the sweep step. No
    route uses it yet; its tests drive the lease directly.
 2. **`feat(web): the sandbox image carries tmux, and an agent's terminals
@@ -536,7 +546,7 @@ planned.
    the token, PTY, and duration facts first? Who holds the contact?
 3. **Should an attached terminal keep the sandbox running?** The idle stop
    would come 15 minutes after the last terminal closes, at about $0.17 per
-   hour per held 4-vCPU sandbox. Is 15 minutes right?
+   hour per held 4-vCPU sandbox. Is 15 minutes right? (Answered: disconnect after 5 minutes without typing, no cap.)
 4. **Should a stopped sandbox resume on a click** ("Resume and open a
    shell") rather than automatically when the tab opens?
 5. **GitHub from the terminal outside a turn.** Should the relay renew the
