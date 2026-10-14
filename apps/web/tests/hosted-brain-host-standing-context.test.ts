@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  createPlan,
-  openPlanConversation,
-  savePlanText,
-} from "@sidecar/database/models/plan-store";
+import { openPlanConversation, savePlanText } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -16,6 +12,7 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertMessage } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The standing context as the host answers it to the eve project's prompt
@@ -119,7 +116,7 @@ async function said(target: ConversationTarget, words: string): Promise<void> {
 
 test("a turn of a plan's conversation is handed the plan's name and the document saved as it starts, and none of the conversation's words", async () => {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, { name: PLAN_NAME }));
+  const plan = await database.run(startPlan(userId, { name: PLAN_NAME }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
   );

@@ -1,0 +1,1 @@
+ALTER TABLE "plan" ALTER COLUMN "organization_id" SET NOT NULL;

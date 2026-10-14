@@ -14,6 +14,11 @@ import {
 } from "@sidecar/database/models/plan-store";
 import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import {
+  ensurePersonalWorkspace,
+  isWorkspaceMember,
+} from "@sidecar/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import {
@@ -153,6 +158,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * a repository the App reaches no installation of for the account, are each
  * refused by name, with nothing written.
  *
+ * A plan starts in the workspace the request names, which the account must be
+ * a member of, or in the account's personal workspace where it names none;
+ * either way the plan belongs to that workspace from then on, and its row in
+ * the list names it.
+ *
  * Starting a plan otherwise names nothing of the developer's Mac: the
  * planning model reads the repository in its own sandbox on the service
  * (`hosted/repository-shell.ts`), and no route here carries a command.
@@ -251,6 +261,8 @@ const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE
 
 export interface PlansAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
+  /** The plugin's write that makes an account's personal workspace, the first time a start needs it. */
+  workspaces: WorkspaceSeams;
 }
 
 /** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a planning worker's transcript prices its turns at. */
@@ -308,6 +320,39 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.value.fullName;
 });
 
+/**
+ * The workspace a start lands in: the one the request named, where the
+ * account is a member of it, or the account's personal workspace, made the
+ * first time it is needed, where it named none. A workspace the account is
+ * not in answers as one that names nothing. The plugin refusing to make the
+ * personal workspace is the service unable to start the plan, written down
+ * without the plugin's message, which may quote what it refused.
+ */
+const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlansAppSeams,
+  userId: string,
+  workspaceId: string | undefined,
+): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
+  if (workspaceId !== undefined) {
+    const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, workspaceId));
+    if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return workspaceId;
+  }
+  const personal = yield* hostedStoreOrUnavailable(
+    ensurePersonalWorkspace(userId, seams.workspaces).pipe(
+      Effect.catchTag("UnknownError", () =>
+        Effect.as(
+          Effect.logWarning("Personal workspace not made: the plugin refused"),
+          Option.none<string>(),
+        ),
+      ),
+    ),
+  );
+  // Note that an account gone between its bearer and here has no workspace to start in.
+  if (Option.isNone(personal)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return personal.value;
+});
+
 /** Whether a list read asks for the archived plans too; a build from before archiving never does. */
 function listsArchived(request: Request): boolean {
   const asked = new URL(request.url).searchParams.get(PLAN_LIST_QUERY.ARCHIVED);
@@ -335,9 +380,10 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
   const started = readEither(planCreateRequestSchema)(body);
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const organizationId = yield* startingWorkspace(seams, userId, started.success.workspaceId);
   const repository = yield* reachableRepository(userId, started.success.repository);
   const plan = yield* hostedStoreOrUnavailable(
-    createPlan(userId, { name: started.success.name, repository }),
+    createPlan(userId, { organizationId, name: started.success.name, repository }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan });
 });

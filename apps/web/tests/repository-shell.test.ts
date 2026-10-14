@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
@@ -18,6 +17,7 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's shell, run in the session's sandbox on a checkout of
@@ -47,7 +47,7 @@ const reachingGithub = () => githubReaching([INSTALLATION]);
 const openPlan = (repository: string | null, commands: CommandTable = COMMANDS) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const started = yield* createPlan(userId, { name: "Teammate invitations", repository });
+    const started = yield* startPlan(userId, { name: "Teammate invitations", repository });
     const sandbox = sandboxDouble(commands);
     const call: RepositoryCall = {
       plan: { userId, planId: started.id },
