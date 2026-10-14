@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { ReadFailure } from "../read-failure";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "../settings-anchors";
 
 /**
@@ -34,5 +35,20 @@ export function SettingsGroup({
       ) : null}
       <div className="settings-card">{children}</div>
     </section>
+  );
+}
+
+/** A card's line where the read of its rows did not land: the read failure, then Retry, in the rows' place. */
+export function ReadFailed({
+  line,
+  onRetry,
+}: {
+  line: string;
+  onRetry: () => void;
+}): React.JSX.Element {
+  return (
+    <div className="settings-card-line">
+      <ReadFailure line={line} onRetry={onRetry} />
+    </div>
   );
 }

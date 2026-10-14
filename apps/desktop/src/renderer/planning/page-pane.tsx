@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { pageFrameUrl } from "#shared/page-frame";
 import { useCopyToast } from "../copy-feedback";
 import { FindScope } from "../find-in-tab";
-import { RetryButton } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { CodeLineRows } from "./code-pane";
@@ -154,9 +154,12 @@ function PageSource({
   if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
-      <div className="side-panel-empty" role="alert">
-        <p className="m-0">The page's source could not be read.</p>
-        <RetryButton onRetry={onRetry} />
+      <div className="side-panel-empty">
+        <ReadFailure
+          line="The page's source could not be read."
+          onRetry={onRetry}
+          place={READ_FAILURE_PLACE.CENTRED}
+        />
       </div>
     );
   }

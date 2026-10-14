@@ -15,7 +15,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { EmptyState } from "../empty-state";
-import { RetryButton } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -343,9 +343,8 @@ export function AgentChangesTab({
   }
   if ("failure" in answer) {
     return (
-      <div className="side-panel-empty" role="alert">
-        <p className="m-0">{CHANGES_WORDS.FAILED}</p>
-        <RetryButton onRetry={ask} />
+      <div className="side-panel-empty">
+        <ReadFailure line={CHANGES_WORDS.FAILED} onRetry={ask} place={READ_FAILURE_PLACE.CENTRED} />
       </div>
     );
   }

@@ -522,23 +522,6 @@ body,
   font-size: 13px;
 }
 
-/* The list's failure: its sentence, then the retry under it, drawn back by
-   its own inset so its glyph starts where the words do. */
-.sidebar-failure {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-4);
-}
-
-.sidebar-failure p {
-  margin: 0;
-}
-
-.sidebar-failure .quiet-button {
-  margin-left: calc(-1 * var(--space-8));
-}
-
 .sidebar-plans {
   display: flex;
   flex-direction: column;
@@ -1202,12 +1185,6 @@ body,
   gap: var(--control-gap);
 }
 
-.desktop-toolbar-note {
-  margin: 0;
-  color: var(--danger-text);
-  font-size: 12px;
-}
-
 .toolbar-button,
 .icon-button,
 .primary-button,
@@ -1368,6 +1345,20 @@ body,
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4) var(--space-8);
+}
+
+/* A failed read alone in the region it would have filled (`read-failure.tsx`):
+   Retry under the sentence, both centred, in the region's own type. */
+.read-failure-centred {
+  flex-direction: column;
+  font-size: inherit;
+  text-align: center;
+}
+
+/* Among the rows, Retry is drawn back by its own inset, so its glyph stands
+   a gap after the words, or under their first letter where it wraps. */
+.read-failure:not(.read-failure-centred) > .quiet-button {
+  margin-left: calc(-1 * var(--space-8));
 }
 
 .failure-note-remedy {
@@ -4429,12 +4420,6 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-secondary);
   line-height: 1.5;
   overflow-wrap: anywhere;
-}
-
-.confirm-dialog-error {
-  margin: 0;
-  color: var(--danger-text);
-  font-size: 12px;
 }
 
 .confirm-dialog-actions {

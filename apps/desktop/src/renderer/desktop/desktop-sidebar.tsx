@@ -33,8 +33,8 @@ import { sameTab } from "../planning/tab-strip-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";
+import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
-import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -739,9 +739,8 @@ export function DesktopSidebar({
             own; its name is for a screen reader alone. */}
         <nav className="sidebar-group" aria-label="Plans">
           {plans.listFailed ? (
-            <div className="sidebar-note sidebar-failure" role="alert">
-              <p>Your plans couldn't be loaded.</p>
-              <RetryButton onRetry={plans.onRetryList} />
+            <div className="sidebar-note">
+              <ReadFailure line="Your plans could not be read." onRetry={plans.onRetryList} />
             </div>
           ) : null}
           {/* The list is empty before its first read lands, so that it

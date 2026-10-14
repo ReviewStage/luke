@@ -152,7 +152,7 @@ function NewPlanCard({
           onKeyDown={fieldKey}
         />
         {note === undefined ? null : (
-          <p className="confirm-dialog-error" role="alert">
+          <p className="error-message" role="alert">
             {note}
           </p>
         )}

@@ -448,7 +448,7 @@ export function FeedbackDialog({
                   </div>
                 ) : null}
                 {rejection === undefined ? null : (
-                  <p className="confirm-dialog-error" role="alert">
+                  <p className="error-message" role="alert">
                     {rejection}
                   </p>
                 )}

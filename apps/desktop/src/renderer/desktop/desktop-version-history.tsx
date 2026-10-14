@@ -37,7 +37,8 @@ import {
 } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
-import { RetryButton, RetryRowLabel } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { RetryRowLabel } from "../retry-button";
 import type { DialogConfirm } from "../settings/confirm-dialog";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -585,10 +586,11 @@ function VersionPage({
       <div className="desktop-drag-strip" />
       <div className="desktop-empty">
         {list.kind === HISTORY_READ.FAILED ? (
-          <>
-            <p role="alert">The history could not be read.</p>
-            <RetryButton onRetry={versions.onRetry} />
-          </>
+          <ReadFailure
+            line="The history could not be read."
+            onRetry={versions.onRetry}
+            place={READ_FAILURE_PLACE.CENTRED}
+          />
         ) : (
           <p>{noHistoryLine(subject.noun)}</p>
         )}

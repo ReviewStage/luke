@@ -14,7 +14,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
 import { PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
-import { RetryButton } from "../retry-button";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
@@ -392,8 +392,11 @@ function TemplateState({
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
       <div className="desktop-empty">
-        <p role="alert">{PAGE_LINE.READ_FAILED}</p>
-        <RetryButton onRetry={template.retry} />
+        <ReadFailure
+          line={PAGE_LINE.READ_FAILED}
+          onRetry={template.retry}
+          place={READ_FAILURE_PLACE.CENTRED}
+        />
       </div>
     );
   }

@@ -318,7 +318,10 @@ test("while the members are being read the page holds itself back, and a read th
   await settle();
 
   assert.equal(heldBack, true);
-  assert.equal(container.querySelector('[role="alert"]')?.textContent, "Could not read.");
+  assert.equal(
+    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
+    "Could not read.",
+  );
   refuseMembersRead = false;
   act(() => button(container, "Retry").click());
   await settle();
@@ -659,8 +662,8 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
   act(() => root.render(createElement(WorkspacePage, { control })));
 
   assert.equal(
-    container.querySelector('[role="alert"]')?.textContent,
-    "Luke could not read your workspaces.",
+    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
+    "Your workspaces could not be read.",
   );
   assert.equal(container.querySelector(".settings-reading"), null);
   act(() => button(container, "Retry").click());
@@ -681,7 +684,7 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   assert.equal(
-    [...page.querySelectorAll('[role="alert"]')].some(
+    [...page.querySelectorAll('[role="alert"] .failure-note-words')].some(
       (each) => each.textContent === "Could not read.",
     ),
     true,

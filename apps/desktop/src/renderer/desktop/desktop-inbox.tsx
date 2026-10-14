@@ -24,7 +24,7 @@ import { useInboxItems } from "../planning/use-inbox-items";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { RetryButton } from "../retry-button";
+import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
 import { PlanCard } from "./plan-card";
@@ -76,9 +76,8 @@ function ListNote({
 }): React.JSX.Element | null {
   if (failed) {
     return (
-      <div className="sidebar-note flex items-center gap-2" role="alert">
-        <span>{NOT_READ}</span>
-        <RetryButton onRetry={onRetry} />
+      <div className="sidebar-note">
+        <ReadFailure line={NOT_READ} onRetry={onRetry} />
       </div>
     );
   }

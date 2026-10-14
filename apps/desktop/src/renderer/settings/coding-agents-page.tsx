@@ -31,12 +31,11 @@ import {
   windowOf,
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
-import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
-import { SettingsGroup } from "./settings-group";
+import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
@@ -359,12 +358,7 @@ function CodingAgentsSection({
           ) : null}
         </>
       ) : readFailed ? (
-        <div className="settings-card-line">
-          <p className="error-message" role="alert">
-            {PAGE_LINE.FAILED}
-          </p>
-          <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
-        </div>
+        <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
       ) : (
         <div className="settings-card-line settings-reading">
           <SpinnerRegion label="Loading your default" />

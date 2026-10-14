@@ -1273,20 +1273,6 @@ button.code-card-path:hover {
   font-size: 12.5px;
 }
 
-.agent-note {
-  margin: 0;
-  color: var(--danger-text);
-  font-size: 12px;
-}
-
-/* A failed read under the transcript: its sentence, and the retry beside it. */
-.agent-failure {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-8);
-}
-
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */

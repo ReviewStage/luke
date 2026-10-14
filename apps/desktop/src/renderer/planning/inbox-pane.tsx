@@ -30,7 +30,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
-import { RetryButton } from "../retry-button";
+import { ReadFailure } from "../read-failure";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
@@ -110,8 +110,11 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * viewer, drawn over the window outside it, is out of it on its own.
  */
 
+/** What the thread says under its item where the plan's inbox could not be read. */
+const INBOX_FAILED_LINE = "The inbox could not be read.";
+
 /** What a card says of an image whose read did not answer. */
-const IMAGE_NOT_LOADED = "The image could not be loaded.";
+const IMAGE_FAILED_LINE = "The image could not be read.";
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
 const NOTE_PLACEHOLDER = {
@@ -247,9 +250,14 @@ function CodeBlock({
       ) : shown.kind === CODE_READ.READING ? (
         <SpinnerRegion label="Loading lines" />
       ) : (
-        <div className="file-tab-notice border-b-0" role="alert">
-          <p className="m-0">{shown.line}</p>
-          {shown.again ? <RetryButton onRetry={() => setAsked((was) => was + 1)} /> : null}
+        <div className="file-tab-notice border-b-0">
+          {shown.again ? (
+            <ReadFailure line={shown.line} onRetry={() => setAsked((was) => was + 1)} />
+          ) : (
+            <p className="m-0" role="alert">
+              {shown.line}
+            </p>
+          )}
         </div>
       )}
     </article>
@@ -290,9 +298,8 @@ function ImageBlock({
   }
   if ("failed" in image) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground" data-inbox-image-failed="">
-        <span>{IMAGE_NOT_LOADED}</span>
-        <RetryButton onRetry={() => onRetryImage(block.attachmentId)} />
+      <div data-inbox-image-failed="">
+        <ReadFailure line={IMAGE_FAILED_LINE} onRetry={() => onRetryImage(block.attachmentId)} />
       </div>
     );
   }
@@ -852,7 +859,7 @@ function AnswerBox({
         </p>
       )}
       {note === undefined ? null : (
-        <p className="agent-note agent-composer-note" role="alert">
+        <p className="error-message agent-composer-note" role="alert">
           {note}
         </p>
       )}
@@ -1017,10 +1024,7 @@ export function InboxPane({
           <Answered item={item} by={by} now={now} />
           <Withdrawn item={item} by={by} now={now} />
           {control.failed ? (
-            <div className="agent-note agent-failure" role="alert">
-              <p className="m-0">The inbox could not be read.</p>
-              <RetryButton onRetry={control.onRetry} />
-            </div>
+            <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}
         </div>
         {open ? <AnswerBox item={item} control={control} /> : null}

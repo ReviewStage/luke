@@ -13,12 +13,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { HarnessMark } from "../provider-marks";
-import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
-import { SettingsGroup } from "./settings-group";
+import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
@@ -364,12 +363,7 @@ export function ApiKeysSection({
             />
           ))
         ) : readFailed ? (
-          <div className="settings-card-line">
-            <p className="error-message" role="alert">
-              {PAGE_LINE.FAILED}
-            </p>
-            <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
-          </div>
+          <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
         ) : (
           <div className="settings-card-line settings-reading">
             <SpinnerRegion label="Loading your keys" />
