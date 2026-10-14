@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
+import { account } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
 import { ConnectError } from "@vercel/connect";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
+import { GitHubApp } from "../server/github/github-app";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
@@ -31,8 +35,8 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
 } from "../server/hosted/integration-store";
-import { openGithubUser } from "./support/github-app-fake";
-import { integrationConnectOf } from "./support/integration-connect";
+import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 
 /**
@@ -49,6 +53,7 @@ import { noNetwork } from "./support/no-network";
  */
 
 const NOW = 1_800_000_000_000;
+const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const LINEAR_UNAVAILABLE = integrationUnavailable(LINEAR);
 
@@ -165,7 +170,10 @@ const connected = (userId: string) =>
 const tokenRead = (admission: IntegrationAdmission, grants: Map<string, FakeGrant>) =>
   integrationAccessToken(LINEAR, admission).pipe(Effect.provide(connectLayer(grants)));
 
-it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an integration connection's token read", (it) => {
+/** The test's store, no network, and a deployment holding the GitHub App, which is what GitHub's token is read through. */
+const SUITE = Layer.mergeAll(getTestDB(), noNetwork, GitHubApp.layer(GITHUB_APP_SETTINGS));
+
+it.layer(SUITE)("an integration connection's token read", (it) => {
   it.effect(
     "the planning root reads the token of the account the session was admitted for, and never another connected account's",
     () =>
@@ -237,6 +245,29 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an integration connection's to
           ]),
         );
         assert.deepEqual(unconfigured, Result.fail(LINEAR_UNAVAILABLE.NOT_CONFIGURED));
+      }),
+  );
+
+  it.effect(
+    "GitHub's token is the account's own GitHub sign-in token, asked of no connector, and an account that never signed in with GitHub is told to sign in with GitHub",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const signedIn = yield* plannedSession(host, typedSeat);
+        const googleOnly = yield* plannedSession(host, typedSeat);
+        const db = yield* Database;
+        yield* db.delete(account).where(eq(account.userId, googleOnly.userId));
+        const read = (session: { auth: SessionAuth; sessionId: string }) =>
+          integrationAccessToken(GITHUB, host.admit(session.auth, session.sessionId)).pipe(
+            Effect.provide(integrationConnectOf(() => CONNECTOR_ASKED_NOTHING)),
+          );
+
+        const token = yield* read(signedIn);
+        assert.ok(Result.isSuccess(token));
+        assert.equal(token.success.token, standingGithubRow(NOW).accessToken);
+        const refused = yield* read(googleOnly);
+        assert.ok(Result.isFailure(refused));
+        assert.match(refused.failure, /sign in with GitHub/u);
       }),
   );
 });

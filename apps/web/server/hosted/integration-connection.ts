@@ -30,12 +30,20 @@
  */
 
 import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import {
+  INTEGRATION_GRANT,
+  INTEGRATION_GRANT_OF,
+  INTEGRATION_NAME,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
 import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
+import type { HttpClient } from "effect/http";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";
 import type { SessionAuth } from "eve/context";
+import type { GitHubApp } from "../github/github-app.js";
 import type { ConversationAdmission } from "./brain-host/conversation.js";
+import { GITHUB_GRANT_REFUSAL, githubSignInGrant } from "./github-integration.js";
 import {
   accountIntegrationConnect,
   INTEGRATION_CONNECT_FAILURE,
@@ -60,8 +68,11 @@ interface UnavailableSentences {
 /** One provider's fixed sentences, which are the whole of what a refused call says. */
 export function integrationUnavailable(provider: IntegrationProvider): UnavailableSentences {
   const name = INTEGRATION_NAME[provider];
+  const signedIn = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN;
   return {
-    NOT_CONNECTED: `${name} is not connected for this account. The developer can connect it in Luke's Settings › Integrations; carry on without it.`,
+    NOT_CONNECTED: signedIn
+      ? `${name} is not connected for this account. The developer can sign in with GitHub in Luke's Settings › Integrations; carry on without it.`
+      : `${name} is not connected for this account. The developer can connect it in Luke's Settings › Integrations; carry on without it.`,
     EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in Luke's Settings › Integrations; carry on without it.`,
     NOT_CONFIGURED: `${name} is not set up on this deployment of Luke; carry on without it.`,
     UNREACHABLE: `Luke could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
@@ -85,11 +96,41 @@ export type IntegrationAdmission = Effect.Effect<
 /** What the token read answers: the credential, or the sentence saying why there is none. */
 export type IntegrationTokenAnswer = Result.Result<IntegrationTokenResult, string>;
 
-/** The account's token while its row at the provider stands connected; any other row, or none, is why not. */
+/** The account's GitHub sign-in token for a provider it grants, or the sentence saying why there is none. */
+const signedInToken = /* @__PURE__ */ Effect.fnUntraced(function* (
+  provider: IntegrationProvider,
+  userId: string,
+) {
+  const sentences = integrationUnavailable(provider);
+  const grant = yield* githubSignInGrant(userId);
+  if (Result.isSuccess(grant)) {
+    return Result.succeed({
+      token: Redacted.value(grant.success.token),
+      expiresAt: grant.success.expiresAt,
+    });
+  }
+  switch (grant.failure) {
+    case GITHUB_GRANT_REFUSAL.NOT_CONFIGURED:
+      return Result.fail(sentences.NOT_CONFIGURED);
+    case GITHUB_GRANT_REFUSAL.SIGN_IN_REQUIRED:
+      return Result.fail(sentences.NOT_CONNECTED);
+    case GITHUB_GRANT_REFUSAL.UNREACHABLE:
+      return Result.fail(sentences.UNREACHABLE);
+  }
+});
+
+/**
+ * The account's token while its row at the provider stands connected; any
+ * other row, or none, is why not. A provider the account's own GitHub
+ * sign-in grants has no row, and its token is that sign-in's.
+ */
 const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   provider: IntegrationProvider,
   userId: string,
 ) {
+  if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
+    return yield* signedInToken(provider, userId);
+  }
   const sentences = integrationUnavailable(provider);
   const row = yield* readIntegrationConnection(userId, provider);
   if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) {
@@ -136,7 +177,11 @@ const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
 export function integrationAccessToken(
   provider: IntegrationProvider,
   admission: IntegrationAdmission,
-): Effect.Effect<IntegrationTokenAnswer, never, DatabaseServices | IntegrationConnect> {
+): Effect.Effect<
+  IntegrationTokenAnswer,
+  never,
+  DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient
+> {
   return Effect.gen(function* () {
     const admitted = yield* admission;
     if (Result.isFailure(admitted)) {

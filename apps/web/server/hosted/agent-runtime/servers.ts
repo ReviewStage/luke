@@ -25,13 +25,17 @@
 import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { readCodingAgentOfConversation } from "@sidecar/database/models/coding-agent-store";
 import {
+  INTEGRATION_GRANT,
+  INTEGRATION_GRANT_OF,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@sidecar/hosted/integration-wire";
 import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
+import type { GitHubApp } from "../../github/github-app.js";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
+import { githubOffered } from "../github-integration.js";
 import { accountIntegrationConnect, type IntegrationConnect } from "../integration-connect.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
@@ -66,13 +70,19 @@ export type ServerStandingRead = (auth: SessionAuth, sessionId: string) => Promi
 export function turnServers(
   admission: ServerAdmission,
   policy: ConnectionPolicy,
-): Effect.Effect<ServerStanding, never, DatabaseServices | IntegrationConnect> {
+): Effect.Effect<ServerStanding, never, DatabaseServices | IntegrationConnect | GitHubApp> {
   return Effect.gen(function* () {
     const admitted = yield* admission;
     if (Result.isFailure(admitted)) return SERVERS_OFF;
     const { userId, conversationId } = admitted.success.target;
     const connect = yield* accountIntegrationConnect(userId);
-    const offered = INTEGRATION_PROVIDER_LIST.filter((provider) => connect[provider].configured);
+    const github = yield* githubOffered;
+    // A provider the account's GitHub sign-in grants is offered wherever the GitHub App is.
+    const offered = INTEGRATION_PROVIDER_LIST.filter((provider) =>
+      INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
+        ? github
+        : connect[provider].configured,
+    );
     if (policy === CONNECTION_POLICY.ALWAYS_ON) {
       return { on: true, account: userId, providers: offered } as const;
     }

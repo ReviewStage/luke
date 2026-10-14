@@ -14,6 +14,7 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
+import { GitHubApp } from "../server/github/github-app";
 import { CONNECTION_POLICY } from "../server/hosted/agent-runtime/role";
 import { type ServerStanding, turnServers } from "../server/hosted/agent-runtime/servers";
 import {
@@ -22,7 +23,7 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import { openGithubUser } from "./support/github-app-fake";
+import { GITHUB_APP_SETTINGS, openGithubUser } from "./support/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
@@ -37,7 +38,8 @@ import { noNetwork } from "./support/no-network";
  * agents' every one, for a session admitted at all, among the integrations
  * the deployment offers the account. The store and the host are the real
  * ones over the migrations on PGlite; every provider is set up and offered
- * to every account but where a test reads a deployment's variables.
+ * to every account but where a test reads a deployment's variables, and the
+ * deployment holds the GitHub App, which is what offers GitHub.
  */
 
 const NOW = 1_800_000_000_000;
@@ -105,6 +107,7 @@ const codingSession = (host: CoderHost) =>
     return { userId, agentId: agent.id, conversationId: agent.conversationId, auth, sessionId };
   });
 
+const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const SLACK = INTEGRATION_PROVIDER.SLACK;
 const { ALWAYS_ON, AGENT_SWITCHES } = CONNECTION_POLICY;
@@ -116,7 +119,10 @@ function allOn(account: string): ServerStanding {
 
 const EVERY_CONNECTOR = integrationConnectOf(() => CONNECTOR_ASKED_NOTHING);
 
-it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR))(
+/** A deployment that holds the GitHub App, which is what offers GitHub. */
+const GITHUB_APP = GitHubApp.layer(GITHUB_APP_SETTINGS);
+
+it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
   "an agent's MCP servers",
   (it) => {
     it.effect(
@@ -171,15 +177,30 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR))(
 
           // The account's email is the one `openGithubUser` left on its row.
           assert.deepEqual(yield* handed("@stagereview.example"), [
-            standing([LINEAR]),
-            standing([LINEAR]),
-            standing([]),
+            standing([GITHUB, LINEAR]),
+            standing([GITHUB, LINEAR]),
+            standing([GITHUB]),
           ]);
           assert.deepEqual(yield* handed(`${agent.userId}@luke.test`), [
-            standing([LINEAR, SLACK]),
-            standing([LINEAR, SLACK]),
-            standing([SLACK]),
+            standing([GITHUB, LINEAR, SLACK]),
+            standing([GITHUB, LINEAR, SLACK]),
+            standing([GITHUB, SLACK]),
           ]);
+        }),
+    );
+
+    it.effect(
+      "GitHub, granted by the account's own GitHub sign-in, is handed to a turn wherever the deployment holds the GitHub App, and to none where it holds none",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* codingHost;
+          const agent = yield* codingSession(host);
+          const handed = turnServers(host.admit(agent.auth, agent.sessionId), ALWAYS_ON);
+
+          const withApp = yield* handed;
+          assert.ok(withApp.on && withApp.providers.includes(GITHUB));
+          const withoutApp = yield* handed.pipe(Effect.provide(GitHubApp.layer(undefined)));
+          assert.ok(withoutApp.on && !withoutApp.providers.includes(GITHUB));
         }),
     );
   },

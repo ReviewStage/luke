@@ -6,6 +6,16 @@
         "integrations": {
           "type": "object",
           "properties": {
+            "github": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            },
             "granola": {
               "type": "string",
               "enum": [
@@ -118,6 +128,7 @@
             }
           },
           "required": [
+            "github",
             "granola",
             "linear",
             "mercury",

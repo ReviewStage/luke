@@ -98,6 +98,7 @@ const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
 /** What each integration is for, in the words someone looking for it would type. */
 const INTEGRATION_KEYWORDS = {
+  [INTEGRATION_PROVIDER.GITHUB]: "git repositories issues pull requests actions code",
   [INTEGRATION_PROVIDER.GRANOLA]: "meetings notes transcripts calls",
   [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
   [INTEGRATION_PROVIDER.MERCURY]: "bank banking accounts transactions payments finance",

@@ -3,9 +3,11 @@
  *
  * An integration is a provider's own hosted MCP server, reached with a grant
  * Vercel Connect holds for the account under one connector of this
- * deployment's. The table is the whole of what makes a provider one: the
- * variable its connector's UID is read from and the one naming the accounts
- * it is offered to (`integration-connect.ts`), the
+ * deployment's, or, for GitHub, with the account's own GitHub sign-in
+ * (`INTEGRATION_GRANT_OF`, `github-integration.ts`). The table is the whole
+ * of what makes a provider one: the variable its connector's UID is read
+ * from and the one naming the accounts it is offered to
+ * (`integration-connect.ts`), the
  * server every agent's connection is opened to and what the model is told of
  * it (`integration-connection.ts`), and the name a nested call of one of its
  * tools is stored under in a transcript (`connection-tools.ts`). Its routes,
@@ -23,14 +25,19 @@ import {
 } from "@sidecar/hosted/integration-wire";
 
 export interface IntegrationDefinition {
-  /** The variable the connector's UID is read from, as `vercel connect create` printed it. */
-  readonly CONNECTOR_VARIABLE: string;
+  /**
+   * The variable the connector's UID is read from, as `vercel connect create`
+   * printed it; absent for a provider granted by the account's own sign-in,
+   * which has no connector.
+   */
+  readonly CONNECTOR_VARIABLE?: string;
   /**
    * The variable naming the accounts the integration is offered to, comma
    * separated: `@domain.com` for every email at that domain, or one exact
-   * email. Unset, the integration is offered to every account.
+   * email. Unset, the integration is offered to every account; absent, as
+   * the connector's is.
    */
-  readonly ALLOWED_ACCOUNTS_VARIABLE: string;
+  readonly ALLOWED_ACCOUNTS_VARIABLE?: string;
   /** The provider's own hosted MCP server. */
   readonly MCP_URL: string;
   /** What the model is told of the connection, so it can choose which one to search. */
@@ -40,6 +47,17 @@ export interface IntegrationDefinition {
 }
 
 export const INTEGRATION = {
+  /*
+   * GitHub's server takes the GitHub App user token the account's own
+   * sign-in holds, so it has no connector; `/x/all` is the server with
+   * every toolset on rather than its default few.
+   */
+  [INTEGRATION_PROVIDER.GITHUB]: {
+    MCP_URL: "https://api.githubcopilot.com/mcp/x/all",
+    DESCRIPTION:
+      "GitHub, the developer's code host, as their own account sees it through the Luke GitHub App: find, read, create, and update repositories, files, branches, issues, pull requests and their reviews, discussions, Actions runs and their logs, and code search, on the repositories the App is installed on.",
+    REMOTE_TOOL: "github_remote",
+  },
   [INTEGRATION_PROVIDER.GRANOLA]: {
     CONNECTOR_VARIABLE: "GRANOLA_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "GRANOLA_ALLOWED_ACCOUNTS",

@@ -52,6 +52,8 @@ type ServerRowKind = (typeof SERVER_ROW)[keyof typeof SERVER_ROW];
 export const SERVER_ACTION = {
   CONNECT: "Connect",
   RECONNECT: "Reconnect",
+  /** A server the account's GitHub sign-in grants, connected by signing in with GitHub. */
+  SIGN_IN: "Sign in",
   RETRY: "Try again",
 } as const;
 

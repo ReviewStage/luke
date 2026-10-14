@@ -23,8 +23,8 @@
  *   provider's server offers the account's agents, read from the server with
  *   the account's token as an MCP client reads them, and held for a few
  *   minutes per account and provider so a popover opened again asks the
- *   server nothing. A server that listed
- *   none answers why, with its own one-line message where it sent one that
+ *   server nothing; GitHub's, whose grant has no instant a new one is told
+ *   by, are read every time. A server that listed none answers why, with its own one-line message where it sent one that
  *   carries no credential (`hosted/mcp-tools.ts`), and is never held, so a
  *   connection mended at the provider reads as mended at once. A provider
  *   the account has not connected is refused before any token is read.
@@ -45,6 +45,8 @@ import { randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
+  INTEGRATION_GRANT,
+  INTEGRATION_GRANT_OF,
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -60,6 +62,13 @@ import {
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { GitHubApp } from "./github/github-app.js";
+import {
+  GITHUB_GRANT_REFUSAL,
+  githubIntegrationStatus,
+  githubOffered,
+  githubSignInGrant,
+} from "./hosted/github-integration.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -250,13 +259,21 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   return underWay !== undefined ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.DISCONNECTED;
 });
 
-/** GET: where every one of the caller's connections stands; a provider with no connector here, or not offered to the caller, is unavailable. */
+/**
+ * GET: where every one of the caller's connections stands; a provider with
+ * no connector here, or not offered to the caller, is unavailable, and one
+ * the caller's GitHub sign-in grants stands where that sign-in does.
+ */
 const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndpoint")(function* (
   seams: IntegrationsAppSeams,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
+  | HttpServerRequest.HttpServerRequest
+  | DatabaseServices
+  | IntegrationConnect
+  | GitHubApp
+  | HttpClient.HttpClient
 > {
   yield* hostedMethod(HTTP_METHOD.GET);
   const userId = yield* resolvedUserId(seams);
@@ -267,13 +284,15 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
   const integrations = Object.fromEntries(
     yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
       Effect.map(
-        connect[provider].configured
-          ? standingStatus(
-              seams,
-              connect[provider],
-              rows.find((row) => row.provider === provider),
-            )
-          : Effect.succeed(INTEGRATION_STATUS.UNAVAILABLE),
+        INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
+          ? githubIntegrationStatus(userId)
+          : connect[provider].configured
+            ? standingStatus(
+                seams,
+                connect[provider],
+                rows.find((row) => row.provider === provider),
+              )
+            : Effect.succeed(INTEGRATION_STATUS.UNAVAILABLE),
         (status) => [provider, status] as const,
       ),
     ),
@@ -298,6 +317,76 @@ function toolsProblem(failure: McpToolsFailure) {
 }
 
 /**
+ * When the account's grant at one provider was made, which keys the tools
+ * held for it; nothing for a grant that is the account's GitHub sign-in,
+ * whose tools are never held. A
+ * provider with no connector here or not offered to the account, and one the
+ * account has not connected, are refused as unavailable.
+ */
+const standingGrant = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+  provider: IntegrationProvider,
+  userId: string,
+): Effect.fn.Return<
+  number | undefined,
+  HostedRefusal,
+  DatabaseServices | IntegrationConnect | GitHubApp
+> {
+  if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
+    if (!(yield* githubOffered)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    return undefined;
+  }
+  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
+  if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  const row = rows.find((each) => each.provider === provider);
+  if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return row.connectedAt?.getTime();
+});
+
+/** A grant the provider's token read says the account no longer holds. */
+const GRANT_REFUSED = "grant-refused";
+
+/**
+ * The account's token at one provider for reading its tools: Connect's, or
+ * the account's GitHub sign-in's; a grant no longer held is answered as
+ * refused, and a token that could not be asked for is unavailable.
+ */
+const toolsToken = /* @__PURE__ */ Effect.fnUntraced(function* (
+  provider: IntegrationProvider,
+  userId: string,
+): Effect.fn.Return<
+  Result.Result<Redacted.Redacted, typeof GRANT_REFUSED>,
+  HostedRefusal,
+  DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient
+> {
+  const name = INTEGRATION_NAME[provider];
+  if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
+    const grant = yield* githubSignInGrant(userId);
+    if (Result.isSuccess(grant)) return Result.succeed(grant.success.token);
+    if (grant.failure === GITHUB_GRANT_REFUSAL.SIGN_IN_REQUIRED) return Result.fail(GRANT_REFUSED);
+    yield* Effect.logWarning(
+      `the GitHub sign-in gave no ${name} token for its tools`,
+      grant.failure,
+    );
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
+  const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
+  if (Result.isSuccess(issued)) return Result.succeed(issued.success.token);
+  if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
+    return Result.fail(GRANT_REFUSED);
+  }
+  yield* Effect.logWarning(
+    `Vercel Connect gave no ${name} token for its tools`,
+    issued.failure.message,
+  );
+  return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+});
+
+/**
  * GET: the tools one provider's server offers the account's agents. A
  * provider with no connector here or not offered to the account, one the
  * account has not connected, and a Connect that could not be asked are the
@@ -314,20 +403,16 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   | HttpServerRequest.HttpServerRequest
   | DatabaseServices
   | IntegrationConnect
+  | GitHubApp
   | HttpClient.HttpClient
 > {
   yield* hostedMethod(HTTP_METHOD.GET);
   const provider = yield* requestedProvider();
   const userId = yield* resolvedUserId(seams);
-  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
-  if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-  const row = rows.find((each) => each.provider === provider);
-  if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  const held = cache.get(userId)?.get(provider);
-  const grant = row.connectedAt?.getTime();
+  const grant = yield* standingGrant(seams, provider, userId);
+  // Note that GitHub's tools are never held, because its grant has no instant to tell a new one by.
+  const holds = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.CONNECT;
+  const held = holds ? cache.get(userId)?.get(provider) : undefined;
   if (
     held !== undefined &&
     held.connectedAt === grant &&
@@ -336,23 +421,16 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools: held.tools });
   }
   const name = INTEGRATION_NAME[provider];
-  const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
+  const issued = yield* toolsToken(provider, userId);
+  // A grant no longer held is a refusal the developer mends by connecting again, not an outage.
   if (Result.isFailure(issued)) {
-    // A grant Connect no longer holds is a refusal the developer mends by reconnecting, not an outage.
-    if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
-      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-        problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED },
-      });
-    }
-    yield* Effect.logWarning(
-      `Vercel Connect gave no ${name} token for its tools`,
-      issued.failure.message,
-    );
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED },
+    });
   }
   const definition: IntegrationDefinition = INTEGRATION[provider];
   const listed = yield* Effect.result(
-    listMcpTools(definition.MCP_URL, Redacted.value(issued.success.token)),
+    listMcpTools(definition.MCP_URL, Redacted.value(issued.success)),
   );
   if (Result.isFailure(listed)) {
     const failure = listed.failure;
@@ -364,9 +442,11 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   }
   const tools = listed.success;
   heldToolsSwept(cache, seams.now());
-  const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
-  accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
-  cache.set(userId, accountReads);
+  if (holds) {
+    const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
+    accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
+    cache.set(userId, accountReads);
+  }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools });
 });
 
@@ -415,7 +495,9 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
  * POST: ends one provider's connection. The row goes first, so whatever
  * Connect answers, no agent reads a token again; the revoke after it is the
  * courtesy of telling the provider, and a failed one is logged rather than
- * answered, since the account asked to be disconnected and is.
+ * answered, since the account asked to be disconnected and is. GitHub,
+ * whose grant is the account's own GitHub sign-in, is refused as
+ * unavailable: nothing here ends that sign-in.
  */
 const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectEndpoint")(
   function* (
@@ -428,6 +510,10 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
     yield* hostedMethod(HTTP_METHOD.POST);
     const provider = yield* requestedProvider();
     const userId = yield* resolvedUserId(seams);
+    // A grant that is the account's GitHub sign-in ends with that sign-in, never here.
+    if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
     yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, provider));
     yield* revokeIntegrationGrant(userId, provider);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: INTEGRATION_STATUS.DISCONNECTED });
@@ -513,7 +599,7 @@ function refusing<R>(
 /** The group: the five paths, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
-): WebRoutes<DatabaseServices | IntegrationConnect | HttpClient.HttpClient> {
+): WebRoutes<DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient> {
   const tools: ToolsCache = new Map();
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.TOOLS, refusing(toolsEndpoint(seams, tools))),

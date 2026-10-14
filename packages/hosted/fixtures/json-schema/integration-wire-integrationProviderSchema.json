@@ -1,6 +1,7 @@
 {
   "type": "string",
   "enum": [
+    "github",
     "granola",
     "linear",
     "mercury",

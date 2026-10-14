@@ -115,8 +115,10 @@ provider's client is the App's (`GITHUB_APP_CLIENT_ID`,
 the admin dashboard's "GitHub sign-in" row reads the same client), so the
 token a sign-in leaves on the `account` row is a GitHub App user token, which
 reaches only the repositories where the App is installed and the user
-has access, under the App's registered permissions (metadata read, contents
-and pull requests read and write, email addresses read). An account that
+has access, under the App's registered permissions (metadata read; contents,
+pull requests, issues, and discussions read and write; checks, commit
+statuses, and Actions read; email addresses read). The same token is GitHub's
+integration's grant ("GitHub's grant" under Integrations). An account that
 signed in through the OAuth App before this is the same GitHub user id, so
 Better Auth signs it in to the user it already has and
 (`updateAccountOnSignIn`) replaces the row's tokens with the App's;
@@ -776,7 +778,8 @@ Every agent Luke runs — the planning assistant, the coding agent, and each
 one's declared worker — can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists, the
 ones that write and the ones that answer a credential among them (`AGENTS.md`'s
-carve-out for integrations), and no approval step: Granola
+carve-out for integrations), and no approval step: GitHub
+(`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp`),
@@ -790,7 +793,26 @@ project the account has. `server/hosted/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, the one naming
 the accounts it is offered to, its MCP server
 and what the model is told of it, and the name its nested calls are stored
-under. Everything below is the same for every provider.
+under. Everything below is the same for every provider but GitHub, whose
+grant is the account's own GitHub sign-in.
+
+**GitHub's grant** (`server/hosted/github-integration.ts`). GitHub's MCP
+server takes a GitHub App user token, and an account that signed in with
+GitHub already holds one: the Luke GitHub App's, which `GitHubApp.userToken`
+reads off the `account` row and refreshes ("The Luke GitHub App" above). So
+GitHub has no connector, no `integration_connection` row, and no Connect or
+Disconnect (`INTEGRATION_GRANT_OF` in `@sidecar/hosted/integration-wire`): the
+statuses route answers it `connected` while that token reads, `disconnected`
+for an account with no usable GitHub sign-in, and `unavailable` on a
+deployment without the App, and a turn is handed GitHub's server wherever the
+App is configured. The token handed to eve is said to expire inside
+`userToken`'s refresh margin, so eve asks again, and the token is refreshed
+if need be, before it lapses. What the agents reach is what the App reaches
+for the account, under the App's permissions, on the repositories it is
+installed on. Settings › Integrations offers Sign in with GitHub on its row,
+the same sign-in again the desktop offers wherever a GitHub sign-in has
+lapsed, rather than Connect, and no Disconnect: the grant ends with the
+sign-in, when the developer revokes the App or deletes the account.
 
 **Who holds what.** Vercel Connect holds each grant, encrypted, and refreshes
 it; Luke never stores a token. Luke holds one row per account and provider
