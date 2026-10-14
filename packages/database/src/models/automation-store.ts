@@ -24,6 +24,7 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import {
   and,
@@ -35,6 +36,7 @@ import {
   inArray,
   isNull,
   lte,
+  notExists,
   or,
   type SQL,
   sql,
@@ -45,6 +47,7 @@ import { Database, type DatabaseServices, queryBuilder } from "../core/query.js"
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { inboxItem } from "../schemas/inbox.js";
 import { plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
@@ -695,6 +698,63 @@ const findStartedAgents = SqlSchema.findAll({
     ),
 });
 
+const ArchivableAgentSchema = Schema.Struct({
+  userId: Schema.String,
+  codingAgentId: Schema.String,
+  conversationId: Schema.String,
+  createdAt: InstantColumnSchema,
+});
+
+/** An agent a run started that its automation archives once it finishes well: whose it is, its id, its conversation, and when it was made. */
+export type ArchivableRunAgent = typeof ArchivableAgentSchema.Type;
+
+/**
+ * The agents runs fired at or after `since` started for automations that
+ * archive their successful runs and start a new agent each run, not
+ * archived yet and holding no open inbox item, at most `limit`. Note that
+ * an agent waiting on the inbox is left standing, because archiving it
+ * would put away the question it is waiting on.
+ */
+const findArchivableAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ since: Schema.Date, limit: Schema.Number }),
+  Result: ArchivableAgentSchema,
+  execute: ({ since, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: codingAgent.userId,
+          codingAgentId: codingAgent.id,
+          conversationId: codingAgent.conversationId,
+          createdAt: codingAgent.createdAt,
+        })
+        .from(automationRun)
+        .innerJoin(automation, eq(automation.id, automationRun.automationId))
+        .innerJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .where(
+          and(
+            eq(automation.archiveSuccessful, true),
+            eq(automation.targetKind, AUTOMATION_TARGET.NEW_AGENT),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            gte(automationRun.firedAt, since),
+            isNull(codingAgent.archivedAt),
+            notExists(
+              queryBuilder
+                .select({ one: inboxItem.id })
+                .from(inboxItem)
+                .where(
+                  and(
+                    eq(inboxItem.agentId, codingAgent.id),
+                    eq(inboxItem.status, INBOX_STATUS.OPEN),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .orderBy(asc(automationRun.firedAt))
+        .limit(limit),
+    ),
+});
+
 const writeExpired = SqlSchema.findAll({
   Request: Schema.Struct({
     before: Schema.Date,
@@ -1046,6 +1106,14 @@ export function startedRunAgents(
   since: Date,
 ): PlanStoreEffect<readonly StartedRunAgent[]> {
   return findStartedAgents({ automationId, since });
+}
+
+/** The agents of runs fired at or after `since` that their automations archive once finished well, as above, at most `limit`, oldest run first. */
+export function archivableRunAgents(
+  since: Date,
+  limit: number,
+): PlanStoreEffect<readonly ArchivableRunAgent[]> {
+  return findArchivableAgents({ since, limit });
 }
 
 /** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */

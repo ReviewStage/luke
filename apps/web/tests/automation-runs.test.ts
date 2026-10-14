@@ -25,10 +25,11 @@ import {
   type AutomationGuards,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option, Result } from "effect";
 import { executeAutomationRun, recoverStrandedRun } from "../server/hosted/automation-runs";
 import { sweepAutomations } from "../server/hosted/automation-sweep";
 import {
@@ -38,6 +39,7 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import {
   connectWorkspaceGitHub,
@@ -114,7 +116,11 @@ const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, modelCatalo
 
 /** An owner, a plan on the repository of its workspace's installation (or none), and an automation on it due a minute ago. */
 const openAutomation = (
-  options: { readonly repository?: string | null; readonly guards?: AutomationGuards } = {},
+  options: {
+    readonly repository?: string | null;
+    readonly guards?: AutomationGuards;
+    readonly archiveSuccessful?: boolean;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -138,6 +144,7 @@ const openAutomation = (
       guards: options.guards ?? AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: new Date(now - 60_000),
       webhookSecretHash: null,
+      archiveSuccessful: options.archiveSuccessful ?? false,
     });
     return { owner, automation: Option.getOrThrow(made), now, workspaceId: plan.workspaceId };
   });
@@ -153,12 +160,83 @@ const runNow = (automation: Automation) =>
     Option.getOrThrow,
   );
 
+/** The run's agent, its session having run one turn that ended as `status`. */
+const ranTurn = (owner: string, codingAgentId: string, status: TurnStatus) =>
+  Effect.gen(function* () {
+    const agent = Option.getOrThrow(yield* readCodingAgent(owner, codingAgentId));
+    yield* Database.use((db) =>
+      db.insert(turns).values({
+        userId: owner,
+        conversationId: agent.conversationId,
+        origin: TURN_ORIGIN.TYPED,
+        status,
+      }),
+    );
+    return agent;
+  });
+
+/** The run acted on now, answering the agent it started. */
+const startedNow = (eve: ReturnType<typeof fakeEve>, automation: Automation) =>
+  Effect.gen(function* () {
+    const outcome = yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
+      Effect.provide(services),
+    );
+    assert.equal(outcome?.status, AUTOMATION_RUN_STATUS.STARTED);
+    return outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+  });
+
 it.layer(getTestDB())("an automation's runs", (it) => {
+  it.effect(
+    "an automation that archives its successful runs archives a run's agent once its turn settled well, and leaves standing one that failed, one waiting on the inbox, and every agent of an automation that does not",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const archiving = yield* openAutomation({
+          archiveSuccessful: true,
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
+        });
+        const keeping = yield* openAutomation();
+        const succeeded = yield* startedNow(eve, archiving.automation);
+        const failed = yield* startedNow(eve, archiving.automation);
+        const asking = yield* startedNow(eve, archiving.automation);
+        const kept = yield* startedNow(eve, keeping.automation);
+        yield* ranTurn(archiving.owner, succeeded, TURN_STATUS.SETTLED);
+        yield* ranTurn(archiving.owner, failed, TURN_STATUS.FAILED);
+        yield* ranTurn(archiving.owner, asking, TURN_STATUS.SETTLED);
+        yield* ranTurn(keeping.owner, kept, TURN_STATUS.SETTLED);
+        const question = yield* postInboxItem(
+          { userId: archiving.owner, planId: null, agentId: asking },
+          { key: "which-queue", title: "Which queue?", response: { type: INBOX_RESPONSE.TEXT } },
+        );
+        assert.ok(Result.isSuccess(question));
+
+        const swept = yield* sweepAutomations(eve.eveFor, archiving.now).pipe(
+          Effect.provide(services),
+        );
+
+        const archived = (owner: string, id: string) =>
+          Effect.map(
+            readCodingAgent(owner, id),
+            (read) => Option.getOrThrow(read).archivedAt !== null,
+          );
+        assert.equal(swept.archived, 1);
+        assert.deepEqual(
+          [
+            yield* archived(archiving.owner, succeeded),
+            yield* archived(archiving.owner, failed),
+            yield* archived(archiving.owner, asking),
+            yield* archived(keeping.owner, kept),
+          ],
+          [true, false, false, false],
+        );
+      }),
+  );
+
   it.effect(
     "a due schedule starts one coding agent as the deployment acting for its owner, handed the prompt as its task, and a sweep after it starts nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, automation, now } = yield* openAutomation();
+        const { owner, automation, now, workspaceId } = yield* openAutomation();
         const eve = fakeEve();
 
         const first = yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
@@ -175,6 +253,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.equal(agent.model, SOL);
         assert.equal(agent.effort, "low");
         assert.equal(agent.automationId, automation.id, "the agent names the automation it ran");
+        assert.deepEqual(
+          [agent.planId, agent.organizationId, agent.repository],
+          [null, workspaceId, `${RELAY.owner}/${RELAY.name}`],
+          "the run's agent stands in the automation's workspace on no plan, on its repository",
+        );
         assert.ok(agent.task?.startsWith(PROMPT), "the prompt is the agent's task");
         assert.match(agent.task ?? "", /the automation "Flaky-test sweep"/u);
         assert.deepEqual(
