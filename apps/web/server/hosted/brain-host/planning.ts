@@ -4,7 +4,6 @@ import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
   NOTE_KIND,
-  noteOf,
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
@@ -336,7 +335,7 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
     AGENT_EDITS_MARKER,
     ...recent.map(
       (edit) =>
-        `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map((note) => agentNoteLine(noteOf(note))).join("; ")}`,
+        `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map((note) => agentNoteLine(note)).join("; ")}`,
     ),
   ];
 }

@@ -93,9 +93,8 @@ export function settleNotes(
 }
 
 /**
- * A call's notes, each in the heading shape or the fixed template's an agent
- * started before heading notes still takes, or nothing where the call holds
- * no list of notes or any of its notes does not read, which refuses it whole.
+ * A call's notes, or nothing where the call holds no list of notes or any
+ * of its notes does not read, which refuses it whole.
  */
 function notesOf(input: UnparsedWireValue): readonly PlanNote[] | undefined {
   if (!isRecord(input) || !Array.isArray(input.notes)) return undefined;
