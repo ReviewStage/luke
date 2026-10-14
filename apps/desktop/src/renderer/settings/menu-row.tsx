@@ -1,5 +1,6 @@
 import { EllipsisIcon } from "@sidecar/panel";
 import { useRef } from "react";
+import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { searchAnchorProps } from "../settings-anchors";
 import { Tooltip } from "../tooltip";
@@ -15,42 +16,70 @@ import { Tooltip } from "../tooltip";
  * row with no act that applies now draws no ⋯ and answers no right-click. An
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
+ *
+ * A row whose acts are its whole business, a connected service managed from
+ * one place, may name its door instead: a hairlined button carrying the
+ * label and the menu's small chevron stands where the ⋯ would, the same door
+ * to the same menu. Its acts may come in groups, a rule between each.
  */
+
+/** A row's acts: one list, or lists drawn with a rule between each. */
+type MenuRowActions = readonly MenuAction[] | readonly (readonly MenuAction[])[];
+
+/** Whether a row's acts came in groups rather than as one list. */
+function grouped(actions: MenuRowActions): actions is readonly (readonly MenuAction[])[] {
+  return actions.every((entry) => Array.isArray(entry));
+}
+
+/** The row's acts as the menu draws them: in groups, none of them empty. */
+function groupsOf(actions: MenuRowActions): readonly (readonly MenuAction[])[] {
+  const groups = grouped(actions) ? actions : [actions];
+  return groups.filter((group) => group.length > 0);
+}
+
 export function MenuRow({
   label,
   actions,
   heading,
   anchor,
+  triggerLabel,
   children,
 }: {
   /** What the menu is named: "Linear actions". */
   label: string;
-  actions: readonly MenuAction[];
+  actions: MenuRowActions;
   /** A muted line over the menu's acts saying what they act on, where the row's words do not. */
   heading?: string;
   /** The id a pressed search result lands on. */
   anchor?: string;
+  /** The words of a labelled door drawn in the ⋯'s place: "Manage". */
+  triggerLabel?: string;
   /** The row's words, and any control standing before the ⋯. */
   children: React.ReactNode;
 }): React.JSX.Element {
   // The page is drawn whenever the row is, so the menu needs no surface of
   // its own to close with: it closes with the row unmounting.
   const menu = useActionMenu(true);
-  const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const acting = actions.length > 0;
+  const door = useRef<HTMLButtonElement | null>(null);
+  const groups = groupsOf(actions);
+  const acting = groups.length > 0;
   return (
     <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
       <div
         className="settings-row menu-row"
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
-        onContextMenu={acting ? menu.contextMenu(ellipsis) : undefined}
+        onContextMenu={acting ? menu.contextMenu(door) : undefined}
       >
         {children}
-        {acting ? (
+        {!acting ? null : triggerLabel !== undefined ? (
+          <Chip look={CHIP_LOOK.FIELD} chevron ref={door} {...menu.trigger()}>
+            {triggerLabel}
+          </Chip>
+        ) : (
           <Tooltip label="More">
             <button
-              ref={ellipsis}
+              ref={door}
               type="button"
               className="icon-button"
               aria-label={label}
@@ -59,13 +88,13 @@ export function MenuRow({
               <EllipsisIcon />
             </button>
           </Tooltip>
-        ) : null}
+        )}
       </div>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={label}
           menu={menu.drawn}
-          groups={[actions]}
+          groups={groups}
           {...(heading === undefined ? undefined : { heading })}
           onClose={menu.close}
         />

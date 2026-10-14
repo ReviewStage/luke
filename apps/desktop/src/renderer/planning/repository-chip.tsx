@@ -167,7 +167,7 @@ export function RepositoryChip(props: {
 
   const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
-  // No GitHub connected is mended at the workspace's GitHub repositories.
+  // No GitHub connected is mended at the workspace's Integrations.
   const workspaceGitHub: SettingsLink = {
     page: SETTINGS_VIEW.WORKSPACE,
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,

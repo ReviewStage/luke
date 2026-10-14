@@ -87,7 +87,13 @@ test("a link turns to Settings, its page, and its workspace, and lands on its se
   );
 
   assert.deepEqual(turned, [PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE, ACME.id]);
-  assert.equal(landed.on?.querySelector("h2")?.textContent, "GitHub repositories");
+  assert.equal(landed.on?.querySelector("h2")?.textContent, "Integrations");
+  assert.ok(
+    [...(landed.on?.querySelectorAll(".settings-row strong") ?? [])].some(
+      (name) => name.textContent === "GitHub",
+    ),
+    "the group the old GitHub repositories link names holds GitHub's row",
+  );
 });
 
 test("a link naming no section or workspace lands on the page's head, with the sidebar's workspace", () => {

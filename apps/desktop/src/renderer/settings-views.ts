@@ -40,7 +40,7 @@ export const SETTINGS_PAGE_LIST = [
 export const SETTINGS_SECTION = {
   /** A workspace's members, its invite, and the leave. */
   MEMBERS: "workspace-members",
-  /** A workspace's GitHub repositories: the connected GitHub account, its connect and disconnect, and the repositories chosen on GitHub. */
+  /** A workspace's Integrations, the group once called GitHub repositories and still anchored by its name: GitHub's connect, Manage, and disconnect, and the repositories chosen on GitHub. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
 } as const;
 

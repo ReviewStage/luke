@@ -25,6 +25,8 @@ import {
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
 import { ProviderMark } from "../provider-marks";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "../settings-anchors";
+import { SETTINGS_SECTION } from "../settings-views";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
@@ -34,9 +36,9 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
  * invites by address and role and copies or cancels what is pending, and
- * every workspace's GitHub repositories, the first one's too, are an
- * owner's or an admin's to connect or disconnect and a member's to read.
- * Synthetic accounts.
+ * every workspace's Integrations group, the first one's too, holds GitHub:
+ * an owner's or an admin's to connect, or to manage from its one Manage
+ * menu once connected, and a member's to read. Synthetic accounts.
  */
 
 const OWNER: WorkspaceMember = {
@@ -85,7 +87,10 @@ let firstRead: Promise<void> | undefined;
 let refuseLaterReads = false;
 /** Where the next invitation waits before the service makes it, so a test can hold it on the wire. */
 let inviteHeld: Promise<void> | undefined;
-/** Whether the page is drawn by a development build, which may point at a Preview. */
+/** Whether the browser could not be opened on GitHub's page. */
+let refuseGitHubOpen = false;
+/** Whether the service refuses the next GitHub disconnect for the account's role. */
+let refuseGitHubDisconnect = false;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -148,9 +153,23 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
       return Promise.resolve(done(invitations));
-    case ACT_KIND.WORKSPACE_LEAVE:
-    case ACT_KIND.WORKSPACE_GITHUB_DISCONNECT:
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
+      if (refuseGitHubOpen) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: "Luke could not open your browser.",
+        });
+      }
+      return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_GITHUB_DISCONNECT:
+      if (refuseGitHubDisconnect) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+        });
+      }
+      return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
@@ -172,6 +191,8 @@ beforeEach(() => {
   firstRead = undefined;
   refuseLaterReads = false;
   inviteHeld = undefined;
+  refuseGitHubOpen = false;
+  refuseGitHubDisconnect = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -384,7 +405,7 @@ test("a member leaves after confirming, which asks to list another workspace, an
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the account's first workspace reads like any other: its role, its members with the invite form, and Connect for its GitHub repositories", async () => {
+test("the account's first workspace reads like any other: its role, its members with the invite form, and Connect for its GitHub", async () => {
   stored = [OWNER];
   const { page } = await mount(FIRST);
   const row = rowNamed(page, "GitHub");
@@ -403,65 +424,208 @@ test("the account's first workspace reads like any other: its role, its members 
   );
 });
 
-test("an admin sees whose repositories the workspace has, led by GitHub's mark, and disconnects them from the row's ⋯ after confirming", async () => {
-  const { page } = await mount({
-    ...ACME,
-    role: WORKSPACE_ROLE.ADMIN,
-    github: { login: "acme", active: true },
-  });
-  const row = rowNamed(page, "Repositories from acme");
-  const mark = row.querySelector(".settings-row-mark")?.innerHTML;
+const CONNECTED: Workspace = {
+  ...ACME,
+  role: WORKSPACE_ROLE.ADMIN,
+  github: { login: "acme-org", active: true },
+};
+
+/** The Workspace page's Integrations group, found by the anchor its links have always named. */
+const integrationsGroup = (page: HTMLElement) =>
+  page.querySelector<HTMLElement>(
+    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.GITHUB_REPOSITORIES}"]`,
+  ) ?? assert.fail("no Integrations group");
+
+/** What a row says: its name, and the line under it. */
+const rowWords = (row: HTMLElement) => [
+  row.querySelector("strong")?.textContent,
+  row.querySelector("small")?.textContent,
+];
+
+/** The words of every button a row draws. */
+const rowButtons = (row: HTMLElement) =>
+  [...row.querySelectorAll("button")].map((each) => each.textContent);
+
+/** The row's Manage, which opens its menu. */
+const manageOn = (row: HTMLElement) =>
+  row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+  assert.fail("the row draws no Manage");
+
+/** The connects and disconnects sent, by their payloads. */
+const githubSent = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT ||
+    request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
+      ? [[request.kind, request.payload]]
+      : [],
+  );
+
+test("an owner or an admin of a connected workspace sees Integrations' GitHub row, Connected, led by GitHub's mark, with Manage its one control", async () => {
+  for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
+    const { page } = await mount({ ...CONNECTED, role });
+    const group = integrationsGroup(page);
+    const row = rowNamed(group, "GitHub");
+
+    assert.equal(group.querySelector("h2")?.textContent, "Integrations");
+    assert.deepEqual(rowWords(row), ["GitHub", "Connected"]);
+    assert.equal(
+      row.querySelector(".settings-row-mark")?.innerHTML,
+      renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
+    );
+    assert.deepEqual(rowButtons(row), ["Manage"], `a ${role} has Manage and nothing else`);
+    assert.equal(row.textContent?.includes("acme-org"), false, "the account is not named");
+    assert.equal(row.textContent?.includes("Repositories"), false, "nor its repositories");
+    for (const root of roots.splice(0)) act(() => root.unmount());
+  }
+});
+
+test("Manage holds Choose repositories on GitHub, then past a rule Disconnect in red, and the first opens GitHub through the same connect", async () => {
+  const { page } = await mount(CONNECTED);
+  const row = rowNamed(page, "GitHub");
+
+  act(() => manageOn(row).click());
+  const menu = document.querySelector<HTMLElement>('[role="menu"]') ?? assert.fail("no menu");
+  const drawn = [...menu.children].map((child) =>
+    child.tagName === "HR" ? "rule" : child.textContent,
+  );
+  const red = menu.querySelector('[role="menuitem"][data-danger="true"]')?.textContent;
+  act(() => manageOn(row).click());
+  await chooseAction(row, "Choose repositories on GitHub");
+
+  assert.equal(menu.getAttribute("aria-label"), "GitHub actions");
+  assert.deepEqual(drawn, ["Choose repositories on GitHub", "rule", "Disconnect"]);
+  assert.equal(red, "Disconnect");
+  assert.deepEqual(githubSent(), [
+    [ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: CONNECTED.id }],
+  ]);
+});
+
+test("Disconnect from Manage asks first, naming the account, Cancel disconnects nothing, and Disconnect then disconnects", async () => {
+  const { page } = await mount(CONNECTED);
+  const row = rowNamed(page, "GitHub");
 
   await chooseAction(row, "Disconnect");
-  const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT);
+  const asked = [
+    dialog().querySelector("h2")?.textContent,
+    dialog().querySelector("p")?.textContent,
+  ];
+  act(() => button(dialog(), "Cancel").click());
+  await settle();
+  const afterCancel = githubSent();
+  const cancelled = document.querySelector('[role="alertdialog"]');
+  await chooseAction(row, "Disconnect");
+  await confirm("Disconnect");
+
+  assert.deepEqual(asked, [
+    "Disconnect acme-org from acme?",
+    "Its plans lose these repositories until GitHub is connected again.",
+  ]);
+  assert.deepEqual(afterCancel, []);
+  assert.equal(cancelled, null);
+  assert.deepEqual(githubSent(), [
+    [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId: CONNECTED.id }],
+  ]);
+});
+
+test("a disconnect the account's role does not allow says so in the dialog that asked", async () => {
+  refuseGitHubDisconnect = true;
+  const { page } = await mount(CONNECTED);
+
+  await chooseAction(rowNamed(page, "GitHub"), "Disconnect");
   await confirm("Disconnect");
 
   assert.equal(
-    mark,
-    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
-  );
-  assert.equal(askedFirst, true);
-  assert.deepEqual(
-    sent
-      .filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT)
-      .map((request) => request.payload),
-    [{ workspaceId: ACME.id }],
+    dialog().querySelector('[role="alert"]')?.textContent,
+    WORKSPACE_NOT_PERMITTED_REFUSAL,
   );
 });
 
-test("an owner of a workspace with no GitHub is offered Connect, and an admin of a connected one Choose repositories on GitHub", async () => {
-  const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  act(() => button(rowNamed(owner.page, "GitHub"), "Connect").click());
-  const admin = await mount({
-    ...ACME,
-    role: WORKSPACE_ROLE.ADMIN,
-    github: { login: "acme", active: true },
+test("Escape in Manage's menu, and Cancel in the question it raised, hand focus back to Manage", async () => {
+  const { page } = await mount(CONNECTED);
+  const manage = manageOn(rowNamed(page, "GitHub"));
+
+  act(() => manage.click());
+  const firstFocused = document.activeElement?.textContent;
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
   });
-  act(() =>
-    button(rowNamed(admin.page, "Repositories from acme"), "Choose repositories on GitHub").click(),
-  );
+  const afterEscape = document.activeElement;
+  await chooseAction(rowNamed(page, "GitHub"), "Disconnect");
+  act(() => button(dialog(), "Cancel").click());
   await settle();
 
-  assert.deepEqual(
-    sent
-      .filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT)
-      .map((request) => request.payload),
-    [{ workspaceId: ACME.id }, { workspaceId: ACME.id }],
-  );
+  assert.equal(firstFocused, "Choose repositories on GitHub");
+  assert.equal(afterEscape, manage);
+  assert.equal(document.activeElement, manage);
+  assert.equal(manage.getAttribute("aria-expanded"), "false");
 });
 
-test("a member reads whose repositories the workspace has, or is told to ask an owner or admin, and is offered no button or ⋯", async () => {
-  const connected = await mount({ ...ACME, github: { login: "acme", active: true } });
-  const connectedRow = rowNamed(connected.page, "Repositories from acme");
+test("a GitHub page the browser could not open is said under the row, from Manage and from Connect alike", async () => {
+  refuseGitHubOpen = true;
+  const connected = await mount(CONNECTED);
+  await chooseAction(rowNamed(connected.page, "GitHub"), "Choose repositories on GitHub");
+  const unconnected = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  act(() => button(rowNamed(unconnected.page, "GitHub"), "Connect").click());
+  await settle();
+
+  for (const { page } of [connected, unconnected]) {
+    assert.equal(
+      integrationsGroup(page).querySelector('.error-message[role="alert"]')?.textContent,
+      "Luke could not open your browser.",
+    );
+  }
+});
+
+test("an installation GitHub suspended or removed says so in place of Connected, and Manage keeps both its items", async () => {
+  const suspended = { ...CONNECTED, github: { login: "acme-org", active: false } };
+  const admin = await mount(suspended);
+  const adminRow = rowNamed(admin.page, "GitHub");
+  const member = await mount({ ...suspended, role: WORKSPACE_ROLE.MEMBER });
+  const memberRow = rowNamed(member.page, "GitHub");
+
+  for (const row of [adminRow, memberRow]) {
+    assert.deepEqual(rowWords(row), ["GitHub", "Suspended or removed on GitHub."]);
+    assert.equal(row.querySelector('[data-state="attention"]')?.textContent, rowWords(row)[1]);
+  }
+  assert.deepEqual(rowActions(adminRow), ["Choose repositories on GitHub", "Disconnect"]);
+  assert.deepEqual(rowButtons(memberRow), []);
+});
+
+test("an owner or an admin of a workspace with no GitHub is offered Connect alone, which opens the same connect", async () => {
+  for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
+    const { page } = await mount({ ...ACME, role });
+    const row = rowNamed(page, "GitHub");
+
+    assert.deepEqual(rowWords(row), ["GitHub", "Not connected."]);
+    assert.deepEqual(rowButtons(row), ["Connect"]);
+    assert.equal(row.querySelector('[aria-haspopup="menu"]'), null);
+    act(() => button(row, "Connect").click());
+    await settle();
+  }
+
+  assert.deepEqual(githubSent(), [
+    [ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: ACME.id }],
+    [ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: ACME.id }],
+  ]);
+});
+
+test("a member reads that GitHub is connected, or is told to ask an owner or admin, and is offered no Manage, Connect, or right-click menu", async () => {
+  const connected = await mount({ ...CONNECTED, role: WORKSPACE_ROLE.MEMBER });
+  const connectedRow = rowNamed(connected.page, "GitHub");
   const unconnected = await mount(ACME);
   const unconnectedRow = rowNamed(unconnected.page, "GitHub");
 
-  assert.equal(
-    unconnectedRow.querySelector("small")?.textContent,
-    "Not connected. Ask an owner or admin.",
-  );
+  assert.deepEqual(rowWords(connectedRow), ["GitHub", "Connected"]);
+  assert.equal(connectedRow.textContent?.includes("acme-org"), false);
+  assert.deepEqual(rowWords(unconnectedRow), ["GitHub", "Not connected. Ask an owner or admin."]);
   for (const row of [connectedRow, unconnectedRow]) {
     assert.equal(row.querySelector("button"), null);
+    act(() => {
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
+    assert.equal(document.querySelector('[role="menu"]'), null);
   }
 });
 
@@ -675,28 +839,40 @@ test("an address already invited is said under the form, and a member is offered
 });
 
 test("a Disconnect asked for one workspace does not stand over another listed in its place", async () => {
-  const connected = {
-    ...ACME,
-    role: WORKSPACE_ROLE.ADMIN,
-    github: { login: "acme", active: true },
-  };
-  const { page, relist } = await mount(connected);
-  await chooseAction(rowNamed(page, "Repositories from acme"), "Disconnect");
+  const { page, relist } = await mount(CONNECTED);
+  await chooseAction(rowNamed(page, "GitHub"), "Disconnect");
   const asked = dialog().querySelector("h2")?.textContent;
 
   await relist({
-    ...connected,
+    ...CONNECTED,
     id: "workspace-beta",
     name: "Beta",
     github: { login: "beta", active: true },
   });
 
-  assert.equal(asked, "Disconnect acme from acme?");
+  assert.equal(asked, "Disconnect acme-org from acme?");
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.equal(
     sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT),
     false,
   );
+});
+
+test("Manage's menu left open on one workspace closes when another is listed in its place", async () => {
+  const { page, relist } = await mount(CONNECTED);
+  act(() => manageOn(rowNamed(page, "GitHub")).click());
+  const opened = document.querySelector('[role="menu"]:not([data-leaving])') !== null;
+
+  await relist({
+    ...CONNECTED,
+    id: "workspace-beta",
+    name: "Beta",
+    github: { login: "beta", active: true },
+  });
+
+  assert.equal(opened, true);
+  assert.equal(document.querySelector('[role="menu"]:not([data-leaving])'), null);
+  assert.equal(manageOn(rowNamed(page, "GitHub")).getAttribute("aria-expanded"), "false");
 });
 
 test("a workspaces read that failed says so with Retry, which asks for them again", () => {
