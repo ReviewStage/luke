@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
+import { childConversationId } from "@sidecar/database/models/ids";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import type { PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -22,8 +24,9 @@ import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "../server/core";
 import { askStanding } from "../server/hosted/brain-ask";
 import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { ownedAuth } from "../server/hosted/brain-host/door";
 import {
   EVE_CANCEL_OUTCOME,
@@ -32,6 +35,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -52,7 +56,7 @@ import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -241,6 +245,7 @@ async function stand(
   conversationId: string = target.conversationId,
   record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
   over?: EveSessions,
+  accountId: string = target.userId,
 ): Promise<Stand> {
   const eve = fakeEve();
   const reports: string[] = [];
@@ -248,7 +253,7 @@ async function stand(
   const brain = await database.run(
     Scope.provide(
       hostedLiveBrain({
-        accountId: target.userId,
+        accountId,
         conversation: { userId: target.userId, conversationId },
         asks: { asks: record, eve: over ?? eve },
         store,
@@ -609,6 +614,79 @@ it.live(
         LIVE_BRAIN_RUN_END.COMPLETED,
       );
       assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a member following a turn in the plan conversation a teammate opened is shown the model its worker ran on, read under the teammate who opened it",
+  () =>
+    Effect.gen(function* () {
+      const opener = yield* Effect.promise(() => database.createUser());
+      const member = yield* Effect.promise(() => database.createUser());
+      const target = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* startPlan(opener, PLAN);
+            yield* joinWorkspace(plan.workspaceId, member);
+            const opened = Option.getOrThrow(yield* openPlanConversation(opener, plan.id));
+            return { userId: opener, conversationId: opened.conversationId };
+          }),
+        ),
+      );
+      // The worker's own session, started by the turn's call, ran a turn on the scripted model.
+      const child = {
+        userId: opener,
+        conversationId: childConversationId(target.conversationId, "call-1"),
+      };
+      yield* Effect.promise(() =>
+        database.run(openChildConversation(target, child.conversationId, "worker")),
+      );
+      const f = yield* Effect.promise(() =>
+        stand(target, QUICK, database.store, target.conversationId, askEffects, undefined, member),
+      );
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+      yield* Effect.promise(() =>
+        play(spokenTurn(FIRST_EVE_TURN, NOW), {
+          sessionId: `${sessionId}-worker`,
+          target: child,
+          turn: RELAY_TURN.CHILD,
+          model: "scripted-model",
+          state: memoryRelayState(),
+        }),
+      );
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: PLANNER_DELEGATE_TOOL.name,
+        input: { task: "Compare the two queue libraries." },
+        output: "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+      });
+      const standing: RelayStanding = {
+        sessionId,
+        target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      // A look finds the worker's call while the turn runs, so the next look reads its session.
+      const answered = events.findIndex((event) => event.type === "action.result") + 1;
+      yield* Effect.promise(() => play(events.slice(0, answered), standing));
+      yield* arrival(
+        (notify) => f.brain.onWork(notify),
+        () => shown.some((work) => work.workers.length > 0),
+        "the worker's call shown",
+      );
+      yield* Effect.promise(() => play(events.slice(answered), standing));
+      yield* f.arrived(4);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+
+      const [worker] = shown.at(-1)?.workers ?? [];
+      assert.equal(worker?.callId, "call-1");
+      assert.equal(worker?.model, "openai/scripted-model", "the model the worker's turn ran on");
       yield* Effect.promise(() => f.stop());
     }),
 );
