@@ -318,3 +318,79 @@ it.effect("a hand-off that leaves no session sends nothing and answers unanswere
     assert.equal(api.requests().length, 0);
   }),
 );
+
+const INVITATION = {
+  id: "inv-1",
+  email: "alan@example.com",
+  role: WORKSPACE_ROLE.MEMBER,
+  expiresAt: "2026-10-16T12:00:00.000Z",
+  acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-1&email=alan%40example.com",
+};
+
+it.effect(
+  "invites, reads pending invitations, and cancels one, every call under the Mac's session",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/workspaces/invitations": {
+          answer: () => ({ invitation: INVITATION }),
+          status: 201,
+        },
+        "GET /api/workspaces/invitations": { answer: () => ({ invitations: [INVITATION] }) },
+        "POST /api/workspaces/invitations/cancel": { answer: () => ({ invitations: [] }) },
+      });
+      const workspaces = client();
+
+      const made = yield* Effect.provide(
+        workspaces.invite(ACME.id, " alan@example.com ", WORKSPACE_ROLE.MEMBER),
+        api.layer,
+      );
+      const pending = yield* Effect.provide(workspaces.invitations(ACME.id), api.layer);
+      const left = yield* Effect.provide(
+        workspaces.cancelInvitation(ACME.id, INVITATION.id),
+        api.layer,
+      );
+
+      assert.deepEqual(made, { ok: true, answer: INVITATION });
+      assert.deepEqual(pending, { ok: true, answer: [INVITATION] });
+      assert.deepEqual(left, { ok: true, answer: [] });
+      assert.deepEqual(api.credentials(), ["session-1", "session-1", "session-1"]);
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        workspaceId: ACME.id,
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+      });
+      assert.equal(api.requests()[1]?.searchParams.get("workspaceId"), ACME.id);
+    }),
+);
+
+it.effect(
+  "an address already in or invited is named, and an address or role the service would refuse never travels",
+  () =>
+    Effect.gen(function* () {
+      const api = refusing(
+        "POST /api/workspaces/invitations",
+        HOSTED_API_ERROR.ALREADY_INVITED,
+        HTTP_STATUS.CONFLICT,
+      );
+      const workspaces = client();
+
+      const again = yield* Effect.provide(
+        workspaces.invite(ACME.id, "alan@example.com", WORKSPACE_ROLE.MEMBER),
+        api.layer,
+      );
+      const notAnAddress = yield* Effect.provide(
+        workspaces.invite(ACME.id, "alan", WORKSPACE_ROLE.MEMBER),
+        api.layer,
+      );
+      const asOwner = yield* Effect.provide(
+        workspaces.invite(ACME.id, "alan@example.com", WORKSPACE_ROLE.OWNER),
+        api.layer,
+      );
+
+      assert.deepEqual(again, { ok: false, failure: WORKSPACE_CALL_FAILURE.ALREADY_INVITED });
+      assert.deepEqual(notAnAddress, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asOwner, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1);
+    }),
+);

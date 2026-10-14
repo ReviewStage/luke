@@ -11,6 +11,10 @@ import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-stor
 import { member, organization, user } from "@sidecar/database/schemas/auth";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
+  workspaceInvitationAnswerSchema,
+  workspaceInvitationsAnswerSchema,
+} from "@sidecar/hosted/workspace-invitation-wire";
+import {
   WORKSPACE_ROLE,
   type Workspace,
   workspaceAnswerSchema,
@@ -72,6 +76,9 @@ interface SessionSeams {
 /** No session at all: a path that takes one finds none, and nothing writes through the plugin. */
 const NO_SESSION: SessionSeams = {
   members: {
+    inviteMember: () => Effect.die("no member write without a session"),
+    listInvitations: () => Effect.die("no member write without a session"),
+    cancelInvitation: () => Effect.die("no member write without a session"),
     removeMember: () => Effect.die("no member write without a session"),
     leaveOrganization: () => Effect.die("no member write without a session"),
   },
@@ -142,7 +149,11 @@ function setupRequest(query: Record<string, string>) {
 }
 
 /** What an answer carries under the wire's schema, failing the test where it is not the wire's. */
-function readAs<A>(answered: Answer, schema: Schema.Codec<A, unknown>, status: number): A {
+function readAs<A>(
+  answered: Pick<Answer, "status" | "body">,
+  schema: Schema.Codec<A, unknown>,
+  status: number,
+): A {
   assert.equal(answered.status, status);
   const read = readEither(schema)(unparsedWire(answered.body));
   if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
@@ -776,7 +787,11 @@ it.effect(
           leaving({ ...plugin, members }, grace, acme);
         const answering = (
           write: Effect.Effect<void, OrganizationRefused | Cause.UnknownError>,
-        ): MemberSeams => ({ removeMember: () => write, leaveOrganization: () => write });
+        ): MemberSeams => ({
+          ...NO_SESSION.members,
+          removeMember: () => write,
+          leaveOrganization: () => write,
+        });
 
         const forbidden = yield* leavingAgainst(
           answering(Effect.fail(new OrganizationRefused({ status: 403 }))),
@@ -801,5 +816,179 @@ it.effect(
           refusedAs(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
       }).pipe(Effect.provide(database));
+    }),
+);
+
+/** The invitations path, a workspace's pending ones named in the query. */
+const invitationsAt = (workspaceId: string) =>
+  `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS}?${new URLSearchParams({ workspaceId })}`;
+
+/** A read under a fresh session of the account's, as its status and body. */
+const readInSession = (plugin: WorkspacePlugin, userId: string, path: string) =>
+  Effect.gen(function* () {
+    const sessionBearer = yield* plugin.sessionBearerOf(userId);
+    const { status, body } = yield* send(
+      plugin.seams,
+      NO_GITHUB_TO_READ,
+      bearerRequest(path, sessionBearer),
+      plugin,
+    );
+    return { status, body };
+  });
+
+/** An invitation asked for by the account, under its session. */
+const inviting = (plugin: WorkspacePlugin, userId: string, workspaceId: string, email: string) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS, {
+    workspaceId,
+    email,
+    role: "member",
+  });
+
+it.effect(
+  "an admin invites by address, reads the invitation pending with its accept link, and cancels it",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "admin" }]);
+
+        const made = readAs(
+          yield* inviting(plugin, grace, acme, "  Alan@Example.com "),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+        const listed = readAs(
+          yield* readInSession(plugin, ada, invitationsAt(acme)),
+          workspaceInvitationsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).invitations;
+        const canceled = yield* postedInSession(
+          plugin,
+          ada,
+          HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
+          { workspaceId: acme, invitationId: made.id },
+        );
+
+        assert.equal(made.email, "alan@example.com");
+        assert.equal(made.role, "member");
+        const link = new URL(made.acceptUrl);
+        assert.equal(link.origin + link.pathname, `${ORIGIN}/accept-invitation.html`);
+        assert.equal(link.searchParams.get("id"), made.id);
+        assert.deepEqual(listed, [made]);
+        assert.deepEqual(canceled, { status: HOSTED_HTTP_STATUS.OK, body: { invitations: [] } });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "an address already a member or already invited is refused as already invited, and nothing is sent twice",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
+
+        yield* inviting(plugin, ada, acme, "alan@example.com");
+        const again = yield* inviting(plugin, ada, acme, "alan@example.com");
+        const member = yield* inviting(plugin, ada, acme, `${grace}@luke.test`);
+
+        const alreadyInvited = refusedAs(
+          HOSTED_HTTP_STATUS.CONFLICT,
+          HOSTED_API_ERROR.ALREADY_INVITED,
+        );
+        assert.deepEqual(again, alreadyInvited);
+        assert.deepEqual(member, alreadyInvited);
+        const pending = readAs(
+          yield* readInSession(plugin, ada, invitationsAt(acme)),
+          workspaceInvitationsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).invitations;
+        assert.deepEqual(
+          pending.map((one) => one.email),
+          ["alan@example.com"],
+        );
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a member neither invites nor reads invitations, a personal workspace takes none, and another workspace's invitation is not canceled",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
+        const other = yield* openTeam(plugin.api, grace, []);
+        const personal = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
+        const elsewhere = readAs(
+          yield* inviting(plugin, grace, other, "someone@example.com"),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+
+        const answers = [
+          yield* inviting(plugin, grace, acme, "alan@example.com"),
+          yield* readInSession(plugin, grace, invitationsAt(acme)),
+          yield* inviting(plugin, ada, personal, "alan@example.com"),
+        ];
+        const crossed = yield* postedInSession(
+          plugin,
+          ada,
+          HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
+          { workspaceId: acme, invitationId: elsewhere.id },
+        );
+
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+        assert.deepEqual(answers, [notPermitted, notPermitted, notPermitted]);
+        assert.deepEqual(
+          crossed,
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "invitations under the Mac's OAuth token rather than its session are unauthenticated",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const acme = yield* openTeam(plugin.api, ada, []);
+
+        const read = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(invitationsAt(acme), ada),
+          plugin,
+        );
+        const made = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS, ada, {
+            workspaceId: acme,
+            email: "alan@example.com",
+            role: "member",
+          }),
+          plugin,
+        );
+
+        const unauthenticated = refusedAs(
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          HOSTED_API_ERROR.INVALID_TOKEN,
+        );
+        assert.deepEqual({ status: read.status, body: read.body }, unauthenticated);
+        assert.deepEqual({ status: made.status, body: made.body }, unauthenticated);
+      }).pipe(Effect.provide(plugin.database));
     }),
 );

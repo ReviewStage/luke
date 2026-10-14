@@ -81,6 +81,8 @@ export const HOSTED_API_ERROR = {
    * written.
    */
   NOT_PERMITTED: "not-permitted",
+  /** The address is already a member of the workspace, or already holds a pending invitation to it; nothing was sent. */
+  ALREADY_INVITED: "already-invited",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

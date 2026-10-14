@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@sidecar/database/core/query";
 import type {
   MemberSeams,
   OrganizationRefused,
+  PluginInvitation,
   WorkspaceSeams,
 } from "@sidecar/database/models/workspace-seams";
 import {
@@ -13,6 +14,14 @@ import {
 } from "@sidecar/database/models/workspace-store";
 import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
 import {
+  INVITATION_ROLE,
+  invitationAcceptUrl,
+  WORKSPACE_INVITATIONS_QUERY,
+  type WorkspaceInvitation,
+  workspaceInvitationCancelSchema,
+  workspaceInviteRequestSchema,
+} from "@sidecar/hosted/workspace-invitation-wire";
+import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_ROLE,
   workspaceCreateRequestSchema,
@@ -21,7 +30,7 @@ import {
   workspaceMemberRemovalSchema,
 } from "@sidecar/hosted/workspace-wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Cause, Effect, Layer, Option, Result } from "effect";
+import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -80,6 +89,14 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * plugin reads as the session cookie those calls take; every other path
  * here takes the Mac's OAuth token. Luke's own rules stand in front of the
  * plugin's, which checks the caller's role and membership again itself.
+ *
+ * An owner or an admin of a team's workspace invites people from the Mac the
+ * same way, under the session: `GET /api/workspaces/invitations` answers the
+ * pending invitations, each with its accept link, `POST` makes one through
+ * the plugin's `createInvitation`
+ * (https://www.better-auth.com/docs/plugins/organization#send-invitation),
+ * and `POST /api/workspaces/invitations/cancel` cancels one through
+ * `cancelInvitation`, answering those still pending.
  */
 
 const WORKSPACES_PATH = "/api/workspaces";
@@ -88,6 +105,17 @@ const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
 const MEMBERS_PATH = "/api/workspaces/members";
 const MEMBERS_REMOVE_PATH = "/api/workspaces/members/remove";
 const LEAVE_PATH = "/api/workspaces/leave";
+const INVITATIONS_PATH = "/api/workspaces/invitations";
+const INVITATIONS_CANCEL_PATH = "/api/workspaces/invitations/cancel";
+
+/** The plugin's word for an invitation not yet accepted, rejected, or canceled. */
+const INVITATION_PENDING = "pending";
+
+/** The plugin's codes for an address it will not invite because it already is, or already was. */
+const ALREADY_INVITED_CODES: ReadonlySet<string> = new Set([
+  "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION",
+  "USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION",
+]);
 
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 
@@ -162,14 +190,15 @@ const sessionAccountOf = Effect.fn("web/workspacesSessionAccount")(function* (
 });
 
 /**
- * A member write through the plugin: its refusal of the session as
- * unauthenticated, any other refusal as not permitted, since Luke's own
- * rules already passed, and a failure that is not a refusal as the outage
- * the Mac may retry, logged by its kind alone.
+ * A plugin call under the session: its refusal of the session as
+ * unauthenticated, an address already in or invited as such, any other
+ * refusal as not permitted, since Luke's own rules already passed, and a
+ * failure that is not a refusal as the outage the Mac may retry, logged by
+ * its kind alone.
  */
-function memberWriteOrRefused<R>(
-  write: Effect.Effect<void, OrganizationRefused | Cause.UnknownError, R>,
-): Effect.Effect<void, HostedRefusal, R> {
+function pluginCallOrRefused<A, R>(
+  write: Effect.Effect<A, OrganizationRefused | Cause.UnknownError, R>,
+): Effect.Effect<A, HostedRefusal, R> {
   return Effect.catch(write, (failure): Effect.Effect<never, HostedRefusal> => {
     if (failure._tag === "UnknownError") {
       return Effect.andThen(
@@ -177,12 +206,55 @@ function memberWriteOrRefused<R>(
         Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
       );
     }
+    if (failure.status === HOSTED_HTTP_STATUS.UNAUTHORIZED) {
+      return Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    }
     return Effect.fail(
-      failure.status === HOSTED_HTTP_STATUS.UNAUTHORIZED
-        ? HOSTED_REFUSAL.INVALID_TOKEN
+      failure.code !== undefined && ALREADY_INVITED_CODES.has(failure.code)
+        ? HOSTED_REFUSAL.ALREADY_INVITED
         : HOSTED_REFUSAL.NOT_PERMITTED,
     );
   });
+}
+
+/** An invitation's expiry as the instant it is, however the plugin's adapter handed it back. */
+function expiryOf(invitation: PluginInvitation): Date {
+  return invitation.expiresAt instanceof Date
+    ? invitation.expiresAt
+    : new Date(invitation.expiresAt);
+}
+
+/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of Luke's. */
+function invitationRoleOf(role: string): WorkspaceInvitation["role"] | undefined {
+  return Object.values(INVITATION_ROLE).find((one) => one === role);
+}
+
+/**
+ * The plugin's invitations as the Mac reads them: pending and unexpired
+ * alone, soonest to expire first, each with its accept link on the service's
+ * own origin.
+ */
+function pendingInvitations(
+  invitations: readonly PluginInvitation[],
+  origin: string,
+  now: number,
+): readonly WorkspaceInvitation[] {
+  return invitations
+    .filter((one) => one.status === INVITATION_PENDING && expiryOf(one).getTime() > now)
+    .toSorted((first, second) => expiryOf(first).getTime() - expiryOf(second).getTime())
+    .flatMap((one) => {
+      const role = invitationRoleOf(one.role);
+      if (role === undefined) return [];
+      return [
+        {
+          id: one.id,
+          email: one.email,
+          role,
+          expiresAt: expiryOf(one).toISOString(),
+          acceptUrl: invitationAcceptUrl(origin, one.id, one.email),
+        },
+      ];
+    });
 }
 
 /** The workspace the body names, where the account is an owner or admin of it; one it is not in is not found. */
@@ -324,7 +396,7 @@ const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* 
   if (target.value.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  yield* memberWriteOrRefused(
+  yield* pluginCallOrRefused(
     seams.members.removeMember({ headers, organizationId: workspaceId, memberId: memberId.value }),
   );
   const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
@@ -348,13 +420,111 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   if (workspace.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  yield* memberWriteOrRefused(
+  yield* pluginCallOrRefused(
     seams.members.leaveOrganization({ headers, organizationId: workspaceId }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 
-/** The group: the workspaces path, the two GitHub paths, the three members paths, and the hosted vocabulary's own refusal for any other. */
+/** A team workspace the account is an owner or an admin of; the one whose invitations it manages. */
+const invitingWorkspace = Effect.fn("web/invitingWorkspace")(function* (
+  userId: string,
+  organizationId: string,
+): Effect.fn.Return<Workspace, HostedRefusal, DatabaseServices> {
+  const workspace = yield* managedWorkspace(userId, organizationId);
+  if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  return workspace;
+});
+
+/** The service's own origin, which an accept link is built on. */
+const serviceOrigin = Effect.gen(function* () {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  return new URL(request.url).origin;
+});
+
+/** The workspace's pending invitations as the plugin lists them under the session, read for the Mac. */
+const pendingOf = Effect.fn("web/workspacePendingInvitations")(function* (
+  seams: WorkspacesAppSeams,
+  headers: Headers,
+  organizationId: string,
+) {
+  const listed = yield* pluginCallOrRefused(
+    seams.members.listInvitations({ headers, organizationId }),
+  );
+  return pendingInvitations(listed, yield* serviceOrigin, yield* Clock.currentTimeMillis);
+});
+
+/** POST: an invitation made by an owner or an admin, answered with it and its accept link. */
+const inviteEndpoint = Effect.fn("web/workspaceInviteEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceInviteRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, email, role } = asked.success;
+  const workspace = yield* invitingWorkspace(userId, workspaceId);
+  const made = yield* pluginCallOrRefused(
+    seams.members.inviteMember({ headers, organizationId: workspace.id, email, role }),
+  );
+  const [invitation] = pendingInvitations(
+    [made],
+    yield* serviceOrigin,
+    yield* Clock.currentTimeMillis,
+  );
+  if (invitation === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { invitation });
+});
+
+/** GET: a workspace's pending invitations, to an owner or an admin; POST: one made. */
+const invitationsEndpoint = Effect.fn("web/workspaceInvitationsEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method === HTTP_METHOD.POST) return yield* inviteEndpoint(seams);
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.getAll(WORKSPACE_INVITATIONS_QUERY.WORKSPACE_ID);
+  const asked = readEither(workspaceIdSchema)(unparsedWire(named[0]));
+  if (named.length !== 1 || Result.isFailure(asked)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const workspace = yield* invitingWorkspace(userId, asked.success);
+  const invitations = yield* pendingOf(seams, headers, workspace.id);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
+});
+
+/** POST: a pending invitation canceled by an owner or an admin, answered with those still pending. */
+const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceInvitationCancelSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, invitationId } = asked.success;
+  const workspace = yield* invitingWorkspace(userId, workspaceId);
+  // Note that only a pending invitation of this workspace is canceled,
+  // because the plugin checks the caller's role in whichever workspace the
+  // id names, not the one the body names.
+  const pending = yield* pendingOf(seams, headers, workspace.id);
+  if (!pending.some((one) => one.id === invitationId)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  yield* pluginCallOrRefused(seams.members.cancelInvitation({ headers, invitationId }));
+  const invitations = yield* pendingOf(seams, headers, workspace.id);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
+});
+
+/** The group: the workspaces path, the two GitHub paths, the three members paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
@@ -365,6 +535,12 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, MEMBERS_PATH, hostedRefusing(membersEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_REMOVE_PATH, hostedRefusing(removeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, LEAVE_PATH, hostedRefusing(leaveEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, INVITATIONS_PATH, hostedRefusing(invitationsEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      INVITATIONS_CANCEL_PATH,
+      hostedRefusing(cancelInvitationEndpoint(seams)),
+    ),
     hostedNotFoundRoute,
   );
 }
