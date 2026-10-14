@@ -38,8 +38,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * alike, so the address says nothing of what stands behind it. A paused
  * automation takes the call and queues nothing, so a sender does not retry.
  * The run is queued under the caller's `Idempotency-Key` where it sends
- * one, so a retry is the same run, with the body as it came, up to its
- * bound, beside it; the minute sweep starts the agent, which is handed the
+ * one, so a retry is the same run, with the body as it came, UTF-8 up to
+ * its bound, beside it; the minute sweep starts the agent, which is handed the
  * body fenced as the caller's own text. Nothing of the body or the secret
  * is logged.
  */
@@ -67,10 +67,26 @@ function secretHolds(secret: string, kept: string): boolean {
   return offered.length === wanted.length && timingSafeEqual(offered, wanted);
 }
 
-/** The caller's own key for the call where it sends one within the bound, else a fresh one, so a call without one is its own run. */
+/**
+ * The caller's own key for the call, its SHA-256 where it runs past the
+ * bound, so a long key still names the one run on every retry; a fresh one
+ * where it sends none, so a call without one is its own run.
+ */
 function dedupeKeyOf(request: Request): string {
   const sent = request.headers.get(AUTOMATION_WEBHOOK.IDEMPOTENCY_HEADER)?.trim() ?? "";
-  return sent.length > 0 && sent.length <= AUTOMATION_BOUNDS.MAX_KEY_CHARS ? sent : randomUUID();
+  if (sent.length === 0) return randomUUID();
+  return sent.length <= AUTOMATION_BOUNDS.MAX_KEY_CHARS
+    ? sent
+    : createHash("sha256").update(sent).digest("hex");
+}
+
+/** The body as UTF-8 text, or nothing for bytes that are not, which the agent could not be handed whole. */
+function utf8Of(body: Uint8Array): string | undefined {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  } catch {
+    return undefined;
+  }
 }
 
 /** POST: one call, admitted by the trigger's secret, queuing one run. */
@@ -100,13 +116,15 @@ const webhookEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookEndpoint
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     }
     const body = yield* readBodyBytesEffect(AUTOMATION_WEBHOOK.MAX_BODY_BYTES);
+    const text = utf8Of(body);
+    if (text === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     if (!automation.value.enabled) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { queued: 0 });
     const firedAt = new Date(yield* Clock.currentTimeMillis);
     const recorded = yield* hostedStoreOrUnavailable(
       recordAutomationRun(automation.value, {
         dedupeKey: dedupeKeyOf(request),
         firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: body.byteLength },
-        payload: new TextDecoder().decode(body),
+        payload: text,
         firedAt,
       }),
     );

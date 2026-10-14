@@ -27,6 +27,7 @@ import {
   type AutomationGuards,
   GITHUB_TRIGGER_EVENT,
 } from "@sidecar/hosted/automation-wire";
+import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
@@ -566,5 +567,29 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           "the body cannot close its own fence",
         );
       }),
+  );
+
+  it.effect("a webhook body too long for the agent's task is cut to fit, the cut said", () =>
+    Effect.gen(function* () {
+      const { owner, automation } = yield* openAutomation();
+      const eve = fakeEve();
+      const body = "x".repeat(64 * 1024);
+      const run = Option.getOrThrow(
+        yield* recordAutomationRun(automation, {
+          dedupeKey: randomUUID(),
+          firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: body.length },
+          payload: body,
+          firedAt: new Date(),
+        }),
+      );
+
+      const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+
+      const agentId =
+        outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+      const task = Option.getOrThrow(yield* readCodingAgent(owner, agentId)).task ?? "";
+      assert.ok(task.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, `${task.length} fits`);
+      assert.match(task, /cut to fit/u);
+    }),
   );
 });

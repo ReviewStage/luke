@@ -26,6 +26,7 @@ import {
   type NewAutomation,
   readAutomation,
   recordAutomationRun,
+  replaceWebhookSecretHash,
   settleAutomationRun,
   updateAutomation,
 } from "../automation-store.js";
@@ -319,6 +320,35 @@ it.layer(getTestDB())("the automation store", (it) => {
           [],
           "nor an automation listening for another event",
         );
+      }),
+  );
+
+  it.effect(
+    "a webhook's secret hash is replaced only where it is still the one the caller read, so a stale rotation changes nothing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            ...nightly(yield* openPlan(owner)),
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            nextRunAt: null,
+            webhookSecretHash: "hash-a",
+          }),
+        );
+
+        const first = yield* replaceWebhookSecretHash(owner, made.id, "hash-a", "hash-b");
+        const stale = yield* replaceWebhookSecretHash(owner, made.id, "hash-a", "hash-c");
+
+        assert.equal(first, true);
+        assert.equal(stale, false, "the rotation that read the old hash is refused");
+        const [row] = yield* Database.use((db) =>
+          db
+            .select({ hash: automation.webhookSecretHash })
+            .from(automation)
+            .where(eq(automation.id, made.id)),
+        );
+        assert.equal(row?.hash, "hash-b");
       }),
   );
 });

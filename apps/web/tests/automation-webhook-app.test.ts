@@ -5,6 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import {
   createAutomation,
   listAutomationRuns,
+  queuedAutomationRuns,
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
 import { getTestDB } from "@sidecar/database/testing";
@@ -147,9 +148,13 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
         );
         assert.deepEqual(retry, { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 0 } });
         assert.deepEqual(byToken, { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } });
-        const runs = yield* listAutomationRuns(owner, automation.id);
+        // The body rides only the queued run the sweep acts on, so it is read as the sweep reads it.
+        const queued = (yield* queuedAutomationRuns(new Date(0), 100)).filter(
+          (run) => run.automationId === automation.id,
+        );
+        assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 2);
         assert.deepEqual(
-          runs.map((run) => [run.firing, run.payload]).sort(),
+          queued.map((run) => [run.firing, run.payload]).sort(),
           [
             [{ kind: AUTOMATION_FIRING.WEBHOOK, bytes: ALERT.length }, ALERT],
             [{ kind: AUTOMATION_FIRING.WEBHOOK, bytes: "plain text".length }, "plain text"],
@@ -198,6 +203,29 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
           call(fresh, { body: "x".repeat(AUTOMATION_WEBHOOK.MAX_BODY_BYTES + 1) }),
         );
         assert.equal(tooLarge.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
+        assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a retry key past the bound still names one run, and a body that is not UTF-8 is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, secret } = yield* openWebhook;
+        const { ask } = yield* standing;
+        const path = automationWebhookPath(automation.id);
+        const long = "k".repeat(500);
+
+        const first = yield* ask(path, call(secret, { key: long }));
+        const retry = yield* ask(path, call(secret, { key: long }));
+        const binary = yield* ask(path, {
+          method: "POST",
+          headers: { authorization: `Bearer ${secret}` },
+          body: new Uint8Array([0xff, 0xfe, 0x00, 0x41]),
+        });
+
+        assert.deepEqual([first.body, retry.body], [{ queued: 1 }, { queued: 0 }]);
+        assert.deepEqual(binary.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
         assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 1);
       }),
   );

@@ -10,7 +10,9 @@ import {
   listAutomationRuns,
   listAutomations,
   readAutomation,
+  readWebhookAutomation,
   recordAutomationRun,
+  replaceWebhookSecretHash,
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
@@ -475,10 +477,16 @@ const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSe
     if (standing.value.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
+    const kept = yield* hostedStoreOrUnavailable(readWebhookAutomation(id));
+    const previous = Option.getOrUndefined(kept)?.webhookSecretHash ?? null;
+    if (previous === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const webhook = mintWebhookSecret();
-    const written = yield* hostedStoreOrUnavailable(
-      updateAutomation(userId, id, { webhookSecretHash: webhook.hash }),
+    // A rotation another request made between the read and this write leaves this one refused, never undone.
+    const swapped = yield* hostedStoreOrUnavailable(
+      replaceWebhookSecretHash(userId, id, previous, webhook.hash),
     );
+    if (!swapped) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    const written = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
     if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       automation: yield* summaryOf(userId, written.value),

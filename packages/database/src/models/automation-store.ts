@@ -135,7 +135,6 @@ const RunRowSchema = Schema.Struct({
   id: Schema.String,
   automationId: Schema.String,
   firing: automationFiringSchema,
-  payload: Schema.NullOr(Schema.String),
   status: automationRunStatusSchema,
   reason: Schema.NullOr(automationRunReasonSchema),
   codingAgentId: Schema.NullOr(Schema.String),
@@ -150,13 +149,26 @@ const RUN_COLUMNS = {
   id: automationRun.id,
   automationId: automationRun.automationId,
   firing: automationRun.firing,
-  payload: automationRun.payload,
   status: automationRun.status,
   reason: automationRun.reason,
   codingAgentId: automationRun.codingAgentId,
   firedAt: automationRun.firedAt,
   settledAt: automationRun.settledAt,
 };
+
+const QueuedRunSchema = Schema.Struct({
+  ...RunRowSchema.fields,
+  payload: Schema.NullOr(Schema.String),
+});
+
+/**
+ * One run as the act that starts it reads it: the run, with a webhook's
+ * body beside it. Note that only a run about to be acted on reads its body,
+ * because a guard counts many runs and a body may run to 64 KiB.
+ */
+export type QueuedRun = typeof QueuedRunSchema.Type;
+
+const QUEUED_RUN_COLUMNS = { ...RUN_COLUMNS, payload: automationRun.payload };
 
 /** A firing to record: its identity, what it was, and when it fired. */
 export interface NewAutomationRun {
@@ -330,14 +342,14 @@ const insertRun = SqlSchema.findAll({
     payload: Schema.NullOr(Schema.String),
     firedAt: Schema.Date,
   }),
-  Result: RunRowSchema,
+  Result: QueuedRunSchema,
   execute: (row) =>
     Database.use((db) =>
       db
         .insert(automationRun)
         .values({ ...row, status: AUTOMATION_RUN_STATUS.QUEUED })
         .onConflictDoNothing({ target: [automationRun.automationId, automationRun.dedupeKey] })
-        .returning(RUN_COLUMNS),
+        .returning(QUEUED_RUN_COLUMNS),
     ),
 });
 
@@ -518,11 +530,11 @@ const findAutomationToRun = SqlSchema.findOneOption({
 
 const findQueuedRuns = SqlSchema.findAll({
   Request: Schema.Struct({ since: Schema.Date, limit: Schema.Int }),
-  Result: RunRowSchema,
+  Result: QueuedRunSchema,
   execute: ({ since, limit }) =>
     Database.use((db) =>
       db
-        .select(RUN_COLUMNS)
+        .select(QUEUED_RUN_COLUMNS)
         .from(automationRun)
         .where(
           and(
@@ -776,6 +788,25 @@ const findWebhookAutomation = SqlSchema.findOneOption({
     ),
 });
 
+const swapWebhookSecret = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    id: Schema.String,
+    previous: Schema.String,
+    next: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, id, previous, next, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ webhookSecretHash: next, updatedAt: now })
+        .where(and(ownedAndReachable(userId, id), eq(automation.webhookSecretHash, previous)))
+        .returning({ id: automation.id }),
+    ),
+});
+
 const writePause = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
   execute: ({ id, reason, now }) =>
@@ -858,7 +889,7 @@ export function deleteAutomation(userId: string, id: string): PlanStoreEffect<bo
 export function recordAutomationRun(
   owner: Pick<Automation, "id" | "userId">,
   run: NewAutomationRun,
-): PlanStoreEffect<Option.Option<AutomationRun>> {
+): PlanStoreEffect<Option.Option<QueuedRun>> {
   const row = {
     dedupeKey: run.dedupeKey,
     firing: run.firing,
@@ -959,7 +990,7 @@ export function readAutomationToRun(id: string): PlanStoreEffect<Option.Option<A
 export function queuedAutomationRuns(
   since: Date,
   limit: number,
-): PlanStoreEffect<readonly AutomationRun[]> {
+): PlanStoreEffect<readonly QueuedRun[]> {
   return findQueuedRuns({ since, limit });
 }
 
@@ -1072,4 +1103,21 @@ export function readWebhookAutomation(
   id: string,
 ): PlanStoreEffect<Option.Option<WebhookAutomation>> {
   return findWebhookAutomation(id);
+}
+
+/**
+ * A webhook's secret hash replaced, only where it is still the one the
+ * caller read, so two rotations at once leave the later one's secret and
+ * never bring back the one a rotation already replaced; false where it
+ * changed between.
+ */
+export function replaceWebhookSecretHash(
+  userId: string,
+  id: string,
+  previous: string,
+  next: string,
+): PlanStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(swapWebhookSecret({ userId, id, previous, next, now }), (rows) => rows.length > 0),
+  );
 }
