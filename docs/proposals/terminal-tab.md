@@ -535,8 +535,7 @@ sandbox port, which is a later "Open preview" idea, not v1.
 
 Each PR is small, stacks on the previous one, and ships tests that fail
 without it. Web PRs (1–3) run their store tests on a real Postgres
-(`test:store`). Desktop UI PRs carry `verify.sh` evidence from a Mac, and
-their bodies say CI could not verify the Mac.
+(`test:store`).
 
 1. **`feat(web): an attached terminal holds its agent's sandbox: the turn's
    end skips its stop, and the sweep stops it 2 minutes after the lease

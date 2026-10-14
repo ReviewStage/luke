@@ -15,11 +15,6 @@ available_in = [ "local" ]
 default = true
 icon = "play"
 
-[scripts.run.verify]
-command = "./scripts/verify.sh"
-available_in = [ "local" ]
-icon = "badge-check"
-
 [scripts.run.evidence]
 command = "./scripts/evidence.sh"
 available_in = [ "local" ]

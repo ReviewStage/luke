@@ -5,19 +5,6 @@
 ## Evidence
 
 - Platform-independent checks: `not run`
-- macOS Electron verification (`./scripts/verify.sh`): `not run`
-
-### Visual evidence
-
-CI runs on Linux only, so the deterministic macOS screenshots are yours to
-produce with `./scripts/verify.sh` and attach through GitHub's editor.
-
-- Fixture screenshots inspected: `not attached`
-
-### Physical-device evidence
-
-- Screenshot or screen recording: `not attached`
-- Device/display configuration: `not recorded`
 
 ## Invariants
 
@@ -25,7 +12,7 @@ Fill in every row. Rows marked CI are enforced by `scripts/repository-checks.sh`
 or by tests; the rest are yours to state. A row that cannot be ticked without a
 judgment call is a reason to stop and ask, not to tick it.
 
-- [ ] `./scripts/check.sh` green; renderer/UI PRs also `./scripts/verify.sh` with evidence inspected. (CI)
+- [ ] `./scripts/check.sh` green. (CI)
 - [ ] JSON Schema goldens unchanged (`LUKE_UPDATE_FIXTURES` not run, or diff explained line by line). (CI)
 - [ ] Every behavior change has, in this PR, the test that fails without it; no change-detector test added. (manual; root `AGENTS.md` "Testing")
 - [ ] Gateway envelope goldens unchanged. (CI)

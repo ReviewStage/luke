@@ -12,12 +12,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# CI is Linux only: the packaged macOS app is proven where it is built, by
-# `./scripts/verify.sh` at the developer's hand before a UI change is opened
-# and by the release workflow before anything ships. Every job below is
-# independent and runs at once, so a run takes as long as its longest job:
-# the tests, which are the bulk of `check.sh`, are spread across runners
-# rather than run behind the lint and typecheck.
+# CI is Linux only: the packaged macOS app is proven by the release workflow
+# before anything ships. Every job below is independent and runs at once, so a
+# run takes as long as its longest job: the tests, which are the bulk of
+# `check.sh`, are spread across runners rather than run behind the lint and
+# typecheck.
 #
 # The TypeScript checks and the tests run through Turborepo (`turbo.json`),
 # which replays a task whose inputs it has already seen pass. Its cache is

@@ -6,8 +6,8 @@ repository to copying the finished plan, and it names the existing piece of Luke
 each part of the Plans tab is built from. It is a design, not an
 implementation: the issues that build it (LUKE-334 document store, LUKE-337 the
 first Mac surface, LUKE-347 its move into the panel, LUKE-338 GitHub source
-tools, LUKE-340 GPT Live, LUKE-342 review and Copy) own the code, the tests,
-and the `verify.sh` evidence.
+tools, LUKE-340 GPT Live, LUKE-342 review and Copy) own the code and the
+tests.
 
 The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
@@ -1302,7 +1302,7 @@ changes when a check is run, not when one is planned.
 ### Not validated
 
 - **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
-  `./scripts/verify.sh` has not been run on the integrated application. The
+  the integrated application has not been run on one. The
   Plans tab in the panel, the document's presentation, the
   document scrolling inside the panel's ceiling,
   the microphone row, and the captions during a planning call
