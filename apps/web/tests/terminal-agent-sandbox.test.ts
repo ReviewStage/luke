@@ -9,6 +9,7 @@ import {
   agentSandboxLayer,
   SHELL_REFUSAL,
 } from "../server/hosted/terminal/agent-sandbox";
+import { TMUX_EXIT } from "../server/hosted/terminal/tmux";
 import { SandboxUnavailable } from "../server/hosted/vercel-sandbox-api";
 
 /**
@@ -65,6 +66,7 @@ function vercel(
   shells: readonly string[] = [],
   listExit = 0,
   interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
+  shellCheckExit: number = TMUX_EXIT.NO_SESSION,
 ) {
   const asked: Asked[] = [];
   const policies: unknown[] = [];
@@ -82,6 +84,8 @@ function vercel(
         if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
         if (tmuxArgs[0] === "new-session") return commandStream(0);
         const named = tmuxArgs.some((arg) => arg.startsWith(`=luke-${SHELL}`));
+        // The shell check exits its own code for a session tmux does not hold, or what a failed install exits.
+        if (args[1]?.includes("has-session")) return commandStream(named ? 0 : shellCheckExit);
         return commandStream(named ? 0 : 1);
       }
       asked.push({ method, url: parsed });
@@ -290,6 +294,20 @@ it.effect("an attach to a shell tmux does not hold is gone, and no PTY is minted
 
     assert.deepEqual(attached, { state: SANDBOX_STATE.RUNNING, gone: true });
     assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/interactive")));
+  }),
+);
+
+it.effect("a tmux that could not be asked is an outage the tab may retry, never a shell gone", () =>
+  Effect.gen(function* () {
+    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+    const api = vercel("running", [], 0, undefined, 1);
+    const unknown = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
+
+    const attached = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+      sandbox.attach(SESSION, unknown),
+    ).pipe(Effect.provide(api.layer), Effect.flip);
+
+    assert.ok(attached instanceof SandboxUnavailable);
   }),
 );
 

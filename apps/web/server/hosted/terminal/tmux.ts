@@ -162,9 +162,15 @@ export function attachTerminal(terminalId: string): CommandAsk {
   return tmux(["attach-session", "-t", targetOf(terminalId)]);
 }
 
-/** Whether a shell stands: exit 0 where its session does. */
+/** How the shell check exits where tmux ran and holds no such session: apart from tmux's own 1, which a failed install also exits with. */
+export const TMUX_EXIT = { NO_SESSION: 3 } as const;
+
+/** Whether a shell stands: exit 0 where its session does, `TMUX_EXIT.NO_SESSION` where tmux holds none by that name, and anything else where tmux could not be asked. */
 export function holdsTerminal(terminalId: string): CommandAsk {
-  return tmux(["has-session", "-t", targetOf(terminalId)]);
+  return script(
+    `${ENSURE_TMUX}\ntmux has-session -t "$1" 2>/dev/null || exit ${TMUX_EXIT.NO_SESSION}`,
+    [targetOf(terminalId)],
+  );
 }
 
 /** Names a shell anew. */
