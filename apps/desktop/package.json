@@ -47,7 +47,6 @@
     "@sidecar/analytics": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/features": "workspace:*",
-    "@sidecar/feedback": "workspace:*",
     "@sidecar/gateway": "workspace:*",
     "@sidecar/host": "workspace:*",
     "@sidecar/live": "workspace:*",
