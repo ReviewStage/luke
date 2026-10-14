@@ -323,26 +323,27 @@ function useMentionChips(
   planId: string,
   views: readonly UnitView[],
   links: SectionLinks | undefined,
-): LinkDrawer | undefined {
+): { readonly link: LinkDrawer | undefined; readonly doors: MentionDoors | undefined } {
   const latest = useRef(links);
   latest.current = links;
   const offered = links !== undefined;
   const opensFiles = links?.onOpenFile !== undefined;
   const headingKey = views.map((view) => view.heading).join("\n");
   return useMemo(() => {
-    if (!offered) return undefined;
+    if (!offered) return { link: undefined, doors: undefined };
     const doors: MentionDoors = {
       planId,
       headings: new Set(headingKey.split("\n").filter((heading) => heading !== "")),
       onOpenPlan: (mention) => latest.current?.onOpen(mention),
       onOpenFile: opensFiles ? (path) => latest.current?.onOpenFile?.(path) : undefined,
     };
-    return (href: string, label: string) => {
+    const link = (href: string, label: string) => {
       if (!isMentionLabel(label)) return undefined;
       const mention = decodeMention(href);
       if (mention === undefined) return undefined;
       return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
     };
+    return { link, doors };
   }, [offered, opensFiles, planId, headingKey]);
 }
 
@@ -513,7 +514,7 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
-  const link = useMentionChips(plan.id, views, sectionLinks);
+  const { link, doors: mentionDoors } = useMentionChips(plan.id, views, sectionLinks);
   const linkedPlan = sectionLinks === undefined ? undefined : plan.id;
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
@@ -676,6 +677,7 @@ export function PlanBody({
             editing={editing}
             drawn={sections}
             hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+            mentions={mentionDoors}
           />
         )}
       </div>

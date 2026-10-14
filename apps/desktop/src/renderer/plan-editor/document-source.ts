@@ -2,6 +2,7 @@ import { type AnyExtension, type Editor, type JSONContent, Node } from "@tiptap/
 import { MarkdownManager } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { diffArrays } from "diff";
+import { withMentions } from "./mention-node";
 
 /**
  * document-source.ts -- a plan's whole Markdown document as the editor's top-level blocks, each keeping its exact source, and back.
@@ -98,7 +99,7 @@ export function documentOpened(manager: MarkdownManager, markdown: string): Open
     const [block] = parsed;
     blocks.push(
       parsed.length === 1 && block !== undefined
-        ? block
+        ? withMentions(block)
         : { type: RawBlock.name, attrs: { source: token.raw } },
     );
     sources.push(token.raw);

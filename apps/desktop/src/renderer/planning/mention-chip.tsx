@@ -1,4 +1,10 @@
-import { MENTION_KIND, type Mention, type PlanMention } from "@sidecar/hosted/mention-link";
+import {
+  decodeMention,
+  encodeMention,
+  MENTION_KIND,
+  type Mention,
+  type PlanMention,
+} from "@sidecar/hosted/mention-link";
 import { DocumentIcon } from "@sidecar/panel";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
@@ -50,6 +56,23 @@ export interface MentionDoors {
   readonly onOpenPlan: (mention: PlanMention) => void;
   /** Shows a file's tab; none where no file can be opened from here. */
   readonly onOpenFile: ((path: string) => void) | undefined;
+}
+
+/**
+ * A mention's target named again where the plan it names had the heading
+ * it names renamed in an edit (`../plan-editor/plan-mentions.ts`): the new
+ * target, or nothing where the target names no section of the plan, or one
+ * of a heading the edit did not rename.
+ */
+export function retargetedMention(
+  planId: string,
+  target: string,
+  renamed: ReadonlyMap<string, string>,
+): string | undefined {
+  const mention = decodeMention(target);
+  if (mention?.kind !== MENTION_KIND.SECTION || mention.planId !== planId) return undefined;
+  const heading = renamed.get(mention.heading);
+  return heading === undefined ? undefined : encodeMention({ ...mention, heading });
 }
 
 /** What a gone section's card says of it. */

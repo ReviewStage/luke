@@ -1,12 +1,21 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
+import { decodeMention } from "@sidecar/hosted/mention-link";
 import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
-import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { editorBundleAtom, prefetchEditorBundle } from "../editor-bundle";
-import type { PlanEditorHandle, PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
+import type {
+  MentionNode,
+  PlanEditorHandle,
+  PlanEditorModule,
+  PlanEditorProps,
+} from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
+import { MentionChip, type MentionDoors, retargetedMention } from "./mention-chip";
+import { useMentionPicker } from "./mention-picker";
 import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
@@ -411,11 +420,23 @@ function MountedPlanEditor({
   latest.current = props;
   useLayoutEffect(() => {
     if (host.current === null) return;
+    const { mentions } = latest.current;
     const mounted = module.mount(host.current, {
       ...latest.current,
       onDraft: (markdown) => latest.current.onDraft(markdown),
       onFinish: (section) => latest.current.onFinish(section),
       onLeaveUp: () => latest.current.onLeaveUp(),
+      // Note that the mentions' doors are read as they are used, as the rest are.
+      mentions:
+        mentions === undefined
+          ? undefined
+          : {
+              onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
+              onKey: (event) => latest.current.mentions?.onKey(event) ?? false,
+              drawMention: (element, mention) =>
+                latest.current.mentions?.drawMention(element, mention) ?? (() => undefined),
+              retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
+            },
     });
     handle.current = mounted;
     return () => {
@@ -504,17 +525,30 @@ export function PlanDocumentEditor({
   editing,
   drawn,
   hostOf,
+  mentions,
 }: {
   plan: Plan;
   editor: DocumentEditor;
   editing: PlanEditing;
   drawn: ReactNode;
   hostOf: (section: number) => EditorHost;
+  /** What the plan's mentions open, drawn as their chips in the editor, with `@` picking new ones; none where the text takes no mentions. */
+  mentions?: MentionDoors | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
   useMergedAnswers(editor, editing, plan, handle);
   const module = useAtomValue(editorBundleAtom);
+  const room = useRef<HTMLElement>(null);
+  const chips = useEditorMentions();
+  const picker = useMentionPicker({
+    planId: plan.id,
+    planName: plan.name,
+    // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
+    text: () => handle.current?.markdown() ?? editor.draft,
+    room,
+    onChoose: (mention) => handle.current?.chooseMention(mention),
+  });
   if (!AsyncResult.isSuccess(module)) {
     return (
       <section className="plan-document-editor ph-no-capture" aria-busy="true">
@@ -536,9 +570,19 @@ export function PlanDocumentEditor({
     onDraft: doors.onDraft,
     onFinish: doors.onFinish,
     onLeaveUp: doors.onLeaveUp,
+    mentions:
+      mentions === undefined
+        ? undefined
+        : {
+            onTrigger: picker.onTrigger,
+            onKey: picker.onKey,
+            drawMention: chips.draw,
+            retarget: (target, renamed) => retargetedMention(plan.id, target, renamed),
+          },
   };
   return (
     <section
+      ref={room}
       className="plan-document-editor ph-no-capture"
       aria-label="Editing the plan"
       onBlur={(event) => {
@@ -547,6 +591,55 @@ export function PlanDocumentEditor({
     >
       <MountedPlanEditor module={module.value} props={props} handle={handle} />
       <DocumentNote editor={editor} editing={editing} />
+      {mentions === undefined ? null : picker.menu}
+      {mentions === undefined
+        ? null
+        : chips.drawn.map((each) =>
+            createPortal(
+              <EditorMention mention={each.mention} doors={mentions} />,
+              each.element,
+              each.key,
+            ),
+          )}
     </section>
   );
+}
+
+/** A mention the editor asked to be drawn: the element its node stands as, what it holds, and the key its drawing goes under. */
+interface DrawnMention {
+  readonly element: HTMLElement;
+  readonly mention: MentionNode;
+  readonly key: number;
+}
+
+/** The mentions the editor holds as drawn, and the door the editor asks to draw one through. */
+interface EditorMentions {
+  readonly drawn: readonly DrawnMention[];
+  readonly draw: (element: HTMLElement, mention: MentionNode) => () => void;
+}
+
+/** The mentions the editor holds, each drawn into its node's own element while it stands, as the composer draws its chips. */
+function useEditorMentions(): EditorMentions {
+  const [drawn, setDrawn] = useState<readonly DrawnMention[]>([]);
+  const counted = useRef(0);
+  const draw = (element: HTMLElement, mention: MentionNode) => {
+    counted.current += 1;
+    const key = counted.current;
+    setDrawn((was) => [...was, { element, mention, key }]);
+    return () => setDrawn((was) => was.filter((each) => each.key !== key));
+  };
+  return { drawn, draw };
+}
+
+/** A mention in the editor: its chip where its target names a mention, and its words where it names none. */
+function EditorMention({
+  mention,
+  doors,
+}: {
+  mention: MentionNode;
+  doors: MentionDoors;
+}): React.JSX.Element {
+  const named = decodeMention(mention.target);
+  if (named === undefined) return <>{`@${mention.name}`}</>;
+  return <MentionChip mention={named} name={mention.name} doors={doors} />;
 }

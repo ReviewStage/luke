@@ -8,7 +8,12 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import type { PlanEditorHandle, PlanEditorPlacement, PlanEditorProps } from "./contract";
+import type {
+  MentionNode,
+  PlanEditorHandle,
+  PlanEditorPlacement,
+  PlanEditorProps,
+} from "./contract";
 import {
   documentManager,
   documentMarkdown,
@@ -18,6 +23,8 @@ import {
   RawBlock,
   sourcesOf,
 } from "./document-source";
+import { mentionNode } from "./mention-node";
+import { planMentions } from "./plan-mentions";
 
 /**
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
@@ -31,6 +38,9 @@ import {
  * (`./document-source.ts`). Esc and ⌘↩ finish, naming the section the caret
  * stood in; ↑ on the text's first line goes to the title above it.
  */
+
+/** The key code a browser gives a key an input method takes. */
+const COMPOSING_KEY_CODE = 229;
 
 /** The class the editor's own element wears beside the read view's, which `planning.css` styles. */
 const EDITOR_CLASS = "plan-document-text";
@@ -46,8 +56,13 @@ const DocumentHeading = Heading.extend({
   },
 });
 
-/** What the text may hold, read and written as the editor reads and writes it. */
-export function markdownExtensions(): AnyExtension[] {
+/**
+ * What the text may hold, read and written as the editor reads and writes
+ * it: the mention among the rest, drawn by the panel where it can draw one.
+ */
+export function markdownExtensions(
+  drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+): AnyExtension[] {
   const kit = StarterKit.configure({
     heading: false,
     underline: false,
@@ -63,6 +78,7 @@ export function markdownExtensions(): AnyExtension[] {
     TableKit,
     Image.configure({ inline: true }),
     RawBlock,
+    mentionNode(drawMention),
   ];
 }
 
@@ -111,12 +127,18 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
  * caret where the placement says, and focused if it is asked to be.
  */
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
-  const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp } = props;
-  const extensions = markdownExtensions();
+  const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp, mentions } =
+    props;
+  const extensions = markdownExtensions(mentions?.drawMention);
   const manager = documentManager(extensions);
-  const opened = documentOpened(manager, markdown);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
-  let held: HeldSources = { sources: new Map(), lead: opened.lead, ending: opened.ending };
+  let held: HeldSources = { sources: new Map(), lead: "", ending: "" };
+  const picking =
+    mentions === undefined
+      ? undefined
+      : planMentions(manager, (node) => held.sources.get(node), mentions);
+  const opened = documentOpened(manager, markdown);
+  held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
     extensions: [...extensions, Placeholder.configure({ placeholder: "Write the plan" })],
@@ -130,6 +152,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-label": label,
       },
       handleKeyDown: (view, event) => {
+        // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
+        if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {
+          return false;
+        }
+        // The keys a mention's list takes are its own first, Escape among them, which closes it.
+        if (mentions?.onKey(event) === true) return true;
         if (event.key === "Escape" || (event.key === "Enter" && event.metaKey)) {
           onFinish(caretSection(editor));
           return true;
@@ -143,6 +171,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     onUpdate: ({ editor: updated }) => onDraft(documentMarkdown(manager, updated.state.doc, held)),
   });
+  if (picking !== undefined) editor.registerPlugin(picking.plugin);
   held = sourcesOf(editor.state.doc, opened);
   editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
   if (focus) editor.view.focus();
@@ -152,6 +181,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
       held = answer.held;
       return { base: answer.base, text: documentMarkdown(manager, editor.state.doc, held) };
     },
+    chooseMention: (mention) => picking?.choose(editor, mention),
+    markdown: () => documentMarkdown(manager, editor.state.doc, held),
     destroy: () => editor.destroy(),
   };
 }

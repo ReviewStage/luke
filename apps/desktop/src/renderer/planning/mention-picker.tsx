@@ -1,0 +1,362 @@
+import { encodeMention, MENTION_KIND, type Mention } from "@sidecar/hosted/mention-link";
+import { planSections } from "@sidecar/hosted/plan-document";
+import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
+import { DocumentIcon } from "@sidecar/panel";
+import { defaultFilter } from "cmdk";
+import { FolderIcon, HashIcon } from "lucide-react";
+import { type RefObject, useEffect, useId, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { useAct } from "../act";
+import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
+import { fileFolder, fileName } from "./code-pane-model";
+import { FileTypeIcon } from "./file-type-icon";
+
+/**
+ * mention-picker.tsx -- the list an `@` opens: the plan's repository's files and folders, the plan's sections, and the plan, grouped by kind, narrowed as the word is typed, the pick written as its mention.
+ *
+ * The list opens the way the `/` list does (`skill-picker.tsx`), at the
+ * word an editor reports (`ComposerTrigger`), the caret staying in the
+ * editor throughout: ↑ and ↓ move the highlight, Enter or Tab write the
+ * highlighted row as its mention, and Escape closes the list until the caret
+ * leaves the word. Nothing typed after the `@`, it offers the plan and its
+ * sections; typed, it finds each kind's best few by the words typed, scored
+ * as ⌘K scores them (cmdk's own filter), files and folders first, each
+ * group in a fixed place so a later read never moves the rows above it.
+ * The repository's paths are read once per plan, the first time an `@` is
+ * typed, through the same listing ⌘K finds files with
+ * (`ACT_KIND.PLANNING_TREE`, the whole tree at the default branch).
+ *
+ * A pick hands the editor the mention's name and its target
+ * (`@sidecar/hosted/mention-link`), which the editor writes in place of
+ * the word; the name is the file's or folder's own name, the heading, or
+ * the plan's name.
+ */
+
+/** What the list's groups are called, in the order they stand. */
+const MENTION_GROUP = {
+  FILES: "Files and folders",
+  PLAN: "Plan",
+} as const;
+
+/** The most rows one group lists. */
+const PER_GROUP = 4;
+
+/** The least of cmdk's scores the list counts as a match, as ⌘K counts one. */
+const LEAST_SCORE = 0.01;
+
+/** The list's own name, which its listbox is read by. */
+const MENU_LABEL = "Mention";
+
+/** What the list says where it has no row. */
+const NO_MATCH = "Nothing matches";
+
+/** The keys the list hears, said at its foot. */
+const MENU_KEYS = ["↑↓ Move", "↵ Mention", "esc Close"] as const;
+
+/** The gap between the word's line and the list under it. */
+const MENU_GAP = 4;
+
+/** The list's width, as the stylesheet sets it (`.mention-menu`). */
+const MENU_WIDTH = 360;
+
+/** One row the list offers: what it mentions, the name its mention is written with, and a muted detail. */
+interface MentionRow {
+  readonly mention: Mention;
+  readonly name: string;
+  readonly detail: string | undefined;
+  /** The words it is found by. */
+  readonly terms: string;
+}
+
+interface MentionGroup {
+  readonly label: string;
+  readonly rows: readonly MentionRow[];
+}
+
+/** A path of the repository as the list finds it: a file or a folder. */
+interface RepositoryPath {
+  readonly path: string;
+  readonly folder: boolean;
+}
+
+/** The highlight as it was moved, held against the word it was moved in. */
+interface Highlight {
+  readonly start: number;
+  readonly query: string;
+  readonly at: number;
+}
+
+/** A path's row: its own name, its folder after it, found by the whole path. */
+function pathRow(entry: RepositoryPath): MentionRow {
+  const name = fileName(entry.path);
+  return {
+    mention: entry.folder
+      ? { kind: MENTION_KIND.FOLDER, path: entry.path }
+      : { kind: MENTION_KIND.FILE, path: entry.path },
+    name: entry.folder ? `${name}/` : name,
+    detail: fileFolder(entry.path),
+    terms: entry.path,
+  };
+}
+
+/** The plan's rows: each section by its heading, then the plan itself. */
+function planRows(planId: string, planName: string, text: string): MentionRow[] {
+  const headings = [
+    ...new Set(
+      planSections(text).flatMap((section) => (section.heading === "" ? [] : [section.heading])),
+    ),
+  ];
+  return [
+    ...headings.map(
+      (heading): MentionRow => ({
+        mention: { kind: MENTION_KIND.SECTION, planId, heading },
+        name: heading,
+        detail: "Section",
+        terms: heading,
+      }),
+    ),
+    {
+      mention: { kind: MENTION_KIND.PLAN, planId },
+      name: planName,
+      detail: "The whole plan",
+      terms: planName,
+    },
+  ];
+}
+
+/** The rows matching the query, best first, as many as a group lists; every row in order for no query. */
+function best(rows: readonly MentionRow[], query: string): readonly MentionRow[] {
+  if (query.trim() === "") return rows.slice(0, PER_GROUP);
+  return rows
+    .map((row) => ({ row, score: defaultFilter(row.terms, query) }))
+    .filter((each) => each.score >= LEAST_SCORE)
+    .sort((first, second) => second.score - first.score)
+    .slice(0, PER_GROUP)
+    .map((each) => each.row);
+}
+
+/** The groups the list offers for the word: the plan's alone for no query, else each kind's best, files and folders first. */
+function groupsFor(
+  query: string,
+  paths: readonly RepositoryPath[] | undefined,
+  plan: readonly MentionRow[],
+): readonly MentionGroup[] {
+  const files = query.trim() === "" || paths === undefined ? [] : best(paths.map(pathRow), query);
+  return [
+    { label: MENTION_GROUP.FILES, rows: files },
+    { label: MENTION_GROUP.PLAN, rows: best(plan, query) },
+  ].filter((group) => group.rows.length > 0);
+}
+
+/** A row's glyph, as its chip wears it. */
+function RowGlyph({ mention }: { mention: Mention }): React.JSX.Element {
+  switch (mention.kind) {
+    case MENTION_KIND.FILE:
+      return <FileTypeIcon name={fileName(mention.path)} />;
+    case MENTION_KIND.FOLDER:
+      return <FolderIcon aria-hidden="true" />;
+    case MENTION_KIND.SECTION:
+      return <HashIcon aria-hidden="true" />;
+    case MENTION_KIND.PLAN:
+      return <DocumentIcon />;
+  }
+}
+
+/** One row's id, under the list's own. */
+function optionId(listId: string, index: number): string {
+  return `${listId}-${index}`;
+}
+
+/** The list itself: each group's heading and rows, the highlighted one washed, and the keys at its foot. */
+function MentionMenu({
+  id,
+  groups,
+  at,
+  place,
+  onHover,
+  onChoose,
+}: {
+  id: string;
+  groups: readonly MentionGroup[];
+  at: number;
+  place: { readonly left: number; readonly top: number };
+  onHover: (index: number) => void;
+  onChoose: (row: MentionRow) => void;
+}): React.JSX.Element {
+  let index = -1;
+  return (
+    <div className="menu-surface searchable-menu mention-menu" style={place}>
+      {/* Note that a press on a row keeps the caret in the editor, where the keys are read. */}
+      <div
+        id={id}
+        className="plan-compose-menu-list"
+        role="listbox"
+        aria-label={MENU_LABEL}
+        onMouseDown={(event) => event.preventDefault()}
+      >
+        {groups.map((group) => (
+          // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
+          <div key={group.label} role="group" aria-label={group.label}>
+            <div className="menu-heading" aria-hidden="true">
+              {group.label}
+            </div>
+            {group.rows.map((row) => {
+              index += 1;
+              const mine = index;
+              return (
+                <button
+                  key={encodeMention(row.mention)}
+                  id={optionId(id, mine)}
+                  type="button"
+                  role="option"
+                  tabIndex={-1}
+                  className="menu-item"
+                  aria-selected={mine === at}
+                  onMouseMove={() => onHover(mine)}
+                  onClick={() => onChoose(row)}
+                >
+                  <span className="menu-item-glyph">
+                    <RowGlyph mention={row.mention} />
+                  </span>
+                  <span className="plan-compose-menu-name">{row.name}</span>
+                  {row.detail === undefined ? null : (
+                    <span className="menu-item-hint mention-row-detail">{row.detail}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+        {groups.length === 0 ? <p className="plan-compose-menu-note">{NO_MATCH}</p> : null}
+      </div>
+      <div className="plan-compose-menu-foot mention-menu-foot" aria-hidden="true">
+        {MENU_KEYS.map((key) => (
+          <span key={key}>{key}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** What an editor drawing an `@` list wires: the list while it stands, and the report and keys the editor hands it. */
+export interface MentionPicker {
+  readonly menu: React.ReactNode;
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly onKey: (event: KeyboardEvent) => boolean;
+}
+
+/**
+ * The `@` list for an editor of the plan's text: its rows read from the
+ * plan's words as they stand and the repository's paths, placed under the
+ * word in `room`, and a pick handed to `onChoose` as the mention's node.
+ */
+export function useMentionPicker({
+  planId,
+  planName,
+  text,
+  room,
+  onChoose,
+}: {
+  planId: string;
+  planName: string;
+  /** The plan's text as it stands now, whose sections the list offers, read as the list draws. */
+  text: () => string;
+  /** The element the list is placed in, under the word. */
+  room: RefObject<HTMLElement | null>;
+  onChoose: (mention: MentionNode) => void;
+}): MentionPicker {
+  const listId = useId();
+  const { act } = useAct();
+  const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
+  const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
+  const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
+  const [paths, setPaths] = useState<{ planId: string; paths: readonly RepositoryPath[] }>();
+
+  const open = trigger !== undefined && closedAt !== trigger.start;
+  // A word closed with Escape stays closed only while the caret is in it.
+  const inWord = trigger !== undefined;
+  useEffect(() => {
+    if (!inWord) setClosedAt(undefined);
+  }, [inWord]);
+
+  // The repository's paths are read the first time the list opens on the plan.
+  const read = paths?.planId === planId ? paths.paths : undefined;
+  useEffect(() => {
+    if (!open || read !== undefined) return;
+    let live = true;
+    act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true }).then(
+      (answer) => {
+        if (!live) return;
+        const entries = "folder" in answer ? answer.folder.entries : [];
+        setPaths({
+          planId,
+          paths: entries.map((entry) => ({
+            path: entry.name,
+            folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
+          })),
+        });
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [open, read, act, planId]);
+
+  const groups = open ? groupsFor(trigger.query, read, planRows(planId, planName, text())) : [];
+  const rows = groups.flatMap((group) => group.rows);
+  const held =
+    highlight !== undefined &&
+    trigger !== undefined &&
+    highlight.start === trigger.start &&
+    highlight.query === trigger.query
+      ? highlight.at
+      : 0;
+  const at = Math.min(held, Math.max(rows.length - 1, 0));
+  const choose = (row: MentionRow) =>
+    onChoose({ name: row.name, target: encodeMention(row.mention) });
+
+  const onKey = (event: KeyboardEvent): boolean => {
+    if (!open) return false;
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      setClosedAt(trigger.start);
+      return true;
+    }
+    const row = rows[at];
+    if (row === undefined) return false;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const step = event.key === "ArrowDown" ? 1 : rows.length - 1;
+      setHighlight({ start: trigger.start, query: trigger.query, at: (at + step) % rows.length });
+      return true;
+    }
+    if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
+      choose(row);
+      return true;
+    }
+    return false;
+  };
+
+  // The list stands under the word's line, inside the room's width.
+  const box = room.current;
+  const placed = box?.getBoundingClientRect();
+  const menu =
+    !open || box === null || placed === undefined ? null : (
+      <MentionMenu
+        id={listId}
+        groups={groups}
+        at={at}
+        place={{
+          left: Math.max(
+            0,
+            Math.min(trigger.rect.left - placed.left, box.clientWidth - MENU_WIDTH),
+          ),
+          top: trigger.rect.bottom - placed.top + MENU_GAP,
+        }}
+        onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
+        onChoose={choose}
+      />
+    );
+
+  return { menu, onTrigger: setTrigger, onKey };
+}
