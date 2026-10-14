@@ -14,7 +14,6 @@ import type {
   ShortcutControl,
   UpdateControl,
 } from "./controls";
-import { GitHubSection, type GitHubSettingsControl } from "./github-section";
 import { type IntegrationsSearch, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
@@ -51,8 +50,6 @@ export interface SettingsPanelProps {
   shortcuts: ShortcutControl;
   /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
-  /** Whether the account has GitHub connected, and the pages that connect and disconnect it, drawn while an account is signed in. */
-  github?: GitHubSettingsControl;
 }
 
 /**
@@ -116,7 +113,6 @@ export function SettingsPanel({
   settings,
   shortcuts,
   workspace,
-  github,
   integrationsSearch,
 }: SettingsPanelProps & {
   /** Settings' one search, which the Integrations page reads its query from and hands its tools to. */
@@ -129,14 +125,11 @@ export function SettingsPanel({
     <div className="settings">
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
-          <>
-            <AccountSection
-              account={account}
-              onSignOut={onSignOut}
-              onDeleteAccount={onDeleteAccount}
-            />
-            {github !== undefined ? <GitHubSection control={github} /> : null}
-          </>
+          <AccountSection
+            account={account}
+            onSignOut={onSignOut}
+            onDeleteAccount={onDeleteAccount}
+          />
         ) : (
           <p className="settings-note">Not signed in.</p>
         )

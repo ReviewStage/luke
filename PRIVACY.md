@@ -224,12 +224,14 @@ You cannot put an image or a file on the board. Deleting the plan deletes its
 whiteboard.
 
 **How the planning model reads your repository.** A plan names a GitHub
-repository the Luke GitHub App is installed on and you can reach. The
+repository of the Luke GitHub App installation connected to the plan's
+workspace. The
 planning model reads its code by running shell commands (such as `ls`,
 `grep`, or `cat`) in a Vercel Sandbox: an isolated machine our service opens
 for the plan's planning conversation, on Vercel's infrastructure, never on
 your Mac. The first command checks out the default branch's latest commit,
-after our service confirms you still reach the repository, with a read-only
+after our service confirms the workspace's installation still reaches the
+repository, with a read-only
 token the App mints for that one repository, good for an hour. The token is
 set at the sandbox's network firewall for the checkout and withdrawn when it
 ends: it never enters the sandbox, a command, its output, or the
@@ -265,8 +267,8 @@ Luke. It is never part of the plan's document.
 its whole file in a File tab. Our service reads the file from GitHub at the
 commit Luke's checkout read it at, or, for a file you open from the tree, a
 skill, or code shown before that commit was recorded, at the head of the
-default branch: it confirms you still reach the repository and
-mints a token for that one repository that reads its contents, used for that
+default branch: it confirms the workspace's installation still reaches the
+repository and mints a token for that one repository that reads its contents, used for that
 read and never sent to your Mac, logged, or kept. The rules for code on
 screen apply, and a link, a folder, a file over a megabyte, or one that is
 not text is refused. The file is read 500 lines at a time as you scroll, is
@@ -282,7 +284,8 @@ nothing of the file is stored.
 
 **A coding agent's changes.** A coding agent's Changes tab shows its pull
 request's changed files. Each time the tab opens, our service reads them from
-GitHub with your GitHub token: each file's name and patch, for up to 300
+GitHub with a token the Luke GitHub App mints for that one repository on the
+workspace's installation: each file's name and patch, for up to 300
 files, leaving out a patch over 100,000 characters. It stores none of it, and
 Luke holds it in memory while the tab is open, never on disk, except that
 downloading the patch writes it where you save it.
@@ -369,7 +372,8 @@ own retention policy.
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, the address of your profile picture, and which of the two you used.
 An account made with Google can also link a GitHub account to itself, even
-one under a different email address; signing in with GitHub, or linking it,
+one under a different email address, in Settings › Integrations, which lets
+agents use GitHub tools as you; signing in with GitHub, or linking it,
 authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents,
@@ -386,8 +390,11 @@ holds only your GitHub account's number, so signing in with GitHub again
 finds your account even if your GitHub email changed; your account keeps
 any other way you sign in. Signing in with Google leaves us
 Google's sign-in tokens, kept on our service and used for nothing after the
-sign-in. Installing the App stores nothing about you: which repositories it
-can see is read from GitHub when you choose one. We also keep the records
+sign-in. Your own GitHub is not how Luke reaches a workspace's
+repositories: they are those of the GitHub installation connected to the
+workspace, read from GitHub with tokens the App mints for that installation
+when you choose one, and nobody's own GitHub account decides what a
+workspace reaches. We also keep the records
 that keep you signed in, each with the network address and the browser or app
 it was signed in from, and a daily count of your use of our service, one
 number a day: one for each voice session you opened; each model call made on
@@ -407,14 +414,18 @@ with your name and holding you as its owner; it goes when you delete your
 account. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 other than a personal one sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. When an owner or admin connects a GitHub organization to a workspace, the
+role in it, and an owner or admin of it can remove a member. When an owner
+or admin connects GitHub to a workspace, a personal one included, the
 service keeps beside the workspace GitHub's ids for that installation and the
 account it is on, its login, whether it is a user or an organization, and
-whether the installation is active, suspended, or removed; to confirm the
-installation is one your GitHub account can see, it reads your installations
-on your own GitHub token once, and keeps nothing else of that read. While a
-connect is under way it keeps, for at most an hour, a one-way digest of the
-connect link's random code beside your account and the workspace.
+whether the installation is active, suspended, or removed. To confirm the
+installation is one the person connecting it can see, GitHub asks them to
+authorize the Luke GitHub App once; our service uses the one-time token that
+gives it to read their installations once, then revokes it, and keeps nothing
+of it or of that read. While a connect is under way it keeps, for at most an
+hour, a one-way digest of the connect link's random code beside your account
+and the workspace, the installation GitHub named, and the random code that
+proves the authorization is the one it asked for.
 
 The service also keeps your conversation with Luke. Each turn he runs for you
 writes to our database your ask as given; his reply, the summaries of his
@@ -560,8 +571,9 @@ never to your Mac, a model, or a sandbox, and keeps no other record of the
 connection. What GitHub answers goes to the model that made the call, and each
 call, with its input and everything GitHub answered, is written to the plan's
 conversation or the agent's transcript like any other tool call. An account
-that signed in with Google alone is offered Connect GitHub in Settings ›
-Integrations instead, which opens Connected accounts to connect it. Luke
+that signed in with Google alone is offered Connect on GitHub's row in
+Settings › Integrations instead, which connects it, and Disconnect there
+ends it. Luke
 stops using it when your GitHub connection ends: when you disconnect it,
 revoke the App in GitHub's settings, or delete your account; what agents
 already changed on GitHub, and the record of it, stays.
@@ -737,11 +749,14 @@ only when you press Send.
   shares with us, when a pull request or its checks change on a repository the
   App is installed on; our service reads only the kind of change and the
   repository's and branch's names from that message and keeps none of it,
-  then, for up to ten of the newest agents on that branch, reads with its
-  owner's GitHub token the pull request's number, title, link, state, checks,
+  then, for up to ten of the newest agents on that branch, reads with a token
+  the App mints on the workspace's installation the pull request's number,
+  title, link, state, checks,
   and size of change, and the branch's latest commit, and keeps them with the
-  agent until the plan is deleted. Our service also reads from GitHub, on your
-  behalf and storing none of it, a file or folder you open, a pull request's
+  agent until the plan is deleted. Commits and pull requests are the Luke
+  GitHub App's own, under its bot, and name no one's GitHub account. Our
+  service also reads from GitHub, through the workspace's installation and
+  storing none of it, a file or folder you open, a pull request's
   changed files for the Changes tab, and a repository's skills.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to

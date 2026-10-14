@@ -47,36 +47,34 @@ test("Invite people finds Members for a team workspace and nothing for the perso
   assert.deepEqual(workspaceFound("Invite people", PERSONAL), []);
 });
 
-test("GitHub repositories is found only for an owner or an admin of a team workspace", () => {
+test("GitHub repositories is found for every workspace, a member's and the personal one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
-  assert.deepEqual(
-    workspaceFound("GitHub repositories", { ...TEAM, role: WORKSPACE_ROLE.OWNER }),
-    found,
-  );
+  assert.deepEqual(workspaceFound("GitHub repositories", PERSONAL), found);
+  assert.deepEqual(workspaceFound("GitHub repositories", TEAM), found);
   assert.deepEqual(
     workspaceFound("GitHub repositories", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }),
     found,
   );
-  assert.deepEqual(workspaceFound("GitHub repositories", TEAM), []);
-  assert.deepEqual(workspaceFound("GitHub repositories", PERSONAL), []);
 });
 
-/** The ids of every row a query for `query` finds, signed in or not, with no workspace shown. */
-function found(query: string, accountDrawn: boolean): readonly string[] {
-  const input: SettingsSearchInput = {
+test("searching GitHub while signed in finds Integrations' GitHub row and nothing on the Account page", () => {
+  const entries = settingsSearchEntries({
     settings: settingsView(),
     voiceControlsDrawn: true,
-    accountDrawn,
-  };
-  return (searchSettings(settingsSearchEntries(input), query)?.groups ?? []).flatMap((group) =>
-    group.items.map((entry) => entry.id),
-  );
-}
+    accountDrawn: true,
+  });
+  const groups = searchSettings(entries, "GitHub")?.groups ?? [];
 
-test("searching GitHub finds Connected accounts while signed in, and not while signed out, when it is not drawn", () => {
-  assert.ok(found("GitHub", true).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS));
-  assert.ok(found("reconnect", true).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS));
-  assert.equal(found("GitHub", false).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS), false);
+  assert.deepEqual(
+    groups
+      .find((group) => group.page === SETTINGS_VIEW.INTEGRATIONS)
+      ?.items.map((entry) => entry.id),
+    [INTEGRATION_PROVIDER.GITHUB],
+  );
+  assert.equal(
+    groups.some((group) => group.page === SETTINGS_VIEW.ACCOUNT),
+    false,
+  );
 });
 
 test("an integration is found by its tools' names and descriptions once the Integrations page has handed them up", () => {

@@ -121,12 +121,7 @@ const REPOSITORY_FAILURE_NOTES = {
   [PLAN_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
   [PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
     "Luke can't see that repository on GitHub. Choose which repositories Luke can see, then try again.",
-  [PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED]:
-    "Connect GitHub in Settings to use a repository with Luke.",
 } as const satisfies Record<RepositoryCallFailure, string>;
-
-/** What a button that opens the page connecting the account's GitHub says, wherever a refusal for GitHub not connected is drawn. */
-export const CONNECT_GITHUB_LABEL = "Connect GitHub";
 
 /** The sentence the page shows for a start or a repository change the service refused. */
 export function repositoryFailureNote(failure: RepositoryCallFailure): string {

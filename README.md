@@ -27,9 +27,10 @@ Requires an Apple silicon Mac on macOS 14 or newer.
 
 1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
 2. Open the DMG and drag **Luke** into **Applications**.
-3. Open Luke and sign in with Google or GitHub. Planning against a
-   repository needs a GitHub sign-in and the Luke GitHub App installed on it,
-   which Luke offers from the plan's repository chip.
+3. Open Luke and sign in with Google or GitHub. A workspace's repositories
+   come from the GitHub account or organization connected to it: an owner or
+   admin connects one in Settings › Workspace › GitHub repositories, which
+   installs the Luke GitHub App there.
 
 Luke asks for microphone access the first time you start a call.
 
@@ -68,7 +69,7 @@ out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
 repository and sets at the sandbox's firewall, never inside it, and the
 planning model runs commands such as `ls`, `grep`, or `cat` there. A coding
 agent you start works in a sandbox of its own, on a full checkout, and pushes
-its branch and pull request through the same App. See
+its branch and pull request through the same App, as the App's own bot. See
 [PRIVACY.md](PRIVACY.md) for details.
 
 ## Contributing

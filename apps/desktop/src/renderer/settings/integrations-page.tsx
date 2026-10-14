@@ -8,10 +8,11 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { ChevronRightIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
+import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import {
   CONNECTION_HEALTH,
@@ -25,7 +26,6 @@ import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
-import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
 import { ProviderMark } from "../provider-marks";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
@@ -50,15 +50,13 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * on it) keeps Reconnect, which signs in with the provider again, beside
  * Disconnect, which asks first in the confirm dialog. The rows stand in the
  * order of their names, GitHub's among them. GitHub is granted by the
- * account's own GitHub (`integration-grant.ts`), which its ⋯ says over its
- * acts: its row offers Connect GitHub, which connects the account's GitHub
- * in place, and once connected its ⋯ adds Manage repositories, the Luke
- * GitHub App's page on GitHub where the repositories it reaches are chosen.
- * Its Disconnect is Settings › Connected accounts' own, which unlinks the
- * account's GitHub and never signs the account out: the service refuses it
- * where GitHub is the account's only way to sign in, and the dialog that
- * asked says so. The window never sees a sign-in address; the host opens
- * it. Where every
+ * account's own GitHub (`integration-grant.ts`), which lets agents use
+ * GitHub's tools as the developer and is linked nowhere else, as its ⋯ says
+ * over its acts: its Connect links that GitHub in the browser, and its
+ * Disconnect unlinks it under the Mac's session, a refusal saying why in a
+ * toast. A workspace's repositories are not this; they come from the GitHub
+ * connected in Settings › Workspace. The window never sees a sign-in
+ * address; the host opens it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
  * developer comes back from the browser. A provider this deployment does not
@@ -92,14 +90,15 @@ const PAGE_LINE = {
   NONE_OFFERED: "No integrations are available for this account.",
   NOT_OPENED: "Luke could not open your browser to sign in.",
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
-  REPOSITORIES_NOT_OPENED: "Luke could not open GitHub's repositories page. Try again in a moment.",
 } as const;
 
-/** What a row offers to mend or manage its connection, on its button or in its ⋯. */
+/** What a row offers to mend its connection, on its button or in its ⋯. */
 const ROW_ACT = {
   RECONNECT: "Reconnect",
-  MANAGE_REPOSITORIES: "Manage repositories",
 } as const;
+
+/** What GitHub's row says it is for, since its grant is the account's own GitHub rather than a sign-in at a provider. */
+const GITHUB_DESCRIPTION = "Lets agents use GitHub tools as you.";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -172,16 +171,11 @@ function rowLine(
 
 /**
  * What a row's grant button says: Reconnect over a connection that broke,
- * GitHub's included, else Connect GitHub for GitHub, Try again after a
- * sign-in that did not connect, else Connect or Reconnect.
+ * GitHub's included, else Try again after a sign-in that did not connect,
+ * else Connect or Reconnect.
  */
-function grantLabel(
-  bySignIn: boolean,
-  status: IntegrationStatus | undefined,
-  signIn: SignIn | undefined,
-): string {
+function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | undefined): string {
   if (status === INTEGRATION_STATUS.CONNECTED) return ROW_ACT.RECONNECT;
-  if (bySignIn) return CONNECT_GITHUB_LABEL;
   if (signIn !== undefined) return SIGN_IN_ACTION.TRY_AGAIN;
   return status === INTEGRATION_STATUS.EXPIRED ? ROW_ACT.RECONNECT : "Connect";
 }
@@ -268,11 +262,12 @@ function RowToolsPanel({
 
 /**
  * Disconnects one provider: a Connect grant at the service, and GitHub by
- * unlinking the account's GitHub as Connected accounts does, whose refusal
- * where GitHub is the account's only way to sign in is the dialog's to say.
+ * unlinking the account's GitHub under the Mac's session, whose refusal is
+ * the window's toast, so the dialog closes either way.
  */
 function disconnectProvider(
   act: ActHandle["act"],
+  github: GitHubConnectControl,
   provider: IntegrationProvider,
   settle: IntegrationStatuses["settle"],
 ): Promise<ActionResult> {
@@ -281,13 +276,10 @@ function disconnectProvider(
     reason: `Luke could not disconnect ${INTEGRATION_NAME[provider]}. Try again in a moment.`,
   };
   if (grantedBySignIn(provider)) {
-    return act(ACT_KIND.GITHUB_DISCONNECT).then(
-      () => {
-        settle(provider, INTEGRATION_STATUS.DISCONNECTED);
-        return ACCEPTED;
-      },
-      (refusal: Error) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal.message }),
-    );
+    return github.disconnect().then((disconnected) => {
+      if (disconnected) settle(provider, INTEGRATION_STATUS.DISCONNECTED);
+      return ACCEPTED;
+    });
   }
   return act(ACT_KIND.INTEGRATIONS_DISCONNECT, { provider }).then(
     (answer: IntegrationStatusView) => {
@@ -320,6 +312,7 @@ function IntegrationRow({
   const { settle, cancelSignIn } = statuses;
   const grant = useIntegrationGrant(statuses);
   const bySignIn = grantedBySignIn(provider);
+  const github = useGitHubConnection();
   const signIn = statuses.signInOf(provider);
   const [connecting, setConnecting] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
@@ -346,21 +339,9 @@ function IntegrationRow({
     });
   }, [cancelSignIn, provider, name]);
 
-  // The Luke GitHub App's page on GitHub, which the service names beside
-  // the repositories it reaches.
-  const manageRepositories = useCallback(() => {
-    setRejection(undefined);
-    void act(ACT_KIND.PLANNING_REPOSITORIES, {})
-      .then((answer) => {
-        if ("failure" in answer) throw new Error(answer.failure);
-        return act(ACT_KIND.GITHUB_OPEN, { url: answer.repositories.installationUrl });
-      })
-      .catch(() => setRejection(PAGE_LINE.REPOSITORIES_NOT_OPENED));
-  }, [act]);
-
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog({ subject: connected, surfaceOpen: true }, () =>
-    disconnectProvider(act, provider, settle),
+    disconnectProvider(act, github, provider, settle),
   );
 
   const line = rowLine(provider, status, health, signIn);
@@ -374,20 +355,13 @@ function IntegrationRow({
     disabled: connecting,
     onSelect: connect,
   };
-  const repositories = {
-    label: ROW_ACT.MANAGE_REPOSITORIES,
-    icon: <ExternalLinkIcon />,
-    onSelect: manageRepositories,
-  };
   const leave = {
     label: "Disconnect",
     icon: <TrashIcon />,
     danger: true,
     onSelect: disconnect.ask,
   };
-  const actions = connected
-    ? [...(broken ? [] : [reconnect]), ...(bySignIn ? [repositories] : []), leave]
-    : [];
+  const actions = connected ? [...(broken ? [] : [reconnect]), leave] : [];
   return (
     <>
       <MenuRow
@@ -403,6 +377,7 @@ function IntegrationRow({
           <strong>
             <Highlighted text={name} tokens={tools.tokens} />
           </strong>
+          {bySignIn ? <small>{GITHUB_DESCRIPTION}</small> : null}
           {connected && tools.all.length > 0 ? (
             <ToolsLine name={name} panelId={panelId} tools={tools} />
           ) : line === undefined ? null : (
@@ -441,7 +416,7 @@ function IntegrationRow({
             }
             onClick={connect}
           >
-            {grantLabel(bySignIn, status, signIn)}
+            {grantLabel(status, signIn)}
           </button>
         )}
       </MenuRow>

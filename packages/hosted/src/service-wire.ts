@@ -49,12 +49,6 @@ export const HOSTED_API_ERROR = {
   /** The row the path names is not one this account holds; another account's and none at all read alike. */
   NOT_FOUND: "not-found",
   /**
-   * The account holds no GitHub App token the service can use: it never
-   * signed in with GitHub, signed in before the Luke GitHub App, or GitHub
-   * retired or revoked what it had. Signing in with GitHub again mends it.
-   */
-  GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
-  /**
    * The GitHub installation connected to the workspace reaches no such
    * repository, or the workspace has none connected. Nothing was written.
    */

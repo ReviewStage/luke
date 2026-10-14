@@ -986,11 +986,12 @@ App is configured. The token handed to eve is said to expire inside
 `userToken`'s refresh margin, so eve asks again, and the token is refreshed
 if need be, before it lapses. What the agents reach is what the App reaches
 for the account, under the App's permissions, on the repositories it is
-installed on. Settings › Integrations offers Connect GitHub on its row,
-which opens Settings › Connected accounts, where the account connects its
-own GitHub, as every desktop GitHub remedy does, rather than a Connect of
-its own, and no Disconnect: the grant ends with the account's GitHub, when
-the developer disconnects or revokes the App or deletes the account.
+installed on. Settings › Integrations' GitHub row ("Lets agents use GitHub
+tools as you") is where an account links its own GitHub, through the connect
+page, or disconnects it, under the Mac's session; that link reaches no
+repository of a workspace's, which comes from the workspace's installation
+alone. The grant ends with the account's GitHub, when the developer
+disconnects or revokes the App or deletes the account.
 
 **Who holds what.** Vercel Connect holds each grant, encrypted, and refreshes
 it; Luke never stores a token. Luke holds one row per account and provider

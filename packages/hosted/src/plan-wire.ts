@@ -570,8 +570,7 @@ export const PLAN_FILE_BOUNDS = {
  * folder not listed for its tree: a secret file, no regular file (or no
  * folder) at the path, a file too large or not text,
  * a plan with no repository, a repository the Luke GitHub App does not
- * reach for the account, an account that must sign in with GitHub again,
- * or GitHub not answering just now.
+ * reach for the account, or GitHub not answering just now.
  */
 export const PLAN_FILE_REFUSAL = {
   SECRET: "secret",
@@ -579,7 +578,6 @@ export const PLAN_FILE_REFUSAL = {
   NOT_TEXT: "not-text",
   NO_REPOSITORY: "no-repository",
   NOT_REACHABLE: "not-reachable",
-  SIGN_IN_REQUIRED: "sign-in-required",
   UNAVAILABLE: "unavailable",
 } as const;
 

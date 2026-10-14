@@ -124,7 +124,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onOpenWorkspaceSettings: ignore,
     github: undefined,
     onConnectAccountGitHub: () => Promise.resolve(false),
-    onDisconnectAccountGitHub: ignore,
+    onDisconnectAccountGitHub: () => Promise.resolve(false),
     activePlanId: undefined,
     boundFor: overrides.activePlanId,
     listFailed: false,
