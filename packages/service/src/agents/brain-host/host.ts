@@ -28,6 +28,7 @@ import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
+import { HELD_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
@@ -41,6 +42,7 @@ import {
   type BrainHostTurn,
   RELAY_TURN,
 } from "./bounds.js";
+import { ChatPostTally, chatSince, chatTakenIn, lukeOn } from "./chat.js";
 import { readRecentMessages } from "./context.js";
 import {
   type AdmittedConversation,
@@ -116,6 +118,24 @@ export interface SessionPromptRecord {
   readonly hash?: string;
 }
 
+/**
+ * What the eve project keeps of the chat a turn was handed, between the
+ * turn's start that read it and the turn's settling: eve's id for the turn
+ * and the place Luke has read through once it settles, absent where the
+ * turn was handed none. It lives in eve's durable session state, because
+ * the turn may settle on another instance than the one it opened on.
+ */
+export interface ChatHandedRecord {
+  readonly eveTurnId?: string;
+  readonly through?: number;
+}
+
+/** What a turn opens with: the standing context's words, and the place in the chat Luke has read through once the turn settles, where it was handed any. */
+export interface TurnStanding {
+  readonly text: string;
+  readonly chatThrough?: number;
+}
+
 /** The turn id eve's `turn.started` event carries, read off the event a resolver is handed; nothing for any other shape. */
 export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
   if (!isRecord(event) || !isRecord(event.data)) return undefined;
@@ -145,8 +165,8 @@ export interface BrainHost extends HostAdmission {
   turnOf(auth: SessionAuth, sessionId: string, eveTurnId: string): HostedTurn | undefined;
   /** The prompt a session runs under, with the hash its turns are recorded under; the text itself is stored nowhere. */
   prompt(): HostedSessionPrompt;
-  /** The standing context one turn opens with: the plan's name and saved document, as data. */
-  standingContext(admitted: AdmittedConversation): HostEffect<string>;
+  /** The standing context one turn opens with: the plan's name and saved document, as data, and what the turn was handed of the chat. */
+  standingContext(admitted: AdmittedConversation): HostEffect<TurnStanding>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools every turn is offered, as declarations; the eve project binds each to `runTool`. */
@@ -200,13 +220,19 @@ export interface BrainHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | HttpClient.HttpClient | GitHubApp
   >;
-  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
+  /**
+   * Relays one event of the session's stream into the store, under the state
+   * the caller keeps for the session and the prompt it composed; a turn that
+   * completes marks the chat it was handed read, and one that fails or is
+   * stopped leaves it unread for the next.
+   */
   relay(
     event: MessageStreamEvent,
     admitted: AdmittedConversation,
     session: SessionContext["session"],
     state: RelayStateStore,
     prompt: SessionPromptRecord,
+    chat: ChatHandedRecord,
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
@@ -242,6 +268,7 @@ function firstTaskOf(child: ConversationTarget): HostEffect<string | undefined> 
 /** The host over the deployment's seams; the research budget it keeps stands for the host's life. */
 export function brainHost(seams: BrainHostSeams): BrainHost {
   const research = new ResearchBudget();
+  const chatPosts = new ChatPostTally();
 
   /** The caller's metered model and its effort, or why none runs. */
   const modelFor = (admitted: AdmittedConversation): Result.Result<CoderModelSelection, string> => {
@@ -361,11 +388,19 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const plan = yield* planOf(admitted);
         const board =
           plan === undefined ? Option.none() : yield* readBoard(admitted.caller, plan.plan.id);
-        return planningStandingContext(
+        // Read as the turn opens and marked read once it settles (`relay`), so a turn that fails
+        // hands the next the same lines.
+        const chat =
+          plan === undefined
+            ? { messages: [], more: false }
+            : yield* chatSince(admitted.caller, plan.plan.id);
+        const text = planningStandingContext(
           plan,
           Option.getOrElse(board, () => EMPTY_BOARD),
+          chat,
           seams.now(),
         );
+        return chat.through === undefined ? { text } : { text, chatThrough: chat.through };
       }),
 
     seed: (admitted) =>
@@ -402,6 +437,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           secret === undefined || origin === undefined
             ? undefined
             : eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER });
+        // A chat notice reaches an agent's session as the deployment acting for the account that
+        // started it, each notice minted for that starter; nothing where the deployment reaches no eve.
+        const eveFor = (starter: string) =>
+          secret === undefined || origin === undefined
+            ? undefined
+            : eve({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
         return yield* runPlanningTool(
           name,
           plan === undefined
@@ -429,6 +470,18 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   writer: seams.writer(),
                   clientKey: context.callId,
                 },
+                // Luke reaches the chat on the standing of the member speaking.
+                chat: {
+                  luke: {
+                    ...lukeOn(caller, plan.plan.id),
+                    repository: plan.plan.repository,
+                    telling: { eveFor, writer: seams.writer(), doors: HELD_DOORS },
+                  },
+                  clientKey: context.callId,
+                  turnId: binding.turn.turnId,
+                  tally: chatPosts,
+                  sandbox: () => context.getSandbox(),
+                },
               },
           input,
         );
@@ -436,13 +489,20 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     model: (admitted) => modelFor(admitted),
 
-    relay: (event, admitted, session, state, prompt) =>
-      relayEvent(event, {
-        sessionId: session.id,
-        target: admitted.target,
-        turn: turnKindOf(session.auth.current),
-        state,
-        ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+    relay: (event, admitted, session, state, prompt, chat) =>
+      Effect.gen(function* () {
+        yield* relayEvent(event, {
+          sessionId: session.id,
+          target: admitted.target,
+          turn: turnKindOf(session.auth.current),
+          state,
+          ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+        });
+        // Only the turn the chat was handed to, and only once it completed, marks it read.
+        if (event.type !== "turn.completed" || event.data.turnId !== chat.eveTurnId) return;
+        const plan = yield* planOf(admitted);
+        if (plan === undefined || chat.through === undefined) return;
+        yield* chatTakenIn(admitted.caller, plan.plan.id, chat.through);
       }),
 
     relayChild: (event, session, state) =>

@@ -1824,13 +1824,40 @@ export function resolveAsk(
   );
 }
 
+/** A member's unread as a turn is handed it: the page, whether more waits, and the place a read of it moves the cursor to. */
+export interface ChatUnreadPage extends ChatUnread {
+  readonly through: number;
+}
+
 /**
- * What a member has not read: what it may see that someone else posted or
+ * The reader's unread page: what it may see that someone else posted or
  * changed past its cursor, oldest change first, a page of between one and
- * the bound. The
- * cursor moves past what is answered, to the workspace's head where nothing
- * more waits, and lets go of a notice it passes. Nothing where the account
- * is not in the workspace or the member is not of it.
+ * the bound, and the place reading it moves the cursor to, past the page,
+ * or the workspace's head where nothing more waits.
+ */
+function unreadPage(reader: ChatMemberRow, limit: number): ChatStoreEffect<ChatUnreadPage> {
+  return Effect.gen(function* () {
+    const head = yield* headOf(reader.organizationId);
+    const page = boundedPage(limit);
+    // One past the page is read, so a page that is the last says so.
+    const rows = yield* visibleMessages(
+      reader,
+      [gt(chatMessage.touchedSeq, reader.readSeq), ne(chatMessage.authorMemberId, reader.id)],
+      READ_ORDER.TOUCHED,
+      page + 1,
+    );
+    const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    const more = read.length > page;
+    const messages = read.slice(0, page);
+    const through = more ? (messages.at(-1)?.touchedSeq ?? reader.readSeq) : head;
+    return { messages, more, through };
+  });
+}
+
+/**
+ * What a member has not read, as `unreadPage` reads it, which moves the
+ * cursor past what is answered and lets go of a notice it passes. Nothing
+ * where the account is not in the workspace or the member is not of it.
  */
 export function unreadFor(
   userId: string,
@@ -1842,26 +1869,48 @@ export function unreadFor(
     Effect.gen(function* () {
       const reader = yield* readerIn(userId, organizationId, readerId);
       if (Option.isNone(reader)) return Option.none();
-      const head = yield* headOf(organizationId);
-      const page = boundedPage(limit);
-      // One past the page is read, so a page that is the last says so.
-      const rows = yield* visibleMessages(
-        reader.value,
-        [
-          gt(chatMessage.touchedSeq, reader.value.readSeq),
-          ne(chatMessage.authorMemberId, readerId),
-        ],
-        READ_ORDER.TOUCHED,
-        page + 1,
-      );
-      const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
-      const more = read.length > page;
-      const messages = read.slice(0, page);
-      const to = more ? (messages.at(-1)?.touchedSeq ?? reader.value.readSeq) : head;
-      yield* moveCursor({ readerId, organizationId, to });
+      const { messages, more, through } = yield* unreadPage(reader.value, limit);
+      yield* moveCursor({ readerId, organizationId, to: through });
       return Option.some({ messages, more });
     }),
   );
+}
+
+/**
+ * What a member has not read, as `unreadFor` reads it, moving nothing: the
+ * page and the place its read would move the cursor to, which
+ * `readThrough` moves it to once the reader has taken the page in.
+ */
+export function peekUnread(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  limit: number = CHAT_BOUNDS.MAX_READ,
+): ChatStoreEffect<Option.Option<ChatUnreadPage>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    return Option.some(yield* unreadPage(reader.value, limit));
+  });
+}
+
+/**
+ * Moves a member's cursor on to the place given, never back, letting go
+ * of a notice it passes: a page `peekUnread` answered, taken in. Answers
+ * whether the account and the member were found.
+ */
+export function readThrough(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  through: number,
+): ChatStoreEffect<boolean> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return false;
+    yield* moveCursor({ readerId, organizationId, to: through });
+    return true;
+  });
 }
 
 /**

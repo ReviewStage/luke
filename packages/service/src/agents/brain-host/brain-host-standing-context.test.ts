@@ -95,7 +95,7 @@ async function standingContextOf(target: ConversationTarget): Promise<string> {
   const admitted = await database.run(host.admit(auth, id));
   assert.ok(Result.isSuccess(admitted));
   if (!Result.isSuccess(admitted)) throw new Error("not admitted");
-  return database.run(host.standingContext(admitted.success));
+  return (await database.run(host.standingContext(admitted.success))).text;
 }
 
 /** The developer's words said in the conversation, as a finished row of its history. */

@@ -1949,8 +1949,8 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         agents.push({
           userId: opened.owner,
-          agentId: started.agent.id,
           planId: opened.plan.id,
+          self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -2210,7 +2210,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         yield* db
           .update(codingAgent)
           .set({ planId: null })
-          .where(eq(codingAgent.id, chat.first.agentId));
+          .where(eq(codingAgent.id, "agentId" in chat.first.self ? chat.first.self.agentId : ""));
         const planless = { ...chat.first, planId: null };
         const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
         assert.ok("seq" in posted);

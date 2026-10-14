@@ -35,6 +35,7 @@ import { runShowCode, SHOW_CODE_TOOL } from "../../plans/show-code.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import { CHAT_TOOLS } from "../coder-host/chat.js";
 import {
   type CodingAgentCall,
   LIST_CODING_AGENTS_TOOL,
@@ -60,6 +61,13 @@ import {
   RUN_IN_REPOSITORY_TOOL,
   runInRepository,
 } from "../repository-shell.js";
+import {
+  type ChatSince,
+  type PlannerChatCall,
+  runPlannerPost,
+  runPlannerRead,
+  runPlannerResolve,
+} from "./chat.js";
 
 /**
  * planning.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
@@ -214,7 +222,11 @@ On an instruction, send it when it is clear which agent is meant and what to say
 
 On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_coding_agent with no task to build the plan, or with the task in the developer's words where they named one instead, and the model and effort where they named them, else neither. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read and message.
 
-Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
+### The plan's chat
+
+The plan's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the plan has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last planning call], and is read by then. When the developer asks you to tell the team or the plan's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the plan's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the plan's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
+
+Never put a credential, token, or key into a message to an agent, a chat post, any tool's input, or your return, and never repeat one you see in an agent's transcript or the chat.
 
 ### Available tools
 
@@ -234,6 +246,9 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
 - start_coding_agent starts a new coding agent on this plan, on the plan itself or on a task, as the developer's Start button would.
+- post_chat posts a message in the workspace's chat as @luke, in the plan's channel unless it names another place.
+- read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
+- resolve_ask resolves an ask you posted in the chat, by its key.
 - end_call ends the voice call once the developer asks you to end it or has clearly said they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"), even right after another request such as starting a coding agent. Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
 ## Return the result
@@ -300,6 +315,7 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+const CHAT_SINCE_MARKER = "[chat since the last planning call]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -341,6 +357,19 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
   ];
 }
 
+/** One chat message in a line: its place, where it was said and the thread it replies in, who said it, and its words whole, since the turn's read has marked them read. */
+function chatLine(message: ChatSince["messages"][number]): string {
+  const thread = message.thread === undefined ? "" : `, in the thread of m ${message.thread}`;
+  return `- m ${message.seq} in ${message.in}${thread}, ${message.from}: ${JSON.stringify(message.text)}`;
+}
+
+/** What was said in the chat since Luke last read it, one line a message, and that more waits where it does; nothing where nothing was. */
+function chatSinceText(chat: ChatSince): readonly string[] {
+  if (chat.messages.length === 0) return [];
+  const more = chat.more ? ["- More is unread: read_chat reads it."] : [];
+  return [CHAT_SINCE_MARKER, ...chat.messages.map(chatLine), ...more];
+}
+
 /** The sections the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
 function developerFieldsText(stored: StoredPlan): readonly string[] {
   const written = stored.sectionWriters.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
@@ -354,7 +383,8 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
 /**
  * What a planning turn is handed beside its instructions every turn: the
  * plan's name, the saved document as JSON, the newest saves coding agents
- * made on it (so Luke can raise what an agent asked or decided), the sections
+ * made on it (so Luke can raise what an agent asked or decided), what was
+ * said in the chat since Luke last read it (`chat.ts`), the sections
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the
@@ -363,6 +393,7 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
 export function planningStandingContext(
   stored: StoredPlan | undefined,
   board: Board,
+  chat: ChatSince,
   now: number,
 ): string {
   const heading = `${PLAN_MARKER} ${new Date(now).toISOString()}`;
@@ -374,6 +405,7 @@ export function planningStandingContext(
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
     ...agentEditsText(stored.agentEdits),
+    ...chatSinceText(chat),
     ...developerFieldsText(stored),
     boardText(board),
   ].join("\n");
@@ -395,12 +427,13 @@ export interface HostedToolDeclaration {
   readonly endsTurn?: boolean;
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
+/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, the plan's coding agents, and Luke in the workspace's chat. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
+  readonly chat: PlannerChatCall;
 }
 
 /** One tool a planning turn is offered: its declaration, and the call it carries under the plan the conversation belongs to. */
@@ -435,8 +468,10 @@ type PlanningToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp
  * writes an interactive page for the side panel, the coding agents' tool
  * too (`page-tool.ts`); the four
  * agent tools read, message, and start the plan's coding agents
- * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
- * carried as `queue_question` is by its journaled call (`end-call.ts`).
+ * (`coding-agent-tools.ts`); the three chat tools post, read, and resolve
+ * asks in the workspace's chat as the plan's `@luke` (`chat.ts`); `end_call`
+ * hangs up once the developer is done, carried as `queue_question` is by its
+ * journaled call (`end-call.ts`).
  * Every read's result goes back to the model as data, a look's as an image.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
@@ -501,6 +536,18 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...START_CODING_AGENT_TOOL,
     run: (call, input) => runStartCodingAgent(call.agents, input),
+  },
+  {
+    ...CHAT_TOOLS.POST,
+    run: (call, input) => runPlannerPost(call.chat, input),
+  },
+  {
+    ...CHAT_TOOLS.READ,
+    run: (call, input) => runPlannerRead(call.chat, input),
+  },
+  {
+    ...CHAT_TOOLS.RESOLVE,
+    run: (call, input) => runPlannerResolve(call.chat, input),
   },
   {
     ...END_CALL_TOOL,

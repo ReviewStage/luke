@@ -1,4 +1,4 @@
-import type { SessionPromptRecord } from "@luke/service/agents/brain-host/host";
+import type { ChatHandedRecord, SessionPromptRecord } from "@luke/service/agents/brain-host/host";
 import { defineState } from "eve/context";
 
 /**
@@ -8,3 +8,11 @@ import { defineState } from "eve/context";
  * turn row names the prompt the model reads rather than one composed again.
  */
 export const sessionPrompt = defineState<SessionPromptRecord>("luke.prompt", () => ({}));
+
+/**
+ * The chat the turn under way was handed, in eve's durable session state:
+ * written by the instructions resolver as each turn starts and read by the
+ * store hook as the turn settles, so a completed turn marks read what it was
+ * handed and a failed one leaves it for the next.
+ */
+export const chatHanded = defineState<ChatHandedRecord>("luke.chat-handed", () => ({}));
