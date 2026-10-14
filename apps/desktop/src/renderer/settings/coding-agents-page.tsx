@@ -22,6 +22,7 @@ import {
   effortFor,
   effortLabel,
   effortsOf,
+  FAST_ACCESS_URL,
   FAST_WORD,
   fastRestingNote,
   longWindowNote,
@@ -32,6 +33,7 @@ import {
   windowLabel,
   windowOf,
 } from "../planning/coding-agent-model";
+import { useOpenLink } from "../planning/use-open-link";
 import { Segmented } from "../segmented";
 import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";
@@ -55,7 +57,9 @@ import { actionRejection } from "./use-setting-write";
  * of the harness that runs it, the newest first within each provider, every fast
  * version folded into its model, the chosen one checked. Under it a Fast
  * switch runs the model's fast version, resting where the model has none
- * or the service withholds it for the account's own key, saying which;
+ * or the service withholds it because Anthropic never granted the key's
+ * organization fast mode, saying which, and on the account's own key with
+ * a link to ask Anthropic for it;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
@@ -75,6 +79,9 @@ const PAGE_LINE = {
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
+
+/** The link under a resting Fast row that asks Anthropic for fast mode. */
+const FAST_ACCESS_WORD = "Request access";
 
 /** A provider as the model row names the key it runs on. */
 const PROVIDER_NAME = {
@@ -153,6 +160,9 @@ function DefaultRows({
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
   const fastNote =
     base === undefined ? undefined : fastRestingNote(base.model.id, base, models ?? []);
+  // Only the account's own organization can ask for fast mode, so the link stands on its own key alone.
+  const fastAskable = base?.model.fastNotEnabled === true && ownKeys.has(MODEL_PROVIDER.ANTHROPIC);
+  const openLink = useOpenLink();
   const unsearched = unsearchedModels(models ?? [], read.base);
   const windows = contextWindowsOf(models ?? [], choice.model);
   const window = windowOf(models ?? [], choice);
@@ -207,7 +217,27 @@ function DefaultRows({
       <SwitchRow
         key={othersSaved}
         label={FAST_WORD}
-        detail={fastNote === undefined ? undefined : `${fastNote}.`}
+        detail={
+          fastNote === undefined ? undefined : (
+            <>
+              {`${fastNote}.`}
+              {fastAskable ? (
+                <>
+                  {" "}
+                  <a
+                    href={FAST_ACCESS_URL}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openLink(FAST_ACCESS_URL);
+                    }}
+                  >
+                    {FAST_ACCESS_WORD}
+                  </a>
+                </>
+              ) : null}
+            </>
+          )
+        }
         checked={read.fast}
         anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_FAST}
         disabled={busy || base?.fast === undefined}
@@ -302,7 +332,7 @@ function CodingAgentsSection({
   const ownAnthropic = ownKeys?.has(MODEL_PROVIDER.ANTHROPIC);
   const ownOpenAi = ownKeys?.has(MODEL_PROVIDER.OPENAI);
   const keysRead = ownKeys !== undefined;
-  // The models are read once the keys are, and again as a key of the account's own is saved or removed, since the service withholds a fast version for one.
+  // The models are read once the keys are, and again as a key of the account's own is saved or removed, since the service offers fast versions by the organization of the key the agents run on.
   useEffect(() => {
     if (!signedIn || !keysRead) return;
     let live = true;

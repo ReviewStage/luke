@@ -58,12 +58,6 @@
                 ],
                 "additionalProperties": false
               },
-              "fastWithheld": {
-                "type": "string",
-                "enum": [
-                  "own-key"
-                ]
-              },
               "fastNotEnabled": {
                 "type": "boolean"
               }

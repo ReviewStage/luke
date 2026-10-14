@@ -20,7 +20,8 @@ export function SwitchRow({
   onChange,
 }: {
   label: string;
-  detail?: string | undefined;
+  /** The why under the name: words, and where a row needs one, a link among them. */
+  detail?: React.ReactNode;
   checked: boolean;
   /** The id a pressed search result lands on: marked on the switch itself, which then takes the keyboard. */
   anchor?: string;

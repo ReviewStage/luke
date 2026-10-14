@@ -227,6 +227,12 @@
   line-height: 1.4;
 }
 
+.settings-copy small a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so
    a switch reads as the primary button beside it does. Its state is keyed on
    its own `data-checked`, so a switch drawn inside a row button that carries
