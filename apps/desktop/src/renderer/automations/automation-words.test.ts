@@ -8,13 +8,21 @@ import {
 } from "@sidecar/hosted/automation-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { describe, expect, it } from "vitest";
-import { firingText, RUN_TONE, reasonText, runState, triggerText } from "./automation-words";
+import { GLYPH_STATE } from "../state-glyph";
+import {
+  firingText,
+  RUN_TONE,
+  reasonText,
+  runGlyphState,
+  runState,
+  triggerText,
+} from "./automation-words";
 
 /**
  * How the Automations page says a trigger and a run: a schedule the picker
  * writes in words with its zone's city, any other cron as written, a GitHub
- * trigger with its filters, and a run's pill read from its agent once it
- * started one.
+ * trigger with its filters, and a run's state read from its agent once it
+ * started one, on its pill and on the glyph a list row wears.
  */
 
 const schedule = (cron: string, timezone = "America/New_York") => ({
@@ -106,5 +114,32 @@ describe("an automation's words", () => {
       "Sign in with GitHub again, then turn it back on.",
     );
     expect(reasonText(null)).toBeUndefined();
+  });
+
+  it("wears a run's glyph working while its agent works, failed where it could not start or its agent failed, and at rest for a skip", () => {
+    const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
+      id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
+      title: null,
+      status,
+    });
+    expect(runGlyphState(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) }))).toBe(
+      GLYPH_STATE.WORKING,
+    );
+    expect(runGlyphState(run({ agent: agent(CODING_AGENT_STATUS.FAILED) }))).toBe(
+      GLYPH_STATE.FAILED,
+    );
+    expect(
+      runGlyphState(
+        run({ status: AUTOMATION_RUN_STATUS.FAILED, reason: AUTOMATION_RUN_REASON.MODEL }),
+      ),
+    ).toBe(GLYPH_STATE.FAILED);
+    expect(
+      runGlyphState(
+        run({ status: AUTOMATION_RUN_STATUS.SKIPPED, reason: AUTOMATION_RUN_REASON.CONCURRENCY }),
+      ),
+    ).toBe(GLYPH_STATE.REST);
+    expect(runGlyphState(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) }))).toBe(
+      GLYPH_STATE.REST,
+    );
   });
 });

@@ -12,6 +12,7 @@ import {
   type GitHubTriggerEvent,
 } from "@sidecar/hosted/automation-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { GLYPH_STATE, type GlyphState } from "../state-glyph";
 
 /**
  * automation-words.ts -- how the Automations page says an automation and its runs: a trigger in a line, a run's state as a pill, why one did not start.
@@ -193,6 +194,25 @@ export function runState(run: AutomationRunSummary): RunState {
       return { word: "Cancelled", tone: RUN_TONE.QUIET };
     case undefined:
       return { word: "Started", tone: RUN_TONE.QUIET };
+  }
+}
+
+/**
+ * Where a run stands on the glyph it wears, as the window draws every piece
+ * of work (`state-glyph.tsx`): working while its agent works, failed where
+ * it could not start or its agent failed, and at rest otherwise, a skip
+ * included, since a skip is the guard working as asked.
+ */
+export function runGlyphState(run: AutomationRunSummary): GlyphState {
+  if (run.status === AUTOMATION_RUN_STATUS.FAILED) return GLYPH_STATE.FAILED;
+  switch (run.agent?.status) {
+    case CODING_AGENT_STATUS.STARTING:
+    case CODING_AGENT_STATUS.RUNNING:
+      return GLYPH_STATE.WORKING;
+    case CODING_AGENT_STATUS.FAILED:
+      return GLYPH_STATE.FAILED;
+    default:
+      return GLYPH_STATE.REST;
   }
 }
 

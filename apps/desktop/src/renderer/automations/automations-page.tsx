@@ -8,7 +8,6 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@sidecar/hosted/automation-wire";
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   ChevronRightIcon,
@@ -36,6 +35,7 @@ import { ProviderMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { WorkingMark } from "../working-mark";
 import {
@@ -53,6 +53,7 @@ import {
   RUN_TONE,
   type RunTone,
   reasonText,
+  runGlyphState,
   runState,
   triggerText,
 } from "./automation-words";
@@ -120,14 +121,6 @@ const TEMPLATES: readonly {
 /** What a "Run now" the service did not take says. */
 const RUN_NOW_FAILED = "Couldn't run it now. Try again.";
 
-const NEXT_RUN = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
 /** The editor's state: closed, or open on a draft, for a new automation or one to edit. */
 type Editing =
   | undefined
@@ -188,40 +181,39 @@ function AutomationSwitch({
   );
 }
 
-/** When an automation runs next, as a list row says it: a label over a value. */
-interface WhenWords {
-  readonly label: string;
-  readonly value: string;
+const NEXT_SHORT = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/** When the automation runs next, in the few words a list row ends with. */
+function nextText(automation: AutomationSummary): string {
+  if (automation.pausedReason !== null) return "Paused";
+  if (!automation.enabled) return "Off";
+  if (automation.nextRunAt !== null) return `Next ${NEXT_SHORT.format(automation.nextRunAt)}`;
+  return "On event";
 }
 
-/** When the automation runs next, as a list row says it. */
-function whenText(automation: AutomationSummary): WhenWords {
-  if (automation.pausedReason !== null) return { label: "Status", value: "Paused" };
-  if (!automation.enabled) return { label: "Status", value: "Off" };
-  if (automation.nextRunAt !== null)
-    return { label: "Next run", value: NEXT_RUN.format(automation.nextRunAt) };
-  return { label: "Runs", value: "On each event" };
-}
-
-/** One automation's row in the list. */
+/**
+ * One automation's row: its trigger's glyph wearing where its newest run
+ * stands, its name over what fires it, when it runs next, a failure's mark,
+ * and its switch, nothing else, so a list of them reads as one.
+ */
 function AutomationRow({
   automation,
-  plan,
-  now,
   onOpen,
   onToggle,
 }: {
   automation: AutomationSummary;
-  plan: PlanSummary | undefined;
-  now: number;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
-  const when = whenText(automation);
+  const state = automation.lastRun === null ? GLYPH_STATE.REST : runGlyphState(automation.lastRun);
   return (
     // biome-ignore lint/a11y/useSemanticElements: the row holds its own switch, which a button may not.
     <div
-      className="automation-row"
+      className="automation-list-row"
       role="button"
       tabIndex={0}
       data-enabled={String(automation.enabled)}
@@ -233,40 +225,19 @@ function AutomationRow({
         }
       }}
     >
-      <span className="automation-mark" aria-hidden="true">
-        <TriggerGlyph trigger={automation.trigger} />
+      <StateGlyph glyph={<TriggerGlyph trigger={automation.trigger} />} state={state} />
+      <span className="automation-list-copy">
+        <span className="automation-list-name">{automation.name}</span>
+        <span className="automation-list-detail">{triggerText(automation.trigger)}</span>
       </span>
-      <span className="settings-copy">
-        <strong>{automation.name}</strong>
-        <small>
-          {triggerText(automation.trigger)}
-          <span className="automation-dot" />
-          {automation.planName}
-          {plan?.repository == null ? null : (
-            <>
-              <span className="automation-dot" />
-              {plan.repository}
-            </>
-          )}
-        </small>
-      </span>
-      <span className="automation-when">
-        <small>{when.label}</small>
-        <span>{when.value}</span>
-      </span>
-      {automation.lastRun === null ? (
-        <span className="automation-pill" data-tone={RUN_TONE.QUIET}>
-          No runs yet
-        </span>
-      ) : (
-        <RunPill run={automation.lastRun} now={now} />
-      )}
+      <span className="automation-list-when">{nextText(automation)}</span>
+      {stateEndMark(state, true)}
       <AutomationSwitch automation={automation} onToggle={onToggle} />
     </div>
   );
 }
 
-/** The page with none made: what an automation is, and three to start from. */
+/** The page with none made: what an automation does, the one way to make one, and three to start from as plain rows. */
 function EmptyAutomations({
   onNew,
 }: {
@@ -275,31 +246,30 @@ function EmptyAutomations({
   return (
     <div className="automation-empty">
       <EmptyState icon={<ZapIcon />}>
-        Automations start a coding agent on one of your plans when something happens: on a schedule,
-        on a GitHub event, or when a webhook is called.
+        Start a coding agent on one of your plans on a schedule, a GitHub event, or a webhook.
       </EmptyState>
       <button type="button" className="primary-button" onClick={() => onNew()}>
-        <PlusIcon />
         New automation
       </button>
-      <h2 className="automation-templates-title">Start from a template</h2>
-      <div className="automation-templates">
-        {TEMPLATES.map((template) => (
-          <button
-            key={template.line}
-            type="button"
-            className="automation-template"
-            onClick={() => onNew(template.draft)}
-          >
-            <span className="automation-mark" aria-hidden="true">
-              {template.glyph}
-            </span>
-            <strong>{template.draft.name}</strong>
-            <p>{template.draft.prompt}</p>
-            <span className="automation-template-line">{template.line}</span>
-          </button>
-        ))}
-      </div>
+      <section className="automation-templates">
+        <h2 className="settings-group-title">Templates</h2>
+        <div className="settings-card">
+          {TEMPLATES.map((template) => (
+            <button
+              key={template.line}
+              type="button"
+              className="automation-list-row"
+              onClick={() => onNew(template.draft)}
+            >
+              <StateGlyph glyph={template.glyph} state={GLYPH_STATE.REST} />
+              <span className="automation-list-copy">
+                <span className="automation-list-name">{template.draft.name}</span>
+                <span className="automation-list-detail">{template.line}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -586,7 +556,6 @@ function WebhookSecretDialog({
 export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
   const view = plans.automationsView;
   const store = useAutomations(view.plan);
-  const now = useMinute();
   const [editing, setEditing] = useState<Editing>(undefined);
   const [secret, setSecret] = useState<ShownSecret | undefined>(undefined);
   const { read } = store;
@@ -753,17 +722,11 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
                   <AutomationRow
                     key={automation.id}
                     automation={automation}
-                    plan={planOf(automation.planId)}
-                    now={now}
                     onOpen={() => view.onChoose(automation.id)}
                     onToggle={toggle(automation)}
                   />
                 ))}
               </div>
-              <p className="settings-note">
-                Automations run in the cloud as you, whether or not this Mac is awake. Each run
-                starts a coding agent you'll find on its plan, and in your Inbox when it needs you.
-              </p>
             </div>
           ) : null}
           {chosen === undefined ? null : (

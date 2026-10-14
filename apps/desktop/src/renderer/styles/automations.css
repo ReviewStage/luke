@@ -793,70 +793,6 @@
   --shortcut-ink: var(--on-accent-muted);
 }
 
-.automation-templates {
-  display: grid;
-  width: 100%;
-  gap: var(--space-12);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: var(--space-24);
-  text-align: left;
-}
-
-.automation-templates-title {
-  width: 100%;
-  margin: var(--space-24) 0 calc(-1 * var(--space-12));
-  padding: 0 var(--space-2);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.automation-template {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-16);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
-  color: inherit;
-  text-align: left;
-  transition:
-    background-color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
-}
-
-.automation-template:hover {
-  border-color: var(--hairline-strong);
-  background: var(--raised);
-}
-
-.automation-template strong {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.automation-template p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.automation-template .automation-head-line {
-  margin-top: auto;
-  padding-top: var(--space-4);
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.automation-templates[data-stacked="true"] {
-  grid-template-columns: 1fr;
-  margin-top: var(--space-8);
-}
-
 /* What the page adds beyond the mockups' rules ------------------------------ */
 
 /* The detail's crumbs: back to the list, then the automation's name. */
@@ -915,11 +851,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.automation-template-line {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
 .automation-run-link {
   overflow-wrap: anywhere;
   font-family: var(--font-mono);
@@ -964,4 +895,86 @@
 .automation-filter svg {
   width: 12px;
   height: 12px;
+}
+
+/* The list, quiet: one row an automation, its glyph wearing its newest
+   run's state, its name over what fires it, when it runs next in the
+   tertiary ink, a failure's mark, and its switch. The rows sit in a
+   Settings card, divided by its hairlines, and nothing else is drawn. */
+.automation-list-row {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-16);
+  background: none;
+  color: inherit;
+  cursor: default;
+  text-align: left;
+}
+
+.automation-list-row + .automation-list-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.automation-list-row:hover {
+  background: var(--raised);
+}
+
+.automation-list-row:first-child {
+  border-top-left-radius: var(--control-radius);
+  border-top-right-radius: var(--control-radius);
+}
+
+.automation-list-row:last-child {
+  border-bottom-left-radius: var(--control-radius);
+  border-bottom-right-radius: var(--control-radius);
+}
+
+.automation-list-row > .state-glyph {
+  color: var(--text-secondary);
+}
+
+.automation-list-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.automation-list-name,
+.automation-list-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-list-name {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.automation-list-detail,
+.automation-list-when {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.automation-list-when {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An automation that is off reads as set aside: its name in the secondary ink. */
+.automation-list-row[data-enabled="false"] .automation-list-name {
+  color: var(--text-secondary);
+}
+
+.automation-templates {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  margin-top: var(--space-24);
 }

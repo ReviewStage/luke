@@ -219,8 +219,10 @@ test("with none made, a template opens the editor filled in", async () => {
   script([]);
   const page = await mount();
 
-  const template = [...page.querySelectorAll<HTMLButtonElement>(".automation-template")].find(
-    (each) => each.querySelector("strong")?.textContent === "Fix failing CI on main",
+  const template = [
+    ...page.querySelectorAll<HTMLButtonElement>(".automation-templates button"),
+  ].find(
+    (each) => each.querySelector(".automation-list-name")?.textContent === "Fix failing CI on main",
   );
   assert.ok(template, "the template is offered");
   await act(async () => template.click());
