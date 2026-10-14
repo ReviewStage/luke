@@ -89,7 +89,8 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(undefined));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
       // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
-      keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1", addedAt: OWN_ANTHROPIC.addedAt + 60_000 }];
+      // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
+      keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
       models = [OPUS, OPUS_FAST];
       return Promise.resolve(done({ keys }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:

@@ -292,13 +292,13 @@ function DefaultRows({
 function CodingAgentsSection({
   signedIn,
   ownKeys,
-  anthropicKeyAddedAt,
+  keysAnswered,
 }: {
   signedIn: boolean;
   /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them; nothing until they are read. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus> | undefined;
-  /** When the account's own Anthropic key was saved, which a replacement moves; nothing where it holds none. */
-  anthropicKeyAddedAt: number | undefined;
+  /** How many times the API keys group has answered the keys: once as it reads them, and once more for each save or removal. */
+  keysAnswered: number;
 }): React.JSX.Element {
   const { act } = useAct();
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
@@ -332,9 +332,8 @@ function CodingAgentsSection({
     };
   }, [act, signedIn, attempt]);
 
-  const ownOpenAi = ownKeys?.has(MODEL_PROVIDER.OPENAI);
   const keysRead = ownKeys !== undefined;
-  // The models are read once the keys are, and again as a key of the account's own is saved, replaced, or removed, since the service offers fast versions by the organization of the Anthropic key the agents run on.
+  // The models are read once the keys are, and again at every answer of a save or removal, a replacement included, since the service offers fast versions by the organization of the Anthropic key the agents run on.
   useEffect(() => {
     if (!signedIn || !keysRead) return;
     let live = true;
@@ -356,7 +355,7 @@ function CodingAgentsSection({
     return () => {
       live = false;
     };
-  }, [act, signedIn, attempt, keysRead, anthropicKeyAddedAt, ownOpenAi]);
+  }, [act, signedIn, attempt, keysRead, keysAnswered]);
 
   const write = useCallback(
     (next: ModelChoice): Promise<ActionResult> => {
@@ -404,18 +403,14 @@ function CodingAgentsSection({
  */
 export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
-  const [anthropicKeyAddedAt, setAnthropicKeyAddedAt] = useState<number>();
+  const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
     setOwnKeys(new Map(keys.map((key) => [key.provider, key.status])));
-    setAnthropicKeyAddedAt(keys.find((key) => key.provider === MODEL_PROVIDER.ANTHROPIC)?.addedAt);
+    setKeysAnswered((count) => count + 1);
   }, []);
   return (
     <>
-      <CodingAgentsSection
-        signedIn={signedIn}
-        ownKeys={ownKeys}
-        anthropicKeyAddedAt={anthropicKeyAddedAt}
-      />
+      <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
     </>
   );
