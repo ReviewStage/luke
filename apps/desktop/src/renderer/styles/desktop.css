@@ -1540,7 +1540,12 @@ body,
    (`searchable-menu.tsx`), the composer's `/` list, the MCP popover, and a
    crumb's tree. Where it hangs and how wide it stands are each menu's own;
    the ground, edge, corner, shadow, inset, and entrance are this, and so is
-   staying hidden for the one layout pass that measures where it fits. */
+   staying hidden for the one layout pass that measures where it fits.
+   Note that the entrance animates a transform, which makes a surface the
+   containing block of every fixed box inside it, so a flyout submenu, a
+   second surface standing beside the first, is drawn beside it at the body
+   and never inside it; a page drawn in a menu's place, as the MCP popover's
+   server page is, is the surface's own content. */
 .menu-surface {
   display: flex;
   flex-direction: column;
