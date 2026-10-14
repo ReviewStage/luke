@@ -25,7 +25,7 @@ export const SANDBOX_STATE = {
 
 export type SandboxState = (typeof SANDBOX_STATE)[keyof typeof SANDBOX_STATE];
 
-export const TERMINAL_BOUNDS = {
+const TERMINAL_BOUNDS = {
   /** The most characters of a shell's name. */
   MAX_TITLE_CHARS: 60,
 } as const;
@@ -42,7 +42,7 @@ const title = EffectSchema.String.check(
  * or the shell's own, what its foreground process is, the folder it stands
  * in, and whether something other than the shell itself is running there.
  */
-export const terminalSummarySchema = EffectSchema.Struct({
+const terminalSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   title: EffectSchema.String,
   command: EffectSchema.String,
@@ -53,7 +53,7 @@ export const terminalSummarySchema = EffectSchema.Struct({
 export type TerminalSummary = typeof terminalSummarySchema.Type;
 
 /** The agent's shells (GET), oldest first, and where its sandbox stands; none while it is not running. */
-export const terminalsAnswerSchema = EffectSchema.Struct({
+const terminalsAnswerSchema = EffectSchema.Struct({
   sandbox: EffectSchema.Literals(Object.values(SANDBOX_STATE)),
   terminals: EffectSchema.Array(terminalSummarySchema),
 });
@@ -65,15 +65,5 @@ export const terminalCreateRequestSchema = EffectSchema.Struct({
   title: EffectSchema.optional(title),
 });
 
-/** The shell started (POST). */
-export const terminalCreatedAnswerSchema = EffectSchema.Struct({
-  terminal: terminalSummarySchema,
-});
-
 /** A shell's new name (PATCH). */
 export const terminalRenameRequestSchema = EffectSchema.Struct({ title });
-
-/** Where the sandbox stands once a resume answered (POST). */
-export const sandboxResumedAnswerSchema = EffectSchema.Struct({
-  sandbox: EffectSchema.Literals(Object.values(SANDBOX_STATE)),
-});

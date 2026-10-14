@@ -29,7 +29,7 @@ import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 const SESSION_TAG = "sessionId";
 
 /** Vercel's answer for a sandbox or session already gone. */
-export const NOT_FOUND_STATUS = 404;
+const NOT_FOUND_STATUS = 404;
 
 const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
 
