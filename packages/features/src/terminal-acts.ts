@@ -13,7 +13,7 @@
 
 import { Schema as EffectSchema } from "effect";
 import {
-  type TerminalConnection,
+  TERMINAL_CONNECTION,
   type TerminalRefusal as TerminalViewRefusal,
   terminalShellParamsSchema,
   TERMINAL_FLOW as VIEW_FLOW,
