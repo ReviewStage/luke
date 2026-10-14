@@ -14,6 +14,7 @@ import { changedSections } from "@sidecar/hosted/plan-document";
 import { applyDocumentEdit, type PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import {
   applyNotesToText,
+  applyRolloutNotes,
   type PlanAgentEdit,
   type PlanNote,
   withAgentEdit,
@@ -37,7 +38,9 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * are a planning call's notetaker (`voice/plan-scribe.ts`) and a coding
  * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
  * notes (`@sidecar/hosted/plan-template`): a point added under a heading, a
- * phrase corrected, or a line struck. They are taken in order over the text
+ * phrase corrected, or a line struck, or under the rollout a pull request
+ * added, restated, or struck. A rollout note lands in the rollout beside the
+ * text and never in it. The rest are taken in order over the text
  * as it stands, and a note that names a phrase the text does not hold is
  * passed over while the rest are saved; a text past the plan's bound is
  * refused before anything is written. Every save names its writer, the
@@ -105,6 +108,8 @@ export type PlanSaveResult =
       readonly status: typeof PLAN_SAVE_STATUS.SAVED;
       /** The document exactly as it now stands saved. */
       readonly document: PlanDocument;
+      /** The rollout beside the document as it now stands saved. */
+      readonly rollout: Rollout;
       /** Epoch milliseconds of the save. */
       readonly savedAt: number;
       /** The notes that could not be taken, passed over while the rest were saved. */
@@ -259,7 +264,12 @@ export function saveNotes(
   const take = (stored: StoredPlan, now: number) =>
     Effect.map(readStartedText(binding.userId, stored.plan.createdAt), (started) => {
       const noted = applyNotesToText(stored.text, notes, started);
-      const taken = notes.filter((note) => !noted.missed.includes(note));
+      // The rollout stands beside the text, so its notes land in it and never in the text.
+      const cut = applyRolloutNotes(stored.plan.rollout, notes);
+      const missed = notes.filter(
+        (note) => noted.missed.includes(note) || cut.missed.includes(note),
+      );
+      const taken = notes.filter((note) => !missed.includes(note));
       // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
       const journaled =
         writer.actor === PLAN_ACTOR.AGENT && taken.length > 0
@@ -271,7 +281,13 @@ export function saveNotes(
               }),
             }
           : undefined;
-      return Result.succeed({ ...noted, changes: taken.length, ...journaled });
+      return Result.succeed({
+        ...noted,
+        missed,
+        rollout: cut.rollout,
+        changes: taken.length,
+        ...journaled,
+      });
     });
   // Notes never refuse the plan they find: one naming a phrase the plan does not hold is passed over.
   const saved = Effect.map(savedUnderLock(binding, writer, take), (result): PlanSaveResult => {
@@ -281,6 +297,7 @@ export function saveNotes(
       status: PLAN_SAVE_STATUS.SAVED,
       document: plan.document,
       sectionEdits: plan.sectionEdits ?? [],
+      rollout: plan.rollout,
       savedAt: plan.updatedAt,
       missed: taken.missed,
       moved: result.moved,

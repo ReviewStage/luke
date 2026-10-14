@@ -13,8 +13,10 @@ import {
   PLAN_SECTION_BOUNDS,
   type PlanField,
   ROLLOUT_BASE,
+  ROLLOUT_BOUNDS,
   type Rollout,
   type RolloutItem,
+  rolloutItemSchema,
 } from "./plan-wire.js";
 
 /**
@@ -336,10 +338,79 @@ const removeNoteSchema = EffectSchema.Struct({
   ),
 });
 
-const planNoteSchema = EffectSchema.Union([addNoteSchema, replaceNoteSchema, removeNoteSchema]);
+/** The rollout as a note names it: beside the plan's text, its items pull requests rather than words. */
+export const ROLLOUT_NOTE_FIELD = "rollout";
 
-/** One note: a point added under a heading, a phrase corrected, or a line struck. */
+const ROLLOUT_FIELD = describeWire(
+  EffectSchema.Literal(ROLLOUT_NOTE_FIELD),
+  "The rollout: the pull requests the work lands as, in order.",
+);
+
+const ROLLOUT_FIND = describeWire(
+  trimmedText(MAX_FIND_CHARS),
+  "A phrase copied exactly from the title of the one pull request the note changes.",
+);
+
+/** A rollout note's pull request, described as the note uses it and then as what each of its keys holds. */
+function rolloutItem(use: string) {
+  return describeWire(
+    rolloutItemSchema,
+    `${use} Its title; its scope, what it changes; its base, main or the position counted ` +
+      "from one of the earlier pull request it cannot build without; and acceptance, what is " +
+      "true once it lands, or null while unsaid.",
+  );
+}
+
+const addRolloutNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.ADD),
+  field: ROLLOUT_FIELD,
+  item: rolloutItem("The new pull request, added after the last."),
+});
+
+const replaceRolloutNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
+  field: ROLLOUT_FIELD,
+  find: ROLLOUT_FIND,
+  item: rolloutItem("The pull request as it now stands, in the same position."),
+});
+
+const removeRolloutNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.REMOVE),
+  field: ROLLOUT_FIELD,
+  find: ROLLOUT_FIND,
+});
+
+/**
+ * A note as the models answer it: a pull request of the rollout, or a point
+ * under a heading of the text. Note that the rollout's shapes are tried
+ * first, because a rollout strike also reads as a strike of the text once its
+ * field is dropped, and would cut the phrase from the plan's words.
+ */
+const planNoteSchema = EffectSchema.Union([
+  addRolloutNoteSchema,
+  replaceRolloutNoteSchema,
+  removeRolloutNoteSchema,
+  addNoteSchema,
+  replaceNoteSchema,
+  removeNoteSchema,
+]);
+
+/** One note: a point added under a heading, a phrase corrected, or a line struck; under the rollout, a pull request added, restated, or struck. */
 export type PlanNote = typeof planNoteSchema.Type;
+
+/** A note taken under the rollout, whose items are pull requests named by their titles. */
+type RolloutNote = Extract<PlanNote, { readonly field: typeof ROLLOUT_NOTE_FIELD }>;
+
+/** A note taken in the plan's text, under a heading or on a phrase of it. */
+type TextNote = Exclude<PlanNote, RolloutNote>;
+
+function isRolloutNote(note: PlanNote): note is RolloutNote {
+  return "field" in note && note.field === ROLLOUT_NOTE_FIELD;
+}
+
+function isTextNote(note: PlanNote): note is TextNote {
+  return !isRolloutNote(note);
+}
 
 /** What the notetaker answers each run with: the notes the latest lines call for, in the order taken. */
 export const planNotesSchema = EffectSchema.Struct({
@@ -471,7 +542,7 @@ function guidanceOnly(section: PlanSection, started: string | undefined): boolea
  */
 function addedToText(
   text: string,
-  note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>,
+  note: Extract<TextNote, { kind: typeof NOTE_KIND.ADD }>,
   started: string | undefined,
 ): string {
   const heading = note.section;
@@ -525,7 +596,7 @@ function struckFromText(text: string, at: Span): string {
  */
 function applyNoteToText(
   text: string,
-  note: PlanNote,
+  note: TextNote,
   started: string | undefined,
 ): string | undefined {
   if (note.kind === NOTE_KIND.ADD) return addedToText(text, note, started);
@@ -547,7 +618,10 @@ export interface TextNotesTaken {
  * Every note taken over a document's text in order, and the notes that could
  * not be. `started` is the template text the plan started as, where it is
  * known, so a section still holding only its guidance takes its first point
- * in place of it; without it every point is added after what stands.
+ * in place of it; without it every point is added after what stands. Note
+ * that a rollout note is passed over here, neither taken nor missed, because
+ * the rollout stands beside the text and is never written into it
+ * (`applyRolloutNotes`).
  */
 export function applyNotesToText(
   text: string,
@@ -556,12 +630,93 @@ export function applyNotesToText(
 ): TextNotesTaken {
   let taken = text;
   const missed: PlanNote[] = [];
-  for (const note of notes) {
+  for (const note of notes.filter(isTextNote)) {
     const next = applyNoteToText(taken, note, started);
     if (next === undefined) missed.push(note);
     else taken = next;
   }
   return { text: taken, missed };
+}
+
+/** Which one item of a list holds a phrase, where exactly one place in the whole list does; -1 otherwise. */
+function soleHolder<Item>(
+  items: readonly Item[],
+  textsOf: (item: Item) => readonly string[],
+  find: string,
+): number {
+  const counts = items.map((item) =>
+    textsOf(item).reduce((total, text) => total + spansOf(text, find).length, 0),
+  );
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  return total === 1 ? counts.indexOf(1) : -1;
+}
+
+/** Whether a rollout is within its bound and every pull request bases on main or on one before it. */
+function rolloutHolds(rollout: Rollout): boolean {
+  return (
+    rollout.length <= ROLLOUT_BOUNDS.MAX_PULL_REQUESTS &&
+    rollout.every((item, at) => item.base === ROLLOUT_BASE.MAIN || item.base <= at)
+  );
+}
+
+/**
+ * The rollout with a pull request struck, each later one's base counted down
+ * past it, or nothing where another pull request bases on it. Note that a
+ * pull request still built on is never struck, because re-basing its
+ * dependents is a decision the note does not make.
+ */
+function rolloutStruck(rollout: Rollout, index: number): Rollout | undefined {
+  const position = index + 1;
+  if (rollout.some((item) => item.base === position)) return undefined;
+  return rollout
+    .filter((_, at) => at !== index)
+    .map((item) =>
+      item.base !== ROLLOUT_BASE.MAIN && item.base > position
+        ? { ...item, base: item.base - 1 }
+        : item,
+    );
+}
+
+/** The rollout with a note taken as it says, or nothing where the title it names is not one pull request's. */
+function rolloutChanged(rollout: Rollout, note: RolloutNote): Rollout | undefined {
+  if (note.kind === NOTE_KIND.ADD) return [...rollout, note.item];
+  const index = soleHolder(rollout, (item) => [item.title], note.find);
+  if (index === -1) return undefined;
+  if (note.kind === NOTE_KIND.REMOVE) return rolloutStruck(rollout, index);
+  return rollout.map((standing, at) => (at === index ? note.item : standing));
+}
+
+/**
+ * The rollout with a note taken, or nothing where it cannot be: a title it
+ * names that no one pull request holds, a struck pull request another bases
+ * on, or a rollout left with a base at or past its own position or grown
+ * past its bound.
+ */
+function rolloutNoted(rollout: Rollout, note: RolloutNote): Rollout | undefined {
+  const noted = rolloutChanged(rollout, note);
+  return noted !== undefined && rolloutHolds(noted) ? noted : undefined;
+}
+
+/** Rollout notes taken over a plan's rollout: the rollout after, and the notes that could not be taken. */
+export interface RolloutNotesTaken {
+  readonly rollout: Rollout;
+  readonly missed: readonly PlanNote[];
+}
+
+/**
+ * Every rollout note taken over a plan's rollout in order, and the notes that
+ * could not be. A note on the text is passed over here, neither taken nor
+ * missed (`applyNotesToText`).
+ */
+export function applyRolloutNotes(rollout: Rollout, notes: readonly PlanNote[]): RolloutNotesTaken {
+  let taken = rollout;
+  const missed: PlanNote[] = [];
+  for (const note of notes.filter(isRolloutNote)) {
+    const next = rolloutNoted(taken, note);
+    if (next === undefined) missed.push(note);
+    else taken = next;
+  }
+  return { rollout: taken, missed };
 }
 
 const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
@@ -581,7 +736,9 @@ function growingAddition(value: UnparsedWireValue): PlanNote | undefined {
   const text = settledText(value.text).trim();
   if (text.length === 0) return undefined;
   const read = readNote(unparsedWire({ ...value, text }));
-  return Result.isSuccess(read) ? read.success : undefined;
+  if (Result.isFailure(read)) return undefined;
+  // A pull request is drawn only whole, so a rollout note never grows here.
+  return isRolloutNote(read.success) ? undefined : read.success;
 }
 
 /** An answer's notes as read, and how many of its notes did not read. */
@@ -619,6 +776,15 @@ export function textNotesInProgress(
   started?: string,
 ): string {
   return applyNotesToText(text, notesSoFar(partial), started).text;
+}
+
+/**
+ * A plan's rollout as the notetaker's answer so far leaves it. Note that a
+ * pull request is drawn only once its note is whole, because a title or a
+ * base still being written would move under the developer's eyes.
+ */
+export function rolloutNotesInProgress(rollout: Rollout, partial: UnparsedWireValue): Rollout {
+  return applyRolloutNotes(rollout, notesSoFar(partial)).rollout;
 }
 
 /** The notes an answer so far holds: every whole note that reads, then the last, while it adds a point, as written so far. */

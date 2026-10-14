@@ -584,6 +584,18 @@ written out again:
   names, or opens that section at the end of the text where it has none.
 - `replace` corrects a phrase copied exactly from the text, standing once in
   it and touching no heading, and `remove` strikes the line holding one.
+- Under `rollout` each kind is over one whole pull request, and lands
+  in the rollout beside the text, never in the text: `add` with `item`
+  appends one, `replace` with `find` and `item` restates the one whose title
+  alone holds `find`, and `remove` with `find` strikes it, counting each
+  later base past it down by one. A cut Luke proposes and the developer
+  takes is written as one rollout note per pull request, never as prose
+  under Approach. A rollout note is missed where no one title holds its
+  phrase, where it strikes a pull request another bases on, or where it
+  would leave a base at or past its own position or the list past twenty.
+  The notetaker is handed the rollout as JSON beside the plan, and every
+  draft it sends the window carries the rollout, a pull request appearing
+  once its note is whole.
 
 A note naming a phrase the plan does not hold is passed over, reported, and
 never guessed into another; a note that does not read under the schema is
@@ -871,9 +883,15 @@ rather than judging it.
   main` or `· base: #2` with the scope under it and `Done when: …` where set,
   or "No rollout yet" while empty, read-only in the window, last in Copy and
   in what a coding agent is handed, and handed to the planning model beside
-  the text once it holds one. Nothing writes it yet; the notetaker's rollout
-  notes come next. Migration 0096 added both columns, every existing plan and
-  revision with an empty rollout.
+  the text once it holds one. The notetaker and a coding agent's `edit_plan`
+  write it through rollout notes ("The notetaker" above). The planning
+  model proposes the cut itself once the Interfaces, Hard parts, and Testing
+  sections are good enough, read by heading ("Cutting the rollout" in
+  `PLANNING_INSTRUCTIONS`): the interfaces grouped by layer in the order the
+  repository confirms, one line per pull request on why it lands green alone,
+  siblings on the one they both need, a single pull request asked once
+  whether it splits; it writes none of it. Migration 0096 added both
+  columns, every existing plan and revision with an empty rollout.
   `rolloutStacksOf` (`plan-wire.ts`) cuts it into the GitHub stacks it lands
   as, since a stack is a line: each pull request on main starts a chain on
   main, and at each pull request its lowest-numbered child goes on up the
