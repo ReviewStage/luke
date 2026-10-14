@@ -293,6 +293,24 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // A call's avatar, its own bundle so the bundle every window parses never
+  // carries Keyframe's SDK or the LiveKit client under it; the call window
+  // loads it the first time an avatar is shown
+  // (`src/renderer/avatar-session/contract.ts`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-session/index.ts")],
+    outfile: path.join(outputRoot, "renderer/avatar-session.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    conditions: ["production"],
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+    define: { "process.env.NODE_ENV": '"production"' },
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),
