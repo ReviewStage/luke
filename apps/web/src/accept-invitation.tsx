@@ -2,11 +2,11 @@ import {
   type InvitationAcceptQuery,
   invitationAcceptQuery,
 } from "@luke/features/workspace-invitation-wire";
+import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { SignInChoices } from "./sign-in-choices";
 import "./styles.css";
 

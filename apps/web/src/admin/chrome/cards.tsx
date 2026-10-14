@@ -1,12 +1,12 @@
-import { ProviderMark } from "@luke/ui";
-import { useState } from "react";
-import { AUTH_BUTTON } from "../../auth-surface";
-import { LukeMark } from "../../SiteChrome";
 import {
   SOCIAL_PROVIDER,
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
-} from "../../sign-in-provider";
+} from "@luke/features/sign-in-provider";
+import { ProviderMark } from "@luke/ui";
+import { AUTH_BUTTON } from "@luke/ui/auth-surface";
+import { useState } from "react";
+import { LukeMark } from "../../SiteChrome";
 import { authClient } from "../auth-client";
 import { SIGN_IN_CHOSEN } from "../prefs";
 import { PLAIN_BUTTON } from "./controls";

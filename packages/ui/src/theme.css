@@ -15,6 +15,7 @@
      --color-muted             --color-muted-foreground
      --color-primary           --color-primary-foreground
 
-   A token outside that list belongs to one app, and a component that needs
-   one takes the class from its caller instead. */
+   A token outside that list belongs to one app, and a module that reads one
+   is drawn by that app alone: `auth-surface.ts`'s pill reads the site's
+   attention and complete inks. */
 @source "./";

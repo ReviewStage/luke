@@ -39,6 +39,8 @@
     "./transcript-wire": "./src/transcript-wire.js",
     "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
     "./workspace-wire": "./src/workspace-wire.js",
+    "./sign-in-provider": "./src/sign-in-provider.js",
+    "./connect-github-step": "./src/connect-github-step.js",
     "./feedback": "./src/feedback/index.js",
     "./analytics": "./src/analytics/index.js",
     "./analytics/sender": "./src/analytics/sender.js",

@@ -6,7 +6,7 @@ import {
   failedLinkAddress,
   LINK_FAILED,
   linkErrorWords,
-} from "../src/connect-github-step";
+} from "./connect-github-step.js";
 
 /**
  * What the connect page reads off its address, and the words it draws for

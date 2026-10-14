@@ -1,6 +1,6 @@
+import { accountLabel } from "@luke/ui/account-initials";
 import type { AdminUserAccount, AdminUserDetail } from "../../../server/admin/admin-user";
 import type { AdminMetricsWindow } from "../../../server/admin/http";
-import { accountLabel } from "../../account-initials";
 import { ActivityCalendar } from "../charts/activity-calendar";
 import { SectionHeading, StatCard } from "../charts/stat-card";
 import { UsageChart } from "../charts/usage-chart";

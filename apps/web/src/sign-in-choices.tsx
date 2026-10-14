@@ -1,8 +1,12 @@
+import {
+  SOCIAL_PROVIDER,
+  SOCIAL_PROVIDER_LABEL,
+  type SocialProvider,
+} from "@luke/features/sign-in-provider";
 import { ProviderMark } from "@luke/ui";
+import { AUTH_BUTTON } from "@luke/ui/auth-surface";
 import type { createAuthClient } from "better-auth/react";
 import { useState } from "react";
-import { AUTH_BUTTON } from "./auth-surface";
-import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
 /**
  * sign-in-choices.tsx -- the Google and GitHub sign-in buttons a page on the browser's session offers when it has none.

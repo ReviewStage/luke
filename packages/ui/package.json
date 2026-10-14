@@ -6,6 +6,11 @@
   "description": "Shared React for the desktop panel: Luke's face and glyphs, traced from the brand's generated art",
   "exports": {
     ".": "./src/index.js",
+    "./account-initials": "./src/account-initials.js",
+    "./activity-calendar": "./src/activity-calendar.js",
+    "./admin-animations": "./src/admin-animations.js",
+    "./auth-surface": "./src/auth-surface.js",
+    "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
     "./theme.css": "./src/theme.css"
   },
@@ -18,6 +23,7 @@
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
     "clsx": "2.1.1",
+    "effect": "catalog:",
     "react": "catalog:",
     "recharts": "3.8.0",
     "tailwind-merge": "3.7.0"

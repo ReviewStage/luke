@@ -5,10 +5,10 @@ import {
   githubInstallStatusFromWire,
 } from "@luke/features";
 import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
+import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
-import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { ConnectionGraphic } from "./connection-graphic";
 import "./styles.css";
 

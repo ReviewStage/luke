@@ -2,8 +2,13 @@
 
 The React that more than one app mounts: the face and the glyphs traced from
 `@luke/brand`'s generated art, every provider's brand mark, the chart, `cn`, and
-the custom-property bridge a component's `style` reads.
+the custom-property bridge a component's `style` reads; and the DOM-free view
+models a page is drawn from (the site's account initials, activity calendar,
+daily series, animations roster, and OAuth card classes).
 
+- A view model is a `.ts` module that imports no React, at a subpath of its
+  own (`@luke/ui/<name>`), so an app that reads one never resolves React
+  through it.
 - A component takes its data and its callbacks as props. A shared context
   lands only when three components need the same door, because a context is a
   second way in that every app has to provide.
