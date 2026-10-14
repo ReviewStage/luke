@@ -1,6 +1,5 @@
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -152,6 +151,7 @@ import {
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
+import type { AgentWireTrace } from "@sidecar/gateway/devtrace";
 import type { LiveDiagnostics } from "@sidecar/live";
 import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";

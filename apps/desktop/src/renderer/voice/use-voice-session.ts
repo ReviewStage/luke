@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
-import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
+import { sanitizedTraceEvent } from "@sidecar/gateway/devtrace";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
   type LiveVoiceBridge,

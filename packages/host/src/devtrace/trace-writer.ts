@@ -1,8 +1,12 @@
+import {
+  type AgentWireTrace,
+  sanitizedTraceEvent,
+  TRACE_ENTRY_KIND,
+} from "@sidecar/gateway/devtrace";
 import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
 import { Cause, DateTime, Deferred, Effect, Path, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
-import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
 /**
  * One decision the speech arbiter took about a proactive turn: which kind of

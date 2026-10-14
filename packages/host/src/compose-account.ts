@@ -10,7 +10,6 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
-import { AgentTraceWriter, agentTraceDirectory } from "@sidecar/devtrace";
 import {
   AccountRefreshFailed,
   type AccountSessionToken,
@@ -31,6 +30,8 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
+import { agentTraceDirectory } from "./devtrace/trace-directory.js";
+import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, Environment } from "./effect/seams.js";
 import { openSocketOverWs } from "./voice/socket-over-ws.js";
