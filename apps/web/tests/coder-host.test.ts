@@ -14,6 +14,7 @@ import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planSections } from "@sidecar/hosted/plan-document";
+import { FAST_ACCESS } from "@sidecar/hosted/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
@@ -62,14 +63,16 @@ const NOW = 1_800_000_000_000;
 
 const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
+const OPUS: OfferedModel = {
+  id: "anthropic/claude-opus-5.5",
+  name: "Claude Opus 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "medium", "high", "max"],
+  contextWindow: 1_000_000,
+};
+
 const CATALOG: readonly OfferedModel[] = [
-  {
-    id: "anthropic/claude-opus-5.5",
-    name: "Claude Opus 5.5",
-    provider: MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["low", "medium", "high", "max"],
-    contextWindow: 1_000_000,
-  },
+  OPUS,
   {
     id: "openai/gpt-6.1-sol",
     name: "GPT-6.1 Sol",
@@ -329,6 +332,29 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             .pipe(Effect.provide(modelCatalogOf(CATALOG))),
           Result.fail(CODER_REFUSAL.NO_AGENT),
         );
+      }),
+  );
+
+  it.effect(
+    "a worker asked for on a fast version is refused as no model Luke offers where Anthropic never granted the key's organization fast mode, and recorded on it where Anthropic did",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const fast: OfferedModel = { ...OPUS, id: "anthropic/claude-opus-5.5-fast" };
+        const catalog = [...CATALOG, fast];
+        const asked = { model: fast.id };
+
+        const refused = yield* host
+          .delegate(admitted, "call-fast-refused", asked)
+          .pipe(Effect.provide(modelCatalogOf(catalog, FAST_ACCESS.NOT_ENABLED)));
+        const accepted = yield* host
+          .delegate(admitted, "call-fast-accepted", asked)
+          .pipe(Effect.provide(modelCatalogOf(catalog, FAST_ACCESS.ENABLED)));
+
+        assert.ok(Result.isFailure(refused));
+        assert.match(refused.failure, /is no model Luke offers/u);
+        assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
       }),
   );
 

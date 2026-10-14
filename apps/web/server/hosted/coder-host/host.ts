@@ -30,7 +30,7 @@ import {
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
-import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
+import { ModelCatalog, type OfferedModel, offeredToAccount } from "../model-catalog.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../page-tool.js";
 import {
   type ReadWebPageResult,
@@ -41,6 +41,7 @@ import {
 } from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { logStoreFailure } from "../store-failure.js";
+import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
   agentCiReadable,
@@ -427,7 +428,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           const catalog = yield* ModelCatalog;
           const offered = yield* catalog.read.pipe(Effect.option);
           if (Option.isNone(offered)) return Result.fail(CODER_REFUSAL.CATALOG_UNAVAILABLE);
-          const chosen = delegationChoice(own, asked, offered.value);
+          // A worker is offered what the agent's account is, so no worker runs a fast version its key's organization was never granted.
+          const fastAccess = yield* anthropicFastAccess(admitted.target.userId);
+          const chosen = delegationChoice(own, asked, offeredToAccount(offered.value, fastAccess));
           if (Result.isFailure(chosen)) return chosen;
           choice = chosen.success;
         }
