@@ -36,6 +36,8 @@ export const GATEWAY_METHOD = {
   PLANNING_SET_REPOSITORY: "planning.setRepository",
   /** The developer's edit of a plan's document saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
   PLANNING_EDIT: "planning.edit",
+  /** A developer's typed line to Luke on one plan, under the window's own key for it; the ask Luke took it as, the same for a retry of the key, or why it was not taken. */
+  PLANNING_MESSAGE: "planning.message",
   /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** The page of the open plan's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */

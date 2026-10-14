@@ -32,6 +32,7 @@ import {
   type Plan,
   type PlanAgentsSummary,
   type PlanFileAnswer,
+  type PlanMessageAnswer,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSkillsAnswer,
@@ -45,6 +46,7 @@ import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanCallFailure,
+  type PlanningMessageFailure,
   type PlanningView,
   type PlanWorkAnswer,
   planningViewSchema,
@@ -172,6 +174,8 @@ interface FakeService extends PlanningClient {
   githubGate: Effect.Effect<void>;
   /** The single-use pages the service hands out to connect GitHub, the newest last. */
   connectPages: string[];
+  /** Every typed line the service took, in order, as Luke's asks: the plan, the words, and the key. */
+  readonly lines: { planId: string; text: string; clientKey: string }[];
 }
 
 const PERSONAL: Workspace = {
@@ -214,6 +218,11 @@ const NOT_PERMITTED_WORKSPACE = {
   ok: false,
   failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
 } as const;
+
+/** The ask the fake service takes every typed line as, and the instant it takes it at. */
+const ASK_ID = "5e2d8c1a-3f4b-4a6e-9d7c-1b8a2f6e4c30";
+const QUEUED_AT = 8_000;
+const CLIENT_KEY = "3f6c1a2e-9b4d-4e7f-8a1c-5d2e7f9b3a64";
 
 /** The instant the fake service stamps every edit's save with. */
 const EDITED_AT = 7_000;
@@ -271,6 +280,7 @@ function fakeService(plans: Plan[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    lines: [],
     memberships: [PERSONAL],
     installUrl: INSTALL_URL,
     workspacesFail: false,
@@ -400,6 +410,17 @@ function fakeService(plans: Plan[]): FakeService {
           return { ok: true, answer: workspaceId } as const;
         }),
     },
+    // The service takes a line on a plan it holds as an ask, and refuses one on an archived plan.
+    send: (planId, text, clientKey) =>
+      Effect.sync((): PlanCallResult<PlanMessageAnswer, PlanningMessageFailure> => {
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        if (found === undefined) return { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND };
+        if (found.archivedAt !== undefined) {
+          return { ok: false, failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED };
+        }
+        service.lines.push({ planId, text, clientKey });
+        return { ok: true, answer: { ask: { id: ASK_ID, queuedAt: QUEUED_AT } } };
+      }),
     repositoryPins: () => Effect.sync(() => (service.pinsFail ? undefined : service.pins)),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
@@ -805,6 +826,52 @@ it.effect(
         status: PLANNING_READ.READY,
         plan: service.plans[0],
       });
+    }),
+);
+
+it.effect(
+  "a typed line reaches the service with the window's key and answers the ask Luke took it as, and leaves the open document as it stood",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      const opened = last();
+
+      const answer = yield* call(GATEWAY_METHOD.PLANNING_MESSAGE, {
+        planId: INVITES,
+        text: "Roll out the plan.",
+        clientKey: CLIENT_KEY,
+      });
+
+      assert.deepEqual(answer, { ask: { id: ASK_ID, queuedAt: QUEUED_AT } });
+      assert.deepEqual(service.lines, [
+        { planId: INVITES, text: "Roll out the plan.", clientKey: CLIENT_KEY },
+      ]);
+      assert.deepEqual(last(), opened);
+    }),
+);
+
+it.effect(
+  "a typed line to an archived plan answers archived, and signed out it answers unanswered and never reaches the service",
+  () =>
+    Effect.gen(function* () {
+      const archived = { ...plan(INVITES, "Teammate invitations", "# Invites", 10), archivedAt: 9 };
+      const service = fakeService([archived]);
+      const line = { planId: INVITES, text: "Roll out the plan.", clientKey: CLIENT_KEY };
+      const signedIn = yield* subject(service);
+      const signedOut = yield* subject(service, { signedIn: false });
+
+      const refused = yield* signedIn.call(GATEWAY_METHOD.PLANNING_MESSAGE, line);
+      const { archivedAt: _archivedAt, ...brought } = archived;
+      service.plans = [brought];
+      const unsent = yield* signedOut.call(GATEWAY_METHOD.PLANNING_MESSAGE, line);
+
+      assert.deepEqual(refused, { failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED });
+      assert.deepEqual(unsent, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(service.lines, []);
     }),
 );
 

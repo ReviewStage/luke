@@ -3,7 +3,7 @@ import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON } from "../failure-remedy";
-import { choiceLabel } from "../planning/coding-agent-model";
+import { choiceLabel, ROLL_OUT_HINT } from "../planning/coding-agent-model";
 import { ModelMenu, settledChoice } from "../planning/model-menu";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { BusyLabel } from "../spinner";
@@ -24,6 +24,12 @@ import { useDisclosure } from "../use-disclosure";
  * is unavailable and says why on hover instead. The menu closes on a pick,
  * on Escape, on a press of the main part, and on focus leaving the button;
  * Escape stops there, so it closes the menu and not the plan behind it.
+ *
+ * A plan whose rollout names more than one pull request reads "Roll out"
+ * instead, and its main part asks Luke to roll the plan out, a coding agent
+ * per pull request and one to keep the stack, which is what it says on
+ * hover so the press is not taken for a Start of one. The chevron's menu stays, since a pick is still
+ * the account's default and Luke starts each agent on it.
  */
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
@@ -94,21 +100,21 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     start.onPress();
   };
 
-  const hint =
-    start.reason ??
-    (models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined);
+  const modelHint =
+    models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined;
+  const hint = start.reason ?? (start.rollOut ? ROLL_OUT_HINT : modelHint);
   const main = (
     <button
       type="button"
       className="toolbar-button start-agent-main"
       aria-disabled={unavailable || start.busy ? "true" : undefined}
-      aria-label="Start a coding agent"
+      aria-label={start.rollOut ? "Roll out the plan" : "Start a coding agent"}
       aria-busy={start.busy ? "true" : undefined}
       onClick={press}
     >
-      <BusyLabel busy={start.busy} label="Starting">
+      <BusyLabel busy={start.busy} label={start.rollOut ? "Rolling out" : "Starting"}>
         <PlayIcon />
-        Start
+        {start.rollOut ? "Roll out" : "Start"}
       </BusyLabel>
     </button>
   );

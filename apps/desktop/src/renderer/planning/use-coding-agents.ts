@@ -13,6 +13,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import { PLAN_CALL_FAILURE, type PlanningMessageAnswer } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
@@ -25,7 +26,10 @@ import {
   archiveWords,
   choiceRequest,
   MODEL_CHANGE_FAILED,
+  PLAN_ASK,
   RENAME_FAILED,
+  ROLL_OUT_FAILED_AWAY,
+  rollOutFailureNote,
   SERVERS_FAILED,
   START_ARCHIVED,
   START_FAILED_AWAY,
@@ -66,6 +70,14 @@ const NO_KEYWORDS: readonly string[] = [];
  * of an agent's transcript carries its title too, which is how the title
  * generated as the agent started reaches a tab the list opened before it
  * landed.
+ *
+ * A plan whose rollout names more than one pull request is rolled out
+ * rather than started: the same press sends Luke the fixed line
+ * `PLAN_ASK.ROLL_OUT` as the developer's own typed words, and Luke starts
+ * a builder per pull request and one stack keeper for the rollout, each on
+ * the account's default, as a Start would have run one. The line carries a key of its own, kept as a Start's
+ * is: a line the service did not answer is sent again under the same key,
+ * so Luke takes it once, and a line Luke took lets its key go.
  *
  * A draft is an agent the developer opened from the column's "+" and has
  * not yet sent anything: it exists only here, so a draft let go leaves
@@ -146,11 +158,13 @@ export interface CodingAgentsControl {
     available: boolean;
     /** Why it cannot, said on the button, while it cannot. */
     reason: string | undefined;
-    /** Whether a Start is out. */
+    /** Whether the press rolls the plan out through Luke rather than starting one agent: its rollout names more than one pull request. */
+    rollOut: boolean;
+    /** Whether a Start, or a Roll out, is out. */
     busy: boolean;
     /** Why the last Start did not start, or the last change of model did not take, said beside the button until the next. */
     note: Failure | undefined;
-    /** Starts an agent on the choice given, or on the account's default with none. */
+    /** Starts an agent on the choice given, or on the account's default with none; or, while `rollOut`, asks Luke to roll the plan out. */
     onPress: (choice?: ModelChoice) => void;
   };
   /** Stops one agent; the list is read again once the service answers. */
@@ -245,6 +259,8 @@ export function useCodingAgents(input: {
   repository: string | null;
   /** Whether the open plan is archived, which starts nothing on it. */
   archived: boolean;
+  /** How many pull requests the open plan's rollout names; more than one rolls it out through Luke. */
+  rollout: number;
   /** Brings the open plan back from the archive. */
   onUnarchive: () => void;
   /** Opens Settings on its Integrations page. */
@@ -259,6 +275,7 @@ export function useCodingAgents(input: {
   mintKey?: () => string;
 }): CodingAgentsControl {
   const { planId, repository, archived } = input;
+  const rollOut = input.rollout > 1;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
   const [list, setList] = useState<{
@@ -274,6 +291,8 @@ export function useCodingAgents(input: {
   const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
+  // Each plan's Roll out key still owed an answer, by the plan's id.
+  const pendingLines = useRef(new Map<string, string>());
   const toast = useToast();
   const failed = useCallback(
     (words: string) => toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
@@ -411,6 +430,33 @@ export function useCodingAgents(input: {
       pending.current = undefined;
       landed(planId, answer.agent);
     });
+  };
+
+  // Note that the line is sent under the key the plan's last unanswered
+  // press minted, because Luke may have taken it and only the answer was
+  // lost; each plan holds its own, so a Roll out of another plan between
+  // the two presses does not make it a second line.
+  const pressRollOut = () => {
+    if (planId === undefined || repository === null || archived || starting) return;
+    const key = pendingLines.current.get(planId) ?? mintKey();
+    pendingLines.current.set(planId, key);
+    setNote(undefined);
+    setStarting(true);
+    act(ACT_KIND.PLANNING_MESSAGE, { planId, text: PLAN_ASK.ROLL_OUT, clientKey: key })
+      .catch((): PlanningMessageAnswer => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }))
+      .then((answer) => {
+        setStarting(false);
+        if (!("failure" in answer)) {
+          pendingLines.current.delete(planId);
+          return;
+        }
+        if (answer.failure !== PLAN_CALL_FAILURE.UNANSWERED) pendingLines.current.delete(planId);
+        setNote({
+          planId,
+          note: { reason: FAILURE_REASON.OTHER, text: rollOutFailureNote(answer.failure) },
+        });
+        if (latest.current.planId !== planId) failed(ROLL_OUT_FAILED_AWAY);
+      });
   };
 
   /** The drafts with the plan's set to `next`, or let go where it is nothing. */
@@ -726,9 +772,10 @@ export function useCodingAgents(input: {
     start: {
       available: planId !== undefined && repository !== null && !archived,
       reason: startReason(planId, repository, archived),
+      rollOut,
       busy: starting,
       note: note !== undefined && note.planId === planId ? note.note : undefined,
-      onPress: pressStart,
+      onPress: rollOut ? pressRollOut : pressStart,
     },
     onStop,
     onMessage,

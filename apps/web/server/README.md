@@ -1467,6 +1467,21 @@ through `shownCodeOf`, so what the call refused and a secret file are
 never read back. `packages/hosted/src/planning-view.ts` declares the
 answer (`planWorkAnswerSchema`).
 
+`POST /api/plans/{id}/messages` `{ text, clientKey }` is the developer's
+typed line to Luke on the plan, under their own bearer: the plan's
+conversation, opened for it where it has none yet as a call opens it
+(`openPlanConversation`), takes the line as a typed ask through the same
+`acceptAsk` (`server/hosted/brain-ask.ts`) a spoken ask takes, on eve's
+planning channel with the typed turn header, so the relay writes the line as
+the developer's own row and Luke's reply lands on the plan's work. The key is
+the ask's client id, so a retry under it answers the first send's ask and
+hands eve nothing again. The words are bounded as a line to a coding agent is
+(`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`, `message_too_long` past it); an
+archived plan is refused `plan_archived` before any conversation is opened, as
+a Start is; and a dispatch eve did not take answers `unavailable`, the ask
+left standing for a retry. The answer is a 202 naming the ask and when it was
+taken (`planMessageRequestSchema`, `planMessageAnswerSchema`).
+
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
 the plan's repository for the Mac's File tab (`server/hosted/plan-file.ts`),
 at most 500 lines a window. No sandbox stands outside a planning turn, so it

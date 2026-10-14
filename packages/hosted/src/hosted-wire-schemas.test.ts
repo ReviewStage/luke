@@ -234,6 +234,8 @@ const EFFECT_MODULE_SCHEMAS = {
     repositoryPinRequestSchema: planWire.repositoryPinRequestSchema,
     planAnswerSchema: planWire.planAnswerSchema,
     planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
+    planMessageRequestSchema: planWire.planMessageRequestSchema,
+    planMessageAnswerSchema: planWire.planMessageAnswerSchema,
     planRevisionSeqSchema: planWire.planRevisionSeqSchema,
     planRevisionLineSchema: planWire.planRevisionLineSchema,
     planRevisionsAnswerSchema: planWire.planRevisionsAnswerSchema,

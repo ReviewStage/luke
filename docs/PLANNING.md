@@ -35,7 +35,10 @@ A reviewer can hold the build to these as easily as to the layout:
   text fields are ordinary setup fields (the plan's name and the repository
   filter) and the editor the document opens in, and nothing typed into them
   reaches the model as conversation. An edited section reaches it as the
-  document it is handed, marked as the developer's own words.
+  document it is handed, marked as the developer's own words. Roll out
+  ("Header" below) sends Luke one fixed line, `PLAN_ASK.ROLL_OUT`, as the
+  developer's typed words; it is a button, not a composer, and no other
+  typed line reaches Luke.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are
   read and restored from its version history ("History" below), which is the
@@ -244,7 +247,16 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   service also keeps as the account's default. A plan with no repository has Start unavailable, saying why on
   hover. Each press mints a key of its own, and a press asked again after
   the service did not answer carries the same key, so one press is one agent
-  ("From a plan to a pull request" below).
+  ("From a plan to a pull request" below). While the plan's rollout names
+  more than one pull request the button reads **Roll out** instead, and says
+  "Luke starts a coding agent per PR and one to keep the stack" on hover:
+  its main part sends Luke the fixed line "Roll out the plan."
+  (`PLAN_ASK.ROLL_OUT`, through `ACT_KIND.PLANNING_MESSAGE`) and Luke starts
+  a builder per pull request and one stack keeper for the rollout, on the
+  account's default, which the chevron's menu still sets.
+  The line's key is kept across a press the service did not answer, as a
+  Start's is, so Luke takes it once. A rollout of one pull request, or none,
+  keeps Start and its one agent.
 - **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
   toolbar's, heard on every tab of the plan. It is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an

@@ -42,6 +42,7 @@ import {
   type PlanningFileAnswer,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningMessageAnswer,
   type PlanningPageAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -63,6 +64,7 @@ import {
   planningBoardSaveParamsSchema,
   planningEditParamsSchema,
   planningFileParamsSchema,
+  planningMessageParamsSchema,
   planningMessagesParamsSchema,
   planningPageParamsSchema,
   planningPinParamsSchema,
@@ -158,6 +160,8 @@ import type { RunMode } from "./run-mode.js";
  * service on the developer's word, and a workspace's members and a
  * connection's install address are answered to the caller that asked and
  * held nowhere here.
+ * A developer's typed line to Luke on a plan is carried to the service on
+ * their word too, and nothing of it is held here.
  */
 
 /**
@@ -278,6 +282,7 @@ export type PlanningClient = Pick<
   | "repositories"
   | "setRepository"
   | "edit"
+  | "send"
 > & {
   /** The account's workspaces, the ones it may join, and their members. */
   workspaces: Pick<
@@ -1638,6 +1643,25 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         return carried<PlanningWorkspaceInvitationsAnswer>(
           pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
         );
+      }),
+    // Note that a typed line touches nothing the view holds, so it is not
+    // serialized behind the reads: Luke takes it as an ask on the service,
+    // and his reply lands on the plan's work there as any turn's does.
+    [GATEWAY_METHOD.PLANNING_MESSAGE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningMessageParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("a typed line names a plan, its words, and its key");
+        }
+        if (!gate()) {
+          return carried<PlanningMessageAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const { planId, text, clientKey } = read.success;
+        const sent = yield* Effect.provide(
+          client.send(planId, text, clientKey),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningMessageAnswer>(sent.ok ? sent.answer : { failure: sent.failure });
       }),
     // A save of another plan than the open one is dropped: its board is not drawn.
     [GATEWAY_METHOD.PLANNING_BOARD_SAVE]: (params) =>

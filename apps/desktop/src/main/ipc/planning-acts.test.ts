@@ -56,6 +56,8 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
+const ASK_ID = "5e2d8c1a-3f4b-4a6e-9d7c-1b8a2f6e4c30";
+const CLIENT_KEY = "3f6c1a2e-9b4d-4e7f-8a1c-5d2e7f9b3a64";
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -165,6 +167,11 @@ function fixture() {
           const value = "document" in params.edit ? params.edit.document.value : "";
           asked.push(`edit:${params.planId}:${value}`);
           return { saved: true } as const;
+        }),
+      planningMessage: (params) =>
+        Effect.sync(() => {
+          asked.push(`message:${params.planId}:${params.text}:${params.clientKey}`);
+          return { ask: { id: ASK_ID, queuedAt: 1_800_000_500_000 } };
         }),
       planningBoardSave: (params) =>
         Effect.sync(() => void asked.push(`board:${params.planId}:${params.appliedDrawing}`)),
@@ -306,6 +313,31 @@ it.effect(
       assert.deepEqual(f.asked, [`edit:${PLAN_ID}:Invites expire.`]);
     }),
 );
+it.effect(
+  "a typed line to Luke reaches the host from a panel with its key and answers the ask, and is refused from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const line = {
+        kind: ACT_KIND.PLANNING_MESSAGE,
+        payload: { planId: PLAN_ID, text: "Roll out the plan.", clientKey: CLIENT_KEY },
+      } as const;
+
+      const sent = yield* f.router.performAct(line, PANEL);
+      const fromVoice = yield* f.router.performAct(line, VOICE);
+
+      assert.deepEqual(sent, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { ask: { id: ASK_ID, queuedAt: 1_800_000_500_000 } },
+      });
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_MESSAGE].refusal,
+      });
+      assert.deepEqual(f.asked, [`message:${PLAN_ID}:Roll out the plan.:${CLIENT_KEY}`]);
+    }),
+);
+
 it.effect(
   "a web link opens an http or https address in the browser, and no other scheme nor an address past the cap",
   () =>

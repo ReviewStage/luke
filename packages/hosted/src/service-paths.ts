@@ -243,11 +243,12 @@ export function planWorkPath(planId: string, before?: string): string {
  * One plan's planning conversation as a coding agent's transcript is read
  * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
  * open while a turn runs; with no cursor, its newest turns; with `before`,
- * the turns queued before that one.
+ * the turns queued before that one. With no page named, the path a
+ * developer's typed line to Luke is sent to (POST).
  */
 export function planMessagesPath(
   planId: string,
-  page: { after?: string; before?: string },
+  page: { after?: string; before?: string } = {},
 ): string {
   const path = `${planPath(planId)}/messages`;
   const query = new URLSearchParams({

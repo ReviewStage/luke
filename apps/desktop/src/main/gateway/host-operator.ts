@@ -95,6 +95,8 @@ import {
   type PlanningFileParams,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningMessageAnswer,
+  type PlanningMessageParams,
   type PlanningMessagesParams,
   type PlanningPageAnswer,
   type PlanningPageParams,
@@ -133,6 +135,7 @@ import {
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
   planningGitHubPageAnswerSchema,
+  planningMessageAnswerSchema,
   planningPageAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
@@ -269,6 +272,8 @@ export interface HostOperator {
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
   /** The developer's edit of a plan's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
+  /** A developer's typed line to Luke on a plan; the ask Luke took it as, the same for a retry of the key, or why it was not taken. */
+  planningMessage(params: PlanningMessageParams): Effect.Effect<PlanningMessageAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
@@ -883,6 +888,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningEditAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningMessage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_MESSAGE, {
+          planId: params.planId,
+          text: params.text,
+          clientKey: params.clientKey,
+        }),
+        (answer): PlanningMessageAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningMessageAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

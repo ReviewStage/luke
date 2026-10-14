@@ -17,7 +17,10 @@ import type { Route } from "../../server/route";
 
 const WEB = join(import.meta.dirname, "..", "..");
 
-/** The client's request as it arrives at its function: rewritten by the committed table, its own query and headers kept. */
+/** The methods a request carries no body on, which `Request` refuses one for. */
+const BODYLESS_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
+
+/** The client's request as it arrives at its function: rewritten by the committed table, its own query, headers, and body kept. */
 async function landed(request: Request): Promise<Request> {
   const asked = new URL(request.url);
   for (const rewrite of await readApiRewritesTable(WEB)) {
@@ -25,7 +28,8 @@ async function landed(request: Request): Promise<Request> {
     if (!pattern.test(asked.pathname)) continue;
     const url = new URL(asked.pathname.replace(pattern, rewrite.dest), asked.origin);
     for (const [name, value] of asked.searchParams) url.searchParams.append(name, value);
-    return new Request(url, { method: request.method, headers: request.headers });
+    const body = BODYLESS_METHODS.has(request.method) ? null : await request.arrayBuffer();
+    return new Request(url, { method: request.method, headers: request.headers, body });
   }
   throw new Error(`no rewrite serves ${asked.pathname}`);
 }

@@ -1,5 +1,10 @@
 import { Schema as EffectSchema } from "effect";
-import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -490,6 +495,30 @@ export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */
 export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+
+/**
+ * A developer's typed line to Luke on the plan (POST
+ * `/api/plans/{id}/messages`): the words, trimmed and bounded as a line to a
+ * coding agent is, and the client's own key for this one line, which a retry
+ * carries again so the service answers what the first send did rather than
+ * handing Luke the line twice. Luke takes it as a typed ask in the plan's
+ * conversation, and his reply lands on the plan's work as any turn's does.
+ */
+export const planMessageRequestSchema = EffectSchema.Struct({
+  text: trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+});
+
+/** A line Luke took (202): the ask it stands as, and when it was taken, the same for a retry of one key. */
+export const planMessageAnswerSchema = EffectSchema.Struct({
+  ask: EffectSchema.Struct({
+    id: wireUuidSchema,
+    /** Epoch milliseconds the line was first taken. */
+    queuedAt: countedNumber,
+  }),
+});
+
+export type PlanMessageAnswer = typeof planMessageAnswerSchema.Type;
 
 /** How a plan's history is read: the newest revisions first, a page at a time. */
 export const PLAN_HISTORY_BOUNDS = {

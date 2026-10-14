@@ -39,6 +39,7 @@ import {
   type PlanCreateRequest,
   type PlanFileAnswer,
   type PlanFileRequest,
+  type PlanMessageAnswer,
   type PlanRenameRequest,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
@@ -53,6 +54,8 @@ import {
   planFileAnswerSchema,
   planFileRequestSchema,
   planListAnswerSchema,
+  planMessageAnswerSchema,
+  planMessageRequestSchema,
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
@@ -68,6 +71,7 @@ import {
   PLAN_CALL_FAILURE,
   type PlanCallFailure,
   type PlanCodeAnswer,
+  type PlanningMessageFailure,
   type PlanWorkAnswer,
   planCodeAnswerSchema,
   planWorkAnswerSchema,
@@ -80,6 +84,7 @@ import {
   planCodePath,
   planEditPath,
   planFilePath,
+  planMessagesPath,
   planPagesPath,
   planPageVersionPath,
   planPath,
@@ -149,10 +154,17 @@ function refusedAs<Failure extends PlanCallFailure>(
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
+/** The refusals a typed line can answer with: the plan gone, or archived. */
+const MESSAGE_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: PLAN_CALL_FAILURE.PLAN_ARCHIVED,
+} as const;
+
 /**
  * The Plans tab's reads and its writes of the service: the list of plans,
  * one plan opened with its document, the repositories the account reaches,
- * and a plan started, renamed, given its repository, pinned, archived, or deleted. Each
+ * a plan started, renamed, given its repository, pinned, archived, or
+ * deleted, and a developer's typed line sent to Luke on one. Each
  * resolves to a result rather than failing, because every caller does the
  * same thing with a failure: draws why, and offers to try again.
  */
@@ -238,6 +250,43 @@ export class HostedPlanClient {
         [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
         [HOSTED_API_ERROR.PLAN_ARCHIVED]: PLAN_CALL_FAILURE.PLAN_ARCHIVED,
       });
+    });
+  }
+
+  /**
+   * Sends Luke one typed line on a plan under the key the window made for
+   * it, which a retry carries again so Luke hears the line once, answering
+   * the ask it stands as; or why it was not taken: the service did not
+   * answer, or the plan is gone or archived. A line the service would refuse
+   * by shape is refused here without traveling at all.
+   */
+  send(
+    planId: string,
+    text: string,
+    clientKey: string,
+  ): Effect.Effect<
+    PlanCallResult<PlanMessageAnswer, PlanningMessageFailure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(
+      readEither(planMessageRequestSchema)({ text, clientKey }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const call = this.#call;
+    return Effect.gen(function* () {
+      const answer = yield* call.send({
+        method: HTTP_METHOD.POST,
+        path: planMessagesPath(planId),
+        body: JSON.stringify(admitted),
+      });
+      if (!callAnswered(answer)) return UNANSWERED;
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (answer.response.ok) {
+        const taken = Result.getOrUndefined(readServiceAnswer(planMessageAnswerSchema)(payload));
+        return taken === undefined ? UNANSWERED : succeeded(taken);
+      }
+      return refusedAs(payload, MESSAGE_REFUSALS);
     });
   }
 
