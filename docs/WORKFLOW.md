@@ -5,31 +5,22 @@
 2. Bootstrap with `./scripts/bootstrap.sh`, then make the smallest change that
    satisfies the issue. Use deterministic fixtures instead of personal data or
    live provider state. Choose the test's size, its doubles, and its
-   fixtures by root `AGENTS.md`'s "Testing" section; an appearance-only
-   change gets visual evidence.
+   fixtures by root `AGENTS.md`'s "Testing" section.
 3. Run `pnpm check:affected` for portable-only work, then push and let CI, which
    runs every check, gate the PR; `./scripts/check.sh` is the full local run,
-   for a release, a broad refactor, or on request. For a macOS, Electron-window,
-   native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`
-   and inspect all PNGs. For a web UI change, run `pnpm --filter @luke/web dev`
-   and inspect the page in a browser. For a hosted-service change the Mac
-   talks to, run `./scripts/run.sh --preview` against the PR's Vercel
-   Preview before merging. CI cannot run `verify.sh` for you: its jobs are Linux
-   only, and by Dean's ruling of 2026-09-11 no macOS job is coming back. The
-   release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the only
-   Mac gate, so do not wait for a macOS check and do not read a green PR as
-   covering the Mac.
+   for a release, a broad refactor, or on request. For a web UI change, run
+   `pnpm --filter @luke/web dev` and inspect the page in a browser. For a
+   hosted-service change the Mac talks to, run `./scripts/run.sh --preview`
+   against the PR's Vercel Preview before merging. CI's jobs are Linux only;
+   the release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the
+   only Mac gate, so do not wait for a macOS check and do not read a green PR
+   as covering the Mac.
 4. Review the complete diff for secrets, machine-specific paths, generated
    files, unsafe IPC, unsupported provider behavior, and accidental scope
    expansion.
 5. Open a focused PR and record commands and results in the template's Evidence
-   section. Every UI change needs an inspected verification screenshot there,
-   uploaded through GitHub's PR editor: for desktop UI, a PNG `./scripts/verify.sh`
-   wrote to `artifacts/evidence/`; for web UI, a capture of the page served by
-   `pnpm --filter @luke/web dev`. A UI PR's body must say plainly that CI could
-   not verify it: a Mac break that lands is caught at the release rehearsal on
-   a tag, not at review, and LUKE-159 is the manual `verify.sh` pass on a Mac
-   that stands in for the missing job before the first release.
+   section. A web UI change needs an inspected capture of the page served by
+   `pnpm --filter @luke/web dev`, uploaded through GitHub's PR editor.
 6. When pushing follow-up commits to an open PR, re-read the PR description and
    update it if the change made it inaccurate or incomplete. Keep the summary,
    scope, and Evidence section matching the commands and results for the current

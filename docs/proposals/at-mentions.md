@@ -944,8 +944,8 @@ and babysitting.
   - Shift+Enter is a hard break. The submit button's disabled state is
     still what refuses an empty or held send.
   - Tests: a composing Enter doesn't send, and a plain Enter does.
-  - Japanese, Chinese and Korean input are checked by hand on the Mac pass
-    (LUKE-159), since no CI drives an IME.
+  - Japanese, Chinese and Korean input are checked by hand on a Mac, since
+    no CI drives an IME.
 - **Dictation offsets: no offsets at all.**
   - When the microphone opens, dictation records the caret as an editor
     position, not a string offset.
@@ -1074,9 +1074,8 @@ PR 3:
 
 Then PR 3, which needs 0 and 1, then 4 and 5. v1 is about +3,100 / −450
 lines, about 6 agent-days with the two chains in parallel, or 8–10
-one after another. Every desktop PR needs a `verify.sh` pass on a Mac
-(LUKE-159), since CI can't see the Mac. PR 1's pass includes IME, dictation
-and VoiceOver.
+one after another. PR 1 is checked by hand on a Mac for IME, dictation and
+VoiceOver, since CI can't see the Mac.
 
 **After v1** (catalog status "Next"):
 - **7:** the `mention-search` endpoint over your own connections, plus the

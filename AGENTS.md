@@ -10,22 +10,15 @@ talks a plan through with Luke, who writes it down as they go.
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; run before pushing |
 | `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
-| `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `./scripts/run.sh` | Launch against live sessions, replacing any running instance (`--fixture smoke`, `--keep-running`, `--no-trace`) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
-`./scripts/verify.sh` is the completion invariant for any macOS or UI change. CI
-runs the portable check on Linux alone, and no macOS job is coming back: Dean
-ruled on 2026-09-11 that the release rehearsal (`release.yml`'s `macos-15` job,
-run on a `v*` tag push or a manual dispatch) is the only Mac gate. A pull
-request builds nothing for the Mac and produces no visual evidence, so a green
-PR says nothing about the Mac and there is no macOS check to wait for. A UI
-PR's evidence is the developer's own `verify.sh` run, its body must say CI could
-not verify it, and a Mac break that lands anyway is caught at the rehearsal on a
-tag, not at review. LUKE-159 is the manual `verify.sh` pass on a Mac that stands
-in for the missing job before the first release.
+CI runs the portable check on Linux alone. The release rehearsal
+(`release.yml`'s `macos-15` job, run on a `v*` tag push or a manual dispatch)
+is the only Mac gate, so a green PR says nothing about the Mac and there is no
+macOS check to wait for.
 
 ## Never
 
@@ -74,9 +67,7 @@ pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, b
 
 `pnpm check:affected` must exit 0 before a push; then push and let CI, which
 runs every check, gate the PR. `check.sh` is the full local run, for a
-release, a broad refactor, or on request, and must exit 0 when it is run. A
-Mac or UI change also needs `./scripts/verify.sh` evidence; CI builds nothing
-for the Mac.
+release, a broad refactor, or on request, and must exit 0 when it is run.
 
 The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
 testing guide, and the rules below agree with it. Its `bunx vitest` is
@@ -85,8 +76,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
-  process (`test:store`, which CI's postgres job runs), then `verify.sh` evidence for a Mac, a window, or
-  a live provider.
+  process (`test:store`, which CI's postgres job runs).
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
   and in any order.

@@ -418,14 +418,14 @@ As built (2026-10-13):
 | Decision 4 | Brain skills | #2375 |
 
 Each PR keeps both live paths working, ships its own tests, and passes
-`check.sh`. Desktop PRs also need the developer's `verify.sh` run. Sizes are
-rough diff size: S is under 200 lines, M is 200–600, L is over 600.
+`check.sh`. Sizes are rough diff size: S is under 200 lines, M is 200–600, L
+is over 600.
 
 | # | PR | Size | Notes |
 | --- | --- | --- | --- |
 | 1 | **One connection set.** `agent-runtime/connections.ts` builds `{linear, notion, sentry, slack}` as one dynamic map per role. The 16 connection files become 4 `connections/integrations.ts`. The planner's connections resolve per turn. | S | Rewrite `integration-agents.test.ts` to resolve each node's map and hold every `INTEGRATION` provider on all four nodes under its own admission. It fails today for a provider added without files. Conflicts only with `coder/host.ts` edits in the rollout PRs. |
 | 2 | **One tool registry with roles.** `agent-runtime/tools.ts`, deriving both stored sets, both worker allow-lists and the planner's resolver filter. Adds a guard test that each root's static `tools/` files equal its role's static entries. No tool changes behavior. | M | Land after, or rebase onto, rollout #2265/#2270/#2277, which add `report` and `read_plan` to `tool-set.ts`. Those become `roles: [CODER]` entries. |
-| 3 | **One transcript part view (desktop).** The Work tab and the agent tab render through one part model, part dispatcher, tool-call adapter, subagent row and subagent tab. Both wires stay, each adapted into the one part model at its edge. | M (net negative) | `verify.sh` evidence. Touches files that #2257 (company brain) and #2249 (rollout) touch. |
+| 3 | **One transcript part view (desktop).** The Work tab and the agent tab render through one part model, part dispatcher, tool-call adapter, subagent row and subagent tab. Both wires stay, each adapted into the one part model at its edge. | M (net negative) | Touches files that #2257 (company brain) and #2249 (rollout) touch. |
 | 4 | **One web-research pair.** Every role uses `search_web` and `read_web_page` (screened, cited, budgeted). The coder's eve `web_search`/`web_fetch` files go. | S | Decision 2. Luke's key pays for coders' searches, metered by PR 6. |
 | 5 | **One delegation.** One `delegate` workflow implementation and one hidden `worker` per root. The planner's root uses `task`; the coder's uses `execute`. The planner's visible worker and its `task_*` row kinds retire. `coding_agent_delegation` becomes `delegation`. | L (2 PRs: server, then desktop) | The Work tab's Stop names a subagent by task id (#2130), so keep `task_cancel` working until the desktop switches. Store tests on Postgres for the table move. |
 | 6 | **One model and metering policy.** `ModelPolicy` per role. The meter counts every Luke-key inference, coders included, and every turn is priced. | S | Count-only meter (`brain-host/model.ts:10-21`), so no new refusals. |

@@ -516,8 +516,6 @@ CREATE TABLE "plan_revision" (
   - The editor's autosave, Esc, and conflict states, through
     `use-plans-tab`-style models.
   - No test of a constant or a call count.
-- **Mac evidence:** `verify.sh` captures the header, the History tab, a
-  version view, and a field open in the editor. CI can't verify the Mac.
 
 ## 6. PR plan
 
@@ -547,8 +545,8 @@ PR 2 and PR 3 each stack on PR 1, PR 4 stacks on PR 3, and PR 5 follows PRs
   a developer-edited field, then a spoken correction to it.
 - **Spec drift.** PLANNING.md and PRIVACY.md change in the same PRs, or
   review should refuse them.
-- **No Mac CI** (LUKE-159). Each UI PR carries the developer's own
-  `verify.sh` run.
+- **No Mac CI.** A Mac break is caught at the release rehearsal, not at
+  review.
 
 ## 8. Open questions
 
