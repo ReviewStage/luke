@@ -77,10 +77,13 @@ const PAGER_IDLE =
 function PagerStep({
   href,
   rel,
+  label,
   children,
 }: {
   readonly href: string | undefined;
   readonly rel: "prev" | "next";
+  /** What the step opens, for a step whose glyph alone says only which way it points. */
+  readonly label: string | undefined;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   if (href === undefined) {
@@ -91,7 +94,7 @@ function PagerStep({
     );
   }
   return (
-    <a className={PAGER_ITEM} href={href} rel={rel}>
+    <a aria-label={label} className={PAGER_ITEM} href={href} rel={rel}>
       {children}
     </a>
   );
@@ -108,7 +111,11 @@ function PageNumbers({
   if (pageCount < 2) return null;
   return (
     <nav aria-label="Changelog pages" className={`${UNDER_NOTES} flex items-center gap-1`}>
-      <PagerStep href={page > 1 ? changelogPagePath(page - 1) : undefined} rel="prev">
+      <PagerStep
+        href={page > 1 ? changelogPagePath(page - 1) : undefined}
+        rel="prev"
+        label="Newer page"
+      >
         ←
       </PagerStep>
       {changelogPagerItems(page, pageCount).map((number, index) =>
@@ -126,7 +133,11 @@ function PageNumbers({
           </a>
         ),
       )}
-      <PagerStep href={page < pageCount ? changelogPagePath(page + 1) : undefined} rel="next">
+      <PagerStep
+        href={page < pageCount ? changelogPagePath(page + 1) : undefined}
+        rel="next"
+        label="Older page"
+      >
         →
       </PagerStep>
     </nav>
@@ -146,12 +157,14 @@ function ReleaseSteps({
       <PagerStep
         href={newer === undefined ? undefined : changelogReleasePath(newer.version)}
         rel="prev"
+        label={newer === undefined ? undefined : `Newer release, v${newer.version}`}
       >
         {newer === undefined ? "←" : `← v${newer.version}`}
       </PagerStep>
       <PagerStep
         href={older === undefined ? undefined : changelogReleasePath(older.version)}
         rel="next"
+        label={older === undefined ? undefined : `Older release, v${older.version}`}
       >
         {older === undefined ? "→" : `v${older.version} →`}
       </PagerStep>
