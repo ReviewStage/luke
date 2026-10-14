@@ -12,6 +12,7 @@
  */
 
 import { Marked, type Token, type Tokens } from "marked";
+import { REPOSITORY_URL } from "./SiteChrome";
 
 export const CHANGELOG_PATH = "/changelog";
 /** The changelog's RSS feed, every release an item linking to its own page. */
@@ -54,9 +55,17 @@ const escapeAttribute = (value: string) =>
 const servedPath = (href: string) =>
   href.startsWith(`${PUBLIC_PREFIX}/`) ? href.slice(PUBLIC_PREFIX.length) : href;
 
+/* A link to a file beside CHANGELOG.md (`PRIVACY.md`) reads on GitHub as the
+   repository's file, and anywhere else would resolve under whatever page or
+   feed holds it, so it is written as that file on GitHub. */
+const RELATIVE_LINK = /^(?![a-z][a-z0-9+.-]*:|\/|#)/i;
+const repositoryFile = (href: string) =>
+  RELATIVE_LINK.test(href) ? `${REPOSITORY_URL}/blob/main/${href}` : href;
+
 const changelogMarked = new Marked({
   walkTokens: (token) => {
     if (token.type === "image") token.href = servedPath(token.href);
+    if (token.type === "link") token.href = repositoryFile(token.href);
   },
   /* A screenshot drawn at the column's measure is a preview of the full
      capture, so it links out to the file itself, the same way GitHub wraps a

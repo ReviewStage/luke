@@ -14,7 +14,7 @@ const CHANGELOG = [
   "",
   "![The Call tab.](apps/web/public/changelog/1.1.0/the-call-tab.png)",
   "",
-  "Code with `]]>` in it, and a [link](/privacy).",
+  "Code with `]]>` in it, a [link](/privacy), and the [Privacy](PRIVACY.md) file.",
   "",
   "## 1.0.0 — 2026-10-01",
   "",
@@ -58,6 +58,10 @@ test("an item carries the release's whole notes, its screenshots and links at th
   assert.match(description, /Calls read as one thread, &amp; so on\./);
   assert.match(description, /src="https:\/\/tryluke\.dev\/changelog\/1\.1\.0\/the-call-tab\.png"/);
   assert.match(description, /href="https:\/\/tryluke\.dev\/privacy"/);
+  assert.match(
+    description,
+    /href="https:\/\/github\.com\/ReviewStage\/luke\/blob\/main\/PRIVACY\.md"/,
+  );
   assert.match(description, /<code>]]&gt;<\/code>/);
 });
 
