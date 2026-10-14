@@ -1010,6 +1010,23 @@ test("a move pressed before the workspaces were read still lists the workspace i
   assert.equal(tab.control().workspace?.id, ACME.id);
 });
 
+test("a workspace chosen while a move is out, even the first chosen after the workspaces land, stays listed when the move lands", async () => {
+  const answers: ((answer: { workspaceId: string }) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+
+  const moved = tab.control().onMovePlan("billing", ACME.id);
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  answers[0]?.({ workspaceId: ACME.id });
+  await settle();
+
+  assert.equal(await moved, true);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
 test("the listed workspace left lists the first one again, and another workspace left keeps the one listed", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(ACME.id));

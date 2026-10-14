@@ -584,6 +584,16 @@ export function usePlansTab(input: {
   // else that finds a plan, the palette, the inbox, and the history, finds
   // it among them all; with no workspace listed yet, every plan is listed.
   const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
+  // Every workspace listed by a choice is counted, so a move answered late can tell whether one was made since it was pressed.
+  const workspaceChoices = useRef(0);
+  const listWorkspace = workspace.choose;
+  const chooseListed = useCallback(
+    (workspaceId: string) => {
+      workspaceChoices.current += 1;
+      listWorkspace(workspaceId);
+    },
+    [listWorkspace],
+  );
   const listedWorkspace = workspace.chosen;
   const sidebar = sidebarPlans(planning.plans);
   const listedSidebar = sidebarPlans(
@@ -773,7 +783,7 @@ export function usePlansTab(input: {
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
   // A plan opened from another workspace, from the palette, the inbox, or
   // the history, lists its workspace, so the sidebar holds the plan open.
-  const chooseWorkspace = workspace.choose;
+  const chooseWorkspace = chooseListed;
   const listedId = listedWorkspace?.id;
   const plansNow = planning.plans;
   const workspacesNow = viewed.workspaces;
@@ -846,9 +856,6 @@ export function usePlansTab(input: {
   // another than the one open when it was pressed.
   const openNow = useRef(openPlanId);
   openNow.current = openPlanId;
-  // The workspace the sidebar lists as a move is answered, which may be another than the one listed when it was pressed.
-  const listedNow = useRef(listedWorkspace?.id);
-  listedNow.current = listedWorkspace?.id;
 
   // A fixture's plans are marked nowhere, as they are read from nowhere. A
   // refusal puts back the mark it drew only while no later press replaced it,
@@ -1116,7 +1123,7 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
       (created) => {
-        workspace.choose(created.id);
+        chooseListed(created.id);
         return undefined;
       },
       (refused: Error) => refused.message,
@@ -1138,19 +1145,18 @@ export function usePlansTab(input: {
   // A fixture's plans move nowhere, as they are read from nowhere. Note that
   // the workspace moves with the plan, because the sidebar lists one
   // workspace's plans and the open plan must not drop out of it, but only
-  // while that plan is still open on the workspace it left, so a move
-  // answered late never undoes where the developer went meanwhile.
+  // while that plan is still open and no workspace was chosen since, so a
+  // move answered late never undoes where the developer went meanwhile.
   const movePlan = (planId: string, workspaceId: string): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    const listedThen = listedNow.current;
+    const choicesThen = workspaceChoices.current;
     return act(ACT_KIND.PLANNING_MOVE, { planId, workspaceId })
       .catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }) as const)
       .then((answer) => {
         if (!("failure" in answer)) {
-          // A first workspace read landing meanwhile lists one where none was, which nobody chose.
-          const stillListed = listedThen === undefined || listedNow.current === listedThen;
-          if (openNow.current === planId && stillListed) {
-            workspace.choose(answer.workspaceId);
+          // A first workspace read landing meanwhile lists one too, but nobody chose it.
+          if (openNow.current === planId && workspaceChoices.current === choicesThen) {
+            listWorkspace(answer.workspaceId);
           }
           return true;
         }
@@ -1414,7 +1420,7 @@ export function usePlansTab(input: {
     },
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
-    onChooseWorkspace: workspace.choose,
+    onChooseWorkspace: chooseListed,
     onCreateWorkspace: createWorkspace,
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({
@@ -1423,7 +1429,7 @@ export function usePlansTab(input: {
       }),
     onLeftWorkspace: (workspaceId) => {
       const next = viewed.workspaces.find((each) => each.id !== workspaceId);
-      if (next !== undefined && listedWorkspace?.id === workspaceId) workspace.choose(next.id);
+      if (next !== undefined && listedWorkspace?.id === workspaceId) chooseListed(next.id);
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
