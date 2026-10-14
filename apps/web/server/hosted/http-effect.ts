@@ -1,3 +1,4 @@
+import type { KeeperTaken, PositionTaken } from "@sidecar/database/models/coding-agent-store";
 import type { PlanArchived } from "@sidecar/database/models/plan-store";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -34,6 +35,8 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.POSITION_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.KEEPER_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -86,6 +89,10 @@ export const HOSTED_REFUSAL = {
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
   /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
+  /** A live worker already holds the rollout position a Start named; nothing was written. */
+  POSITION_TAKEN: { error: HOSTED_API_ERROR.POSITION_TAKEN },
+  /** The plan's rollout already has a live keeper, so a Start of another made nothing. */
+  KEEPER_TAKEN: { error: HOSTED_API_ERROR.KEEPER_TAKEN },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**
@@ -105,17 +112,20 @@ export function hostedStoreOrUnavailable<A, R>(
 }
 
 /**
- * A plan write an archive may refuse: the archive answered as its own
- * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
+ * A plan write the store may refuse on its own terms, an archive, a rollout
+ * position a live builder holds, or a rollout that has its live keeper: each
+ * answered as its own refusal, and a store failure as
+ * `hostedStoreOrUnavailable` answers one.
  */
 export function hostedStoreOrArchived<A, R>(
-  effect: Effect.Effect<A, StoreFailure | PlanArchived, R>,
+  effect: Effect.Effect<A, StoreFailure | PlanArchived | PositionTaken | KeeperTaken, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(effect, (failure) =>
-    "_tag" in failure && failure._tag === "PlanArchived"
-      ? Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED)
-      : hostedStoreOrUnavailable(Effect.fail(failure)),
-  );
+  return Effect.catch(effect, (failure) => {
+    if (failure._tag === "PlanArchived") return Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+    if (failure._tag === "PositionTaken") return Effect.fail(HOSTED_REFUSAL.POSITION_TAKEN);
+    if (failure._tag === "KeeperTaken") return Effect.fail(HOSTED_REFUSAL.KEEPER_TAKEN);
+    return hostedStoreOrUnavailable(Effect.fail(failure));
+  });
 }
 
 /** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */

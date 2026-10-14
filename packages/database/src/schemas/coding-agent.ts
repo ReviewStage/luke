@@ -5,7 +5,16 @@ import {
   type RolloutRole,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
-import { foreignKey, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { plan } from "./plan.js";

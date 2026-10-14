@@ -7,9 +7,14 @@ import {
   type CodingAgent,
   createCodingAgent,
   discardCodingAgent,
+  readCodingAgentByKey,
 } from "@sidecar/database/models/coding-agent-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
-import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import {
+  type CodingAgentAttachment,
+  ROLLOUT_ROLE,
+  type RolloutRole,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
@@ -56,6 +61,11 @@ import { anthropicFastAccess } from "./account-keys.js";
  * agent's eve session opens with the plan's document as the Markdown Copy
  * would put on the clipboard, or with the ask's task in the plan's place
  * and the files attached to it, which only a task carries.
+ * A Start at a position of the plan's rollout makes that pull request's
+ * builder, a position past the rollout naming none, on the base branch the ask names, and is refused as
+ * `position-taken` where a live builder already holds the position; a
+ * Start of the rollout's keeper is refused as `keeper-taken` where a live
+ * keeper stands. A retry under the same key still answers the agent it made.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
@@ -73,6 +83,12 @@ export interface StartAsk {
   readonly task: string | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  /** The pull request of the plan's rollout the agent works, counted from one, where it is that pull request's worker. */
+  readonly position?: number | undefined;
+  /** The branch the agent's work bases on, where it is not the repository's default. */
+  readonly baseBranch?: string | undefined;
+  /** What the agent does for the plan's rollout, where it is one of its agents; a position already implies a builder. */
+  readonly role?: RolloutRole | undefined;
   /** Whether a named choice becomes the account's default, as a developer's own Start makes it; an automation's run keeps the default as it stands. */
   readonly rememberChoice?: boolean;
 }
@@ -116,15 +132,50 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/**
+ * The role a Start asks for in the plan's rollout, or none for an agent
+ * outside it. A position makes a builder, and a builder needs one. The
+ * keeper stands at no position and on no base, and is handed a task, since
+ * its own brief is not composed yet. Any other mix names no agent.
+ */
+function rolloutRoleOf(ask: StartAsk): Effect.Effect<RolloutRole | undefined, HostedRefusal> {
+  const role = ask.position === undefined ? ask.role : (ask.role ?? ROLLOUT_ROLE.BUILDER);
+  switch (role) {
+    case undefined:
+      return Effect.succeed(undefined);
+    case ROLLOUT_ROLE.BUILDER:
+      return ask.position === undefined
+        ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
+        : Effect.succeed(role);
+    case ROLLOUT_ROLE.KEEPER:
+      return ask.position === undefined && ask.baseBranch === undefined && ask.task !== undefined
+        ? Effect.succeed(role)
+        : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+}
+
 /** Starts the account's agent on the plan, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
+  const role = yield* rolloutRoleOf(ask);
   const choice = yield* acceptedAgentChoice(userId, ask.choice);
   const plan = yield* hostedStoreOrUnavailable(readPlan(userId, ask.planId));
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // A position names a pull request of the plan's rollout, so one past it names no builder; a
+  // retry still answers the builder its Start made at that position of this plan, whatever the
+  // rollout has since become, and a key that made anything else answers nothing here.
+  if (ask.position !== undefined && ask.position > plan.value.plan.rollout.length) {
+    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    const retried = Option.filter(
+      made,
+      (agent) => agent.planId === ask.planId && agent.position === ask.position,
+    );
+    if (Option.isSome(retried)) return { agent: retried.value, created: false };
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   const repository = plan.value.plan.repository;
   if (repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   yield* workspaceRepository(plan.value.plan.workspaceId, repository);
@@ -142,10 +193,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       ...brief,
       repository,
       disabledServers: ask.disabledServers,
-    }).pipe(
-      // Note that this Start names no rollout role, so the store has no keeper to refuse it for.
-      Effect.catchTag("KeeperTaken", (taken) => Effect.die(taken)),
-    ),
+      position: ask.position,
+      baseBranch: ask.baseBranch,
+      role,
+    }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created } = started.value;

@@ -126,6 +126,9 @@ type CodingAgentStoreFailure = QueryError | Schema.SchemaError;
 /** The plan's rollout already has a live keeper, so a Start of another made nothing. */
 export class KeeperTaken extends Data.TaggedError("KeeperTaken") {}
 
+/** A Start at a position of the plan's rollout a live worker already holds; nothing was written. */
+export class PositionTaken extends Data.TaggedError("PositionTaken") {}
+
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type CodingAgentStoreEffect<A> = Effect.Effect<A, CodingAgentStoreFailure, DatabaseServices>;
 
@@ -774,14 +777,16 @@ const deleteConversationRow = SqlSchema.void({
  * Nothing where the account reaches no such plan. An archived plan starts no
  * agent, and a plan whose rollout has a live keeper starts no second one,
  * each read under the same lock, though a retry still answers the agent its
- * Start made before either.
+ * Start made before either. A Start at a position of the plan's rollout is
+ * refused where a live worker holds it (`liveWorkerAtPosition`), read under
+ * the same lock, so two Starts at one position make one worker.
  */
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
 ): Effect.Effect<
   Option.Option<CodingAgentStarted>,
-  CodingAgentStoreFailure | PlanArchived | KeeperTaken,
+  CodingAgentStoreFailure | PlanArchived | KeeperTaken | PositionTaken,
   DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -800,6 +805,10 @@ export function createCodingAgent(
         if (started.role === ROLLOUT_ROLE.KEEPER) {
           const keeper = yield* liveKeeperOf(userId, started.planId);
           if (Option.isSome(keeper)) return yield* new KeeperTaken();
+        }
+        if (started.position !== undefined) {
+          const holder = yield* liveWorkerAtPosition(userId, started.planId, started.position);
+          if (Option.isSome(holder)) return yield* new PositionTaken();
         }
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(

@@ -84,6 +84,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TEXT_BYTES: 100_000,
   /** The most bytes every file of one message holds together, which base64 grows by a third and which stays under a function's request body limit. */
   MAX_ATTACHMENTS_BYTES: 3_000_000,
+  /** The most characters a Start's base branch may spell; Git refuses a ref name past a filesystem's own limit long before. */
+  MAX_BRANCH_CHARS: 255,
 } as const;
 
 /**
@@ -312,7 +314,13 @@ export const disabledServersSchema = EffectSchema.Array(
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
  * with a task. The MCP servers its draft switched off go with it, and none
- * is off where the Start names none.
+ * is off where the Start names none. A position names the pull request of the plan's rollout the
+ * agent builds, counted from one, which must be one of the plan's rollout
+ * and which a live builder must not already hold; a base branch is the one its work bases on, the repository's default
+ * where none is named. A role names what the agent does for the rollout: a
+ * builder, which a position already implies and which needs one, or the
+ * keeper, at no position and on no base, of which a rollout has one live.
+ * Until the keeper's own brief exists, a keeper's Start carries a task.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -322,6 +330,11 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
   task: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
+  position: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  baseBranch: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_BRANCH_CHARS)),
+  role: EffectSchema.optionalKey(rolloutRoleSchema),
 }).check(
   EffectSchema.makeFilter(({ task, attachments }) =>
     task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),

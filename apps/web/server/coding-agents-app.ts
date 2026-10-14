@@ -369,8 +369,18 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort, contextWindow, task, attachments, disabledServers } =
-    asked.success;
+  const {
+    idempotencyKey,
+    model,
+    effort,
+    contextWindow,
+    task,
+    attachments,
+    disabledServers,
+    position,
+    baseBranch,
+    role,
+  } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
   // and a window without them is a window of no model.
   if (
@@ -391,6 +401,9 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       task,
       attachments,
       disabledServers,
+      position,
+      baseBranch,
+      role,
     }),
   );
   if (!created) {

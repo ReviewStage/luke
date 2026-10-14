@@ -2545,7 +2545,12 @@ disagree: one that settled still holds its place and a failed one frees it
 for a restart, and one that never ran a turn holds it through
 `CODER.STARTING_GRACE` or while a line of the developer's waits on its first
 turn; a Start of a second keeper while one is live is refused
-(`KeeperTaken`) under the plan's lock.
+(`KeeperTaken`) under the plan's lock. The Start route and
+`coder-host/start.ts` answer those as 409 `keeper-taken` and `position-taken`.
+A Start's position implies a builder, names a pull request of the plan's
+rollout or is refused as `invalid-request`, and a builder needs one; a keeper's
+Start names no position or base and, until the keeper has a brief of its
+own, carries a task, or it is refused as `invalid-request`.
 
 The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
 the planning worker's shape (`eve/subagents/worker/`): read-only in the
