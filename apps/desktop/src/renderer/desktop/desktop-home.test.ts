@@ -264,9 +264,31 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
 
   field.focus();
   press("ArrowDown");
-  assert.equal(document.activeElement, field);
+  assert.ok(document.activeElement === field, "the field keeps the focus");
 
   field.blur();
   press("ArrowUp");
   assert.match(focused(), /^Search all 8 plans/u);
+});
+
+test("a workspace with no plan of its own, in an account with plans elsewhere, still says what needs it rather than welcoming a new account", async () => {
+  const { page } = mount({ listed: { plans: [], archived: [] } });
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.equal(rows(page, "home-needs-you").length, 2);
+  assert.equal(page.querySelector('section[aria-labelledby="home-recent"]'), null);
+});
+
+test("↑ and ↓ pressed on New plan leave the focus on it", async () => {
+  const { page } = mount();
+  await settle();
+  const newPlan = button(page, "New plan");
+  newPlan.focus();
+  act(() => {
+    newPlan.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.ok(document.activeElement === newPlan, "New plan keeps the focus");
 });

@@ -4968,6 +4968,13 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
+/* A home row offers no Pin or Archive to give way to, so its time stays put
+   while the row is hovered or holds the keyboard, and its moment can be read. */
+.home-section .sidebar-plan-item:hover .sidebar-plan-time,
+.home-section .sidebar-plan-item:has(:focus-visible) .sidebar-plan-time {
+  visibility: visible;
+}
+
 .home-row .sidebar-plan-time {
   display: inline-flex;
   align-items: center;

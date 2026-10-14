@@ -36,7 +36,7 @@ import { PlanStatusMark } from "./plan-card";
  * sidebar draws a plan, with its repository after its name, a press opening
  * it, and Search all of them, the command palette, where there are more.
  * Nothing waiting says so in the Inbox's own words. An account with no plan
- * yet is welcomed instead: Luke's face, one line of what he does, and New
+ * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
  * plan. Nothing here names the sidebar, which may be folded away.
  *
  * ↑ and ↓ move through its rows, a launcher's way, from the window itself
@@ -103,7 +103,8 @@ function useWaitingItems(plans: PlansControl) {
 /**
  * ↑ and ↓ from the window itself, or from one of the page's rows, move the
  * focus through the rows; the first press from the window reaches the first
- * row, or the last. A key with a modifier, or one pressed elsewhere, is left alone.
+ * row, or the last. A key with a modifier, or one pressed anywhere else, New
+ * plan's button among them, is left alone.
  */
 function useRowKeys(page: HTMLElement | null, shown: boolean): void {
   useEffect(() => {
@@ -112,12 +113,11 @@ function useRowKeys(page: HTMLElement | null, shown: boolean): void {
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
       const from = document.activeElement;
-      const fromWindow = from === null || from === document.body;
-      if (!fromWindow && !page.contains(from)) return;
       const rows = [...page.querySelectorAll<HTMLElement>(HOME_ROWS)];
-      if (rows.length === 0) return;
-      event.preventDefault();
       const at = rows.findIndex((row) => row === from);
+      const fromWindow = from === null || from === document.body;
+      if (rows.length === 0 || (!fromWindow && at < 0)) return;
+      event.preventDefault();
       const down = event.key === "ArrowDown";
       const next = at < 0 ? (down ? 0 : rows.length - 1) : at + (down ? 1 : -1);
       rows[Math.min(rows.length - 1, Math.max(0, next))]?.focus();
@@ -253,7 +253,9 @@ export function DesktopHome({
   useRowKeys(column, plans.shown);
   const { listed } = plans;
   if (!plans.listRead && !plans.listFailed) return null;
-  if (!plans.listFailed && listed.plans.length === 0 && listed.archived.length === 0) {
+  // Only an account with no plan in any workspace is new; a workspace of
+  // its own with none still says what needs it elsewhere.
+  if (!plans.listFailed && plans.plans.length === 0 && plans.archived.length === 0) {
     return <Welcome plans={plans} />;
   }
   const recent = recentPlans(listed.plans);
