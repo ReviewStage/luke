@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -39,6 +40,18 @@ const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
+const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
+
+/** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
+const CHAT = {
+  self: MEMBER_ID,
+  readSeq: 0,
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  channels: [],
+  messages: [],
+  cursor: "1",
+};
 
 const STARTED: CodingAgentAgentAnswer = {
   agent: {
@@ -299,6 +312,16 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
           return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
         }),
+      codingAgentChat: ({ workspaceId, after }) =>
+        Effect.sync(() => {
+          asked.push(`chat:${workspaceId}:${after}`);
+          return CHAT;
+        }),
+      codingAgentChatPost: ({ workspaceId, write }) =>
+        Effect.sync(() => {
+          asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
+          return { readSeq: 4 };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
@@ -500,6 +523,54 @@ it.effect(
       assert.deepEqual(asked, [
         `picture:${AGENT_ID}:${pictureId}:`,
         `picture:${AGENT_ID}:${pictureId}:call-worker`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a panel's chat read and write reach the host with the workspace, the cursor, and the write as sent, and hear the answer; the voice window is refused both and the host is not asked",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const read = {
+        kind: ACT_KIND.CODING_AGENTS_CHAT,
+        payload: { workspaceId: WORKSPACE_ID, after: CHAT_CURSOR_START },
+      } as const;
+      const write = {
+        kind: ACT_KIND.CODING_AGENTS_CHAT_POST,
+        payload: {
+          workspaceId: WORKSPACE_ID,
+          write: { text: "Morning, @agent-2.", to: "#general", clientKey: "send-1" },
+        },
+      } as const;
+
+      const refused = [
+        yield* router.performAct(read, VOICE),
+        yield* router.performAct(write, VOICE),
+      ];
+      const chat = yield* router.performAct(read, PANEL);
+      const wrote = yield* router.performAct(write, PANEL);
+      const malformed = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_CHAT_POST,
+          payload: {
+            workspaceId: WORKSPACE_ID,
+            write: { text: "Two places.", to: "#general", replyTo: 4, clientKey: "send-2" },
+          },
+        },
+        PANEL,
+      );
+
+      assert.deepEqual(
+        refused.map((outcome) => outcome.status),
+        [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
+      );
+      assert.deepEqual(chat, { status: ACT_OUTCOME_STATUS.DONE, value: CHAT });
+      assert.deepEqual(wrote, { status: ACT_OUTCOME_STATUS.DONE, value: { readSeq: 4 } });
+      assert.notEqual(malformed.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(asked, [
+        `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
+        `chat-post:${WORKSPACE_ID}:${JSON.stringify(write.payload.write)}`,
       ]);
     }),
 );
