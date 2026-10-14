@@ -51,6 +51,21 @@ function cutOnLine(text: string, bound: number): string {
   return `${text.slice(0, kept)}\n… (${text.length - kept} more characters)`;
 }
 
+/** The most characters the list of a cut plan's other sections spells, before it counts the rest. */
+const HEADINGS_CHARS = 2_000;
+
+/** Headings joined as a list, as many as its bound holds, the rest counted. */
+function headingList(headings: readonly string[]): string {
+  let list = "";
+  for (const [at, heading] of headings.entries()) {
+    const next = list === "" ? heading : `${list}; ${heading}`;
+    if (next.length > HEADINGS_CHARS)
+      return `${list === "" ? "" : `${list}; `}and ${headings.length - at} more`;
+    list = next;
+  }
+  return list;
+}
+
 /** What a mention of the plan or one of its sections is handed as. */
 function excerptOf(mention: PlanMention, plan: Plan): string {
   if (mention.kind === MENTION_KIND.PLAN) {
@@ -63,7 +78,7 @@ function excerptOf(mention: PlanMention, plan: Plan): string {
     const headings = planSections(plan.document.body)
       .filter((section) => section.heading !== "" && section.from >= bodyKept)
       .map((section) => section.heading);
-    const rest = headings.length === 0 ? "" : `\n\nIts other sections: ${headings.join("; ")}.`;
+    const rest = headings.length === 0 ? "" : `\n\nIts other sections: ${headingList(headings)}.`;
     return `The whole plan, cut short:\n\n${cutOnLine(whole, MENTIONED_BOUNDS.PLAN_CHARS)}${rest}`;
   }
   const section = planSections(plan.document.body).find((each) => each.heading === mention.heading);

@@ -73,6 +73,22 @@ const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/u;
 /** A run of backticks, which opens a code span the next run of the same length on its line closes. */
 const TICKS = /`+/gu;
 
+/** The code of a space, below which, and at delete, no character of a repository's path is spelled. */
+const SPACE_CODE = 0x20;
+const DELETE_CODE = 0x7f;
+
+/** A percent-encoded character, as a path still holds one once its target is read. */
+const ENCODED = /%[0-9A-Fa-f]{2}/u;
+
+/** A blank line, which ends a paragraph and with it any code span left open in it. */
+const BLANK_LINE = /\n[ \t]*\n/gu;
+
+/** A line indented as code: four spaces, or a tab, before anything. */
+const INDENTED_LINE = /^(?: {4}|\t)/u;
+
+/** A line that opens an item of a list, whose following indented lines are the item's rather than code. */
+const LIST_ITEM_LINE = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:\s|$)/u;
+
 const planIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_PLAN_ID_CHARS),
@@ -86,7 +102,13 @@ const pathSchema = EffectSchema.String.check(
     (path) =>
       !path.startsWith("/") &&
       !path.includes("\\") &&
-      !path.includes("\u0000") &&
+      ![...path].some((character) => {
+        const code = character.codePointAt(0) ?? 0;
+        return code < SPACE_CODE || code === DELETE_CODE;
+      }) &&
+      // Note that a step still spelled percent-encoded once read is refused, so
+      // no reader that decodes it again can find a separator or a step back in it.
+      !ENCODED.test(path) &&
       path.split("/").every((step) => step !== ".." && step !== "." && step !== ""),
   ),
 );
@@ -189,16 +211,35 @@ function insideFence(text: string, at: number): boolean {
   return false;
 }
 
-/** Whether the index stands inside a code span on its own line: between a run of backticks and the next run of the same length. */
+/** A stretch of the words, from its first character to the one after its last. */
+interface TextStretch {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** The paragraph holding the index: from the blank line before it, or the text's start, to the blank line after it, or the text's end. */
+function paragraphAt(text: string, at: number): TextStretch {
+  let start = 0;
+  let end = text.length;
+  for (const blank of text.matchAll(BLANK_LINE)) {
+    if (blank.index + blank[0].length <= at) start = blank.index + blank[0].length;
+    else if (blank.index >= at) {
+      end = blank.index;
+      break;
+    }
+  }
+  return { start, end };
+}
+
+/** Whether the index stands inside a code span: between a run of backticks and the next run of the same length in its paragraph, across its lines. */
 function insideSpan(text: string, at: number): boolean {
-  const lineStart = text.lastIndexOf("\n", at - 1) + 1;
-  const lineEnd = text.indexOf("\n", at);
-  const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
-  const runs = [...line.matchAll(TICKS)].map((run) => ({
+  const paragraph = paragraphAt(text, at);
+  const words = text.slice(paragraph.start, paragraph.end);
+  const runs = [...words.matchAll(TICKS)].map((run) => ({
     start: run.index,
     end: run.index + run[0].length,
   }));
-  const offset = at - lineStart;
+  const offset = at - paragraph.start;
   for (let index = 0; index < runs.length; index += 1) {
     const opening = runs[index];
     if (opening === undefined) continue;
@@ -212,9 +253,34 @@ function insideSpan(text: string, at: number): boolean {
   return false;
 }
 
-/** Whether the index stands in code, where markdown draws no link: a fenced block, or a code span on its line. */
+/**
+ * Whether the index stands on an indented code block's line: indented by
+ * four spaces or a tab, after a blank line or another such line, since an
+ * indented line cannot interrupt a paragraph, and not under a list's item,
+ * whose indented lines are the item's own.
+ */
+function insideIndented(text: string, at: number): boolean {
+  const lines = text.split("\n");
+  let start = 0;
+  let open = false;
+  let inList = false;
+  for (const line of lines) {
+    const end = start + line.length;
+    const blank = line.trim() === "";
+    const indented = !blank && INDENTED_LINE.test(line);
+    if (!blank && !indented) inList = LIST_ITEM_LINE.test(line);
+    const code: boolean = indented && !inList && open;
+    if (at >= start && at <= end) return code;
+    // A blank line or a code line lets the next indented line be code; any other line ends it.
+    open = blank || code;
+    start = end + 1;
+  }
+  return false;
+}
+
+/** Whether the index stands in code, where markdown draws no link: a fenced block, an indented block, or a code span. */
 function insideCode(text: string, at: number): boolean {
-  return insideFence(text, at) || insideSpan(text, at);
+  return insideFence(text, at) || insideIndented(text, at) || insideSpan(text, at);
 }
 
 /** Where a link's label that opens at the index closes, an escaped bracket passed over; nothing where it does not close on its line. */
@@ -269,14 +335,18 @@ export function mentionMarkdown(mention: Mention, name: string): string {
  * Every mention written into the words, in order: a link whose label
  * starts with `@`, whose target names a mention, standing outside code,
  * where markdown draws no link. A link of another kind, or one whose target
- * names nothing, is words. At most `MAX_MENTIONS` are read; any past them
- * stay words.
+ * names nothing, is words. At most `limit` are read, a message's
+ * `MAX_MENTIONS` unless the caller reads a whole plan; any past them stay
+ * words.
  */
-export function mentionsIn(text: string): readonly MentionInWords[] {
+export function mentionsIn(
+  text: string,
+  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
+): readonly MentionInWords[] {
   const found: MentionInWords[] = [];
   const opener = `[${MENTION_SIGIL}`;
   for (let at = text.indexOf(opener); at !== -1; at = text.indexOf(opener, at + 1)) {
-    if (found.length === MENTION_BOUNDS.MAX_MENTIONS) break;
+    if (found.length === limit) break;
     const close = labelEnd(text, at);
     if (close === undefined || text[close + 1] !== "(" || insideCode(text, at)) continue;
     const targetEnd = text.indexOf(")", close + 2);

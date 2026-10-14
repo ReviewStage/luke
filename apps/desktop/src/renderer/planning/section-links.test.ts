@@ -327,3 +327,28 @@ test("a folder's chip, and a file's where no file opens from here, hang their ca
     ],
   );
 });
+
+test("a click on a folder's chip in a plan that can be edited opens no editor", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanBody, {
+        plan: FILES_PLAN,
+        live: false,
+        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+        sectionLinks: { onOpen: () => undefined, onOpenFile: () => undefined, reveal: undefined },
+      }),
+    ),
+  );
+  const folder = [...container.querySelectorAll<HTMLElement>(".mention-chip")].find(
+    (chip) => chip.textContent === "auth/",
+  );
+  assert.ok(folder);
+
+  act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+  assert.equal(container.querySelector(".plan-document-editor"), null);
+});

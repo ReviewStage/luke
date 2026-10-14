@@ -205,3 +205,21 @@ test("a section too long for the room left is passed over, and a shorter one aft
   assert.match(part, /1 more mention of the plan left out/u);
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS);
 });
+
+test("a cut plan with many long headings past the cut is still handed, its list of them bounded", () => {
+  const sections = Array.from(
+    { length: 60 },
+    (_, at) => `## ${"Long heading ".repeat(70)}${at}\n\n${"w".repeat(400)}`,
+  );
+  const plan: Plan = { ...PLAN, document: { body: sections.join("\n\n"), assumptions: [] } };
+
+  const part =
+    mentionedContext(
+      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name),
+      plan,
+    ) ?? "";
+
+  assert.match(part, /The whole plan, cut short/u);
+  assert.match(part, /and \d+ more\./u);
+  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
+});

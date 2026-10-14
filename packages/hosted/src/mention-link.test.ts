@@ -158,3 +158,38 @@ test("a fence closed on a line ending in a carriage return closes, so a mention 
     [{ kind: MENTION_KIND.FILE, path: "a.ts" }],
   );
 });
+
+test("a path still percent-encoded once its target is read names nothing, so no reader decoding it again can climb out", () => {
+  for (const target of [
+    "luke://file/apps%252F..%252F..%252Fetc%252Fpasswd",
+    "luke://file/a%2509b.ts",
+  ]) {
+    assert.equal(decodeMention(target), undefined, target);
+  }
+});
+
+test("a link in an indented code block, or in a code span across lines, is code", () => {
+  const words = [
+    "An example:",
+    "",
+    "    [@a](luke://file/a.ts)",
+    "",
+    "and `a span",
+    "[@b](luke://file/b.ts) across lines` too.",
+    "",
+    "- an item",
+    "",
+    "    [@c](luke://file/c.ts) is the item's own words",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "c.ts" }],
+  );
+});
+
+test("a whole plan is read for every mention it holds, past a message's twenty", () => {
+  const words = Array.from({ length: 25 }, (_, at) => `[@f${at}](luke://file/f${at}.ts)`).join(" ");
+
+  assert.equal(mentionsIn(words, Number.POSITIVE_INFINITY).length, 25);
+});

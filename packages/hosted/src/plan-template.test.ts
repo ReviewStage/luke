@@ -131,3 +131,29 @@ test("striking the line a mention stands on is a retraction, and is taken", () =
   assert.equal(taken.text.includes("[@Goal]"), false);
   assert.deepEqual(taken.missed, []);
 });
+
+test("a correction that drops one of two copies of a mention is not taken", () => {
+  const text =
+    "## Rollout\n\n- [@Goal](luke://plan/pl_1#Goal) first, then [@Goal](luke://plan/pl_1#Goal) again.\n";
+  const note: PlanNote = {
+    kind: NOTE_KIND.REPLACE,
+    find: "then [@Goal](luke://plan/pl_1#Goal) again",
+    text: "then ship",
+  };
+
+  assert.deepEqual(applyNotesToText(text, [note]).missed, [note]);
+});
+
+test("a correction that drops a mention past the plan's twentieth is not taken", () => {
+  const many = Array.from({ length: 21 }, (_, at) => `- see [@f${at}](luke://file/f${at}.ts)`).join(
+    "\n",
+  );
+  const text = `## Files\n\n${many}\n`;
+  const note: PlanNote = {
+    kind: NOTE_KIND.REPLACE,
+    find: "see [@f20](luke://file/f20.ts)",
+    text: "see nothing",
+  };
+
+  assert.deepEqual(applyNotesToText(text, [note]).missed, [note]);
+});

@@ -73,7 +73,8 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
 function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  return !(target instanceof Element && target.closest("a") !== null);
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike.
+  return !(target instanceof Element && target.closest("a, .mention-chip") !== null);
 }
 
 /** The block an editor closed from by the keyboard takes the keyboard back, once. */

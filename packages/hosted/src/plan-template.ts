@@ -479,8 +479,17 @@ function applyNoteToText(
  * is not; striking the line a mention stands on is a retraction, and is.
  */
 function keepsMentions(before: string, after: string): boolean {
-  const kept = new Set(mentionsIn(after).map(({ mention }) => encodeMention(mention)));
-  return mentionsIn(before).every(({ mention }) => kept.has(encodeMention(mention)));
+  // Note that every mention is counted, each copy of one alike, however many the plan holds.
+  const counted = (text: string) => {
+    const counts = new Map<string, number>();
+    for (const { mention } of mentionsIn(text, Number.POSITIVE_INFINITY)) {
+      const target = encodeMention(mention);
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const kept = counted(after);
+  return [...counted(before)].every(([target, count]) => (kept.get(target) ?? 0) >= count);
 }
 
 /** Notes taken over a document's text: the text after, and the notes that could not be taken. */
