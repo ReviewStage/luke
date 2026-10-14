@@ -1115,10 +1115,18 @@ ask for every scope their server publishes (`scopes_supported` in its
 
 ```
 vercel connect list                                        # the connector's scl_ id
-vercel api /v1/connect/connectors/<connector-id>           # what it stands at now
+vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>"   # what it stands at now
 # ~/scopes.json: {"data":{"userAuthorization":{"enabled":true,"scopes":["read","offline_access",…]}}}
-vercel api /v2/connect/connectors/<connector-id> -X PATCH --input ~/scopes.json
+vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/scopes.json
 ```
+
+Every `vercel api` call on a connector names the team in its URL. The CLI
+run by an agent without a terminal ignores the saved team and `--scope`,
+and takes the team from `VERCEL_ORG_ID` or the directory's link instead,
+so a connector of another team answers 404 ("Connector not found") although
+`vercel connect list`, which picks its team itself, lists it; a `teamId`
+already in the URL is the one the CLI sends. The PATCH answers the
+connector wrapped as `{"connector": {…}}`, the GET bare.
 
 A grant is then bounded by what the developer allows on the provider's
 consent page alone. Mercury's `transactions:request` and `transfers:request`
@@ -1140,6 +1148,58 @@ vercel connect create mcp.neon.tech --name neon --connector-type oauth --data @"
 rm ~/neon-client.json ~/neon.json
 vercel connect attach <connector-uid> --yes
 ```
+
+**Granola's, PostHog's, Supabase's, and Y Combinator's connectors.** Each
+is created as above and then corrected in place, its UID unchanged, because
+the client Connect registers for it fails at the provider:
+
+- Granola and PostHog publish client ID metadata documents and
+  `private_key_jwt`, and Connect signs a client assertion whose audience
+  they refuse at the code exchange (Granola: "client_assertion aud must be
+  the authorization server issuer"). Both accept a public client, so one is
+  registered by hand at the provider's registration endpoint
+  (`https://mcp-auth.granola.ai/oauth2/register`,
+  `https://oauth.posthog.com/oauth/register/`) with
+  `"token_endpoint_auth_method":"none"`, and the connector is PATCHed to it:
+  `{"data":{"clientId":"…","tokenEndpointAuthMethod":"none","pkceRequired":true,"codeChallengeMethod":"S256"}}`.
+- Supabase's authorization server publishes no client ID metadata document
+  support and answered Connect's client "Unrecognized client_id". It takes
+  confidential clients alone, so one is registered by hand at
+  `https://api.supabase.com/platform/oauth/apps/register` with
+  `"token_endpoint_auth_method":"client_secret_post"`, and the connector is
+  PATCHed to its `clientId` and `clientSecret` with
+  `"tokenEndpointAuthMethod":"client_secret_post"` and `"pkceRequired":true`.
+- Y Combinator's protected resource is its origin
+  (`https://api.ycombinator.com/.well-known/oauth-protected-resource`
+  answers `"resource":"https://api.ycombinator.com"`, and the path-scoped
+  document is absent), so the RFC 8707 resource Connect derived from
+  `/v1/mcp` was refused ("The requested resource is missing, unsupported,
+  or does not match the authorization grant"). The connector pins it:
+  `{"data":{"defaultResource":"https://api.ycombinator.com"}}`.
+
+Each registration names `https://connect.vercel.com/callback`, the redirect
+a connector without a `redirectUri` of its own replays, and is written under
+`umask 077`, and every registration file is deleted once its PATCH is in,
+as Neon's is, since nothing reads it again and Supabase's holds its secret.
+The backup a PATCH is taken against is written the same way, since a
+connector's read may carry its credentials too, and is kept until the
+provider connects, the one way back if it does not
+(`rm ~/granola-before.json` after a sign-in succeeds).
+Granola's, for example:
+
+```
+(umask 077; curl -s https://mcp-auth.granola.ai/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}' > ~/granola-client.json)
+jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256"}}' ~/granola-client.json > ~/granola-patch.json
+(umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/granola-before.json)   # the backup
+vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/granola-patch.json
+rm ~/granola-client.json ~/granola-patch.json
+```
+
+A sign-in can still fail once right after a connector changes, Granola's
+did, and connects on a second try. Supabase's consent page asks which
+organization to grant before it returns, and a sign-in that waited there
+came back to Connect as "Callback state not found or expired"; signing in
+again straight through connects.
 
 Then set the provider's variable (`GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
