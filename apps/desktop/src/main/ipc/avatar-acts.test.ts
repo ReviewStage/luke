@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { AVATAR_STOP_REASON, type AvatarStopReason } from "@sidecar/features";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import { runModeFor } from "@sidecar/host";
 import type { HostAvatar } from "@sidecar/host/effect";
-import { AVATAR_STOP_REASON, type AvatarStopReason } from "@sidecar/hosted";
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import {
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,

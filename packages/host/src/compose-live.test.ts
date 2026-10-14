@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
+  AVATAR_STOP_REASON,
+  AVATAR_UNAVAILABLE_REASON,
+  type AvatarStopReason,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/features";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
+import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_METHOD,
   type GatewayEventKind,
   type GatewayMethod,
 } from "@sidecar/gateway";
-import {
-  AVATAR_STOP_REASON,
-  AVATAR_UNAVAILABLE_REASON,
-  type AvatarStopReason,
-  VOICE_SERVICE_FRAME,
-} from "@sidecar/hosted";
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { HostedLiveSessionSource } from "@sidecar/voice";

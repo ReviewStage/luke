@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import { Deferred, Effect, Option, Queue, Stream } from "effect";
 import { Base64 } from "effect/encoding";
 import {

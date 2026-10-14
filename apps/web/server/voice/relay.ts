@@ -1,11 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
-import {
-  type AvatarRequestFrame,
-  avatarRequestFrameFromWire,
-  type SessionReportFrame,
-  sessionReportFrameFromWire,
-} from "../core.js";
 import {
   closeEvent,
   decodeLivePayload,
@@ -17,7 +10,12 @@ import {
   parseLiveServerEvent,
 } from "@sidecar/live";
 import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
-import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
+import {
+  type AvatarRequestFrame,
+  avatarRequestFrameFromWire,
+  type SessionReportFrame,
+  sessionReportFrameFromWire,
+} from "../core.js";
 import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
 import {

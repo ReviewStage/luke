@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describe, it } from "vitest";
 import { channels } from "#shared/bridge";

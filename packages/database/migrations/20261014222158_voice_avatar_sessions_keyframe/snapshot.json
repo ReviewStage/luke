@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "50d45bce-9bb7-412a-b4fc-c8e45da1c909",
-  "prevIds": ["b4333fa8-f04f-421e-ab3a-f700560c85a0"],
+  "id": "f5d1c945-a36f-4970-a1ac-d471c3da0c8a",
+  "prevIds": ["8d99604a-bc94-44c0-b67c-ec0f016336f4"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -228,6 +228,12 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "sandbox_terminal_lease",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "session_sandbox_cleanup",
       "entityType": "tables",
       "schema": "public"
@@ -386,6 +392,19 @@
       "generated": null,
       "identity": null,
       "name": "status_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "fast_access",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -2575,9 +2594,35 @@
       "table": "automation"
     },
     {
-      "type": "uuid",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
+      "dimensions": 0,
+      "default": "'personal'",
+      "generated": null,
+      "identity": null,
+      "name": "scope",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -2700,6 +2745,58 @@
       "generated": null,
       "identity": null,
       "name": "webhook_secret_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'[]'",
+      "generated": null,
+      "identity": null,
+      "name": "repositories",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'new-agent'",
+      "generated": null,
+      "identity": null,
+      "name": "target_kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "target_agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "archive_successful",
       "entityType": "columns",
       "schema": "public",
       "table": "automation"
@@ -3277,6 +3374,32 @@
       "table": "github_install_intent"
     },
     {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "installation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_install_intent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "code_verifier",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_install_intent"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -3792,6 +3915,19 @@
       "generated": null,
       "identity": null,
       "name": "state_issued_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "connect_verifier",
       "entityType": "columns",
       "schema": "public",
       "table": "integration_connection"
@@ -4356,6 +4492,19 @@
       "table": "plan_revision"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_revision"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": false,
@@ -4692,6 +4841,45 @@
       "entityType": "columns",
       "schema": "public",
       "table": "repository_pin"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tried_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
     },
     {
       "type": "text",
@@ -5482,6 +5670,19 @@
       "generated": null,
       "identity": null,
       "name": "cancel_requested_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "turns"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "fast_refused",
       "entityType": "columns",
       "schema": "public",
       "table": "turns"
@@ -6491,6 +6692,41 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "scope",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "automation_org_scope_created",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "automation_id",
           "isExpression": false,
           "asc": true,
@@ -6857,6 +7093,34 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "tried_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "held_until",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sandbox_terminal_lease_next",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
     },
     {
       "nameExplicit": true,
@@ -7505,6 +7769,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "automation_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["plan_id"],
       "schemaTo": "public",
       "tableTo": "plan",
@@ -7512,6 +7789,19 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "automation_plan_id_plan_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "automation"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["target_agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "automation_target_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "automation"
@@ -7908,6 +8198,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "plan_revision_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_revision"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["agent_id"],
       "schemaTo": "public",
       "tableTo": "coding_agent",
@@ -7957,6 +8260,19 @@
       "entityType": "fks",
       "schema": "public",
       "table": "repository_pin"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "sandbox_terminal_lease_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
     },
     {
       "nameExplicit": false,
@@ -8463,6 +8779,14 @@
       "name": "account_preference_pkey",
       "schema": "public",
       "table": "account_preference",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["conversation_id"],
+      "nameExplicit": false,
+      "name": "sandbox_terminal_lease_pkey",
+      "schema": "public",
+      "table": "sandbox_terminal_lease",
       "entityType": "pks"
     },
     {

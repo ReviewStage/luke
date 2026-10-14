@@ -11,6 +11,9 @@
  * stops every composer in the reverse of the order it started. That close is
  * the whole quit, and there is no other order to run it in.
  */
+
+import type { AvatarStopReason } from "@sidecar/features";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import {
   type GatewayHost,
   type GatewayShutdownOptions,
@@ -19,8 +22,6 @@ import {
   type NodeRegistry,
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
-import type { AvatarStopReason } from "@sidecar/hosted";
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import type { LiveAvatarState } from "@sidecar/voice/live-session";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope, type Stream } from "effect";
 import type { Composer } from "../composer.js";

@@ -9,12 +9,12 @@
  * nothing else here: it is never written, logged, or kept.
  */
 
-import type { HostAvatar } from "@sidecar/host/effect";
 import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
   type AvatarStopReason,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
+import type { HostAvatar } from "@sidecar/host/effect";
 import {
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,

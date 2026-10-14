@@ -3,8 +3,8 @@
  */
 
 import fs from "node:fs";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import type { RunMode } from "@sidecar/host";
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";

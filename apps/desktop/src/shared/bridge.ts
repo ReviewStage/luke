@@ -6,9 +6,9 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/features/analytics";
+import { type AvatarGrant, avatarGrantFromWire } from "@sidecar/features/avatar-grant";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/gateway/devtrace";
-import { type AvatarGrant, avatarGrantFromWire } from "@sidecar/hosted/avatar-grant";
 import { liveExchangeActive } from "@sidecar/live";
 import {
   EXCESS_KEYS,

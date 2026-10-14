@@ -1,12 +1,4 @@
 import {
-  LIVE_SESSION_PHASE,
-  LIVE_TRANSPORT_STATE,
-  type LivePeerEndReason,
-  type LiveTransportState,
-  type VoiceLiveSessionChanged,
-  type VoiceReportLiveTransportParams,
-} from "@sidecar/gateway";
-import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
   type AvatarStartedFrame,

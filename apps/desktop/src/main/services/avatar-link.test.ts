@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AVATAR_STOP_REASON, AVATAR_UNAVAILABLE_REASON } from "@sidecar/hosted";
+import { AVATAR_STOP_REASON, AVATAR_UNAVAILABLE_REASON } from "@sidecar/features";
 import {
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,

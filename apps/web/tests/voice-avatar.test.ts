@@ -14,13 +14,12 @@ import {
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
-} from "@sidecar/hosted";
-import { LIVE_DEFAULTS } from "@sidecar/live";
+} from "@sidecar/features";
+import { LIVE_CLIENT_EVENT, LIVE_DEFAULTS, LIVE_SERVER_EVENT, LIVE_VOICE } from "@sidecar/live";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { asc, eq } from "drizzle-orm";
 import { Effect, Exit, Layer, Option, Scope } from "effect";
 import { afterAll } from "vitest";
-import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_VOICE } from "../server/live";
 import { callAvatar } from "../server/voice/avatar";
 import {
   type AvatarGrant,

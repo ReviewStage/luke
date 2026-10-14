@@ -8,7 +8,7 @@
  * and tested as the plain relay it is.
  */
 
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
 import type { AvatarFeed } from "#shared/messages/avatar";

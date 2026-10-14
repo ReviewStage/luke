@@ -1,20 +1,6 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
 import {
-  type FeedbackResult,
-  type FeedbackSubmission,
-  feedbackSubmission,
-} from "@sidecar/feedback";
-import {
-  type VoiceCreateLiveSessionResult,
-  voiceCreateLiveSessionParamsSchema,
-  voiceCreateLiveSessionResultSchema,
-  voiceEndLiveSessionParamsSchema,
-  voiceReportLiveActivityParamsSchema,
-  voiceReportLiveTransportParamsSchema,
-  voiceSetVideoParamsSchema,
-} from "@sidecar/gateway";
-import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -150,6 +136,7 @@ import {
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
+  voiceSetVideoParamsSchema,
 } from "@sidecar/gateway";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {

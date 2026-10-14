@@ -15,7 +15,7 @@
  * never reported, logged, or held anywhere but the scope it opened.
  */
 
-import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
+import type { AvatarGrant } from "@sidecar/features/avatar-grant";
 import {
   Duration,
   Effect,
@@ -225,7 +225,7 @@ const subscription = <A>(subscribe: (deliver: (value: A) => void) => () => void)
 
 /** The call window's own doors: main's two channels, the act it alone may send, and the SDK's bundle. */
 const windowDoors: CallAvatarDoors = {
-  feeds: subscription<AvatarFeed>((deliver) => window.sidecar.onAvatarFeed(deliver)),
+  feeds: subscription<AvatarFeed>((deliver) => window.luke.onAvatarFeed(deliver)),
   report: (avatar) => Effect.sync(() => tellAct(ACT_KIND.AVATAR_REPORT, avatar)),
   module: AtomRegistry.getResult(rendererRegistry, avatarSessionModuleAtom),
 };
@@ -239,7 +239,7 @@ const windowDoors: CallAvatarDoors = {
 export const callAvatarAtom = Atom.keepAlive(
   rendererRuntime.atom(
     callAvatar(
-      subscription<AvatarGrant | undefined>((deliver) => window.sidecar.onAvatarSession(deliver)),
+      subscription<AvatarGrant | undefined>((deliver) => window.luke.onAvatarSession(deliver)),
       windowDoors,
     ),
   ),

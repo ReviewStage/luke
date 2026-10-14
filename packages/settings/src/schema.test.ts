@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { APP_TOGGLE_VALUE } from "@sidecar/guide";
+import { APP_TOGGLE_VALUE } from "@sidecar/wire/app-settings";
 import { test } from "vitest";
 import { APP_SETTING_ID } from "./schema.js";
 import { describedSettings, settingRowsForPage } from "./schema-access.js";
