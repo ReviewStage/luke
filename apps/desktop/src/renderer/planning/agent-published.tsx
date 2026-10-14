@@ -151,7 +151,11 @@ export function PublishedChip({
   );
 }
 
-/** The chip that opens the pull request's changes in the side panel, worn beside its own chip; nothing before a pull request stands or where no panel takes the tab. */
+/**
+ * The chip that opens the pull request's changes in the side panel, worn beside its own chip; nothing before a pull request stands or where no panel takes the tab.
+ *
+ * A pull request stands once the agent's turn ends on a pushed branch other than the default with a pull request open from it (`coder-host/published.ts`); a local branch or an uncommitted edit alone shows no chip.
+ */
 export function ChangesChip({
   published,
   doors,
