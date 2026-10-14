@@ -239,7 +239,8 @@ export function AgentComposer({
       ? undefined
       : note.reason === FAILURE_REASON.RECONNECT_INTEGRATION
         ? () => reconnect(note.provider)
-        : repositoryRemedy(note, composer.retry);
+        : // Note that a move's retry is the box's as the move lands, so words edited meanwhile are sent, or nothing once an edit let Retry go.
+          repositoryRemedy(note, () => latest.current.retry());
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
   const dictation = useDictation({ editor, keywords, onNote: setRefusal });

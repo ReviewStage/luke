@@ -846,6 +846,9 @@ export function usePlansTab(input: {
   // another than the one open when it was pressed.
   const openNow = useRef(openPlanId);
   openNow.current = openPlanId;
+  // The workspace the sidebar lists as a move is answered, which may be another than the one listed when it was pressed.
+  const listedNow = useRef(listedWorkspace?.id);
+  listedNow.current = listedWorkspace?.id;
 
   // A fixture's plans are marked nowhere, as they are read from nowhere. A
   // refusal puts back the mark it drew only while no later press replaced it,
@@ -1134,14 +1137,19 @@ export function usePlansTab(input: {
 
   // A fixture's plans move nowhere, as they are read from nowhere. Note that
   // the workspace moves with the plan, because the sidebar lists one
-  // workspace's plans and the open plan must not drop out of it.
+  // workspace's plans and the open plan must not drop out of it, but only
+  // while that plan is still open on the workspace it left, so a move
+  // answered late never undoes where the developer went meanwhile.
   const movePlan = (planId: string, workspaceId: string): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
+    const listedThen = listedNow.current;
     return act(ACT_KIND.PLANNING_MOVE, { planId, workspaceId })
       .catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }) as const)
       .then((answer) => {
         if (!("failure" in answer)) {
-          workspace.choose(answer.workspaceId);
+          if (openNow.current === planId && listedNow.current === listedThen) {
+            workspace.choose(answer.workspaceId);
+          }
           return true;
         }
         toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
@@ -1562,7 +1570,12 @@ export function usePlansTab(input: {
     onSetRepository: setRepository,
     onMovePlan: movePlan,
     onOpenWorkspaceGitHub: (planId) => {
-      const workspaceId = planning.plans.find((plan) => plan.id === planId)?.workspaceId;
+      // The open document names its workspace where the list read did not land.
+      const workspaceId =
+        planning.plans.find((plan) => plan.id === planId)?.workspaceId ??
+        (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
+          ? region.plan.workspaceId
+          : undefined);
       input.onOpenSettings({
         page: SETTINGS_VIEW.WORKSPACE,
         section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
