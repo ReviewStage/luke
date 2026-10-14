@@ -112,8 +112,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
- * it touches is one the bearer's account owns: a plan or an agent another
- * account owns answers exactly as one that names nothing. A Start
+ * it touches is one of a workspace the bearer's account is a member of: a
+ * plan or an agent of any other workspace answers exactly as one that names
+ * nothing. A member reads, messages, renames, re-chooses, and stops an agent
+ * a teammate started, its conversation read and written under that teammate,
+ * whose conversation it is. A Start
  * (`POST /api/plans/{id}/agents`) takes the one path a start takes
  * (`hosted/coder-host/start.ts`), which the voice brain's tool shares: the
  * model and effort checked against the catalog, the account's default where
@@ -168,8 +171,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
  * agent's transcript carries: the child conversation is a function of the
- * two (`@sidecar/database/models/ids`), and only a delegation recorded under the
- * account's agent answers, so a call of another account's agent reads as
+ * two (`@sidecar/database/models/ids`), and only a delegation recorded under an
+ * agent the account reaches answers, so a call of any other agent reads as
  * none. Each worker's title, generated from its task as it starts, is
  * carried on its own page and, for every worker titled so far, on the
  * agent's; a read of an ended agent, or worker, with nothing new waits for a
@@ -390,7 +393,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (!created) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
   }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
@@ -426,18 +429,19 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, planId, { includeArchived: listsArchived(request) }),
   );
-  const standing = yield* standingsOf(
-    userId,
-    agents.map((agent) => agent.conversationId),
-  );
+  const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
   });
 });
 
-/** The account's agent the path names, or not found. */
-const ownedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+/**
+ * The agent the path names, where the account is a member of its plan's
+ * workspace, or not found; its conversation is targeted under the member
+ * who started it, which is whom the conversation belongs to.
+ */
+const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
   request: Request,
 ): Effect.fn.Return<
@@ -452,7 +456,7 @@ const ownedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return {
     userId,
     agent: agent.value,
-    target: { userId, conversationId: agent.value.conversationId },
+    target: { userId: agent.value.userId, conversationId: agent.value.conversationId },
   };
 });
 
@@ -477,14 +481,14 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const { userId, agent } = yield* ownedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
   const eve = yield* eveFor(seams, request);
   yield* steerCodingAgent(eve, writer, userId, agent, asked.success);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
-    agent: yield* summaryOf(userId, agent),
+    agent: yield* summaryOf(agent),
   });
 });
 
@@ -502,7 +506,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
     return yield* sendMessageEndpoint(seams, writer, request);
   }
   const after = yield* cursorOf(request);
-  const { userId, agent, target } = yield* ownedAgent(seams, request);
+  const { userId, agent, target } = yield* reachedAgent(seams, request);
   const titleAwaited = yield* titleAwaitedOf(target);
   const page = yield* hostedStoreOrUnavailable(
     transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent, titleAwaited),
@@ -527,7 +531,7 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const after = yield* cursorOf(request);
     const callId = yield* callIdOf(request);
-    const { userId, agent, target } = yield* ownedAgent(seams, request);
+    const { agent, target } = yield* reachedAgent(seams, request);
     const conversationId = childConversationId(agent.conversationId, callId);
     const read = yield* hostedStoreOrUnavailable(delegationPast(target, conversationId, agent));
     if (read.delegation === undefined) {
@@ -540,7 +544,7 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
     const titleAwaited = yield* titleAwaitedOf(target, conversationId);
     const page = yield* hostedStoreOrUnavailable(
       transcriptPast(
-        { userId, conversationId },
+        { userId: agent.userId, conversationId },
         CODER_TOOL_SET,
         cursorOfWire(after),
         { createdAt: read.delegation.createdAt },
@@ -577,7 +581,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* ownedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
   const rename = readEither(codingAgentRenameRequestSchema)(body);
   if (Result.isSuccess(rename)) {
@@ -587,7 +591,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, renamed.value),
+      agent: yield* summaryOf(renamed.value),
     });
   }
   const archive = readEither(codingAgentArchiveRequestSchema)(body);
@@ -595,12 +599,12 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const { archived } = archive.success;
     if (archived) {
       // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-      yield* stoppedForGood(seams, writer, request, userId, agent);
+      yield* stoppedForGood(seams, writer, request, agent);
     }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, changed.value),
+      agent: yield* summaryOf(changed.value),
     });
   }
   const servers = readEither(codingAgentServersRequestSchema)(body);
@@ -610,7 +614,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, changed.value),
+      agent: yield* summaryOf(changed.value),
     });
   }
   const asked = readEither(modelChoiceSchema)(body);
@@ -621,7 +625,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   );
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: yield* summaryOf(userId, changed.value),
+    agent: yield* summaryOf(changed.value),
   });
 });
 
@@ -635,9 +639,9 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* ownedAgent(seams, request);
-  yield* stoppedTurn(seams, writer, request, userId, agent);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
+  const { agent } = yield* reachedAgent(seams, request);
+  yield* stoppedTurn(seams, writer, request, agent);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
 });
 
 /** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
@@ -647,7 +651,7 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
   // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
-  const { status } = yield* summaryOf(userId, agent);
+  const { status } = yield* summaryOf(agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
   return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
     Effect.catch((failure) => {
@@ -678,7 +682,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* ownedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const answer = yield* keptPublished(published, userId, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
@@ -697,7 +701,7 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* ownedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const { pullRequest } = yield* keptPublished(published, userId, agent);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* githubUserReadOrRefusal(
@@ -792,7 +796,8 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
 }
 
 /**
- * POST answers one item of the account's inbox. An answer naming a
+ * POST answers one item of a plan of the account's workspaces, whichever
+ * member started its agent. An answer naming a
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
  * answer is taken first, at the revision it names, and only then, where

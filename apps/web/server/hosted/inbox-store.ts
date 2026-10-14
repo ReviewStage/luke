@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+} from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import { planReachableBy } from "@sidecar/database/models/workspace-store";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { inboxItem } from "@sidecar/database/schemas/inbox";
 import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
@@ -22,7 +28,19 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { and, count, desc, eq, isNull, max, ne, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  isNull,
+  max,
+  ne,
+  notInArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -30,8 +48,11 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * inbox-store.ts -- the developer's inbox: the items a plan's coding agents post, close, and read, and the developer's answers to them.
  *
  * Every statement names the account beside the plan, the agent, or the
- * item, so an id another account owns reads and writes exactly as one that
- * names nothing. An agent posts an item under a key of its own, which is
+ * item. An item is its agent's, written under the member who started the
+ * agent, and the plan's inbox is the workspace's: every member of the
+ * plan's workspace reads and answers it, gated on that membership
+ * (`workspace-store.ts`), so an item of a workspace the account is not in
+ * reads and writes exactly as one that names nothing. An agent posts an item under a key of its own, which is
  * one row per agent and key: posting under a key it used before writes
  * that row again, moves its revision on, and opens it again whether it was
  * answered or closed, so the agent keeps an item current rather than
@@ -162,7 +183,17 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** The agent's row under its own lock, where the account owns it, which serializes one agent's posts. */
+/** The condition that the account is a member of the workspace of the plan the item a statement reads was posted on. */
+function itemReachableBy(userId: string): SQL {
+  return exists(
+    queryBuilder
+      .select({ id: plan.id })
+      .from(plan)
+      .where(and(eq(plan.id, inboxItem.planId), planReachableBy(userId))),
+  );
+}
+
+/** The agent's row under its own lock, where the account started it and still reaches its plan, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -171,8 +202,11 @@ const lockAgent = SqlSchema.findOneOption({
       db
         .select({ id: codingAgent.id })
         .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
-        .for("update"),
+        .innerJoin(plan, eq(plan.id, codingAgent.planId))
+        .where(
+          and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), planReachableBy(userId)),
+        )
+        .for("update", { of: codingAgent }),
     ),
 });
 
@@ -241,7 +275,7 @@ const deleteOtherAttachments = SqlSchema.void({
     ),
 });
 
-/** The account's attachment, where it is the item's: its type and its bytes. */
+/** The attachment, where it is the item's and the account reaches the item's plan: its type and its bytes. */
 const findAttachment = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -254,11 +288,12 @@ const findAttachment = SqlSchema.findOneOption({
       db
         .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
         .from(inboxAttachment)
+        .innerJoin(inboxItem, eq(inboxItem.id, inboxAttachment.itemId))
         .where(
           and(
-            eq(inboxAttachment.userId, userId),
             eq(inboxAttachment.itemId, itemId),
             eq(inboxAttachment.id, attachmentId),
+            itemReachableBy(userId),
           ),
         ),
     ),
@@ -344,7 +379,7 @@ const closeItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Where a read looks: one plan's items, or one agent's, always the account's own. */
+/** Where a read looks: one plan's items, any member's agents' alike, or one agent's own, under the member who started it. */
 const INBOX_SCOPE = {
   PLAN: "plan",
   AGENT: "agent",
@@ -358,14 +393,11 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the account's, under the plan or the agent given. */
+/** The rows a scope names: the plan's, where the account is a member of its workspace, or the agent's, under the account that started it. */
 function inScope(scope: InboxScope) {
-  return and(
-    eq(inboxItem.userId, scope.userId),
-    scope.scope === INBOX_SCOPE.PLAN
-      ? eq(inboxItem.planId, scope.id)
-      : eq(inboxItem.agentId, scope.id),
-  );
+  return scope.scope === INBOX_SCOPE.PLAN
+    ? and(eq(inboxItem.planId, scope.id), itemReachableBy(scope.userId))
+    : and(eq(inboxItem.agentId, scope.id), eq(inboxItem.userId, scope.userId));
 }
 
 /** The order every read keeps: the latest changed first, and by id among those changed at one instant, so two reads of the same rows agree. */
@@ -443,14 +475,13 @@ const findSettledStamps = SqlSchema.findAll({
 });
 
 /**
- * The account's open items on the plans it has not archived: the rows the
- * account's read of what waits names. Note that the plan is joined by its
- * key from each item the account's own index finds, so leaving archived
- * plans out reads no plan the account has no open item on.
+ * The open items on the plans of the account's workspaces it has not
+ * archived, whichever member's agent posted each: the rows the account's
+ * read of what waits names.
  */
 function accountWaiting(userId: string) {
   return and(
-    eq(inboxItem.userId, userId),
+    planReachableBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
     isNull(plan.archivedAt),
   );
@@ -523,10 +554,9 @@ const PlanItemsRowSchema = Schema.Struct({
 const LATEST_ITEM = max(inboxItem.updatedAt);
 
 /**
- * Every plan of the account's it has not archived that holds an item, open
- * or settled, the plan whose item changed latest first. Note that it is
- * read from the account's own index, as the open items are, the plan joined
- * by its key from each item found.
+ * Every plan of the account's workspaces it has not archived that holds an
+ * item, open or settled, whichever member's agent posted it, the plan whose
+ * item changed latest first.
  */
 const findPlansWithItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
@@ -537,7 +567,7 @@ const findPlansWithItems = SqlSchema.findAll({
         .select({ planId: inboxItem.planId, items: count(), updatedAt: LATEST_ITEM })
         .from(inboxItem)
         .innerJoin(plan, eq(plan.id, inboxItem.planId))
-        .where(and(eq(inboxItem.userId, userId), isNull(plan.archivedAt)))
+        .where(and(planReachableBy(userId), isNull(plan.archivedAt)))
         .groupBy(inboxItem.planId)
         .orderBy(desc(LATEST_ITEM), desc(inboxItem.planId)),
     ),
@@ -562,7 +592,7 @@ const findItem = SqlSchema.findOneOption({
       db
         .select(INBOX_COLUMNS)
         .from(inboxItem)
-        .where(and(eq(inboxItem.userId, userId), eq(inboxItem.id, itemId))),
+        .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
     ),
 });
 
@@ -584,8 +614,8 @@ const answerItem = SqlSchema.findOneOption({
         .set({ status: INBOX_STATUS.ANSWERED, answer, answerKey, updatedAt: now })
         .where(
           and(
-            eq(inboxItem.userId, userId),
             eq(inboxItem.id, itemId),
+            itemReachableBy(userId),
             eq(inboxItem.revision, revision),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
@@ -659,7 +689,7 @@ export function postInboxItem(
   );
 }
 
-/** The account's picture, where it is the item's: its type and its bytes; nothing for one the account does not own or the item does not carry. */
+/** The picture, where it is the item's: its type and its bytes; nothing where the account reaches no such item or the item carries no such picture. */
 export function readInboxAttachment(
   userId: string,
   itemId: string,
@@ -727,7 +757,7 @@ export function planInboxStamps(
   );
 }
 
-/** The account's item, with the key its answer was taken under; nothing for one the account does not own. */
+/** The item, with the key its answer was taken under; nothing for one of a workspace the account is not in. */
 export function readInboxItem(
   userId: string,
   itemId: string,
@@ -751,8 +781,8 @@ const withdrawAnswer = SqlSchema.findOneOption({
         .set({ status: INBOX_STATUS.OPEN, answer: null, answerKey: null, updatedAt: now })
         .where(
           and(
-            eq(inboxItem.userId, userId),
             eq(inboxItem.id, itemId),
+            itemReachableBy(userId),
             eq(inboxItem.answerKey, answerKey),
             eq(inboxItem.status, INBOX_STATUS.ANSWERED),
           ),
