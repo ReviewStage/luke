@@ -36,7 +36,11 @@ import { Effect, Redacted, Result, type Schema } from "effect";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";
 import type { SessionAuth } from "eve/context";
 import type { ConversationAdmission } from "./brain-host/conversation.js";
-import { INTEGRATION_CONNECT_FAILURE, IntegrationConnect } from "./integration-connect.js";
+import {
+  accountIntegrationConnect,
+  INTEGRATION_CONNECT_FAILURE,
+  type IntegrationConnect,
+} from "./integration-connect.js";
 import {
   expireIntegrationConnection,
   INTEGRATION_ROW_STATUS,
@@ -93,7 +97,8 @@ const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
       row?.status === INTEGRATION_ROW_STATUS.EXPIRED ? sentences.EXPIRED : sentences.NOT_CONNECTED,
     );
   }
-  const connector = (yield* IntegrationConnect)[provider];
+  // A provider not offered to the account answers it as one this deployment never set up.
+  const connector = (yield* accountIntegrationConnect(userId))[provider];
   const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
   if (Result.isFailure(issued)) {
     switch (issued.failure.reason) {

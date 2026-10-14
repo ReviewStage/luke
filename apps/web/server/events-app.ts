@@ -1,14 +1,11 @@
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { user } from "@sidecar/database/schemas/auth";
-import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Redacted, Schema } from "effect";
+import type { DatabaseServices } from "@sidecar/database/core/query";
+import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
-import { SqlSchema } from "effect/sql";
+import { readAccountPerson } from "./hosted/account-person.js";
 import { resolveHostedUserId } from "./hosted/bearer.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";
 import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js";
-import type { PosthogPerson } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -16,31 +13,6 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * by the `HttpRouter`, with the hosted vocabulary's own `not-found` on any
  * path it does not declare.
  */
-
-/** How a statement below fails: the driver's own refusal, or a row this build cannot decode. */
-type EventsAppFailure = QueryError | Schema.SchemaError;
-
-const PersonRowSchema = Schema.Struct({ name: Schema.String, email: Schema.String });
-
-const findPerson = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: PersonRowSchema,
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ name: user.name, email: user.email })
-        .from(user)
-        .where(eq(user.id, userId))
-        .limit(1),
-    ),
-});
-
-/** Reads the signed-in user's own name and email, for the events endpoint's PostHog person fields. */
-function readPerson(
-  userId: string,
-): Effect.Effect<PosthogPerson | undefined, EventsAppFailure, DatabaseServices> {
-  return Effect.map(findPerson(userId), Option.getOrUndefined);
-}
 
 const EVENTS_PATH = "/api/events";
 
@@ -64,7 +36,7 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
     resolveUserId: resolveHostedUserId,
     // Read from the service's own user row rather than from the request, so
     // the desktop still sends nothing that names anybody.
-    readPerson,
+    readPerson: readAccountPerson,
   };
   if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
   return yield* handleEvents(options);

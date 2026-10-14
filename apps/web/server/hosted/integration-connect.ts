@@ -13,12 +13,16 @@
  *
  * Asking Connect for another user's token needs the deployment's own Vercel
  * OIDC token, which the SDK reads from the request or the environment
- * itself; the one thing this deployment configures per provider is the
- * connector's UID, read from the variable `integrations.ts` names. A
- * provider whose variable is unset answers every ask as not configured, and
- * every agent still runs, only without that provider.
+ * itself; what this deployment configures per provider is the connector's
+ * UID and, where it names any, the accounts the provider is offered to,
+ * each read from the variable `integrations.ts` names. A provider whose
+ * connector variable is unset answers every ask as not configured, and
+ * every agent still runs, only without that provider; a provider withheld
+ * from an account answers that account the same way
+ * (`accountIntegrationConnect`).
  */
 
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -33,8 +37,9 @@ import {
   startAuthorization,
   UserAuthorizationRequiredError,
 } from "@vercel/connect";
-import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
+import { Config, Context, Data, Effect, Layer, Option, Redacted, type Schema } from "effect";
 import { text } from "../core.js";
+import { readAccountPerson } from "./account-person.js";
 import { INTEGRATION } from "./integrations.js";
 
 /** Why Connect answered nothing usable. */
@@ -74,10 +79,18 @@ interface IntegrationToken {
   readonly expiresAt: number;
 }
 
+/** The accounts a provider is offered to, each entry lower-cased: whole email domains, each with its `@`, and single emails. */
+interface AllowedAccounts {
+  readonly domains: readonly string[];
+  readonly emails: readonly string[];
+}
+
 /** What Luke asks of one provider's connector. */
 export interface ConnectorService {
   /** Whether the deployment names this connector at all; a deployment without it never asks Connect anything. */
   readonly configured: boolean;
+  /** The accounts the deployment offers this provider to; absent, it is offered to every account. */
+  readonly allowedAccounts?: AllowedAccounts;
   /** Begins a browser sign-in for the account, which Connect returns to `callbackUrl`; answers the address the browser opens. */
   readonly authorize: (
     userId: string,
@@ -236,13 +249,94 @@ export function revokeIntegrationGrants(
   );
 }
 
-/** One provider's connector as this deployment's environment configures it: the UID its variable names, or none. */
+/** An allowlist entry for every email at one domain: `@`, then a host name of at least two labels. */
+const DOMAIN_ENTRY_PATTERN = /^@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+/** An allowlist entry for one email: a local part, `@`, then a domain as above. */
+const EMAIL_ENTRY_PATTERN = /^[^@\s]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+/**
+ * The accounts an allowlist variable names: comma-separated entries, each
+ * `@domain.com` for every email at that domain or one exact email, matched
+ * without regard to case. Note that the list fails closed, because it is
+ * what keeps an internal app from strangers: an unset variable names no
+ * list, which offers the provider to every account, but one set to
+ * nothing but blanks names an empty list, and an entry of neither shape
+ * (a bare `@`, say, which every email ends in) is dropped rather than read
+ * as matching anything.
+ */
+function allowedAccountsOf(value: string): AllowedAccounts {
+  const entries = value
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== "");
+  return {
+    domains: entries.filter((entry) => DOMAIN_ENTRY_PATTERN.test(entry)),
+    emails: entries.filter((entry) => EMAIL_ENTRY_PATTERN.test(entry)),
+  };
+}
+
+/** Whether a connector is one the account with this email may use: configured, and offered to it. */
+function offeredTo(connector: ConnectorService, email: string | undefined): boolean {
+  if (!connector.configured) return false;
+  const allowed = connector.allowedAccounts;
+  if (allowed === undefined) return true;
+  if (email === undefined) return false;
+  const address = email.trim().toLowerCase();
+  return (
+    allowed.emails.includes(address) || allowed.domains.some((domain) => address.endsWith(domain))
+  );
+}
+
+/**
+ * Every provider's connector as one account may use it: the deployment's
+ * own where the provider is offered to the account, and the connector of a
+ * provider the deployment names none for where it is not, so every route
+ * and every agent answers a provider withheld from the account exactly as
+ * it answers one this deployment never set up. The account's email is read
+ * from its user row only when some provider names the accounts it is
+ * offered to; an id no row holds is offered none of those.
+ */
+export const accountIntegrationConnect = /* @__PURE__ */ Effect.fn("web/accountIntegrationConnect")(
+  function* (
+    userId: string,
+  ): Effect.fn.Return<
+    IntegrationConnectService,
+    QueryError | Schema.SchemaError,
+    IntegrationConnect | DatabaseServices
+  > {
+    const connect = yield* IntegrationConnect;
+    const restricted = INTEGRATION_PROVIDER_LIST.some(
+      (provider) => connect[provider].allowedAccounts !== undefined,
+    );
+    if (!restricted) return connect;
+    const email = (yield* readAccountPerson(userId))?.email;
+    // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
+    return Object.fromEntries(
+      INTEGRATION_PROVIDER_LIST.map((provider) => [
+        provider,
+        offeredTo(connect[provider], email) ? connect[provider] : UNCONFIGURED_CONNECTOR,
+      ]),
+    ) as IntegrationConnectService;
+  },
+);
+
+/** One provider's connector as this deployment's environment configures it: the UID its variable names and the accounts its allowlist does, or none. */
 function connectorFromEnvironment(provider: IntegrationProvider) {
+  const { CONNECTOR_VARIABLE, ALLOWED_ACCOUNTS_VARIABLE } = INTEGRATION[provider];
   return Effect.map(
-    Config.option(Config.String(INTEGRATION[provider].CONNECTOR_VARIABLE)),
-    (read): ConnectorService => {
-      const connector = text(Option.getOrUndefined(read));
-      return connector === undefined ? UNCONFIGURED_CONNECTOR : vercelConnector(connector);
+    Config.all([
+      Config.option(Config.String(CONNECTOR_VARIABLE)),
+      Config.option(Config.String(ALLOWED_ACCOUNTS_VARIABLE)),
+    ]),
+    ([connectorRead, allowedRead]): ConnectorService => {
+      const connector = text(Option.getOrUndefined(connectorRead));
+      if (connector === undefined) return UNCONFIGURED_CONNECTOR;
+      const configured = vercelConnector(connector);
+      return Option.match(allowedRead, {
+        onNone: () => configured,
+        onSome: (listed) => ({ ...configured, allowedAccounts: allowedAccountsOf(listed) }),
+      });
     },
   );
 }

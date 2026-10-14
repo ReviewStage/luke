@@ -4,18 +4,22 @@
  * `IntegrationConnect` is a record over every provider, so a suite that
  * cares about one provider still hands the service all of them; this builds
  * the record from a function of the provider, so a provider added to the
- * vocabulary needs nothing here.
+ * vocabulary needs nothing here. `integrationConnectOver` builds it instead
+ * from a deployment's variables, through the production read, so a suite
+ * holds the connectors and allowlists exactly as that environment configures
+ * them, each asking a Connect that holds every account's grant.
  */
 
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@sidecar/hosted/integration-wire";
-import { Effect, Layer } from "effect";
+import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 import {
   type ConnectorService,
   IntegrationConnect,
   type IntegrationConnectService,
+  integrationConnectFromEnvironment,
 } from "../../server/hosted/integration-connect.js";
 
 /** Every provider's connector, as the suite builds each one. */
@@ -36,3 +40,44 @@ export const CONNECTOR_ASKED_NOTHING: ConnectorService = {
   token: () => Effect.die(new Error("this suite asks Connect nothing")),
   revoke: () => Effect.die(new Error("this suite asks Connect nothing")),
 };
+
+/** A sign-in address as the granting Connect below answers one. */
+export const GRANTING_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
+
+/**
+ * Every provider's connector as a deployment with these variables
+ * configures it, read by the production layer: a provider whose connector
+ * variable is set keeps the accounts its allowlist names, and asks a Connect
+ * that begins every sign-in, issues every account a token, and revokes
+ * anything; one unset stays unconfigured.
+ */
+export function integrationConnectOver(
+  variables: Readonly<Record<string, string>>,
+): Layer.Layer<IntegrationConnect, Config.ConfigError> {
+  const granting = Effect.gen(function* () {
+    const deployment = yield* IntegrationConnect;
+    // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
+    return Object.fromEntries(
+      INTEGRATION_PROVIDER_LIST.map((provider): [IntegrationProvider, ConnectorService] => {
+        const connector = deployment[provider];
+        if (!connector.configured) return [provider, connector];
+        return [
+          provider,
+          {
+            ...connector,
+            authorize: () => Effect.succeed(GRANTING_SIGN_IN_URL),
+            token: (userId) =>
+              Effect.succeed({ token: Redacted.make(`token_${userId}`), expiresAt: Infinity }),
+            revoke: () => Effect.void,
+          },
+        ];
+      }),
+    ) as IntegrationConnectService;
+  });
+  return Layer.effect(IntegrationConnect, granting).pipe(
+    Layer.provide(integrationConnectFromEnvironment),
+    Layer.provide(
+      Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnvRecord(variables)),
+    ),
+  );
+}

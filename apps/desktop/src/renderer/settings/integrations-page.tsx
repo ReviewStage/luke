@@ -43,10 +43,11 @@ import { SettingsGroup } from "./settings-group";
  * host opens it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
- * developer comes back from the browser. A provider this deployment offers
- * no connector for says so and offers nothing. Every line is fixed by the
- * build, but for the one-line reason a provider's server gave, which the
- * service passes on only where it carries no credential.
+ * developer comes back from the browser. A provider this deployment does not
+ * offer the account has no row, as its agents are never handed it. Every
+ * line is fixed by the build, but for the one-line reason a provider's
+ * server gave, which the service passes on only where it carries no
+ * credential.
  */
 
 const PAGE_LINE = {
@@ -54,7 +55,7 @@ const PAGE_LINE = {
   CHECKING: "Checking…",
   SIGNED_OUT: "Sign in to connect integrations.",
   READ_FAILED: "Your integrations could not be read.",
-  NOT_AVAILABLE: "Not available",
+  NONE_OFFERED: "No integrations are available for this account.",
   NOT_OPENED: "Luke could not open your browser to sign in.",
 } as const;
 
@@ -92,8 +93,8 @@ function connectedLine(health: ConnectionHealth): RowLine {
 
 /**
  * The line under a row's name: where the connection stands, or nothing where
- * the row's own control already says it — a Connect, Not available, or a row
- * whose status has not been read.
+ * the row's own control already says it — a Connect, or a row whose status
+ * has not been read.
  */
 function rowLine(
   provider: IntegrationProvider,
@@ -191,9 +192,9 @@ function IntegrationRow({
             </small>
           )}
         </span>
-        {status === INTEGRATION_STATUS.UNAVAILABLE ? (
-          <span className="settings-unavailable">{PAGE_LINE.NOT_AVAILABLE}</span>
-        ) : status === undefined || (connected && !broken) ? null : (
+        {status === undefined ||
+        status === INTEGRATION_STATUS.UNAVAILABLE ||
+        (connected && !broken) ? null : (
           <button
             type="button"
             className="toolbar-button bordered-button"
@@ -228,9 +229,10 @@ function IntegrationRow({
 }
 
 /**
- * Every provider's row, once where they stand has been read, so each row is
- * drawn whole at once; a read that failed draws them all, offering nothing,
- * and says so above them, with the way to read again.
+ * Every offered provider's row, once where they stand has been read, so each
+ * row is drawn whole at once; a read that failed draws them all, offering
+ * nothing, and says so above them, with the way to read again. A provider
+ * read as unavailable is not offered to the account and has no row.
  */
 function IntegrationRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
@@ -241,6 +243,9 @@ function IntegrationRows(): React.JSX.Element {
   );
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
+  const offered = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => statuses.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
+  );
   return (
     <>
       {statuses.readFailed ? (
@@ -251,17 +256,21 @@ function IntegrationRows(): React.JSX.Element {
           <RetryButton onRetry={() => void statuses.read()} />
         </>
       ) : null}
-      <SettingsGroup>
-        {INTEGRATION_PROVIDER_LIST.map((provider) => (
-          <IntegrationRow
-            key={provider}
-            provider={provider}
-            status={statuses.statusOf(provider)}
-            health={connectionHealth(provider, reads[provider])}
-            statuses={statuses}
-          />
-        ))}
-      </SettingsGroup>
+      {offered.length === 0 ? (
+        <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p>
+      ) : (
+        <SettingsGroup>
+          {offered.map((provider) => (
+            <IntegrationRow
+              key={provider}
+              provider={provider}
+              status={statuses.statusOf(provider)}
+              health={connectionHealth(provider, reads[provider])}
+              statuses={statuses}
+            />
+          ))}
+        </SettingsGroup>
+      )}
     </>
   );
 }

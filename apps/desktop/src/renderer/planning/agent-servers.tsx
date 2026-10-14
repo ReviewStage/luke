@@ -59,6 +59,9 @@ export interface AgentServersControl {
 /** What the gear beside the popover's title is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
+/** What the popover's list says where the deployment offers the account no server at all. */
+const SERVERS_NONE = "No servers available";
+
 /**
  * A connected server's count of tools, and the list of them beside the
  * popover, drawn while the server's row is hovered or the count holds the
@@ -236,6 +239,11 @@ function ServersPopover({
         </Tooltip>
       </div>
       <div className="agent-servers-list">
+        {rows.length === 0 ? (
+          <div className="plan-compose-menu-row agent-servers-row" aria-disabled="true">
+            <span className="plan-compose-menu-name">{SERVERS_NONE}</span>
+          </div>
+        ) : null}
         {rows.map((row) => (
           <div
             key={row.provider}

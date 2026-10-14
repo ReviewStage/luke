@@ -7,7 +7,11 @@ import {
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
-import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { CONNECTION_POLICY } from "../server/hosted/agent-runtime/role";
@@ -19,14 +23,21 @@ import {
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { openGithubUser } from "./support/github-app-fake";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+  integrationConnectOver,
+} from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under
  * its role's policy: a coding agent's switched per agent from its composer,
  * under the root's admission and the worker's alike, and the planning
- * agents' every one, for a session admitted at all. The store and the host
- * are the real ones over the migrations on PGlite.
+ * agents' every one, for a session admitted at all, among the integrations
+ * the deployment offers the account. The store and the host are the real
+ * ones over the migrations on PGlite; every provider is set up and offered
+ * to every account but where a test reads a deployment's variables.
  */
 
 const NOW = 1_800_000_000_000;
@@ -95,36 +106,81 @@ const codingSession = (host: CoderHost) =>
   });
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
-const { ALWAYS_ON } = CONNECTION_POLICY;
+const SLACK = INTEGRATION_PROVIDER.SLACK;
+const { ALWAYS_ON, AGENT_SWITCHES } = CONNECTION_POLICY;
 
 /** Every integration's server on, under the account. */
 function allOn(account: string): ServerStanding {
   return { on: true, account, providers: INTEGRATION_PROVIDER_LIST };
 }
 
-it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an agent's MCP servers", (it) => {
-  it.effect(
-    "a planning agent's turn is handed every server for a session admitted at all, whatever an agent's switches say, and none for one the host does not admit",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* codingHost;
-        const agent = yield* codingSession(host);
-        const theirs = yield* codingSession(host);
-        yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR]);
+const EVERY_CONNECTOR = integrationConnectOf(() => CONNECTOR_ASKED_NOTHING);
 
-        assert.deepEqual(
-          yield* turnServers(host.admit(agent.auth, agent.sessionId), ALWAYS_ON),
-          allOn(agent.userId),
-        );
-        assert.deepEqual(
-          yield* turnServers(host.admitDelegated(agent.auth, mintSession()), ALWAYS_ON),
-          allOn(agent.userId),
-        );
-        // A session over another account's conversation is admitted for nobody.
-        const crossed = typedSeat(agent.userId, theirs.conversationId);
-        assert.deepEqual(yield* turnServers(host.admit(crossed, agent.sessionId), ALWAYS_ON), {
-          on: false,
-        });
-      }),
-  );
-});
+it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR))(
+  "an agent's MCP servers",
+  (it) => {
+    it.effect(
+      "a planning agent's turn is handed every server for a session admitted at all, whatever an agent's switches say, and none for one the host does not admit",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* codingHost;
+          const agent = yield* codingSession(host);
+          const theirs = yield* codingSession(host);
+          yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR]);
+
+          assert.deepEqual(
+            yield* turnServers(host.admit(agent.auth, agent.sessionId), ALWAYS_ON),
+            allOn(agent.userId),
+          );
+          assert.deepEqual(
+            yield* turnServers(host.admitDelegated(agent.auth, mintSession()), ALWAYS_ON),
+            allOn(agent.userId),
+          );
+          // A session over another account's conversation is admitted for nobody.
+          const crossed = typedSeat(agent.userId, theirs.conversationId);
+          assert.deepEqual(yield* turnServers(host.admit(crossed, agent.sessionId), ALWAYS_ON), {
+            on: false,
+          });
+        }),
+    );
+
+    it.effect(
+      "a turn is handed no server the deployment does not offer the account: one its allowlist withholds from the account, or one not set up, reaches none of its agents",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* codingHost;
+          const agent = yield* codingSession(host);
+          yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR]);
+          const deployment = (allowed: string) =>
+            integrationConnectOver({
+              LINEAR_CONNECTOR_UID: "oauth/linear",
+              SLACK_CONNECTOR_UID: "oauth/slack",
+              SLACK_ALLOWED_ACCOUNTS: allowed,
+            });
+          const handed = (allowed: string) =>
+            Effect.all([
+              turnServers(host.admit(agent.auth, agent.sessionId), ALWAYS_ON),
+              turnServers(host.admitDelegated(agent.auth, mintSession()), ALWAYS_ON),
+              turnServers(host.admit(agent.auth, agent.sessionId), AGENT_SWITCHES),
+            ]).pipe(Effect.provide(deployment(allowed)));
+          const standing = (providers: readonly IntegrationProvider[]): ServerStanding => ({
+            on: true,
+            account: agent.userId,
+            providers,
+          });
+
+          // The account's email is the one `openGithubUser` left on its row.
+          assert.deepEqual(yield* handed("@stagereview.example"), [
+            standing([LINEAR]),
+            standing([LINEAR]),
+            standing([]),
+          ]);
+          assert.deepEqual(yield* handed(`${agent.userId}@luke.test`), [
+            standing([LINEAR, SLACK]),
+            standing([LINEAR, SLACK]),
+            standing([SLACK]),
+          ]);
+        }),
+    );
+  },
+);
