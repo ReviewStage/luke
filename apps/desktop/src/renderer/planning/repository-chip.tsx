@@ -4,6 +4,7 @@ import { GearIcon } from "@sidecar/panel";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
+import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { CONNECTED_ACCOUNTS_LINK, OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
@@ -61,6 +62,12 @@ export const CHIP_PLACE = {
 } as const;
 
 export type ChipPlace = (typeof CHIP_PLACE)[keyof typeof CHIP_PLACE];
+
+/** The chip's look in each place: the composer's pill, or the toolbar chip the toolbar's buttons beside it are drawn as. */
+const PLACE_LOOK = {
+  [CHIP_PLACE.COMPOSER]: CHIP_LOOK.PILL,
+  [CHIP_PLACE.TOOLBAR]: CHIP_LOOK.TOOLBAR,
+} as const satisfies Record<ChipPlace, ChipLook>;
 
 /** The chip's words while it waits on a pick. */
 const CHOOSE_LABEL = "Choose repository";
@@ -218,10 +225,9 @@ export function RepositoryChip(props: {
   return (
     <div className="repository-chip" data-place={props.place} ref={chip}>
       {triggerDrawn ? (
-        <button
+        <Chip
           ref={trigger}
-          type="button"
-          className="plan-compose-chip"
+          look={PLACE_LOOK[props.place]}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
@@ -236,8 +242,8 @@ export function RepositoryChip(props: {
               fallback={<GitHubMark />}
             />
           )}
-          <span className="plan-compose-chip-name">{label}</span>
-        </button>
+          <span className="chip-name">{label}</span>
+        </Chip>
       ) : null}
       {drawn.mounted ? (
         <SearchableMenu

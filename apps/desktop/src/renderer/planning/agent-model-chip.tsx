@@ -1,8 +1,8 @@
 import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import { ChevronDownIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { CHIP_LOOK, Chip } from "../chip";
 import { useDisclosure } from "../use-disclosure";
 import { agentUsageLine } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
@@ -12,8 +12,9 @@ import type { AgentModelControl } from "./use-agent-model";
 /**
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
  *
- * Drawn along the composer card's foot as a toolbar's quiet button is, with
- * no border and no fill until the pointer is on it or its menu is open:
+ * Drawn along the composer card's foot as the window's toolbar chip
+ * (`../chip.tsx`), the plan toolbar's repository chip's look, with no
+ * border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
  * the fast version is on and the standard context window's size where the
  * agent runs on that rather than its model's whole window ("GPT-5.5 High
@@ -70,18 +71,17 @@ export function AgentModelChip({
 
   return (
     <div className="agent-model-chip" ref={root}>
-      <button
+      <Chip
         ref={trigger}
-        type="button"
-        className="toolbar-button agent-model-button"
+        look={CHIP_LOOK.TOOLBAR}
+        chevron
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}
       >
         <ModelLabel choice={model.choice} models={models ?? []} />
-        <ChevronDownIcon />
-      </button>
+      </Chip>
       {drawn.mounted ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ModelMenu

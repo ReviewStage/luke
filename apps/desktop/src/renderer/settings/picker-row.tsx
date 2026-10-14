@@ -1,6 +1,6 @@
-import { ChevronDownIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import { CHIP_LOOK, Chip } from "../chip";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { searchAnchorProps } from "../settings-anchors";
 import { useDisclosure } from "../use-disclosure";
@@ -153,10 +153,11 @@ export function PickerRow({
             : cssCustomProperties({ "--settings-picker-list-max": `${placement.listMax}px` })
         }
       >
-        <button
+        <Chip
           ref={chip}
-          type="button"
-          className="plan-compose-chip settings-picker-chip"
+          look={CHIP_LOOK.FIELD}
+          chevron
+          className="settings-picker-chip"
           {...(anchor ? searchAnchorProps(anchor) : undefined)}
           aria-label={`${label}: ${valueLabel}`}
           aria-describedby={describedBy}
@@ -167,9 +168,8 @@ export function PickerRow({
           onClick={() => setOpen(!open)}
         >
           {valueIcon}
-          <span className="plan-compose-chip-name">{valueLabel}</span>
-          <ChevronDownIcon />
-        </button>
+          <span className="chip-name">{valueLabel}</span>
+        </Chip>
         {drawn.mounted ? (
           <SearchableMenu
             leaving={drawn.leaving}

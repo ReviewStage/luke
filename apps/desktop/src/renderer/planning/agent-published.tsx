@@ -6,6 +6,7 @@ import {
 import { CopyIcon } from "@sidecar/panel";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { CHIP_LOOK, Chip } from "../chip";
 import {
   ActionMenu,
   MENU_ALIGN,
@@ -28,7 +29,9 @@ import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
  * agent-published.tsx -- what an agent published, on its tab: the pull request or branch chip at the box's foot, and the pull request's row at a finished transcript's end.
  *
  * The box's foot wears one of two chips once the agent has pushed, after
- * the model chip and in its style: one for its pull request, its mark
+ * the + and in the composer's pill (`../chip.tsx`), since each names a
+ * thing the agent made rather than a setting the quiet model chip at the
+ * foot's other end picks: one for its pull request, its mark
  * (`pull-request-mark.tsx`) and its number in the mark's colour; or, with
  * a branch and no pull request yet, one naming the branch. A press of
  * either opens it on GitHub, the pull request or the branch compared, and
@@ -95,7 +98,7 @@ function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer 
   return (
     <>
       <GitBranchIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="plan-compose-chip-name agent-branch-name">{published.branch}</span>
+      <span className="chip-name agent-branch-name">{published.branch}</span>
     </>
   );
 }
@@ -116,9 +119,9 @@ export function PublishedChip({
   return (
     <>
       <Tooltip label={OPEN_HINT}>
-        <button
-          type="button"
-          className="plan-compose-chip agent-published-chip"
+        <Chip
+          look={CHIP_LOOK.PILL}
+          className="agent-published-chip"
           data-pull-request-state={pullRequest?.state}
           data-menu-open={String(menu.open !== undefined)}
           aria-label={label}
@@ -136,7 +139,7 @@ export function PublishedChip({
           }
         >
           <PublishedFace published={published} />
-        </button>
+        </Chip>
       </Tooltip>
       {menu.drawn === undefined || branch === null ? null : (
         <ActionMenu
@@ -164,15 +167,10 @@ export function ChangesChip({
   }
   return (
     <Tooltip label="Show changes">
-      <button
-        type="button"
-        className="plan-compose-chip agent-changes-chip"
-        aria-label="Show changes"
-        onClick={openChanges}
-      >
+      <Chip look={CHIP_LOOK.PILL} aria-label="Show changes" onClick={openChanges}>
         <FileDiffIcon className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="plan-compose-chip-name">Changes</span>
-      </button>
+        <span className="chip-name">Changes</span>
+      </Chip>
     </Tooltip>
   );
 }
