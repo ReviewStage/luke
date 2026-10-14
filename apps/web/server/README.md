@@ -2042,7 +2042,16 @@ refused again, reported; one left unanswered is reported and never resent,
 since a pending append may still reach the timeline. eve folds asks that waited together into one turn, so
 several follows can project one turn: the newest ask tells it, since the
 service speaks only the newest request's reply, and the rest tell only its
-end, so a reply is never said once per folded ask. Each delegation is an
+end, so a reply is never said once per folded ask. A turn the deployment
+opens on the conversation of its own while a call stands — a rollout worker's
+report (`origin: report`) — has no ask of the call's behind it, so the brain
+also reads the conversation's newest turns every `LIVE_BRAIN_FOLLOW_BOUNDS.WATCH`
+for the whole call: each report turn it had not seen at its first read is
+announced to the service as `LIVE_BRAIN_RUN_EVENT.WOKEN` under the turn's own
+id and followed as an ask's turn is, below every spoken ask's revision. The
+service stands a woken exchange for it and says its reply once no asked run
+is under way; a report turn that failed, or says nothing, stays silent, and a
+report from before the call is never said on it. Each delegation is an
 exchange of its own in the service, a revision of the request: a newer one
 silences the older exchange's reply, slow-step note, and end note, and leaves
 its run to finish rather than cancelling it, because a planning call

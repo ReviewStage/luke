@@ -11,7 +11,7 @@ import { LIVE_DEFAULTS } from "@sidecar/live";
 import { sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
-import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
@@ -37,6 +37,7 @@ import {
   type LiveClientEvent,
   type LiveServerEventType,
 } from "../server/live";
+import { LIVE_BRAIN_FOLLOW_BOUNDS } from "../server/voice/live-brain";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
@@ -187,6 +188,20 @@ async function account(): Promise<PlanTarget> {
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
   for (const event of events) await database.run(relay.handle(event, standing));
+}
+
+/** Long enough for the brain's watch of the conversation to have read it twice, so a report turn that opened is found. */
+const WATCHED_MS = 2 * Duration.toMillis(LIVE_BRAIN_FOLLOW_BOUNDS.WATCH) + 500;
+
+/** A rollout worker's report turn played on the plan's conversation, as the deployment opens one in an eve session of its own. */
+function playReport(target: PlanTarget) {
+  return play(spokenTurn(FIRST_EVE_TURN, NOW), {
+    sessionId: mintEveSession(),
+    target,
+    turn: BRAIN_HOST_TURN.REPORT,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  });
 }
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
@@ -396,6 +411,81 @@ it.live(
       const saved = yield* Effect.promise(body);
       assert.ok(saved.includes(problem));
       assert.equal(drafts.at(-1)?.document.body, saved);
+      yield* Effect.promise(() => f.exchange.stop());
+    }),
+);
+
+it.live(
+  "a report's turn opened during a call is announced woken, and its reply reaches the device session-wide once the asked run ends",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      f.socket.receive(heard("What needs me?", 1000, 2400));
+      f.socket.receive(delegated("dl_1", 2500));
+      yield* settled(
+        async () => (await asks.latestSession(target.userId, target.conversationId)) !== undefined,
+        "the ask's dispatch to be on record",
+      );
+      const recorded = yield* Effect.promise(() =>
+        asks.latestSession(target.userId, target.conversationId),
+      );
+      assert.ok(recorded);
+      // The report's whole turn lands while the developer's ask is still waiting on its own.
+      yield* Effect.promise(() => playReport(target));
+      yield* Effect.sleep(WATCHED_MS);
+      assert.deepEqual(f.commentary(), []);
+      yield* Effect.promise(() =>
+        play(spokenTurn(FIRST_EVE_TURN, NOW), {
+          sessionId: recorded,
+          target,
+          turn: BRAIN_HOST_TURN.SPOKEN,
+          model: "scripted-model",
+          state: memoryRelayState(),
+        }),
+      );
+      yield* settled(
+        () => f.commentary().length >= 4,
+        "both replies to be spoken",
+        async () => `reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`,
+      );
+      assert.deepEqual(
+        f.commentary().map((event) => [event.delegation_id, event.content]),
+        [
+          ["dl_1", "One agent finished."],
+          ["dl_1", "Another is waiting on you."],
+          [null, "One agent finished."],
+          [null, "Another is waiting on you."],
+        ],
+      );
+      assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.exchange.stop());
+    }),
+);
+
+it.live(
+  "a report's turn from before the call is never said on it, and one opened during the call is said once",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      yield* Effect.promise(() => playReport(target));
+      const f = yield* Effect.promise(() => stand(target));
+      yield* Effect.sleep(WATCHED_MS);
+      assert.deepEqual(f.commentary(), []);
+      yield* Effect.promise(() => playReport(target));
+      yield* settled(
+        () => f.commentary().length >= 2,
+        "the report's reply to be spoken",
+        async () => `reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`,
+      );
+      yield* Effect.sleep(WATCHED_MS);
+      assert.deepEqual(
+        f.commentary().map((event) => [event.delegation_id, event.content]),
+        [
+          [null, "One agent finished."],
+          [null, "Another is waiting on you."],
+        ],
+      );
       yield* Effect.promise(() => f.exchange.stop());
     }),
 );
