@@ -20,7 +20,7 @@ import { modelLabel } from "@sidecar/hosted/model-label";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
-import type { AppInboxSlice } from "#shared/messages/app-state";
+import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-state";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
@@ -305,13 +305,19 @@ function inboxNoticeText(
 
 /** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
 function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
-  const plans = new Map<string, string[]>();
+  const plans = new Map<string, AppInboxWaitingItem[]>();
   for (const item of items) {
+    const waiting = {
+      id: item.id,
+      agentId: item.agentId,
+      title: item.title,
+      postedAt: item.postedAt,
+    };
     const held = plans.get(item.planId);
-    if (held === undefined) plans.set(item.planId, [item.id]);
-    else held.push(item.id);
+    if (held === undefined) plans.set(item.planId, [waiting]);
+    else held.push(waiting);
   }
-  return [...plans].map(([planId, ids]) => ({ planId, items: ids }));
+  return [...plans].map(([planId, held]) => ({ planId, items: held }));
 }
 
 /** Whether two answers list the same plans holding items, alike in order, count, and instant. */

@@ -1,6 +1,8 @@
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import type { InboxItem } from "@sidecar/hosted/inbox-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import type { AppInboxWaitingItem } from "#shared/messages/app-state";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
@@ -16,6 +18,11 @@ import {
 import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
+
+/** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
+export function waitingOf(item: InboxItem): AppInboxWaitingItem {
+  return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
+}
 
 /** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = {

@@ -26,7 +26,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
+import { plansControl, waitingOf } from "#testing/plans-control";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
@@ -192,8 +192,8 @@ function mount() {
       plans: plansControl({
         plans: listed,
         inbox: [
-          { planId: BILLING.id, items: [THRESHOLD.id] },
-          { planId: INVITES.id, items: [EXPIRY.id] },
+          { planId: BILLING.id, items: [waitingOf(THRESHOLD)] },
+          { planId: INVITES.id, items: [waitingOf(EXPIRY)] },
         ],
         inboxPlans: holding,
         inboxView: {

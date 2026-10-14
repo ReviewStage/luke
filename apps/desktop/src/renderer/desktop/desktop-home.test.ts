@@ -15,7 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
+import { plansControl, waitingOf } from "#testing/plans-control";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { DesktopHome } from "./desktop-home";
 
@@ -84,8 +84,8 @@ const INBOXES = new Map<string, readonly InboxItem[]>([
 /** The plans holding items, and those of them with an item waiting, as main reads the account. */
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
   inbox: [
-    { planId: INVITES.id, items: [EMAIL.id] },
-    { planId: BILLING.id, items: [ACCOUNT.id] },
+    { planId: INVITES.id, items: [waitingOf(EMAIL)] },
+    { planId: BILLING.id, items: [waitingOf(ACCOUNT)] },
   ],
   inboxPlans: [
     { planId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },

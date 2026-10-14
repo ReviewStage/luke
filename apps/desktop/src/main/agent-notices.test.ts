@@ -282,3 +282,58 @@ it.effect(
       assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START, "7"]);
     }),
 );
+it.effect(
+  "what waits carries each open item's agent, what it asks, and when it was posted, grouped by plan as the read answered them",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      const otherPlan = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+      const otherAgent = "a3e4f5a6-5f4a-4fad-8d88-8b6e9c4a5d43";
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { title: "Push to the release branch?", postedAt: READ_AT - 60_000 }),
+          waitingItem(ITEM_B, {
+            planId: otherPlan,
+            agentId: otherAgent,
+            title: "Which account pays out?",
+            postedAt: READ_AT - 3_600_000,
+          }),
+          waitingItem(ITEM_C, { title: "Expire invites after a week?", postedAt: READ_AT }),
+        ],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.waiting.at(-1), [
+        {
+          planId: PLAN_ID,
+          items: [
+            {
+              id: ITEM_A,
+              agentId: AGENT_ID,
+              title: "Push to the release branch?",
+              postedAt: READ_AT - 60_000,
+            },
+            {
+              id: ITEM_C,
+              agentId: AGENT_ID,
+              title: "Expire invites after a week?",
+              postedAt: READ_AT,
+            },
+          ],
+        },
+        {
+          planId: otherPlan,
+          items: [
+            {
+              id: ITEM_B,
+              agentId: otherAgent,
+              title: "Which account pays out?",
+              postedAt: READ_AT - 3_600_000,
+            },
+          ],
+        },
+      ]);
+    }),
+);
