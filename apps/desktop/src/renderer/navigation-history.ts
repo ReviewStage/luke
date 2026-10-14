@@ -2,7 +2,7 @@
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
  * A place is a plan's page, a plan's version history, the home page,
- * the Inbox, or Settings, and the history is the one a browser keeps: the places behind,
+ * the Inbox, an automation on the Automations page, or Settings, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
  * moves it, so a plan opened from the sidebar, by a key, by starting it, or
@@ -43,6 +43,7 @@ const PLACE_KIND = {
   VERSION_HISTORY: "version-history",
   HOME: "home",
   INBOX: "inbox",
+  AUTOMATIONS: "automations",
   SETTINGS: "settings",
 } as const;
 
@@ -56,6 +57,11 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
   | { readonly kind: typeof PLACE_KIND.INBOX }
+  | {
+      readonly kind: typeof PLACE_KIND.AUTOMATIONS;
+      readonly chosen: string | undefined;
+      readonly plan: string | undefined;
+    }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -228,6 +234,7 @@ export function useWindowHistory(input: {
     | "history"
     | "inboxView"
     | "restoring"
+    | "automationsView"
   >;
 }): WindowHistory {
   const { tab, settingsView, plans } = input;
@@ -238,6 +245,7 @@ export function useWindowHistory(input: {
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
+  const automations = plans.automationsView;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const plan of [...plans.plans, ...plans.archived]) everListed.add(plan.id);
@@ -245,11 +253,25 @@ export function useWindowHistory(input: {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
+    if (automations.open) {
+      return { kind: PLACE_KIND.AUTOMATIONS, chosen: automations.chosen, plan: automations.plan };
+    }
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [known, tab, settingsView, boundFor, historyOpen, spot, inboxOpen]);
+  }, [
+    known,
+    tab,
+    settingsView,
+    boundFor,
+    historyOpen,
+    spot,
+    inboxOpen,
+    automations.open,
+    automations.chosen,
+    automations.plan,
+  ]);
   const reachable = (to: Place) => {
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
@@ -270,8 +292,15 @@ export function useWindowHistory(input: {
       plans.inboxView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox stands over.
+    // An automation read on the Automations page is a place of its own, so Back from it is the list.
+    if (to.kind === PLACE_KIND.AUTOMATIONS) {
+      automations.onOpen(to.plan);
+      automations.onChoose(to.chosen);
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox or Automations stands over.
     if (inboxOpen) plans.inboxView.onClose();
+    if (automations.open) automations.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

@@ -13,7 +13,7 @@ import {
   SearchIcon,
   UnpinIcon,
 } from "@sidecar/panel";
-import { HouseIcon, InboxIcon } from "lucide-react";
+import { HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -607,6 +607,8 @@ export function DesktopSidebar({
   const onPlans = tab === PANEL_TAB.PLANS;
   // The window's Inbox stands in the plan's place, so while it does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
+  // The Automations page stands in the plan's place the same way.
+  const inAutomations = onPlans && plans.automationsView.open;
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -631,7 +633,12 @@ export function DesktopSidebar({
   };
   // The home page is the place shown while no plan is open, the Inbox is not
   // standing in its place, and no launch is still reopening a plan.
-  const atHome = onPlans && !inInbox && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  const atHome =
+    onPlans && !inInbox && !inAutomations && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  const openAutomations = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.automationsView.onOpen();
+  };
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
@@ -643,7 +650,8 @@ export function DesktopSidebar({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) => onPlans && !inInbox && planId === plans.activePlanId;
+  const current = (planId: string) =>
+    onPlans && !inInbox && !inAutomations && planId === plans.activePlanId;
   // The list is the chosen workspace's; the unread marks above read every plan.
   const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
   const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
@@ -751,6 +759,17 @@ export function DesktopSidebar({
         disabled={!plans.signedIn}
         onOpen={openInbox}
       />
+      {/* Automations, the account's own as the Inbox is, opens its page in the plan's place. */}
+      <button
+        type="button"
+        className="sidebar-search sidebar-automations"
+        aria-current={inAutomations ? "page" : undefined}
+        disabled={!plans.signedIn}
+        onClick={openAutomations}
+      >
+        <ZapIcon />
+        Automations
+      </button>
       <hr className="sidebar-rule" />
       {/* The workspace the list is, while an account is signed in; it
           stands over the scroller, so it never scrolls away. */}

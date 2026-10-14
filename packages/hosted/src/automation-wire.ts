@@ -313,6 +313,8 @@ export const automationSummarySchema = EffectSchema.Struct({
   nextRunAt: EffectSchema.NullOr(countedNumber),
   lastRun: EffectSchema.NullOr(automationRunSummarySchema),
   createdAt: countedNumber,
+  /** A webhook trigger's address, which a sender calls under the secret; absent for any other trigger. */
+  webhookUrl: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;

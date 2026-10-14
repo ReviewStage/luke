@@ -16,7 +16,7 @@ import {
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
-import { wireUuidSchema } from "@sidecar/hosted";
+import { automationWebhookPath, wireUuidSchema } from "@sidecar/hosted";
 import { nextScheduledRun, readSchedule } from "@sidecar/hosted/automation-schedule";
 import {
   AUTOMATION_BOUNDS,
@@ -140,6 +140,11 @@ const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   return account.value;
 });
 
+/** The origin the request came to, which a webhook's address is spelled on. */
+function originOf(request: Request): string {
+  return new URL(request.url).origin;
+}
+
 /** The one id the path put under `id`; two is refused, and one that is no UUID names no row. */
 const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
@@ -240,10 +245,11 @@ const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   return runs.map((run) => runSummaryOf(run, standingOf, now));
 });
 
-/** One automation for the wire, with its newest run. */
+/** One automation for the wire, with its newest run, and a webhook's address on the origin the request came to. */
 const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   automation: Automation,
+  origin: string,
 ): Effect.fn.Return<AutomationSummary, HostedRefusal, DatabaseServices> {
   const newest = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, automation.id, 1));
   const [lastRun] = yield* runSummaries(newest);
@@ -260,6 +266,9 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     nextRunAt: automation.nextRunAt?.getTime() ?? null,
     lastRun: lastRun ?? null,
     createdAt: automation.createdAt.getTime(),
+    ...(automation.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK
+      ? { webhookUrl: new URL(automationWebhookPath(automation.id), origin).href }
+      : undefined),
   };
 });
 
@@ -276,13 +285,16 @@ const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const automations = yield* hostedStoreOrUnavailable(listAutomations(userId, plan?.success));
-  const summaries = yield* Effect.forEach(automations, (each) => summaryOf(userId, each));
+  const summaries = yield* Effect.forEach(automations, (each) =>
+    summaryOf(userId, each, originOf(request)),
+  );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { automations: summaries });
 });
 
 /** POST: an automation made on one of the account's plans with a repository. */
 const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
+  request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
   const asked = readEither(automationCreateRequestSchema)(
     yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES),
@@ -311,7 +323,7 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const automation = yield* summaryOf(userId, created.value);
+  const automation = yield* summaryOf(userId, created.value, originOf(request));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     automation,
     ...answeredSecret(webhook),
@@ -330,7 +342,7 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
   const userId = yield* resolvedUserId(seams, request);
   return incoming.method === HTTP_METHOD.GET
     ? yield* listEndpoint(userId, request)
-    : yield* createEndpoint(userId);
+    : yield* createEndpoint(userId, request);
 });
 
 /**
@@ -408,7 +420,7 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
   if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (incoming.method === HTTP_METHOD.GET) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      automation: yield* summaryOf(userId, standing.value),
+      automation: yield* summaryOf(userId, standing.value, originOf(request)),
     });
   }
   const asked = readEither(automationChangeRequestSchema)(
@@ -419,7 +431,7 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
   const written = yield* hostedStoreOrUnavailable(updateAutomation(userId, id, changes));
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    automation: yield* summaryOf(userId, written.value),
+    automation: yield* summaryOf(userId, written.value, originOf(request)),
     ...answeredSecret(webhook),
   });
 });
@@ -515,7 +527,7 @@ const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSe
     const written = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
     if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      automation: yield* summaryOf(userId, written.value),
+      automation: yield* summaryOf(userId, written.value, originOf(request)),
       ...answeredSecret(webhook),
     });
   },

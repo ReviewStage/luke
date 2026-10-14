@@ -313,6 +313,11 @@ it.layer(getTestDB())("the automation routes", (it) => {
           }),
         );
         const secret = hooked.webhookSecret ?? "";
+        assert.equal(
+          hooked.automation.webhookUrl,
+          `${ORIGIN}/api/automations/${hooked.automation.id}/webhook`,
+          "the address is spelled on the origin the request came to",
+        );
         assert.ok(secret.length >= 40, "a secret of real length is answered");
         const [row] = yield* Database.use((db) =>
           db

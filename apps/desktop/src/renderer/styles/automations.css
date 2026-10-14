@@ -1,0 +1,947 @@
+/* automations.css -- the window's Automations page and its dialogs: every rule is spent from base.css and desktop.css tokens, nothing new is invented. */
+
+/* The page ----------------------------------------------------------------- */
+
+/* A window-wide place beside the sidebar, as the Inbox is: its toolbar, then a
+   Settings-measure column of cards. */
+.automations-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.automation-page {
+  --settings-width: 820px;
+  flex: 1;
+}
+
+.automation-page .settings-page-head {
+  margin-bottom: var(--space-24);
+}
+
+.automation-page .settings-page-scroll {
+  mask-image: none;
+}
+
+.automation-head-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.automation-head-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.automation-head-line svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-dot::before {
+  content: "·";
+  color: var(--text-tertiary);
+}
+
+.automation-toolbar-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  max-width: var(--settings-width);
+  margin: 0 auto var(--space-12);
+}
+
+/* The list ----------------------------------------------------------------- */
+
+/* One automation per row, in a Settings card: its trigger's glyph, its name
+   over what fires it and on which plan, when it next runs, how it last
+   went, and its switch. The whole row opens it; the switch is its own press. */
+.automation-row {
+  display: grid;
+  width: 100%;
+  min-height: 60px;
+  align-items: center;
+  gap: var(--space-12);
+  grid-template-columns: 28px minmax(0, 1fr) 124px 136px 34px;
+  padding: var(--space-12) var(--space-16);
+  background: none;
+  color: inherit;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.automation-row:hover {
+  background: var(--raised);
+}
+
+.automation-row:first-child {
+  border-top-left-radius: var(--control-radius);
+  border-top-right-radius: var(--control-radius);
+}
+.automation-row:last-child {
+  border-bottom-left-radius: var(--control-radius);
+  border-bottom-right-radius: var(--control-radius);
+}
+
+.automation-row[data-enabled="false"] :is(.automation-mark, .settings-copy, .automation-when) {
+  opacity: 0.55;
+}
+
+.automation-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.automation-mark svg {
+  width: 15px;
+  height: 15px;
+}
+
+.automation-mark .account-mark {
+  width: 14px;
+  height: 14px;
+}
+
+.automation-row .settings-copy strong,
+.automation-row .settings-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-row .settings-copy small {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.automation-row .settings-copy small svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.automation-when {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 12.5px;
+}
+
+.automation-when small {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.automation-when span {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* How a run went, in the pill an agent's pull request wears
+   (`.agent-published-chip`): its accent at a wash behind its word. */
+.automation-pill {
+  --accent: var(--text-tertiary);
+  display: inline-flex;
+  max-width: 100%;
+  height: 22px;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-6);
+  padding: 0 var(--space-8);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.automation-pill svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.automation-pill .working-mark {
+  width: 11px;
+  height: 11px;
+}
+
+.automation-pill[data-tone="working"] {
+  --accent: var(--state-working);
+}
+.automation-pill[data-tone="complete"] {
+  --accent: var(--state-complete);
+}
+.automation-pill[data-tone="attention"] {
+  --accent: var(--state-attention);
+}
+.automation-pill[data-tone="danger"] {
+  --accent: var(--danger);
+}
+.automation-pill[data-tone="quiet"] {
+  --accent: var(--text-secondary);
+}
+
+/* The filter row's count, muted after its word as a group's is. */
+.automation-count {
+  margin-left: var(--space-4);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A setup row in the detail: its label column, then its value. */
+.automation-facts > .settings-row {
+  align-items: flex-start;
+}
+
+.automation-fact-label {
+  width: 96px;
+  flex: none;
+  padding-top: 1px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.automation-fact {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: 13px;
+}
+
+.automation-fact-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.automation-fact-line svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.automation-fact-line .provider-mark,
+.automation-fact-line .account-mark {
+  width: 14px;
+  height: 14px;
+}
+
+.automation-fact small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.automation-prompt {
+  margin: 0;
+  color: var(--text-body);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.automation-label-chip {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.automation-label-chip svg {
+  width: 11px;
+  height: 11px;
+  color: var(--text-tertiary);
+}
+
+.automation-label-chip[data-mono="true"] {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* Runs ---------------------------------------------------------------------- */
+
+.automation-run {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-12);
+  grid-template-columns: 16px minmax(0, 1fr) auto 44px 14px;
+  padding: var(--space-12) var(--space-16);
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.automation-run:hover {
+  background: var(--raised);
+}
+
+.automation-run[aria-expanded="true"] {
+  background: var(--raised);
+}
+
+.automation-run .settings-copy strong,
+.automation-run .settings-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-run-glyph {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  place-items: center;
+}
+
+.automation-run-glyph svg {
+  width: 15px;
+  height: 15px;
+}
+
+.automation-run-glyph[data-tone="complete"] {
+  color: var(--state-complete);
+}
+.automation-run-glyph[data-tone="danger"] {
+  color: var(--danger);
+}
+.automation-run-glyph[data-tone="attention"] {
+  color: var(--state-attention);
+}
+.automation-run-glyph[data-tone="working"] {
+  color: var(--state-working);
+}
+
+.automation-run-time {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.automation-run .settings-chevron {
+  transition: transform var(--duration-quick) var(--spring);
+}
+
+.automation-run[aria-expanded="true"] .settings-chevron {
+  transform: rotate(90deg);
+}
+
+/* A run opened under its row: what fired it, when, how it settled, and the
+   agent it started, with the doors to that agent's tab and the event. */
+.automation-run-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-4) var(--space-16) var(--space-16)
+    calc(var(--space-16) + 16px + var(--space-12));
+  background: var(--raised);
+}
+
+.settings-card > .automation-run[aria-expanded="true"] + .automation-run-detail {
+  border-top: 0;
+}
+
+.automation-run-facts {
+  display: grid;
+  gap: var(--space-6) var(--space-16);
+  grid-template-columns: 88px minmax(0, 1fr);
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.automation-run-facts dt {
+  color: var(--text-tertiary);
+}
+
+.automation-run-facts dd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.automation-run-facts dd svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-run-facts .provider-mark {
+  width: 13px;
+  height: 13px;
+}
+
+.automation-run-actions {
+  display: flex;
+  gap: var(--control-gap);
+}
+
+.automation-agent-link {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 3px;
+}
+
+.automation-reason {
+  color: var(--text-secondary);
+}
+
+.automation-reason[data-tone="danger"] {
+  color: var(--danger-text);
+}
+
+/* The editor ---------------------------------------------------------------- */
+
+/* The New / Edit automation dialog: the New plan dialog's card at a form's
+   width, its fields in a column that scrolls under a fixed head and foot. */
+.automation-dialog {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 2 * var(--space-24));
+  gap: 0;
+  padding: 0;
+}
+
+.automation-dialog > .confirm-dialog-title {
+  padding: var(--space-20) var(--space-20) var(--space-12);
+}
+
+.automation-dialog-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-20);
+  padding: var(--space-4) var(--space-20) var(--space-20);
+  overflow-y: auto;
+}
+
+.automation-dialog .confirm-dialog-actions {
+  align-items: center;
+  margin: 0;
+  padding: var(--space-12) var(--space-20);
+  border-top: 1px solid var(--hairline);
+}
+
+.automation-dialog .confirm-dialog-actions > .automation-dialog-lead {
+  min-width: 0;
+  margin-right: auto;
+}
+
+.automation-dialog .primary-button .shortcut {
+  --shortcut-ink: var(--on-accent-muted);
+}
+
+.automation-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.automation-field-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.automation-field-label small {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.automation-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+.automation-field-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.automation-field-note strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* A one-line field and the prompt's well, in the New plan name's look. */
+.automation-input {
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.automation-input[data-size="name"] {
+  height: auto;
+  padding: var(--space-8) var(--space-12);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.automation-input[data-mono="true"] {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.automation-input[data-width="time"] {
+  width: 92px;
+  font-variant-numeric: tabular-nums;
+}
+.automation-input[data-width="cron"] {
+  width: 200px;
+}
+
+.automation-input:focus {
+  border-color: var(--selected-edge);
+  outline: none;
+}
+
+.automation-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.automation-textarea {
+  height: auto;
+  min-height: 112px;
+  padding: var(--space-8) var(--space-12);
+  line-height: 1.55;
+  resize: none;
+}
+
+/* Tags typed into a field, each a removable chip, the field's cursor after them. */
+.automation-tags {
+  display: flex;
+  min-height: var(--control-height);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+}
+
+.automation-tags-placeholder {
+  padding-left: var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.automation-next {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-next svg {
+  width: 13px;
+  height: 13px;
+}
+
+.automation-next strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.automation-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.automation-disclosure svg {
+  width: 11px;
+  height: 11px;
+}
+
+.automation-disclosure[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.automation-advanced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--control-gap);
+  padding: var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+/* GitHub's events as the Inbox draws an agent's offered choices, two to a row. */
+.automation-events {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: 1fr 1fr;
+}
+
+.automation-events .inbox-option {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.automation-events .inbox-option > svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+
+.automation-events .inbox-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.automation-two {
+  display: grid;
+  gap: var(--space-16);
+  grid-template-columns: 1fr 1fr;
+}
+
+/* The webhook's address and secret, shown the once: each in a mono well with
+   its copy button, under the warning that it will not be shown again. */
+.automation-secret {
+  display: flex;
+  height: var(--control-height);
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) 0 var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+}
+
+.automation-secret code {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-secret .icon-button {
+  width: 24px;
+  height: 24px;
+}
+
+.automation-secret .icon-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.automation-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid color-mix(in srgb, var(--state-attention) 30%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--state-attention) 9%, transparent);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.automation-callout svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--state-attention);
+}
+
+.automation-code {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+/* A stepper for a guard: the value between − and +. */
+.automation-stepper {
+  display: inline-flex;
+  height: var(--control-height);
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+}
+
+.automation-stepper button {
+  width: 28px;
+  height: 100%;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.automation-stepper button:hover {
+  color: var(--text-primary);
+  background: var(--raised);
+}
+
+.automation-stepper span {
+  min-width: 28px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Empty ---------------------------------------------------------------------- */
+
+.automation-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  max-width: var(--settings-width);
+  margin: 0 auto;
+  padding-top: 72px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.automation-empty > p {
+  max-width: 440px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.automation-empty .primary-button .shortcut {
+  --shortcut-ink: var(--on-accent-muted);
+}
+
+.automation-templates {
+  display: grid;
+  width: 100%;
+  gap: var(--space-12);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--space-24);
+  text-align: left;
+}
+
+.automation-templates-title {
+  width: 100%;
+  margin: var(--space-24) 0 calc(-1 * var(--space-12));
+  padding: 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.automation-template {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  color: inherit;
+  text-align: left;
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+.automation-template:hover {
+  border-color: var(--hairline-strong);
+  background: var(--raised);
+}
+
+.automation-template strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.automation-template p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.automation-template .automation-head-line {
+  margin-top: auto;
+  padding-top: var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.automation-templates[data-stacked="true"] {
+  grid-template-columns: 1fr;
+  margin-top: var(--space-8);
+}
+
+/* What the page adds beyond the mockups' rules ------------------------------ */
+
+/* The detail's crumbs: back to the list, then the automation's name. */
+.automation-crumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.automation-crumbs > svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-crumb {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-list {
+  padding-top: var(--space-24);
+}
+
+.automation-none {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* A schedule the service would refuse says so in the danger ink. */
+.automation-next[data-refused="true"] {
+  color: var(--danger-text);
+}
+
+.automation-dialog-rule {
+  width: 100%;
+  margin: var(--space-4) 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.automation-guard {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-secondary);
+}
+
+.automation-input[data-width="guard"] {
+  width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-template-line {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.automation-run-link {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.automation-curl {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  overflow-x: auto;
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre;
+}
+
+/* The sidebar's Automations row is the place shown while its page stands, filled as the Inbox's row is. */
+.sidebar-automations[aria-current="page"] {
+  background: var(--raised-strong);
+}
+
+.sidebar-automations:disabled {
+  opacity: 0.45;
+}

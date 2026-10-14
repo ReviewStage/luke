@@ -4,6 +4,7 @@ import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { AutomationsPage } from "../automations/automations-page";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
@@ -226,11 +227,14 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
   );
   // The plan is looked at only while it is on screen, which the Inbox standing in its place is not.
   const looks = usePlanLooks(
-    tab === PANEL_TAB.PLANS && !plans.inboxView.open && region.kind === DOCUMENT_REGION.READY
+    tab === PANEL_TAB.PLANS &&
+      !plans.inboxView.open &&
+      !plans.automationsView.open &&
+      region.kind === DOCUMENT_REGION.READY
       ? region.plan
       : undefined,
   );
@@ -290,7 +294,8 @@ export function DesktopShell({
   // toolbar beneath it leaves the toggle room then and only then. The Inbox
   // stands in the plan's place, so it draws no panel to toggle.
   const inboxOpen = plans.inboxView.open;
-  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !inboxOpen;
+  const automationsOpen = plans.automationsView.open;
+  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !inboxOpen && !automationsOpen;
   const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
   // and all, so the captions float in its place then.
@@ -317,9 +322,9 @@ export function DesktopShell({
         call={sidebar.collapsed ? undefined : call}
       />
       <main className="desktop-main">
-        {inboxOpen ? (
-          <DesktopInbox plans={plans} />
-        ) : (
+        {inboxOpen ? <DesktopInbox plans={plans} /> : null}
+        {automationsOpen ? <AutomationsPage plans={plans} /> : null}
+        {inboxOpen || automationsOpen ? null : (
           <DesktopPlans
             plans={plans}
             looks={looks}

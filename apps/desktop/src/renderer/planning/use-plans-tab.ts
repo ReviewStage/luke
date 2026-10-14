@@ -182,6 +182,39 @@ interface InboxViewControl {
   readonly onChoose: (chosen: InboxChoice) => void;
 }
 
+/**
+ * The window's Automations page: the account's automations, and the one
+ * chosen in it read with its runs. It stands in the plan's place as the
+ * Inbox does, and leaves the same ways: opening any plan, or the Inbox,
+ * leaves it. `plan` narrows the list to one plan's automations where the
+ * page was opened from that plan.
+ */
+interface AutomationsViewControl {
+  readonly open: boolean;
+  /** The automation chosen, read with its runs; none for the list. */
+  readonly chosen: string | undefined;
+  /** The plan the list is narrowed to; none for every plan. */
+  readonly plan: string | undefined;
+  readonly onOpen: (plan?: string) => void;
+  readonly onClose: () => void;
+  readonly onChoose: (automationId: string | undefined) => void;
+}
+
+/** The pages that stand in the plan's place beside the sidebar. */
+const WINDOW_PAGE = {
+  INBOX: "inbox",
+  AUTOMATIONS: "automations",
+} as const;
+
+/** The page standing in the plan's place, with what is chosen in it. */
+type WindowPage =
+  | { readonly kind: typeof WINDOW_PAGE.INBOX; readonly chosen: InboxChoice | undefined }
+  | {
+      readonly kind: typeof WINDOW_PAGE.AUTOMATIONS;
+      readonly chosen: string | undefined;
+      readonly plan: string | undefined;
+    };
+
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
   page: PlansPage;
@@ -296,6 +329,8 @@ export interface PlansControl {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
+  /** The window's Automations page: whether it stands in the plan's place, the automation chosen in it, and its presses. */
+  automationsView: AutomationsViewControl;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -512,10 +547,9 @@ export function usePlansTab(input: {
    * opened on, none for the plan as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
-  /** The window's Inbox while it stands, and the item chosen in it. */
-  const [inboxView, setInboxView] = useState<
-    { readonly chosen: InboxChoice | undefined } | undefined
-  >(undefined);
+  /** The page standing in the plan's place, the Inbox or Automations, and what is chosen in it. */
+  const [windowPage, setWindowPage] = useState<WindowPage | undefined>(undefined);
+  const inboxView = windowPage?.kind === WINDOW_PAGE.INBOX ? windowPage : undefined;
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly planId: string; readonly ref: CodeRef; readonly commit: string } | undefined
@@ -769,7 +803,7 @@ export function usePlansTab(input: {
   // Opening a plan, or leaving one, is leaving the window's Inbox for it.
   const select = useCallback(
     (planId: string) => {
-      setInboxView(undefined);
+      setWindowPage(undefined);
       const planWorkspace = plansNow.find((plan) => plan.id === planId)?.workspaceId;
       const target = workspacesNow.find((each) => each.id === planWorkspace);
       const ask = { planId, over: openPlanId };
@@ -790,7 +824,7 @@ export function usePlansTab(input: {
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
-    setInboxView(undefined);
+    setWindowPage(undefined);
     if (fixture !== undefined) return;
     const ask = { planId: undefined, over: openPlanId };
     setAsked(ask);
@@ -1181,7 +1215,7 @@ export function usePlansTab(input: {
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
         setNewPlanAsk(undefined);
-        setInboxView(undefined);
+        setWindowPage(undefined);
         setHistoryFor(undefined);
         if (callingNow.current) {
           askOnOpen.current = answer.planId;
@@ -1205,7 +1239,7 @@ export function usePlansTab(input: {
   // A plan's version history opens over the plan, so another plan opens first.
   const openHistory = (opening: HistoryOpening) => {
     if (opening.planId !== boundFor) select(opening.planId);
-    setInboxView(undefined);
+    setWindowPage(undefined);
     setHistoryFor(opening);
   };
 
@@ -1214,7 +1248,7 @@ export function usePlansTab(input: {
   // window over it.
   const showColumnTab = (planId: string, tab: MainTab) => {
     if (planId !== planning.activePlanId) select(planId);
-    setInboxView(undefined);
+    setWindowPage(undefined);
     setHistoryFor(undefined);
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onShow(planId, tab);
@@ -1223,7 +1257,7 @@ export function usePlansTab(input: {
   // An inbox item's code opens in its plan's File tab; on a plan not yet
   // open, once the host has it open, since the panel draws the open plan's.
   const showFile = (planId: string, ref: CodeRef, commit: string) => {
-    setInboxView(undefined);
+    setWindowPage(undefined);
     setHistoryFor(undefined);
     if (planId === planning.activePlanId) {
       sidePanel.onOpenFile(ref, commit);
@@ -1310,7 +1344,7 @@ export function usePlansTab(input: {
   // One the plan no longer draws, read only once a reopen opened its plan, opens nothing.
   const reopenHere = (closed: ClosedTab) => {
     if (!drawsAgain(closed)) return;
-    setInboxView(undefined);
+    setWindowPage(undefined);
     setHistoryFor(undefined);
     if (closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL) {
       sidePanel.onReopen(closed.tab, closed.at, closed.file);
@@ -1477,10 +1511,30 @@ export function usePlansTab(input: {
       chosen: inboxView?.chosen,
       onOpen: () => {
         setHistoryFor(undefined);
-        setInboxView((held) => held ?? { chosen: undefined });
+        setWindowPage((held) =>
+          held?.kind === WINDOW_PAGE.INBOX ? held : { kind: WINDOW_PAGE.INBOX, chosen: undefined },
+        );
       },
-      onClose: () => setInboxView(undefined),
-      onChoose: (chosen) => setInboxView((held) => held && { chosen }),
+      onClose: () => setWindowPage(undefined),
+      onChoose: (chosen) =>
+        setWindowPage((held) =>
+          held?.kind === WINDOW_PAGE.INBOX ? { kind: WINDOW_PAGE.INBOX, chosen } : held,
+        ),
+    },
+    // The Automations page stands over the plan's place as the Inbox does.
+    automationsView: {
+      open: windowPage?.kind === WINDOW_PAGE.AUTOMATIONS,
+      chosen: windowPage?.kind === WINDOW_PAGE.AUTOMATIONS ? windowPage.chosen : undefined,
+      plan: windowPage?.kind === WINDOW_PAGE.AUTOMATIONS ? windowPage.plan : undefined,
+      onOpen: (plan) => {
+        setHistoryFor(undefined);
+        setWindowPage({ kind: WINDOW_PAGE.AUTOMATIONS, chosen: undefined, plan });
+      },
+      onClose: () => setWindowPage(undefined),
+      onChoose: (chosen) =>
+        setWindowPage((held) =>
+          held?.kind === WINDOW_PAGE.AUTOMATIONS ? { ...held, chosen } : held,
+        ),
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
@@ -1491,7 +1545,7 @@ export function usePlansTab(input: {
         showColumnTab(planId, { agent: source.agentId });
         return;
       }
-      setInboxView(undefined);
+      setWindowPage(undefined);
       setHistoryFor(undefined);
       setReveal({ planId, source });
       sidePanel.onShow(planId, SIDE_PANEL_TAB.CALL);
@@ -1508,7 +1562,7 @@ export function usePlansTab(input: {
       const { tab } = pin;
       setChosen({ pin, over: openPlanId });
       if (pin.plan !== planning.activePlanId) select(pin.plan);
-      setInboxView(undefined);
+      setWindowPage(undefined);
       setHistoryFor(undefined);
       if (!inColumn(tab)) {
         sidePanel.onShow(pin.plan, tab);
@@ -1555,7 +1609,7 @@ export function usePlansTab(input: {
     onLeavePlan: leavePlan,
     // Home is the page with no plan open, so where none is, only the Inbox
     // standing over it is put away, and the host is asked nothing.
-    onGoHome: () => (boundFor === undefined ? setInboxView(undefined) : leavePlan()),
+    onGoHome: () => (boundFor === undefined ? setWindowPage(undefined) : leavePlan()),
     onRenamePlan: renamePlan,
     onDraftName: draftName,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),
