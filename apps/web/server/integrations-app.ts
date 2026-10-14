@@ -23,8 +23,8 @@
  *   provider's server offers the account's agents, read from the server with
  *   the account's token as an MCP client reads them, and held for a few
  *   minutes per account and provider so a popover opened again asks the
- *   server nothing. A server that listed
- *   none answers why, with its own one-line message where it sent one that
+ *   server nothing; GitHub's, whose grant has no instant a new one is told
+ *   by, are read every time. A server that listed none answers why, with its own one-line message where it sent one that
  *   carries no credential (`hosted/mcp-tools.ts`), and is never held, so a
  *   connection mended at the provider reads as mended at once. A provider
  *   the account has not connected is refused before any token is read.
@@ -318,7 +318,8 @@ function toolsProblem(failure: McpToolsFailure) {
 
 /**
  * When the account's grant at one provider was made, which keys the tools
- * held for it; nothing for a grant that is the account's GitHub sign-in. A
+ * held for it; nothing for a grant that is the account's GitHub sign-in,
+ * whose tools are never held. A
  * provider with no connector here or not offered to the account, and one the
  * account has not connected, are refused as unavailable.
  */
@@ -409,7 +410,9 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   const provider = yield* requestedProvider();
   const userId = yield* resolvedUserId(seams);
   const grant = yield* standingGrant(seams, provider, userId);
-  const held = cache.get(userId)?.get(provider);
+  // Note that GitHub's tools are never held, because its grant has no instant to tell a new one by.
+  const holds = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.CONNECT;
+  const held = holds ? cache.get(userId)?.get(provider) : undefined;
   if (
     held !== undefined &&
     held.connectedAt === grant &&
@@ -438,10 +441,12 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { problem: toolsProblem(failure) });
   }
   const tools = listed.success;
-  heldToolsSwept(cache, seams.now());
-  const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
-  accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
-  cache.set(userId, accountReads);
+  if (holds) {
+    heldToolsSwept(cache, seams.now());
+    const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
+    accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
+    cache.set(userId, accountReads);
+  }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools });
 });
 
@@ -490,7 +495,9 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
  * POST: ends one provider's connection. The row goes first, so whatever
  * Connect answers, no agent reads a token again; the revoke after it is the
  * courtesy of telling the provider, and a failed one is logged rather than
- * answered, since the account asked to be disconnected and is.
+ * answered, since the account asked to be disconnected and is. GitHub,
+ * whose grant is the account's own GitHub sign-in, is refused as
+ * unavailable: nothing here ends that sign-in.
  */
 const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectEndpoint")(
   function* (
@@ -503,6 +510,10 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
     yield* hostedMethod(HTTP_METHOD.POST);
     const provider = yield* requestedProvider();
     const userId = yield* resolvedUserId(seams);
+    // A grant that is the account's GitHub sign-in ends with that sign-in, never here.
+    if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
     yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, provider));
     yield* revokeIntegrationGrant(userId, provider);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: INTEGRATION_STATUS.DISCONNECTED });

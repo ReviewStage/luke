@@ -5,7 +5,7 @@ import {
   INTEGRATION_GRANT_OF,
   type IntegrationProvider,
 } from "@sidecar/hosted/integration-wire";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import type { IntegrationStatuses } from "./integration-statuses";
@@ -28,7 +28,7 @@ export const GRANT_OUTCOME = {
   BEGUN: "begun",
   /** The GitHub sign-in landed. */
   SIGNED_IN: "signed-in",
-  /** The GitHub sign-in was cancelled, or landed on another account and was refused. */
+  /** The GitHub sign-in was cancelled, ended with its surface, or landed on another account and was refused. */
   NOT_SIGNED_IN: "not-signed-in",
   /** The browser could not be opened. */
   NOT_OPENED: "not-opened",
@@ -50,16 +50,26 @@ export function grantedBySignIn(provider: IntegrationProvider): boolean {
   return INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN;
 }
 
+/**
+ * Note that each GitHub sign-in is one attempt, and a Cancel or the surface
+ * going away ends it, because a sign-in that lands after its Cancel must not
+ * be taken as this attempt's: as `failure-note.tsx` does, a landing that is
+ * no longer the latest attempt reads nothing and brings nothing back.
+ */
 export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationGrant {
   const { act, tell } = useAct();
   const { read, signInBegun } = statuses;
+  const attempt = useRef(0);
+  useEffect(() => () => void ++attempt.current, []);
 
   const begin = useCallback(
     async (provider: IntegrationProvider): Promise<GrantOutcome> => {
       if (grantedBySignIn(provider)) {
+        const mine = ++attempt.current;
         const signedIn = await act(ACT_KIND.ACCOUNT_SIGN_IN_AGAIN, {
           provider: ACCOUNT_PROVIDER.GITHUB,
         }).catch(() => undefined);
+        if (attempt.current !== mine) return GRANT_OUTCOME.NOT_SIGNED_IN;
         if (signedIn === undefined) return GRANT_OUTCOME.REFUSED;
         tell(ACT_KIND.WINDOW_FOCUS_PANEL);
         if (!signedIn) return GRANT_OUTCOME.NOT_SIGNED_IN;
@@ -79,7 +89,10 @@ export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationG
     [act, tell, read, signInBegun],
   );
 
-  const cancel = useCallback(() => tell(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN), [tell]);
+  const cancel = useCallback(() => {
+    attempt.current += 1;
+    tell(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN);
+  }, [tell]);
 
   return { begin, cancel };
 }

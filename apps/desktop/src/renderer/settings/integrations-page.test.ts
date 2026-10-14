@@ -32,6 +32,10 @@ let refuseRead = false;
 let githubSignedIn = false;
 /** Every act the page sent, in order. */
 let sent: Act[] = [];
+/** Whether the host holds its answer to a GitHub sign-in back until the test lands it. */
+let holdSignIn = false;
+/** Lands a GitHub sign-in the host is holding, as it landed or not. */
+let landSignIn: ((landed: boolean) => void) | undefined;
 
 const roots: Root[] = [];
 
@@ -55,6 +59,8 @@ beforeEach(() => {
   refuseRead = false;
   githubSignedIn = false;
   sent = [];
+  holdSignIn = false;
+  landSignIn = undefined;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -62,8 +68,14 @@ beforeEach(() => {
         sent.push(request);
         // The host's sign-in with GitHub, which lands.
         if (request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN) {
-          githubSignedIn = true;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: true });
+          const landed = (value: boolean): ActOutcome => {
+            githubSignedIn = value;
+            return { status: ACT_OUTCOME_STATUS.DONE, value };
+          };
+          if (!holdSignIn) return Promise.resolve(landed(true));
+          return new Promise<ActOutcome>((answer) => {
+            landSignIn = (value) => answer(landed(value));
+          });
         }
         return Promise.resolve(
           request.kind !== ACT_KIND.INTEGRATIONS_STATUS
@@ -176,4 +188,30 @@ test("GitHub, granted by the account's own GitHub sign-in, offers Sign in with G
   );
   assert.equal(buttonNamed("Sign in with GitHub"), undefined);
   assert.equal(page.querySelector('[aria-label="GitHub actions"]'), null);
+});
+
+test("a GitHub sign-in cancelled from its row and landing after all is not taken as the row's: the row offers Sign in with GitHub again, and nothing is brought back from the browser", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
+  );
+  holdSignIn = true;
+  const page = await mount();
+  const buttonNamed = (name: string) =>
+    [...page.querySelectorAll("button")].find((button) => button.textContent === name);
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+
+  buttonNamed("Sign in with GitHub")?.click();
+  await settle();
+  assert.ok(buttonNamed("Waiting for browser…"));
+  buttonNamed("Cancel")?.click();
+  await settle();
+  assert.ok(sent.some((request) => request.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN));
+  landSignIn?.(true);
+  await settle();
+
+  assert.ok(buttonNamed("Sign in with GitHub"), "the row still offers the sign-in");
+  assert.ok(!sent.some((request) => request.kind === ACT_KIND.WINDOW_FOCUS_PANEL));
 });

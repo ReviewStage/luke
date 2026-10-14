@@ -12,8 +12,9 @@ import {
   integrationLandingPath,
 } from "@sidecar/hosted/integration-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Clock, Effect, Layer, Option } from "effect";
-import { HttpRouter } from "effect/http";
+import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { GitHubApp } from "../server/github/github-app";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -25,7 +26,7 @@ import {
   readIntegrationSignIn,
 } from "../server/hosted/integration-store";
 import { integrationsApp, mintIntegrationState } from "../server/integrations-app";
-import { GITHUB_APP_SETTINGS, openGithubUser } from "./support/github-app-fake";
+import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { GRANTING_SIGN_IN_URL, integrationConnectOver } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 
@@ -55,6 +56,28 @@ const openAccount = (email: string) =>
     return userId;
   });
 
+/** GitHub's MCP server, offering at each ask the tools `listed` names then, and every bearer it was asked with. */
+function githubServer(listed: () => readonly string[]) {
+  const bearers: string[] = [];
+  const layer = fakeHttpClientLayer(async (_url, init) => {
+    bearers.push(new Headers(init.headers).get("authorization") ?? "");
+    // The session's end, and a notification, answer nothing.
+    if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
+    // SAFETY: the client sends one JSON-RPC message per request.
+    const message = JSON.parse(await new Response(init.body).text()) as {
+      id?: number;
+      method: string;
+    };
+    if (message.id === undefined) return new Response(null, { status: 202 });
+    const result =
+      message.method === "tools/list"
+        ? { tools: listed().map((name) => ({ name, description: name })) }
+        : { protocolVersion: "2025-06-18", capabilities: {} };
+    return Response.json({ jsonrpc: "2.0", id: message.id, result });
+  });
+  return { layer, bearers };
+}
+
 /**
  * The group over the test's database and a deployment with these variables
  * and this GitHub App, none unless given, each bearer the account it names.
@@ -62,6 +85,7 @@ const openAccount = (email: string) =>
 const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
+  network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
 ) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
@@ -71,7 +95,7 @@ const standing = (
       Layer.succeed(Clock.Clock, clock),
       integrationConnectOver(variables),
       githubApp,
-      noNetwork,
+      network,
     );
     const app = HttpRouter.toWebHandler(
       integrationsApp({
@@ -121,6 +145,15 @@ const standing = (
           ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
           // SAFETY: a statuses answer is a record of every provider's word.
           ({ body }) => (body as { integrations: Record<string, string> }).integrations[GITHUB],
+        ),
+      disconnectGithub: (userId: string) =>
+        ask(`/api/account/integrations/disconnect?provider=${GITHUB}`, { method: "POST", userId }),
+      /** The names of the tools GitHub's server offers the account. */
+      githubTools: (userId: string) =>
+        Effect.map(
+          ask(`/api/account/integrations/tools?provider=${GITHUB}`, { userId }),
+          // SAFETY: a tools answer is a list of named tools.
+          ({ body }) => (body as { tools: { name: string }[] }).tools.map((tool) => tool.name),
         ),
       connectSlack: (userId: string) =>
         ask(`/api/account/integrations/connect?provider=${SLACK}`, { method: "POST", userId }),
@@ -224,6 +257,27 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         assert.equal(yield* group.githubStatus(googleOnly), INTEGRATION_STATUS.DISCONNECTED);
         const withoutApp = yield* standing({});
         assert.equal(yield* withoutApp.githubStatus(signedIn), INTEGRATION_STATUS.UNAVAILABLE);
+      }),
+  );
+
+  it.effect(
+    "GitHub's tools are read from GitHub's server with the account's own GitHub sign-in token, afresh at every ask, and a Disconnect of GitHub is refused rather than answered as done",
+    () =>
+      Effect.gen(function* () {
+        let offered: readonly string[] = ["get_me"];
+        const server = githubServer(() => offered);
+        const group = yield* standing({}, GitHubApp.layer(GITHUB_APP_SETTINGS), server.layer);
+        const signedIn = yield* openGithubUser();
+
+        assert.deepEqual(yield* group.githubTools(signedIn), ["get_me"]);
+        offered = ["get_me", "list_issues"];
+        assert.deepEqual(yield* group.githubTools(signedIn), ["get_me", "list_issues"]);
+        assert.ok(server.bearers.length > 0);
+        for (const bearer of server.bearers) {
+          assert.equal(bearer, `Bearer ${standingGithubRow(0).accessToken}`);
+        }
+        assert.deepEqual(yield* group.disconnectGithub(signedIn), UNAVAILABLE_REFUSAL);
+        assert.equal(yield* group.githubStatus(signedIn), INTEGRATION_STATUS.CONNECTED);
       }),
   );
 });

@@ -212,7 +212,14 @@ function IntegrationRow({
         (connected && !broken) ? null : (
           <>
             {connecting && signIn ? (
-              <button type="button" className="toolbar-button" onClick={grant.cancel}>
+              <button
+                type="button"
+                className="toolbar-button"
+                onClick={() => {
+                  grant.cancel();
+                  setConnecting(false);
+                }}
+              >
                 Cancel
               </button>
             ) : null}
