@@ -23,26 +23,6 @@ export const SETTINGS_SUBVIEW_LIST = [
   SETTINGS_VIEW.INTEGRATIONS,
 ] as const;
 
-export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
-
-const NAV_ROW_ID = {
-  [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
-  [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",
-  [SETTINGS_VIEW.SHORTCUTS]: "settings-nav-shortcuts",
-  [SETTINGS_VIEW.PLAN_TEMPLATE]: "settings-nav-plan-template",
-  [SETTINGS_VIEW.CODING_AGENTS]: "settings-nav-coding-agents",
-  [SETTINGS_VIEW.INTEGRATIONS]: "settings-nav-integrations",
-  [SETTINGS_VIEW.WORKSPACE]: "settings-nav-workspace",
-};
-
-/**
- * The element id of a page's front-page row, so leaving the page can hand the
- * keyboard back to the row that opened it.
- */
-export function settingsNavRowId(view: SettingsSubview): string {
-  return NAV_ROW_ID[view];
-}
-
 /**
  * A section of a Settings page a link lands on. Each is the anchor its group
  * wears, the same anchor a search result lands on, so a link and a result

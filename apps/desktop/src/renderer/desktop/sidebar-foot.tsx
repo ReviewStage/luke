@@ -1,14 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import {
-  LifeBuoyIcon,
-  LightbulbIcon,
-  LogOutIcon,
-  MailIcon,
-  MessageSquareIcon,
-  NewspaperIcon,
-} from "lucide-react";
+import { ExternalIcon, GearIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
+import { LifeBuoyIcon, MailIcon, MessageSquareIcon } from "lucide-react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -16,7 +8,6 @@ import { GitHubMark } from "../account-marks";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { PersonAvatar } from "../person-avatar";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";
 import { updateInSidebar } from "../update-row";
@@ -29,13 +20,11 @@ import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-m
  * Cursor keeps it: the account's face and name at its start, which opens the
  * account's menu upward over the column, and the gear at its end, which goes
  * to Settings at once. A newer release stands between them as a small pill
- * while there is one, and takes no room while there is not. The menu offers
- * what the menu bar's Help menu offers, by the same commands, with Settings
- * at its head, the ways to reach the people who make Luke under it, and
- * Log out last, which asks first as Settings' Sign out does.
+ * while there is one, and takes no room while there is not. The menu holds
+ * three items and no option of its own: every option's home is Settings.
  */
 
-/** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
+/** Where Help > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
 const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
 
 /** The account's face: the signed-in person's (`person-avatar.tsx`), or a person glyph while no one is signed in. */
@@ -106,21 +95,17 @@ function AccountHeading({
 }
 
 /**
- * The account's menu, in Cursor's order: Settings; what the Help menu
- * offers, the changelog before it, and the ways to write to the people who
- * make Luke after it; then Log out, while anyone is signed in to leave.
+ * The account's menu: Settings, where every option has its one home; Send
+ * feedback; and Help, the ways to reach the people who make Luke. Nothing
+ * else: signing out is Account's in Settings, the changelog About's, and the
+ * shortcuts and a feature's suggestion stay in the menu bar's Help.
  */
-function accountMenuGroups(
-  signedIn: boolean,
-  acts: {
-    onSettings: () => void;
-    onOpenChangelog: () => void;
-    onOpenIssues: () => void;
-    onEmail: () => void;
-    onLogOut: () => void;
-  },
-): MenuEntry[][] {
-  const groups: MenuEntry[][] = [
+function accountMenuGroups(acts: {
+  onSettings: () => void;
+  onOpenIssues: () => void;
+  onEmail: () => void;
+}): MenuEntry[][] {
+  return [
     [
       {
         label: "Settings",
@@ -130,25 +115,13 @@ function accountMenuGroups(
       },
     ],
     [
-      { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
       {
         label: "Send feedback",
         icon: <MessageSquareIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
       },
       {
-        label: "Suggest a feature",
-        icon: <LightbulbIcon />,
-        onSelect: () => runAppCommand(APP_COMMAND.SUGGEST_FEATURE),
-      },
-      {
-        label: "Keyboard shortcuts",
-        icon: <KeyboardIcon />,
-        command: APP_COMMAND.KEYBOARD_SHORTCUTS,
-        onSelect: () => runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS),
-      },
-      {
-        label: "Contact us",
+        label: "Help",
         icon: <LifeBuoyIcon />,
         items: [
           { label: "GitHub", icon: <GitHubMark />, onSelect: acts.onOpenIssues },
@@ -157,51 +130,25 @@ function accountMenuGroups(
       },
     ],
   ];
-  if (signedIn) groups.push([{ label: "Log out", icon: <LogOutIcon />, onSelect: acts.onLogOut }]);
-  return groups;
 }
 
-/**
- * The foot's account button and the menu it raises. Log out asks first, in a
- * dialog over the window, as Settings' Sign out does: getting back
- * in costs a whole trip through the browser.
- */
+/** The foot's account button and the menu it raises. */
 function AccountMenu({
   account,
   shown,
   onSettings,
-  onSignOut,
 }: {
   account: AccountSnapshot;
   shown: boolean;
   onSettings: () => void;
-  onSignOut: () => Promise<void>;
 }): React.JSX.Element {
   const { tell } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   const { open, drawn, show, close } = useActionMenu(shown);
-  const logOut = useConfirmDialog(
-    { subject: signedIn, surfaceOpen: shown },
-    // A sign-out main refused keeps the dialog up saying so, rather than
-    // closing on an account still signed in.
-    async (): Promise<ActionResult> => {
-      try {
-        await onSignOut();
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      } catch {
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "Luke could not log out, so you are still signed in. Try again in a moment.",
-        };
-      }
-    },
-  );
-  const groups = accountMenuGroups(signedIn, {
+  const groups = accountMenuGroups({
     onSettings,
-    onOpenChangelog: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG),
     onOpenIssues: () => tell(ACT_KIND.GITHUB_OPEN, { url: ISSUES_URL }),
     onEmail: () => tell(ACT_KIND.CONTACT_EMAIL),
-    onLogOut: logOut.ask,
   });
   return (
     <>
@@ -232,16 +179,6 @@ function AccountMenu({
           onClose={close}
         />
       )}
-      <ConfirmDialog
-        confirm={logOut}
-        question={{
-          title: signedIn ? `Log out of ${account.email}?` : "Log out?",
-          body: "Your plans stay with your account. Signing back in takes a trip through the browser.",
-          verb: "Log out",
-          running: "Logging out",
-          tone: DIALOG_TONE.PRIMARY,
-        }}
-      />
     </>
   );
 }
@@ -256,7 +193,6 @@ export function SidebarFoot({
   shown,
   settingsOpen,
   onSettings,
-  onSignOut,
 }: {
   account: AccountSnapshot;
   updates: UpdateControl;
@@ -265,11 +201,10 @@ export function SidebarFoot({
   /** Whether Settings is the page on show, which the gear marks. */
   settingsOpen: boolean;
   onSettings: () => void;
-  onSignOut: () => Promise<void>;
 }): React.JSX.Element {
   return (
     <div className="sidebar-account-row">
-      <AccountMenu account={account} shown={shown} onSettings={onSettings} onSignOut={onSignOut} />
+      <AccountMenu account={account} shown={shown} onSettings={onSettings} />
       <SidebarUpdate updates={updates} />
       <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
         <button

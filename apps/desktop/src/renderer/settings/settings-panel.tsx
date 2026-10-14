@@ -3,14 +3,8 @@ import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
-import { useEffect, useRef } from "react";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
-import {
-  SETTINGS_SUBVIEW_LIST,
-  SETTINGS_VIEW,
-  type SettingsView,
-  settingsNavRowId,
-} from "../settings-views";
+import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsPage } from "./coding-agents-page";
@@ -23,7 +17,6 @@ import type {
 import { IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
-import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { VoiceSection } from "./voice-page";
@@ -105,7 +98,6 @@ export function SettingsPanel({
   onSignOut,
   onDeleteAccount,
   view,
-  onViewChange,
   microphone,
   notifications,
   updates,
@@ -114,55 +106,9 @@ export function SettingsPanel({
   workspace,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
-  const voiceNote = voicePageAttention(microphone);
   const panelView = settingsRowsInput({ settings, microphone, account });
-  // Moving between pages moves the keyboard with it: into a page, onto its
-  // back button; back out, onto the row that opened the page just left. Keyed
-  // to the page, because the control being reached for only exists once the
-  // new page is mounted.
-  const backControl = useRef<HTMLButtonElement | null>(null);
-  const heldView = useRef(view);
-  useEffect(() => {
-    const previous = heldView.current;
-    heldView.current = view;
-    if (previous === view) return;
-    if (view === SETTINGS_VIEW.ROOT) {
-      if (previous !== SETTINGS_VIEW.ROOT) {
-        document.getElementById(settingsNavRowId(previous))?.focus();
-      }
-      return;
-    }
-    backControl.current?.focus();
-  }, [view]);
   return (
     <div className="settings">
-      {view !== SETTINGS_VIEW.ROOT ? (
-        <SettingsPageHeader
-          view={view}
-          onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
-          backControl={backControl}
-        />
-      ) : null}
-
-      {view === SETTINGS_VIEW.ROOT ? (
-        /* A newer release waiting is marked on the tab rather than given a
-           section of its own here: a section that changed places as its own
-           check found news would rearrange the page under the hand that
-           pressed it. */
-        <section className="settings-section settings-index">
-          {SETTINGS_SUBVIEW_LIST.map((subview) => (
-            <SettingsNavRow
-              key={subview}
-              view={subview}
-              onOpen={onViewChange}
-              {...(subview === SETTINGS_VIEW.VOICE && voiceNote
-                ? { attention: voiceNote }
-                : undefined)}
-            />
-          ))}
-        </section>
-      ) : null}
-
       {view === SETTINGS_VIEW.WORKSPACE &&
       workspace !== undefined &&
       account.status === ACCOUNT_STATUS.SIGNED_IN ? (

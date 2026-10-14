@@ -1,7 +1,4 @@
-import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import {
-  BackIcon,
-  ChevronIcon,
   DisplayIcon,
   DocumentIcon,
   KeyboardIcon,
@@ -10,9 +7,7 @@ import {
   TerminalIcon,
   UserIcon,
 } from "@sidecar/panel";
-import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
-import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
-import { AttentionMark } from "./marks";
+import { SETTINGS_VIEW } from "../settings-views";
 
 /**
  * What each page is called on the front page and at its own head. One table,
@@ -51,79 +46,3 @@ export const SETTINGS_PAGE = {
     icon: <UserIcon />,
   },
 };
-
-/**
- * One front-page row per page: its glyph, its name, and the chevron that
- * promises a page rather than a control. The row is the whole press target,
- * the way a macOS settings row is. The one thing a row may add is the
- * attention mark: a state, not a sentence, saying the page holds something
- * that needs a hand before its feature can run — the mark's words are the
- * hover's, and the page itself is where they are explained.
- */
-export function SettingsNavRow({
-  view,
-  onOpen,
-  attention,
-}: {
-  view: SettingsSubview;
-  onOpen: (view: SettingsSubview) => void;
-  /** Why the page needs a hand, absent while nothing on it does. */
-  attention?: string;
-}): React.JSX.Element {
-  const page = SETTINGS_PAGE[view];
-  return (
-    <button
-      type="button"
-      id={settingsNavRowId(view)}
-      className="settings-nav"
-      onClick={() => {
-        window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
-          settings_view: SETTINGS_VIEW_COUNTED_AS[view],
-        });
-        onOpen(view);
-      }}
-    >
-      <span className="settings-nav-mark" aria-hidden="true">
-        {page.icon}
-      </span>
-      <span className="settings-copy">
-        <strong>{page.title}</strong>
-      </span>
-      {attention ? <AttentionMark note={attention} /> : null}
-      <ChevronIcon />
-    </button>
-  );
-}
-
-/**
- * A page's head: the way back beside the page's own name. The back button
- * returns to the front page and nothing else — a page holds no unsaved state
- * of its own, so leaving one never needs a warning. A page whose settings can
- * be returned to their defaults ends the line with that reset, drawn only
- * while something on the page differs from them.
- */
-export function SettingsPageHeader({
-  view,
-  onBack,
-  backControl,
-}: {
-  view: SettingsSubview;
-  onBack: () => void;
-  backControl: React.RefObject<HTMLButtonElement | null>;
-}): React.JSX.Element {
-  return (
-    <div className="settings-header">
-      <button
-        type="button"
-        ref={backControl}
-        className="icon-button"
-        aria-label="Back to Settings"
-        title="Back"
-        onClick={onBack}
-      >
-        <BackIcon />
-      </button>
-      <strong>{SETTINGS_PAGE[view].title}</strong>
-    </div>
-  );
-}

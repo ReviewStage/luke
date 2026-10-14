@@ -1,0 +1,102 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { UPDATE_STATUS } from "#shared/messages/update";
+import { onRegistry } from "#testing/copy-feedback";
+import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW } from "../settings-views";
+import { SETTINGS_PAGE } from "./pages";
+import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
+
+/**
+ * Settings' General page as the panel draws it: its own groups and no list of
+ * the other pages, which the Settings sidebar alone lists.
+ */
+
+const ignore = () => undefined;
+const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+
+/** A signed-in account's Settings, every press ignored. */
+const SETTINGS: SettingsPanelProps = {
+  account: {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    email: "dev@example.com",
+    name: "Dev",
+    provider: "github",
+  },
+  onSignOut: () => Promise.resolve(),
+  onDeleteAccount: accepted,
+  view: SETTINGS_VIEW.ROOT,
+  onViewChange: ignore,
+  microphone: {
+    status: MICROPHONE_STATUS.GRANTED,
+    voiceAvailable: true,
+    onRequest: ignore,
+    onOpenSettings: ignore,
+  },
+  notifications: { refused: false, onOpenSettings: ignore },
+  updates: {
+    update: {
+      status: UPDATE_STATUS.IDLE,
+      currentVersion: "1.0.0",
+      installSupported: true,
+      upToDate: false,
+    },
+    build: { packaged: false },
+    onCheck: () => Promise.resolve(),
+    onInstall: ignore,
+    onOpenLatest: ignore,
+  },
+  shortcuts: {
+    voiceHotkeyHeld: false,
+    voiceChosen: false,
+    voiceOff: false,
+    onVoiceHotkeyChange: accepted,
+    stopChosen: false,
+    stopOff: false,
+    onStopHotkeyChange: accepted,
+    onCapture: ignore,
+  },
+};
+
+const roots: Root[] = [];
+
+beforeEach(() => {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+});
+
+afterEach(() => {
+  for (const each of roots.splice(0)) act(() => each.unmount());
+  document.body.innerHTML = "";
+});
+
+test("the General page lists none of the other pages, which the Settings sidebar alone lists", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(SettingsPanel, SETTINGS))));
+
+  const pressed = [...container.querySelectorAll("button")].map((button) => button.textContent);
+  for (const page of SETTINGS_SUBVIEW_LIST) {
+    assert.equal(
+      pressed.some((words) => words?.includes(SETTINGS_PAGE[page].title)),
+      false,
+      `the General page offers no ${SETTINGS_PAGE[page].title} row`,
+    );
+  }
+});
