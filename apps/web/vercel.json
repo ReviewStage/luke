@@ -343,6 +343,10 @@
         {
           "src": "/admin",
           "dest": "/admin.html"
+        },
+        {
+          "src": "/[^/]+/plan/[^/]+/?",
+          "dest": "/open.html"
         }
       ]
     },

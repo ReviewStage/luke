@@ -70,11 +70,14 @@ const MENTION_BOUNDS = {
 /** What marks a link's label as a mention's. */
 const MENTION_SIGIL = "@";
 
-/** The settled form: a plan's address on tryluke.dev, which the desktop's own scheme, `tryluke:`, spells with its scheme swapped. */
+/** The desktop's own scheme, which spells a plan's address with its scheme swapped. */
+const LUKE_APP_PROTOCOL = "tryluke:";
+
+/** The settled form: a plan's address on tryluke.dev, by the web's scheme or the desktop's. */
 const LINK = {
   ORIGIN: "https://tryluke.dev",
   HOST: "tryluke.dev",
-  PROTOCOLS: new Set(["https:", "tryluke:"]),
+  PROTOCOLS: new Set(["https:", LUKE_APP_PROTOCOL]),
   PLAN_STEP: "plan",
 } as const;
 
@@ -262,6 +265,20 @@ function decodedPath(pathname: string): string | undefined {
   return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
 }
 
+/**
+ * A target read as an address, or nothing where it is none. Note that it is
+ * `new URL` caught rather than `URL.parse`, because the "Open in Luke" page
+ * reads a link in whatever browser opened it, and Safari before 18 has no
+ * `URL.parse`.
+ */
+function parsedUrl(target: string): URL | undefined {
+  try {
+    return new URL(target);
+  } catch {
+    return undefined;
+  }
+}
+
 /** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */
 function headingAnchor(heading: string): string {
   return heading.toLowerCase().replace(ANCHOR_DROPPED, "").replace(/ /gu, "-");
@@ -334,8 +351,8 @@ function repositoryFields(url: URL, repository: string | null) {
  * else a GitHub address names.
  */
 function fieldsOf(target: string, repository: string | null) {
-  const url = URL.parse(target);
-  if (url === null) return undefined;
+  const url = parsedUrl(target);
+  if (url === undefined) return undefined;
   if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
   if (LINK.PROTOCOLS.has(url.protocol) && url.host === LINK.HOST) return planFields(url);
   if (url.origin === GITHUB.ORIGIN) return repositoryFields(url, repository);
@@ -533,6 +550,26 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
 export function decodeMention(target: string, repository: string | null): Mention | undefined {
   if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
   return Option.getOrUndefined(readMention(fieldsOf(target, repository)));
+}
+
+/**
+ * A plan's address on tryluke.dev, or a section's, spelled in the desktop's
+ * own scheme (`tryluke://tryluke.dev/<workspace>/plan/<id>#<anchor>`), which
+ * the system hands the app: written again from what the address names, so
+ * nothing else it carried reaches the app; nothing for any other address.
+ */
+export function appLinkOf(target: string): string | undefined {
+  if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
+  const url = parsedUrl(target);
+  if (url === undefined || !LINK.PROTOCOLS.has(url.protocol) || url.host !== LINK.HOST) {
+    return undefined;
+  }
+  const mention = Option.getOrUndefined(readMention(planFields(url)));
+  const workspace = decodedPart(url.pathname.split("/")[1] ?? "");
+  if (mention === undefined || workspace === undefined) return undefined;
+  if (mention.kind !== MENTION_KIND.PLAN && mention.kind !== MENTION_KIND.SECTION) return undefined;
+  const address = encodeMention(mention, { workspace, repository: null });
+  return `${LUKE_APP_PROTOCOL}${address.slice(address.indexOf("//"))}`;
 }
 
 /** Whether a link's label is a mention's: it starts with `@`. */
