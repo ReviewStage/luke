@@ -714,7 +714,7 @@ test("while Settings' search holds a query, a row with tools it found opens onto
 
 test("a query that finds an integration by its own name opens nothing by itself, and opened, keeps every tool", async () => {
   connectVercelAndLinear();
-  const page = await mount(undefined, { query: "vercel projects", onTools: () => undefined });
+  const page = await mount(undefined, { query: "vercel", onTools: () => undefined });
 
   assert.deepEqual(shownTools(page), []);
   act(() =>
@@ -771,4 +771,73 @@ test("a row closed under one query opens again when that query comes back after 
   await settle();
 
   assert.deepEqual(shownTools(container), [["get_deployment", undefined]]);
+});
+
+test("a tool pressed in an opened row shows the whole of what it does, one tool at a time", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    {
+      name: "list_projects",
+      description: "Lists projects.\n\nPages through every project on the team.",
+    },
+    { name: "get_deployment", description: "Reads one deployment." },
+  ]);
+  const page = await mount();
+  act(() =>
+    (
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      assert.fail("Vercel's row opens onto its tools")
+    ).click(),
+  );
+  const press = (name: string) =>
+    act(() =>
+      (
+        [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find((button) =>
+          button.textContent?.startsWith(name),
+        ) ?? assert.fail(`${name} has its row`)
+      ).click(),
+    );
+
+  // Note that in Settings a pressed tool takes the focus, as a button does, so Return and Space reach it next.
+  const pressStart = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  page.querySelector(".integration-tool-head")?.dispatchEvent(pressStart);
+  assert.equal(pressStart.defaultPrevented, false);
+
+  press("list_projects");
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-full")].map((full) => full.textContent),
+    ["Lists projects.\n\nPages through every project on the team."],
+  );
+
+  press("get_deployment");
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-full")].map((full) => full.textContent),
+    ["Reads one deployment."],
+  );
+});
+
+test("a query naming the integration and a tool opens the row onto that tool, as Settings' search found it", async () => {
+  connectVercelAndLinear();
+  const page = await mount(undefined, { query: "vercel deploy", onTools: () => undefined });
+
+  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
+});
+
+test("a tool with no description opens onto nothing", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [{ name: "whoami", description: "" }]);
+  const page = await mount();
+  act(() =>
+    (
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      assert.fail("Vercel's row opens onto its tools")
+    ).click(),
+  );
+  const head =
+    page.querySelector<HTMLButtonElement>(".integration-tool-head") ?? assert.fail("whoami's row");
+
+  act(() => head.click());
+
+  assert.equal(page.querySelector('.integration-tool[data-open="true"]'), null);
+  assert.equal(head.getAttribute("aria-expanded"), null);
 });

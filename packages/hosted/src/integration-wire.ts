@@ -160,7 +160,7 @@ export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema
 
 /**
  * The tools one provider's server offers the account's agents (GET): each
- * one's name, the first line of what it does, and the hints its server
+ * one's name, what it does as its server wrote it, and the hints its server
  * annotated it with where it sent any, or why the server listed none, with
  * the server's own one-line message where it sent one.
  */

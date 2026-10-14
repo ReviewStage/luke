@@ -48,10 +48,10 @@ import {
  * then Reopen and Cancel, and becomes the switch once the sign-in settles,
  * or says it failed or did not finish and offers Try again
  * (`../integration-sign-in.ts`). Pressing a connected server turns the popover into
- * its page, in place: back, its name, its switch, a filter, and its tools,
- * each its name, the badge its server's annotations earn it, and what it
- * does, run by name prefix where the names share clear ones
- * (`../integration-tool-list.tsx`). What is typed in the home's field finds
+ * its page, in place: back, its name, its switch, a filter, and its tools
+ * in alphabetical order, each its name, the badge its server's annotations
+ * earn it, and what it does, a press opening it onto the whole of that
+ * (`../integration-tool-list.tsx`), the popover standing open. What is typed in the home's field finds
  * servers by name and every tool by name or description, and a tool found
  * opens its server's page filtered to the search. Focus stays in the field
  * throughout, as the searchable menu keeps it: the arrows move one
@@ -554,7 +554,12 @@ function ServersPopover({
         />
         <div ref={list} className="plan-compose-menu-list agent-servers-list">
           {tools.length === 0 ? <p className="plan-compose-menu-note">{PAGE.NONE}</p> : null}
-          <IntegrationToolList server={row.name} tools={tools} tokens={tokens} />
+          <IntegrationToolList
+            server={row.name}
+            tools={tools}
+            tokens={tokens}
+            onPressStart={keepFieldFocus}
+          />
         </div>
       </>
     );
@@ -566,6 +571,10 @@ function ServersPopover({
       className="plan-compose-menu searchable-menu agent-servers-menu"
       role="dialog"
       aria-label={page !== undefined ? `${page.name} tools` : SERVERS_LABEL}
+      // Note that the dialog takes the focus a press on its words would
+      // otherwise hand to the page, because focus leaving the popover closes
+      // it: a press that selects a tool's description must not.
+      tabIndex={-1}
       onKeyDown={onKey}
       onBlur={(event) => onLeave(event.relatedTarget)}
     >

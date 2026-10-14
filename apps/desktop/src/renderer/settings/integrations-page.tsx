@@ -69,9 +69,9 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  *
  * A connected row whose server answered with its tools opens in place onto
  * them, drawn as the MCP popover draws a server's page
- * (`../integration-tool-list.tsx`): run by name prefix where the names
- * clearly share them, else alphabetical, each badged only by its server's
- * own annotations. Settings has one search, the sidebar's: the page hands
+ * (`../integration-tool-list.tsx`): alphabetical, each badged only by its
+ * server's own annotations, a press on one opening it onto the whole of
+ * what it does. Settings has one search, the sidebar's: the page hands
  * the tools it read up to it, so a query finds an integration by its tools'
  * names and descriptions too (`../settings-search.tsx`), and while a query
  * stands, a row with a tool it found opens by itself onto just the tools it
@@ -482,7 +482,9 @@ interface FoundRow {
 /**
  * A provider's row as a query finds it: opened onto the tools it found where
  * it found its tools alone, else onto every one. Note that a query that finds
- * the integration by its own name finds the whole of it, every tool kept.
+ * the integration by its own name finds the whole of it, every tool kept, and
+ * that a word naming the integration counts toward each of its tools, as
+ * Settings' search reads them together ("vercel logs").
  */
 function foundRow(
   provider: IntegrationProvider,
@@ -494,7 +496,9 @@ function foundRow(
   const hits =
     tokens.length === 0 || named
       ? []
-      : all.filter((tool) => matchesTokens([tool.name, tool.description], tokens));
+      : all.filter((tool) =>
+          matchesTokens([tool.name, tool.description, INTEGRATION_NAME[provider]], tokens),
+        );
   const toolsFound = hits.length > 0;
   return { provider, health, all, shown: toolsFound ? hits : all, toolsFound };
 }

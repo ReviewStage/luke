@@ -5,8 +5,9 @@ import { Effect } from "effect";
 import { listMcpTools, MCP_TOOLS_FAILURE } from "../server/hosted/mcp-tools.js";
 
 /**
- * What the tools read keeps of a provider's MCP server: each tool's hints
- * exactly as the server sent them, and none it did not send; and why a
+ * What the tools read keeps of a provider's MCP server: each tool's
+ * description whole, bounded, and its hints exactly as the server sent them,
+ * and none it did not send; and why a
  * server listed no tools, with the server's own JSON-RPC message where it
  * sent one under an error status, and never a message that could carry the
  * account's bearer.
@@ -80,6 +81,31 @@ it.effect("a tool keeps the hints its server sent, and only those", () =>
       { name: "get_project", description: "Gets a project." },
       { name: "deploy", description: "Deploys." },
     ]);
+  }),
+);
+
+it.effect("a tool keeps its description whole, every line of it, up to a bound", () =>
+  Effect.gen(function* () {
+    const long = "x".repeat(2400);
+    const tools = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(
+        listingServer([
+          {
+            name: "save_issue",
+            description:
+              "  Creates or updates an issue.\n\nPass an id to update one; omit it to create.  ",
+          },
+          { name: "huge", description: long },
+        ]),
+      ),
+    );
+
+    assert.equal(
+      tools[0]?.description,
+      "Creates or updates an issue.\n\nPass an id to update one; omit it to create.",
+    );
+    assert.equal(tools[1]?.description.length, 2000);
+    assert.ok(tools[1]?.description.endsWith("…"));
   }),
 );
 

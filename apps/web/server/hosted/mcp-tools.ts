@@ -7,8 +7,9 @@
  * back. A server may answer a request with one JSON body or with an event
  * stream whose `data:` lines carry it; both are read. The account's bearer
  * travels on every request and nowhere else, and the session is ended once
- * the list is read. What the list keeps of each tool is its name, the
- * first line of its description, and the hints the server annotated it
+ * the list is read. What the list keeps of each tool is its name, its
+ * description whole (bounded, for a person to read it all where a list opens
+ * it), and the hints the server annotated it
  * with (`readOnlyHint` and its kin), where it sent any it spelled as the
  * spec does: nothing the model would be handed, only what a person picking
  * servers reads. A tool whose hints are malformed is kept without them, so
@@ -56,8 +57,8 @@ const READ_TIMEOUT = Duration.seconds(10);
 /** How long ending the session may take, after which it is let go: the list is already read. */
 const END_TIMEOUT = Duration.seconds(2);
 
-/** The most of a description's first line a tool keeps. */
-const DESCRIPTION_MAX_CHARS = 160;
+/** The most of a description a tool keeps, enough for any a server writes for a person to read whole. */
+const DESCRIPTION_MAX_CHARS = 2000;
 
 /** The most of a server's error message a failure keeps. */
 const MESSAGE_MAX_CHARS = 200;
@@ -155,6 +156,12 @@ function answersOf(contentType: string, body: string): readonly RpcAnswerType[] 
       )
     : [body];
   return texts.flatMap((text) => Option.toArray(decodeAnswerText(text)));
+}
+
+/** A text whole, its ends trimmed, bounded to `max` characters. */
+function bounded(text: string | undefined, max: number): string {
+  const whole = (text ?? "").trim();
+  return whole.length <= max ? whole : `${whole.slice(0, max - 1)}…`;
 }
 
 /** A text's first line, bounded to `max` characters. */
@@ -286,7 +293,7 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
         const annotations = keptAnnotations(tool.annotations);
         tools.push({
           name: tool.name,
-          description: firstLine(tool.description, DESCRIPTION_MAX_CHARS),
+          description: bounded(tool.description, DESCRIPTION_MAX_CHARS),
           ...(annotations !== undefined ? { annotations } : undefined),
         });
       }
