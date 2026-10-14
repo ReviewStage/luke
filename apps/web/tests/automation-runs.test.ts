@@ -12,7 +12,7 @@ import {
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { automationRun } from "@sidecar/database/schemas/automation";
+import { automationRun, automation as automationTable } from "@sidecar/database/schemas/automation";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import {
@@ -45,7 +45,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "./support/github-app-fake";
-import { startPlan } from "./support/workspaces";
+import { leaveWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts
@@ -140,7 +140,7 @@ const openAutomation = (
       nextRunAt: new Date(now - 60_000),
       webhookSecretHash: null,
     });
-    return { owner, automation: Option.getOrThrow(made), now };
+    return { owner, automation: Option.getOrThrow(made), now, workspaceId: plan.workspaceId };
   });
 
 /** A "Run now" of the automation, queued. */
@@ -225,6 +225,33 @@ it.layer(getTestDB())("an automation's runs", (it) => {
       });
       assert.equal(eve.opened.length, 2, "only the two started runs opened a session");
     }),
+  );
+
+  it.effect(
+    "a run of an automation whose creator left its workspace fails as creator-left and starts nothing, and the automation stays on",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, workspaceId } = yield* openAutomation();
+        const eve = fakeEve();
+        yield* leaveWorkspace(workspaceId, owner);
+
+        const outcome = yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
+          Effect.provide(services),
+        );
+
+        assert.deepEqual(outcome, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.CREATOR_LEFT,
+        });
+        assert.deepEqual(eve.opened, []);
+        const [row] = yield* Database.use((db) =>
+          db
+            .select({ enabled: automationTable.enabled })
+            .from(automationTable)
+            .where(eq(automationTable.id, automation.id)),
+        );
+        assert.equal(row?.enabled, true);
+      }),
   );
 
   it.effect(

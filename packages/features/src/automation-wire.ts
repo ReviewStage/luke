@@ -274,6 +274,8 @@ export const AUTOMATION_RUN_REASON = {
   DAILY_CAP: "daily-cap",
   /** The plan is gone, or no longer reachable by the account. */
   PLAN_UNREACHABLE: "plan-unreachable",
+  /** Its creator is no longer a member of its workspace, and a run starts as its creator. */
+  CREATOR_LEFT: "creator-left",
   /** The plan names no repository. */
   NO_REPOSITORY: "no-repository",
   /** The GitHub installation connected to the plan's workspace no longer reaches the repository. */

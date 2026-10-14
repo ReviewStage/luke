@@ -8,6 +8,7 @@ import { createPlan, type NewPlan } from "@sidecar/database/models/plan-store";
 import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
 import { member, organization } from "@sidecar/database/schemas/auth";
 import { githubInstallation } from "@sidecar/database/schemas/github-installation";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/features/workspace-wire";
 import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
 
@@ -27,12 +28,7 @@ import { Cause, DateTime, Effect } from "effect";
 /** A plan to start in the account's test workspace: what `createPlan` takes, without the workspace. */
 export type TestPlan = Omit<NewPlan, "organizationId">;
 
-export const WORKSPACE_ROLE = {
-  OWNER: "owner",
-  MEMBER: "member",
-} as const;
-
-type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
+export { WORKSPACE_ROLE };
 
 /** What a test workspace is called; the column is not null and no test reads it. */
 const TEST_WORKSPACE_NAME = "Test Workspace";

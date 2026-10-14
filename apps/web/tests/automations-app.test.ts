@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { createPlan } from "@sidecar/database/models/plan-store";
+import { member as memberTable } from "@sidecar/database/schemas/auth";
 import { automation as automationTable } from "@sidecar/database/schemas/automation";
 import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
 import { getTestDB } from "@sidecar/database/testing";
@@ -31,6 +32,7 @@ import {
 } from "@sidecar/features/automation-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
+import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
@@ -52,7 +54,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "./support/github-app-fake";
-import { openWorkspace, startPlan } from "./support/workspaces";
+import { joinWorkspace, leaveWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The automation routes, answered by the group the way a function answers
@@ -578,6 +580,113 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(strangerAgent.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
         assert.deepEqual(inPersonalWorkspace.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
         assert.equal(shared.scope, AUTOMATION_SCOPE.WORKSPACE);
+      }),
+  );
+
+  it.effect(
+    "a personal automation is its creator's, seen, paused, and deleted by owners and admins; a workspace one is seen, run, and paused by every member and changed by its creator and admins; a creator who left reaches nothing of theirs",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan } = yield* openAccounts;
+        const member = yield* openGithubUser();
+        const admin = yield* openGithubUser();
+        yield* joinWorkspace(plan.workspaceId, member, WORKSPACE_ROLE.MEMBER);
+        yield* joinWorkspace(plan.workspaceId, admin, WORKSPACE_ROLE.MEMBER);
+        // The plugin's role text may name several roles; this admin is one only among them.
+        yield* Database.use((db) =>
+          db
+            .update(memberTable)
+            .set({ role: `${WORKSPACE_ROLE.MEMBER},${WORKSPACE_ROLE.ADMIN}` })
+            .where(eq(memberTable.userId, admin)),
+        );
+        const { ask } = yield* standing(
+          new Map([
+            [`Bearer ${owner}`, owner],
+            [`Bearer ${member}`, member],
+            [`Bearer ${admin}`, admin],
+          ]),
+        );
+        const make = (by: string, body: WireBoundaryInput) =>
+          Effect.map(
+            ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body }),
+            (answer) =>
+              readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
+          );
+        const listed = (by: string) =>
+          Effect.map(ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by), (answer) =>
+            readAnswer(automationListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer)
+              .automations.map((each) => each.id)
+              .toSorted(),
+          );
+        const patch = (by: string, id: string, body: WireBoundaryInput) =>
+          Effect.map(
+            ask(automationPath(id), by, { method: "PATCH", body }),
+            (answer) => answer.status,
+          );
+        const runNow = (by: string, id: string) =>
+          Effect.map(
+            ask(automationRunPath(id), by, {
+              method: "POST",
+              body: { idempotencyKey: randomUUID() },
+            }),
+            (answer) => answer.status,
+          );
+        const remove = (by: string, id: string) =>
+          Effect.map(ask(automationPath(id), by, { method: "DELETE" }), (answer) => answer.status);
+
+        const personal = yield* make(owner, weekdays(plan.id));
+        const shared = yield* make(owner, {
+          ...weekdays(plan.id),
+          scope: AUTOMATION_SCOPE.WORKSPACE,
+        });
+        const leavers = yield* make(member, weekdays(plan.id));
+
+        assert.deepEqual(yield* listed(member), [shared.id, leavers.id].toSorted());
+        assert.deepEqual(
+          yield* listed(admin),
+          [personal.id, shared.id, leavers.id].toSorted(),
+          "owners and admins see every automation of the workspace",
+        );
+        assert.deepEqual(
+          [
+            yield* patch(member, shared.id, { name: "Renamed by a member" }),
+            yield* patch(member, shared.id, { enabled: false }),
+            yield* runNow(member, shared.id),
+            yield* runNow(member, personal.id),
+            yield* remove(member, shared.id),
+          ],
+          [
+            HOSTED_HTTP_STATUS.FORBIDDEN,
+            HOSTED_HTTP_STATUS.OK,
+            HOSTED_HTTP_STATUS.CREATED,
+            HOSTED_HTTP_STATUS.NOT_FOUND,
+            HOSTED_HTTP_STATUS.FORBIDDEN,
+          ],
+          "a member runs and pauses the workspace's, changes and deletes none, and never sees a personal one",
+        );
+        assert.deepEqual(
+          [
+            yield* patch(admin, shared.id, { name: "Renamed by an admin" }),
+            yield* patch(admin, personal.id, { name: "Not theirs to change" }),
+            yield* patch(admin, personal.id, { enabled: false }),
+            yield* runNow(admin, personal.id),
+          ],
+          [
+            HOSTED_HTTP_STATUS.OK,
+            HOSTED_HTTP_STATUS.FORBIDDEN,
+            HOSTED_HTTP_STATUS.OK,
+            HOSTED_HTTP_STATUS.FORBIDDEN,
+          ],
+          "an admin changes the workspace's, and pauses but neither changes nor runs a personal one",
+        );
+
+        yield* leaveWorkspace(plan.workspaceId, member);
+        assert.deepEqual(yield* listed(member), [], "a creator who left reaches nothing of theirs");
+        assert.equal(
+          yield* remove(admin, leavers.id),
+          HOSTED_HTTP_STATUS.OK,
+          "and an admin deletes it",
+        );
       }),
   );
 

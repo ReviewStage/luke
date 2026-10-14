@@ -24,6 +24,7 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@sidecar/features/automation-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/features/workspace-wire";
 import {
   and,
   asc,
@@ -47,7 +48,7 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import { reachablePlan } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
@@ -208,15 +209,84 @@ export type AutomationRunOutcome =
 
 const AutomationKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** The condition that the account owns the automation a statement reads and still reaches its plan. */
-function ownedAndReachable(userId: string, id?: string): SQL | undefined {
+/**
+ * What an account asks to do with an automation, each allowed by its own
+ * rule (`docs/proposals/automations-scope.md`, D2): a personal automation
+ * is its creator's, which the workspace's owners and admins see, pause, and
+ * delete; a workspace's every member sees, runs, and pauses, and its
+ * creator, owners, and admins change and delete.
+ */
+export const AUTOMATION_ACCESS = {
+  READ: "read",
+  CHANGE: "change",
+  TOGGLE: "toggle",
+  RUN: "run",
+  DELETE: "delete",
+} as const;
+
+export type AutomationAccess = (typeof AUTOMATION_ACCESS)[keyof typeof AUTOMATION_ACCESS];
+
+const automationAccessSchema = Schema.Literals(Object.values(AUTOMATION_ACCESS));
+
+/** The condition that the account is a member of the automation's workspace, in one of `roles` where it names any. */
+function memberOfAutomationWorkspace(
+  userId: string | typeof automation.userId,
+  roles?: readonly WorkspaceRole[],
+): SQL {
+  return exists(
+    queryBuilder
+      .select({ id: member.id })
+      .from(member)
+      .where(
+        and(
+          // A row an older build wrote, its workspace still null, is its plan's workspace's.
+          eq(
+            member.organizationId,
+            sql`coalesce(${automation.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${automation.planId}))`,
+          ),
+          eq(member.userId, userId),
+          // The plugin's role text may name several roles, comma-separated, as `roleOf` reads it.
+          roles === undefined
+            ? undefined
+            : sql`string_to_array(replace(${member.role}, ' ', ''), ',') && array[${sql.join(
+                roles.map((role) => sql`${role}`),
+                sql`, `,
+              )}]::text[]`,
+        ),
+      ),
+  );
+}
+
+/**
+ * The condition that the account may do `access` with the automation a
+ * statement names. Note that every rule asks the account to be a member of
+ * the automation's workspace still, so a creator who left reaches nothing
+ * of it, while its owners and admins go on seeing and deleting it.
+ */
+function allowedTo(userId: string, access: AutomationAccess, id?: string): SQL | undefined {
+  const mine = eq(automation.userId, userId);
+  const shared = eq(automation.scope, AUTOMATION_SCOPE.WORKSPACE);
+  const managing = memberOfAutomationWorkspace(userId, [
+    WORKSPACE_ROLE.OWNER,
+    WORKSPACE_ROLE.ADMIN,
+  ]);
+  const rule = (() => {
+    switch (access) {
+      case AUTOMATION_ACCESS.READ:
+      case AUTOMATION_ACCESS.TOGGLE:
+        return or(mine, shared, managing);
+      case AUTOMATION_ACCESS.CHANGE:
+        return or(mine, and(shared, managing));
+      case AUTOMATION_ACCESS.RUN:
+        return or(mine, shared);
+      case AUTOMATION_ACCESS.DELETE:
+        return or(mine, managing);
+    }
+  })();
   return and(
     id === undefined ? undefined : eq(automation.id, id),
-    eq(automation.userId, userId),
-    inArray(
-      automation.planId,
-      queryBuilder.select({ id: plan.id }).from(plan).where(planReachableBy(userId)),
-    ),
+    memberOfAutomationWorkspace(userId),
+    rule,
   );
 }
 
@@ -306,7 +376,7 @@ const findAutomations = SqlSchema.findAll({
         .innerJoin(plan, eq(plan.id, automation.planId))
         .where(
           and(
-            ownedAndReachable(userId),
+            allowedTo(userId, AUTOMATION_ACCESS.READ),
             planId === null ? undefined : eq(automation.planId, planId),
           ),
         )
@@ -315,21 +385,22 @@ const findAutomations = SqlSchema.findAll({
 });
 
 const findAutomation = SqlSchema.findOneOption({
-  Request: AutomationKeySchema,
+  Request: Schema.Struct({ ...AutomationKeySchema.fields, access: automationAccessSchema }),
   Result: AutomationRowSchema,
-  execute: ({ userId, id }) =>
+  execute: ({ userId, id, access }) =>
     Database.use((db) =>
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
         .innerJoin(plan, eq(plan.id, automation.planId))
-        .where(ownedAndReachable(userId, id)),
+        .where(allowedTo(userId, access, id)),
     ),
 });
 
 const writeAutomation = SqlSchema.findAll({
   Request: Schema.Struct({
     ...AutomationKeySchema.fields,
+    access: automationAccessSchema,
     name: Schema.optionalKey(Schema.String),
     enabled: Schema.optionalKey(Schema.Boolean),
     pausedReason: Schema.optionalKey(Schema.NullOr(automationPauseSchema)),
@@ -345,7 +416,7 @@ const writeAutomation = SqlSchema.findAll({
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, now, trigger, nextRunAt, webhookSecretHash, ...changes }) =>
+  execute: ({ userId, id, access, now, trigger, nextRunAt, webhookSecretHash, ...changes }) =>
     Database.use((db) =>
       db
         .update(automation)
@@ -358,7 +429,7 @@ const writeAutomation = SqlSchema.findAll({
             : triggerColumns(trigger, nextRunAt, webhookSecretHash)),
           updatedAt: now,
         })
-        .where(ownedAndReachable(userId, id))
+        .where(allowedTo(userId, access, id))
         .returning({ id: automation.id }),
     ),
 });
@@ -368,7 +439,10 @@ const removeAutomation = SqlSchema.findAll({
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, id }) =>
     Database.use((db) =>
-      db.delete(automation).where(ownedAndReachable(userId, id)).returning({ id: automation.id }),
+      db
+        .delete(automation)
+        .where(allowedTo(userId, AUTOMATION_ACCESS.DELETE, id))
+        .returning({ id: automation.id }),
     ),
 });
 
@@ -422,14 +496,14 @@ const HistoryRowSchema = Schema.Struct({
 /** One run as the history reads it, with the conversation, title, and start of the agent it started where that agent stands. */
 export type AutomationRunInHistory = typeof HistoryRowSchema.Type;
 
-/** The account's runs of one automation it still reaches, with each one's agent, newest first. */
+/** The runs of one automation the account may read, with each one's agent, newest first. */
 function historyOf(userId: string, automationId: string): SQL {
   return inArray(
     automationRun.automationId,
     queryBuilder
       .select({ id: automation.id })
       .from(automation)
-      .where(ownedAndReachable(userId, automationId)),
+      .where(allowedTo(userId, AUTOMATION_ACCESS.READ, automationId)),
   );
 }
 
@@ -538,7 +612,6 @@ const lockDue = SqlSchema.findAll({
             eq(automation.enabled, true),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.SCHEDULE),
             lte(automation.nextRunAt, now),
-            OWNER_REACHES_PLAN,
           ),
         )
         .orderBy(asc(automation.nextRunAt), asc(automation.id))
@@ -788,7 +861,7 @@ const findRunsSince = SqlSchema.findAll({
 
 /** Re-reads one automation after a write, which answered only that a row was written. */
 function readWritten(userId: string, id: string): PlanStoreEffect<Option.Option<Automation>> {
-  return findAutomation({ userId, id });
+  return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
 }
 
 /** Makes the account's automation on the plan, enabled; nothing where the account does not reach the plan. */
@@ -816,7 +889,7 @@ export function createAutomation(
   });
 }
 
-/** The account's automations, newest first, or those of one plan where it names one. */
+/** The automations the account may read, newest first, or those of one plan where it names one. */
 export function listAutomations(
   userId: string,
   planId?: string,
@@ -824,29 +897,37 @@ export function listAutomations(
   return findAutomations({ userId, planId: planId ?? null });
 }
 
-/** One of the account's automations; nothing for an id that is not the account's. */
+/** One automation the account may do `access` with, reading by default; nothing for any other id. */
 export function readAutomation(
   userId: string,
   id: string,
+  access: AutomationAccess = AUTOMATION_ACCESS.READ,
 ): PlanStoreEffect<Option.Option<Automation>> {
-  return findAutomation({ userId, id });
+  return findAutomation({ userId, id, access });
 }
 
-/** Writes the changes onto one of the account's automations and answers it as it now stands; nothing for an id that is not the account's. */
+/**
+ * Writes the changes onto an automation the account may change, or turn on
+ * or off where `access` is the toggle, and answers it as it now stands;
+ * nothing for any other id.
+ */
 export function updateAutomation(
   userId: string,
   id: string,
   changes: AutomationChanges,
+  access:
+    | typeof AUTOMATION_ACCESS.CHANGE
+    | typeof AUTOMATION_ACCESS.TOGGLE = AUTOMATION_ACCESS.CHANGE,
 ): PlanStoreEffect<Option.Option<Automation>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const written = yield* writeAutomation({ ...changes, userId, id, now });
+    const written = yield* writeAutomation({ ...changes, userId, id, access, now });
     if (written.length === 0) return Option.none();
     return yield* readWritten(userId, id);
   });
 }
 
-/** Deletes one of the account's automations and its history; false for an id that is not the account's. */
+/** Deletes an automation the account may delete, and its history; false for any other id. */
 export function deleteAutomation(userId: string, id: string): PlanStoreEffect<boolean> {
   return Effect.map(removeAutomation({ userId, id }), (rows) => rows.length > 0);
 }
@@ -970,6 +1051,25 @@ export function expireQueuedAutomationRuns(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
   );
+}
+
+const findCreatorMembership = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (automationId) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id })
+        .from(automation)
+        .where(
+          and(eq(automation.id, automationId), memberOfAutomationWorkspace(automation.userId)),
+        ),
+    ),
+});
+
+/** Whether the automation's creator is a member of its workspace still, which a run that starts as them needs. */
+export function creatorStillMember(automationId: string): PlanStoreEffect<boolean> {
+  return Effect.map(findCreatorMembership(automationId), (rows) => rows.length > 0);
 }
 
 /**
