@@ -83,8 +83,8 @@ const ENCODED_STEP = /%(?:2[Ff]|5[Cc]|2[Ee])/u;
 /** A line that starts a block of its own, a heading or a list's item, which ends any code span left open before it. */
 const BLOCK_START_LINE = /^ {0,3}(?:#{1,6}(?:\s|$)|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/u;
 
-/** A quoted line, which starts a block only where the line before it is no quoted line, since a quote's lines are one block. */
-const QUOTE_LINE = /^ {0,3}>/u;
+/** A line's quote markers, however deep the quote, which a line inside a quote is read past: a quote's blank line is a line of markers alone. */
+const QUOTE_MARKERS = /^(?: {0,3}>)+ ?/u;
 
 /** A line indented as code: four spaces, or a tab, before anything. */
 const INDENTED_LINE = /^(?: {4}|\t)/u;
@@ -225,18 +225,23 @@ interface TextStretch {
  * The block of words holding the index, which a code span cannot leave: from
  * the line after the last blank line or the line that starts the block, to
  * the line before the next one, as CommonMark's spans stay inside their block.
+ * A quoted line is read past its markers, so a quote's blank line and a
+ * heading or an item inside it end a block as they would outside it, and a
+ * line quoted deeper or shallower than the one before starts a block.
  */
 function paragraphAt(text: string, at: number): TextStretch {
   let start = 0;
   let end = text.length;
   let lineStart = 0;
-  let quoted = false;
+  let depth = 0;
   for (const line of text.split("\n")) {
     const lineEnd = lineStart + line.length;
-    const blank = line.trim() === "";
-    const quote = QUOTE_LINE.test(line);
-    const opens = BLOCK_START_LINE.test(line) || (quote && !quoted);
-    quoted = quote;
+    const markers = QUOTE_MARKERS.exec(line)?.[0] ?? "";
+    const inner = line.slice(markers.length);
+    const lineDepth = [...markers].filter((character) => character === ">").length;
+    const blank = inner.trim() === "";
+    const opens = BLOCK_START_LINE.test(inner) || lineDepth !== depth;
+    depth = lineDepth;
     if (lineStart <= at) {
       if (blank) start = lineEnd + 1;
       else if (opens) start = lineStart;

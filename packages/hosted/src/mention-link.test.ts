@@ -224,3 +224,18 @@ test("a code span across a quote's lines is code, the quote's lines being one bl
     [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
   );
 });
+
+test("a quote's blank line, or an item inside the quote, ends its paragraph, so a backtick before it pairs with nothing after", () => {
+  const paragraphs = ["> `before", ">", "> [@a](luke://file/a.ts) `after"].join("\n");
+  const item = ["> `before", "> - [@b](luke://file/b.ts) `after"].join("\n");
+  const deeper = ["> `before", "> > [@c](luke://file/c.ts) `after"].join("\n");
+
+  assert.deepEqual(
+    [paragraphs, item, deeper].flatMap((words) => mentionsIn(words).map(({ mention }) => mention)),
+    [
+      { kind: MENTION_KIND.FILE, path: "a.ts" },
+      { kind: MENTION_KIND.FILE, path: "b.ts" },
+      { kind: MENTION_KIND.FILE, path: "c.ts" },
+    ],
+  );
+});
