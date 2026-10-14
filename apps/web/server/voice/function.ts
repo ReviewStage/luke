@@ -1,6 +1,7 @@
 import { recordVoiceSeconds, spendHostedMeter } from "@sidecar/database/models/quota";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
 import { CRON_ENVIRONMENT } from "../hosted/maintenance-bounds.js";
@@ -8,6 +9,7 @@ import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { deploymentExchange } from "./deployment-exchange.js";
+import { Keyframe } from "./keyframe.js";
 import { LOG_EVENT, standardOutputLog } from "./log.js";
 import {
   type VoiceServer,
@@ -37,6 +39,10 @@ const VOICE_FUNCTION_ENVIRONMENT = {
   API_KEY: HOSTED_OPENAI_ENVIRONMENT.API_KEY,
   /** A deployment-pinned model; `LIVE_DEFAULTS.MODEL` otherwise. */
   LIVE_MODEL: "LUKE_LIVE_MODEL",
+  /** Luke's Keyframe Labs key, which mints each call's avatar session. */
+  KEYFRAME_API_KEY: "KEYFRAME_API_KEY",
+  /** The stock persona every call's avatar is minted as. */
+  KEYFRAME_PERSONA_ID: "LUKE_KEYFRAME_PERSONA_ID",
 } as const;
 
 const deploymentAccounts: VoiceAccounts = {
@@ -50,6 +56,21 @@ const deploymentAccounts: VoiceAccounts = {
 function configured(name: string): Redacted.Redacted | undefined {
   const named = process.env[name]?.trim();
   return named ? Redacted.make(named) : undefined;
+}
+
+/**
+ * The call's avatar on this deployment's Keyframe key and persona, or none
+ * where either is missing, which answers every avatar ask not configured and
+ * leaves the voice untouched.
+ */
+function deploymentAvatar(): VoiceServiceOptions["avatar"] {
+  const apiKey = configured(VOICE_FUNCTION_ENVIRONMENT.KEYFRAME_API_KEY);
+  const personaId = process.env[VOICE_FUNCTION_ENVIRONMENT.KEYFRAME_PERSONA_ID]?.trim();
+  if (apiKey === undefined || !personaId) return undefined;
+  return {
+    keyframe: Layer.provide(Keyframe.layer({ apiKey, personaId }), FetchHttpClient.layer),
+    personaId,
+  };
 }
 
 /** How much of a report's own wording the log keeps: its fixed sentence, which every reporter on the exchange path puts ahead of the first colon. */
@@ -75,6 +96,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
     record: voiceSessionRecord(),
+    avatar: deploymentAvatar(),
     exchange: deploymentExchange({
       deploymentSecret: () => configured(CRON_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,
