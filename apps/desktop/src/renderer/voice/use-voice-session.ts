@@ -266,8 +266,11 @@ export function useVoiceSession(
         if (command === VOICE_COMMAND.STOP_SPEAKING) {
           callRef.current?.interruptAvatar();
           drive(orchestrator.stopSpeaking());
-        } else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
-        else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
+        } else if (command === VOICE_COMMAND.END_CALL) {
+          // The graceful close can take its bound, and the avatar must not talk on through it.
+          callRef.current?.interruptAvatar();
+          drive(orchestrator.stopCall());
+        } else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
           drive(orchestrator.toggleMicrophone());
         else if (command === VOICE_COMMAND.MUTE_SPEAKER) drive(orchestrator.muteSpeaker(true));
         else if (command === VOICE_COMMAND.UNMUTE_SPEAKER) drive(orchestrator.muteSpeaker(false));
