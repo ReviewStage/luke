@@ -79,7 +79,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,

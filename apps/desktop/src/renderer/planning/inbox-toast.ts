@@ -43,7 +43,7 @@ export function useInboxToasts(
   const told = useRef(new Map<string, { planId: string; heard: number }>());
   useEffect(
     () =>
-      window.sidecar.onInboxItemOpened(({ planId, itemId, words, detail }) => {
+      window.luke.onInboxItemOpened(({ planId, itemId, words, detail }) => {
         told.current.set(itemId, { planId, heard: appStateNow()?.version ?? -1 });
         toast({
           words,

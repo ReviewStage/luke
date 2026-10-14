@@ -146,7 +146,7 @@ beforeEach(() => {
   heldRead = () => new Promise(() => undefined);
   startRead = undefined;
   listedAgents = [AGENT];
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,

@@ -96,7 +96,7 @@ const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
 let root: Root | undefined;
 
 beforeEach(() => {
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,

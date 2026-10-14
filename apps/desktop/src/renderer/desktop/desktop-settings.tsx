@@ -96,7 +96,7 @@ export function DesktopSettings({
       ? searchSettings(settingsSearchEntries({ ...rows, integrationTools }), query)
       : undefined;
   const open = (view: SettingsView) => {
-    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+    window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
     });
     settings.onViewChange(view);

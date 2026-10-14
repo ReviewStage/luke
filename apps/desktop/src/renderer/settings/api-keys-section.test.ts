@@ -98,7 +98,7 @@ beforeEach(() => {
   refuseRead = false;
   holdRead = false;
   holdSaves = undefined;
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
   });

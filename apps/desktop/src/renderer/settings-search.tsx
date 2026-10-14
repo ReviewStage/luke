@@ -452,7 +452,7 @@ export function SettingsSearchField({
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           onFocus={() => {
-            window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+            window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
               search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
             });
           }}

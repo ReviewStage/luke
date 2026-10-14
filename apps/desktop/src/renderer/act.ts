@@ -54,7 +54,7 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome): 
  * transcript read is held open by the service for seconds, and any act sent
  * meanwhile would have handed the reader its answer, and taken the reader's.
  */
-const send = (request: Act): Promise<ActOutcome> => window.sidecar.act(request);
+const send = (request: Act): Promise<ActOutcome> => window.luke.act(request);
 
 async function performAct<Kind extends ActKind>(
   send: (request: Act) => Promise<ActOutcome>,

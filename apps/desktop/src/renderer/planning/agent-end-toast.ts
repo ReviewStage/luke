@@ -35,7 +35,7 @@ export function useAgentEndToasts(
   viewing.current = view;
   useEffect(
     () =>
-      window.sidecar.onAgentEnded(({ planId, agentId, words, detail, failed }) =>
+      window.luke.onAgentEnded(({ planId, agentId, words, detail, failed }) =>
         toast({
           words,
           detail,

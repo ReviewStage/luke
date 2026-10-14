@@ -30,7 +30,7 @@ const mounted: Root[] = [];
 beforeEach(() => {
   held = [];
   window.localStorage.clear();
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act) =>

@@ -111,7 +111,7 @@ beforeEach(() => {
   touched.clear();
   listed.clear();
   reopenedDuringCancel = false;
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {

@@ -87,10 +87,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     reportView: (view, exchangeOpened) => {
       speakerMuted.current = view.speakerMuted;
       playRemoteAudio();
-      window.sidecar.reportVoiceView(
-        view,
-        exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined,
-      );
+      window.luke.reportVoiceView(view, exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined);
     },
     requestMicrophone: () =>
       Effect.promise(
@@ -144,7 +141,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         // document that says whether a writer stands behind the bridge.
         onWireEvent: (direction, event) => {
           if (appStateNow()?.run.agentTraceEnabled !== true) return;
-          window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
+          window.luke.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
         },
       });
       callRef.current = call;
@@ -232,7 +229,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // a turn the developer did not, and a Clear reaches the record on main alone.
   useEffect(
     () =>
-      window.sidecar.onVoiceCommand(({ command }) => {
+      window.luke.onVoiceCommand(({ command }) => {
         if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
         else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
         else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
@@ -250,14 +247,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // that plan opened and heard, or its microphone toggled, as the main process
   // forwards the press.
   useEffect(
-    () => window.sidecar.onPlanningTalk(({ planId }) => drive(orchestrator.talkAboutPlan(planId))),
+    () => window.luke.onPlanningTalk(({ planId }) => drive(orchestrator.talkAboutPlan(planId))),
     [drive, orchestrator],
   );
 
   // The host's word on its one session: closing hangs up.
   useEffect(
     () =>
-      window.sidecar.onVoiceLiveSessionChanged((change) =>
+      window.luke.onVoiceLiveSessionChanged((change) =>
         drive(orchestrator.obeySessionChange(change)),
       ),
     [drive, orchestrator],
@@ -272,12 +269,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // recording still ends. A press made while the panel has a plan open names
   // that plan, and is heard on that plan's call.
   useEffect(
-    () =>
-      window.sidecar.onVoiceHotkeyPress((press) => drive(orchestrator.beginTalk(press?.planId))),
+    () => window.luke.onVoiceHotkeyPress((press) => drive(orchestrator.beginTalk(press?.planId))),
     [drive, orchestrator],
   );
   useEffect(
-    () => window.sidecar.onVoiceHotkeyRelease(() => drive(orchestrator.endTalk())),
+    () => window.luke.onVoiceHotkeyRelease(() => drive(orchestrator.endTalk())),
     [drive, orchestrator],
   );
   // The stop key asks for quiet from any app, exactly as Escape asks for it
@@ -285,7 +281,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // host tells the model to stop; a press over no session simply does
   // nothing.
   useEffect(
-    () => window.sidecar.onStopHotkeyPress(() => drive(orchestrator.stopSpeaking())),
+    () => window.luke.onStopHotkeyPress(() => drive(orchestrator.stopSpeaking())),
     [drive, orchestrator],
   );
 

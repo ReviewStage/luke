@@ -35,7 +35,7 @@ let menuListener: ((command: AppCommand) => void) | undefined;
 beforeEach(() => {
   sent = [];
   answer = { delivered: true };
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       recordSurfaceEvent: () => undefined,

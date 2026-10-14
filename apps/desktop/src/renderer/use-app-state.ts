@@ -40,8 +40,8 @@ type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
 const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
   Atom.make({
     subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) =>
-      window.sidecar.onAppState(onDelivered),
-    read: () => window.sidecar.requestAppState(),
+      window.luke.onAppState(onDelivered),
+    read: () => window.luke.requestAppState(),
   }),
 );
 
