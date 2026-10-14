@@ -8,6 +8,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
+import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList } from "../planning/inbox-list";
 import {
   anyNeedsYou,
@@ -49,7 +50,10 @@ import { planCardOf } from "./plan-card";
  * the plan or the agent's tab, and a code block's Open its file, each
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
  * glyph (`empty-state.tsx`). Escape leaves it for the plan it stood over,
- * and so does any row of the sidebar.
+ * and so does any row of the sidebar. Too narrow for the list and the item
+ * side by side, it shows one at a time (`inbox-columns.ts`): the list, and
+ * the item a press opens, whose way back, Back's chord, or Escape gives the
+ * list back before Escape leaves the Inbox.
  */
 
 /** What the list says where a plan's read did not answer. */
@@ -163,11 +167,13 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     if (standIn !== undefined) choose(standIn);
   }, [standIn, choose]);
   const reading = holdings.some((holding) => !read.items.has(holding.planId));
+  const columns = useInboxColumns(chosen?.item.id);
   return (
-    <div className="inbox-view">
+    <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
       <InboxList
         view={list}
         chosen={chosen?.item.id}
+        columns={columns.shown}
         head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
         models={named.models}
         note={
@@ -178,10 +184,17 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
             onRetry={read.onRetry}
           />
         }
-        onChoose={choose}
+        onChoose={(listed) => {
+          choose(listed);
+          columns.onOpen(listed.item.id);
+        }}
       />
       {chosen === undefined ? (
-        <section className="inbox-view-items" aria-label="Inbox">
+        <section
+          className="inbox-view-items"
+          aria-label="Inbox"
+          hidden={columns.shown !== INBOX_COLUMNS.BOTH}
+        >
           <header className="desktop-toolbar" />
           {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
         </section>
@@ -191,6 +204,8 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
           item={chosen.item}
           control={live}
           agents={named}
+          hidden={columns.shown === INBOX_COLUMNS.LIST}
+          onBack={columns.onBack}
           doors={{
             onOpenPlan: () => plans.onShowPlan(chosen.plan.id),
             planCard: planCardOf(plans, chosen.plan, now),
