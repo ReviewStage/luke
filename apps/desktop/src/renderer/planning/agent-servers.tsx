@@ -3,8 +3,8 @@ import {
   INTEGRATION_STATUS,
   type IntegrationProvider,
 } from "@sidecar/hosted/integration-wire";
-import { GearIcon, McpIcon } from "@sidecar/panel";
-import { useEffect, useId, useRef, useState } from "react";
+import { ArrowLeftIcon, ChevronRightIcon, GearIcon, McpIcon, SearchIcon } from "@sidecar/panel";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
@@ -12,42 +12,59 @@ import { IntegrationMark } from "../integration-marks";
 import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
+import { Highlighted } from "../search-field";
+import { matchesTokens, searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { Tooltip } from "../tooltip";
 import {
+  opensTools,
   SERVER_ACTION,
   SERVER_ROW,
   SERVERS_LABEL,
   type ServerRow,
+  searchServers,
+  serverGroups,
   serverRows,
   switchedServers,
+  type ToolHit,
 } from "./agent-servers-model";
+import { TOOL_BADGE, toolBadge, toolGroups } from "./server-tools-model";
 
 /**
- * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each.
+ * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
  *
  * Between the model chip and the context ring stands the MCP mark. A press
  * opens a popover from the button's trailing edge, as the model menu and
  * the context popover hang from theirs (`../anchored-popover.tsx`), drawn
- * as the model menu is: one row per server with its mark and its name
- * (`agent-servers-model.ts`). A connected server's row names how many tools
- * it offers, a count that opens the list of them beside the popover on
- * hover or focus, and ends with this agent's switch; one whose server
+ * as the searchable menu is: a search field first, then the servers under
+ * Connected and Not connected (`agent-servers-model.ts`), and Manage in
+ * Settings pinned at the foot. A connected server's row names how many
+ * tools it offers and ends with this agent's switch; one whose server
  * answered why it lists none says why beside its name and ends with
- * Reconnect instead (`../integration-health.ts`). One not connected ends
- * with Connect, which sends the browser to sign in there and then, as
- * Settings does: the row waits on it with a ring, its line said only to a
- * reader and in its title, since the row is too narrow to draw it, then Reopen and Cancel, and
- * becomes the switch once the sign-in settles, or says it failed or did
- * not finish and offers Try again (`../integration-sign-in.ts`); Settings
- * is one press away at the gear beside the title for everything else. Where
- * every connection stands is the composer's read (`../integration-statuses.ts`),
+ * Reconnect; one not connected ends with Connect, which sends the browser
+ * to sign in there and then, as Settings does: the row waits on it with a
+ * ring after its name, its line said only to a reader and in its title,
+ * then Reopen and Cancel, and becomes the switch once the sign-in settles,
+ * or says it failed or did not finish and offers Try again
+ * (`../integration-sign-in.ts`). Pressing a connected server turns the popover into
+ * its page, in place: back, its name, its switch, a filter, and its tools,
+ * each its name, the badge its server's annotations earn it, and what it
+ * does, run by name prefix where the names share clear ones
+ * (`server-tools-model.ts`). What is typed in the home's field finds
+ * servers by name and every tool by name or description, and a tool found
+ * opens its server's page filtered to the search. Focus stays in the field
+ * throughout, as the searchable menu keeps it: the arrows move one
+ * highlight through the rows, Enter or Right opens the highlighted server
+ * or tool, Space on an empty search flips its switch, and on a server's
+ * page Left, or Backspace on an empty filter, goes back. Where every
+ * connection stands is the composer's read (`../integration-statuses.ts`),
  * taken as it is drawn and again when the window is focused, which is how
- * the developer comes back from the browser, so the popover stays open while
- * the window is away. A draft agent keeps its choice until
- * its first message starts it. The popover closes on Escape, which stops
- * there so the panel behind stays open, on a second press of the button,
- * and on focus leaving it for another part of the window.
+ * the developer comes back from the browser, so the popover stays open
+ * while the window is away. A draft agent keeps its choice until its first
+ * message starts it. Escape goes back from a server's page and otherwise
+ * closes the popover, and stops there so the panel behind stays open; a
+ * second press of the button, and focus leaving it for another part of the
+ * window, close it too.
  */
 
 /** The servers an agent is handed, as the button changes them. */
@@ -60,57 +77,143 @@ export interface AgentServersControl {
   readonly onOpenSettings: () => void;
 }
 
-/** What the gear beside the popover's title is named, which opens Settings › Integrations. */
+/** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
 /** What the popover's list says where the deployment offers the account no server at all. */
 const SERVERS_NONE = "No servers available";
 
+/** What the home's field asks for, and says where nothing matches. */
+const SEARCH = {
+  PLACEHOLDER: "Search servers and tools",
+  NONE: "No servers or tools match",
+  TOOLS: "Tools",
+} as const;
+
+/** What a server's page says where its filter matches nothing, and heads the tools no prefix runs. */
+const PAGE = {
+  NONE: "No tools match",
+  BACK: "Back to MCP servers",
+  OTHER: "Other",
+} as const;
+
+/** How far the arrows scroll a server's page, about one tool. */
+const PAGE_STEP = 44;
+
 /**
- * A connected server's count of tools, and the list of them beside the
- * popover, drawn while the server's row is hovered or the count holds the
- * focus, as a menu row opens its submenu: the list stands in the page
- * throughout and the stylesheet shows it, so a pointer crossing from the row
- * into the list keeps it open.
+ * A pointer's press that leaves the focus in the field, so the keys the
+ * field hears go on working after a row, a switch, or a button is clicked;
+ * Tab still reaches every control, which takes the focus as it should.
  */
-function ToolsCount({
-  name,
-  tools,
+function keepFieldFocus(event: React.MouseEvent): void {
+  event.preventDefault();
+}
+
+/** One thing the home's highlight can land on: a server's row, or a tool a search found. */
+type Pick = { readonly row: ServerRow; readonly tool?: IntegrationTool };
+
+/** The switch that hands the agent a server or takes it away. */
+function ServerSwitch({
+  row,
+  servers,
 }: {
-  name: string;
-  tools: readonly IntegrationTool[];
+  row: ServerRow;
+  servers: AgentServersControl;
 }): React.JSX.Element {
-  const listId = useId();
   return (
-    <span className="agent-servers-tools">
-      <button
-        type="button"
-        className="agent-servers-tools-count"
-        aria-label={`${name}: ${toolsCount(tools.length)}`}
-        aria-describedby={tools.length > 0 ? listId : undefined}
-      >
-        {toolsCount(tools.length)}
-      </button>
-      {tools.length > 0 ? (
-        <ul
-          id={listId}
-          className="plan-compose-submenu agent-servers-tools-menu"
-          data-side="left"
-          data-stand="up"
-          aria-label={`${name} tools`}
-        >
-          {tools.map((tool) => (
-            <li key={tool.name} className="agent-servers-tool">
-              <span className="agent-servers-tool-name">{tool.name}</span>
-              {tool.description !== "" ? (
-                <span className="agent-servers-tool-description">{tool.description}</span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </span>
+    <button
+      type="button"
+      className="agent-servers-switch"
+      role="switch"
+      onMouseDown={keepFieldFocus}
+      aria-checked={row.on}
+      aria-label={`${row.name} for this agent`}
+      onClick={(event) => {
+        event.stopPropagation();
+        servers.onSwitch(switchedServers(servers.disabled, row.provider, !row.on));
+      }}
+    >
+      <span className="switch plan-compose-menu-switch">
+        <span className="switch-thumb" />
+      </span>
+    </button>
   );
+}
+
+/** The search field at the top of either page, which holds the focus while the popover is open. */
+function SearchRow({
+  field,
+  value,
+  placeholder,
+  onChange,
+  onKeyDown,
+}: {
+  field: React.RefObject<HTMLInputElement | null>;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+}): React.JSX.Element {
+  return (
+    <div className="plan-compose-menu-search">
+      <SearchIcon />
+      <input
+        ref={field}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        spellCheck={false}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        onKeyDown={onKeyDown}
+      />
+    </div>
+  );
+}
+
+/** One of a server's tools on its page: its name, its badge, and what it does. */
+function ToolItem({
+  tool,
+  tokens,
+  server,
+}: {
+  tool: IntegrationTool;
+  tokens: readonly string[];
+  server: string;
+}): React.JSX.Element {
+  const badge = toolBadge(tool.annotations);
+  return (
+    <li className="agent-servers-tool" title={tool.description || undefined}>
+      <span className="agent-servers-tool-name">
+        <span className="agent-servers-tool-id">
+          <Highlighted text={tool.name} tokens={tokens} />
+        </span>
+        {badge !== undefined ? (
+          <span
+            className="agent-servers-badge"
+            data-destructive={badge === TOOL_BADGE.DESTRUCTIVE ? "true" : undefined}
+            title={`${server}'s server marks this tool ${badge.toLowerCase()}`}
+          >
+            {badge}
+          </span>
+        ) : null}
+      </span>
+      {tool.description !== "" ? (
+        <span className="agent-servers-tool-description">
+          <Highlighted text={tool.description} tokens={tokens} />
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/** Keeps a row inside its scroller's view, scrolling only the scroller (the renderer's rule against `scrollIntoView`). */
+function keepInView(list: HTMLElement | null, row: Element | null): void {
+  if (list === null || !(row instanceof HTMLElement)) return;
+  const top = row.offsetTop - list.offsetTop;
+  if (top < list.scrollTop) list.scrollTop = top;
+  else if (top + row.offsetHeight > list.scrollTop + list.clientHeight)
+    list.scrollTop = top + row.offsetHeight - list.clientHeight;
 }
 
 function ServersPopover({
@@ -128,7 +231,9 @@ function ServersPopover({
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const box = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const rowsId = useId();
   const reads = useIntegrationTools(
     INTEGRATION_PROVIDER_LIST.filter(
       (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
@@ -142,18 +247,31 @@ function ServersPopover({
     disabled: servers.disabled,
   });
   const [connecting, setConnecting] = useState<IntegrationProvider | undefined>(undefined);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("");
+  const [opened, setOpened] = useState<IntegrationProvider | undefined>(undefined);
+  const [highlight, setHighlight] = useState(0);
   const grant = useIntegrationGrant(statuses);
 
-  // The popover takes focus as it opens, so Escape and focus leaving it are heard.
-  useEffect(() => {
-    box.current?.focus();
-  }, []);
+  // A server's page stands only while its server still answers with tools; otherwise the home is drawn.
+  const page = rows.find((row) => row.provider === opened && opensTools(row));
+  const found = searchServers(rows, query);
+  const groups = serverGroups(found.rows);
+  const picks: Pick[] = [
+    ...groups.flatMap((group) => group.rows).filter((row) => row.kind !== SERVER_ROW.QUIET),
+    ...found.tools,
+  ].map((each) => ("tool" in each ? each : { row: each }));
+  const at = Math.min(highlight, Math.max(picks.length - 1, 0));
 
-  const onKey = (event: React.KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
-    onClose();
-  };
+  // The field takes focus as the popover opens and as either page is drawn, so the keys and focus leaving it are heard.
+  useEffect(() => {
+    field.current?.focus();
+  }, [page?.provider]);
+
+  useLayoutEffect(() => {
+    if (page !== undefined) return;
+    keepInView(list.current, document.getElementById(`${rowsId}-${at}`));
+  }, [at, page, rowsId]);
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (provider: IntegrationProvider) => {
@@ -167,45 +285,132 @@ function ServersPopover({
     void statuses.cancelSignIn(provider).then(() => setConnecting(undefined));
   };
 
+  const open = (row: ServerRow, search = "") => {
+    setOpened(row.provider);
+    setFilter(search);
+  };
+
+  const back = () => {
+    setOpened(undefined);
+    setFilter("");
+  };
+
+  /** What a pick does when chosen: a server opens or connects, and a tool opens its server's page, filtered to the search. */
+  const choose = (pick: Pick | undefined) => {
+    if (pick === undefined) return;
+    const { row } = pick;
+    if (pick.tool !== undefined) return open(row, query);
+    if (opensTools(row)) return open(row);
+    // Note that Enter on a sign-in under way reopens it, its first press, as Try again begins it again.
+    if (
+      row.kind === SERVER_ROW.CONNECT ||
+      row.kind === SERVER_ROW.RECONNECT ||
+      row.kind === SERVER_ROW.SIGNING_IN ||
+      row.kind === SERVER_ROW.TRY_AGAIN
+    )
+      return connect(row.provider);
+    if (row.kind === SERVER_ROW.RETRY) void statuses.read();
+  };
+
+  const onHomeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const caretAtEnd = event.currentTarget.selectionStart === query.length;
+    const pick = picks[at];
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setHighlight(Math.min(Math.max(at + step, 0), Math.max(picks.length - 1, 0)));
+    } else if (event.key === "Enter" || (event.key === "ArrowRight" && caretAtEnd)) {
+      if (
+        event.key === "ArrowRight" &&
+        !(pick !== undefined && (pick.tool !== undefined || opensTools(pick.row)))
+      )
+        return;
+      event.preventDefault();
+      choose(pick);
+    } else if (event.key === " " && query.trim() === "" && pick?.row.kind === SERVER_ROW.SWITCH) {
+      // Note that we flip the switch only on an empty search, because a space typed after a word is part of the search.
+      event.preventDefault();
+      servers.onSwitch(switchedServers(servers.disabled, pick.row.provider, !pick.row.on));
+    }
+  };
+
+  const onPageKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((event.key === "ArrowLeft" || event.key === "Backspace") && filter === "") {
+      event.preventDefault();
+      back();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      list.current?.scrollBy({ top: event.key === "ArrowDown" ? PAGE_STEP : -PAGE_STEP });
+    }
+  };
+
+  const onKey = (event: React.KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    if (page !== undefined) back();
+    else onClose();
+  };
+
   const end = (row: ServerRow): React.JSX.Element | null => {
     switch (row.kind) {
       case SERVER_ROW.SWITCH:
         return (
           <>
-            {row.tools !== undefined ? <ToolsCount name={row.name} tools={row.tools} /> : null}
-            <button
-              type="button"
-              className="agent-servers-switch"
-              role="switch"
-              aria-checked={row.on}
-              aria-label={`${row.name} for this agent`}
-              onClick={() =>
-                servers.onSwitch(switchedServers(servers.disabled, row.provider, !row.on))
-              }
-            >
-              <span className="switch plan-compose-menu-switch">
-                <span className="switch-thumb" />
+            {opensTools(row) ? (
+              <span className="agent-servers-chevron" aria-hidden="true">
+                <ChevronRightIcon />
               </span>
-            </button>
+            ) : null}
+            <ServerSwitch row={row} servers={servers} />
           </>
+        );
+      case SERVER_ROW.CONNECT:
+      case SERVER_ROW.RECONNECT:
+        return (
+          <button
+            type="button"
+            className="agent-servers-connect"
+            onMouseDown={keepFieldFocus}
+            disabled={connecting === row.provider}
+            title={
+              grantedBySignIn(row.provider)
+                ? "Connect GitHub in your browser"
+                : `Sign in to ${row.name} in your browser`
+            }
+            onClick={(event) => {
+              event.stopPropagation();
+              connect(row.provider);
+            }}
+          >
+            {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
+          </button>
         );
       case SERVER_ROW.SIGNING_IN:
         return (
           <>
             <button
               type="button"
-              className="toolbar-button quiet-button agent-servers-reopen"
+              className="agent-servers-connect"
+              onMouseDown={keepFieldFocus}
               disabled={connecting === row.provider}
               title={`Open the ${row.name} sign-in in your browser again`}
-              onClick={() => connect(row.provider)}
+              onClick={(event) => {
+                event.stopPropagation();
+                connect(row.provider);
+              }}
             >
               {SIGN_IN_ACTION.REOPEN}
             </button>
             <button
               type="button"
-              className="toolbar-button bordered-button agent-servers-cancel"
+              className="agent-servers-connect"
+              onMouseDown={keepFieldFocus}
+              data-tone="quiet"
               disabled={connecting === row.provider}
-              onClick={() => cancel(row.provider)}
+              onClick={(event) => {
+                event.stopPropagation();
+                cancel(row.provider);
+              }}
             >
               {SIGN_IN_ACTION.CANCEL}
             </button>
@@ -215,37 +420,28 @@ function ServersPopover({
         return (
           <button
             type="button"
-            className="toolbar-button bordered-button agent-servers-connect"
+            className="agent-servers-connect"
+            onMouseDown={keepFieldFocus}
             disabled={connecting === row.provider}
             title={`Sign in to ${row.name} in your browser`}
-            onClick={() => connect(row.provider)}
+            onClick={(event) => {
+              event.stopPropagation();
+              connect(row.provider);
+            }}
           >
             {SIGN_IN_ACTION.TRY_AGAIN}
-          </button>
-        );
-      case SERVER_ROW.CONNECT:
-      case SERVER_ROW.RECONNECT:
-        return (
-          <button
-            type="button"
-            className="toolbar-button bordered-button agent-servers-connect"
-            disabled={connecting === row.provider}
-            title={
-              grantedBySignIn(row.provider)
-                ? "Connect GitHub in your browser"
-                : `Sign in to ${row.name} in your browser`
-            }
-            onClick={() => connect(row.provider)}
-          >
-            {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
           </button>
         );
       case SERVER_ROW.RETRY:
         return (
           <button
             type="button"
-            className="toolbar-button agent-servers-connect"
-            onClick={() => void statuses.read()}
+            className="agent-servers-connect"
+            onMouseDown={keepFieldFocus}
+            onClick={(event) => {
+              event.stopPropagation();
+              void statuses.read();
+            }}
           >
             {SERVER_ACTION.RETRY}
           </button>
@@ -255,71 +451,198 @@ function ServersPopover({
     }
   };
 
+  /** A row's place among the picks, which names its id and its highlight; a quiet row is none. */
+  const pickIndex = (row: ServerRow, tool?: IntegrationTool) =>
+    picks.findIndex((pick) => pick.row === row && pick.tool === tool);
+
+  const serverRow = (row: ServerRow) => {
+    const index = pickIndex(row);
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: the row's press is the field's Enter for the pointer; its switch and button are the controls.
+      // biome-ignore lint/a11y/useKeyWithClickEvents: the keys reach the row through the field, which holds the focus.
+      <div
+        key={row.provider}
+        id={index < 0 ? undefined : `${rowsId}-${index}`}
+        className="plan-compose-menu-row agent-servers-row"
+        data-highlighted={index === at ? "true" : undefined}
+        data-opens={opensTools(row) ? "true" : undefined}
+        aria-disabled={row.kind === SERVER_ROW.QUIET ? "true" : undefined}
+        onMouseMove={() => index >= 0 && index !== at && setHighlight(index)}
+        onMouseDown={keepFieldFocus}
+        onClick={() => opensTools(row) && open(row)}
+      >
+        <IntegrationMark provider={row.provider} />
+        <span className="plan-compose-menu-name">{row.name}</span>
+        {row.tools !== undefined ? (
+          <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
+        ) : null}
+        {row.kind === SERVER_ROW.SIGNING_IN ? (
+          <span
+            className="spinner agent-servers-waiting"
+            data-size={SPINNER_SIZE.INLINE}
+            role="status"
+            title={row.note}
+          >
+            <SpinnerRing />
+            <span className="visually-hidden">{row.note}</span>
+          </span>
+        ) : null}
+        {row.problem !== undefined ? (
+          <span className="agent-servers-problem" title={row.problem}>
+            {row.problem}
+          </span>
+        ) : null}
+        {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
+          <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
+            {row.note}
+          </span>
+        ) : null}
+        <span className="agent-servers-end">{end(row)}</span>
+      </div>
+    );
+  };
+
+  const toolRow = ({ row, tool }: ToolHit) => {
+    const index = pickIndex(row, tool);
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: as a server's row, a press is the field's Enter for the pointer.
+      // biome-ignore lint/a11y/useKeyWithClickEvents: the keys reach the row through the field, which holds the focus.
+      <div
+        key={`${row.provider}:${tool.name}`}
+        id={`${rowsId}-${index}`}
+        className="plan-compose-menu-row agent-servers-row agent-servers-hit"
+        data-highlighted={index === at ? "true" : undefined}
+        onMouseMove={() => index !== at && setHighlight(index)}
+        onMouseDown={keepFieldFocus}
+        onClick={() => open(row, query)}
+      >
+        <IntegrationMark provider={row.provider} />
+        <span className="plan-compose-menu-name agent-servers-tool-id">
+          <Highlighted text={tool.name} tokens={searchTokens(query)} />
+        </span>
+        <span className="agent-servers-count">{row.name}</span>
+      </div>
+    );
+  };
+
+  const home = (
+    <>
+      <SearchRow
+        field={field}
+        value={query}
+        placeholder={SEARCH.PLACEHOLDER}
+        onChange={(value) => {
+          setQuery(value);
+          setHighlight(0);
+        }}
+        onKeyDown={onHomeKey}
+      />
+      <div ref={list} className="plan-compose-menu-list agent-servers-list">
+        {rows.length === 0 ? <p className="plan-compose-menu-note">{SERVERS_NONE}</p> : null}
+        {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
+          <p className="plan-compose-menu-note">{SEARCH.NONE}</p>
+        ) : null}
+        {groups.map((group) => (
+          // biome-ignore lint/a11y/useSemanticElements: a menu's section of rows, as the searchable menu's are, which a <fieldset> of form controls is not.
+          <div key={group.heading ?? "unread"} role="group" aria-label={group.heading}>
+            {group.heading !== undefined ? (
+              <div className="plan-compose-menu-section">{group.heading}</div>
+            ) : null}
+            {group.rows.map(serverRow)}
+          </div>
+        ))}
+        {found.tools.length > 0 ? (
+          // biome-ignore lint/a11y/useSemanticElements: a menu's section of rows, as the searchable menu's are, which a <fieldset> of form controls is not.
+          <div role="group" aria-label={SEARCH.TOOLS}>
+            <div className="plan-compose-menu-section">{SEARCH.TOOLS}</div>
+            {found.tools.map(toolRow)}
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+
+  const serverPage = (row: ServerRow) => {
+    const tokens = searchTokens(filter);
+    const tools = (row.tools ?? []).filter((tool) =>
+      matchesTokens([tool.name, tool.description], tokens),
+    );
+    const runs = toolGroups(tools);
+    return (
+      <>
+        <div className="agent-servers-page-head">
+          <Tooltip label={PAGE.BACK}>
+            <button
+              type="button"
+              className="icon-button agent-servers-back"
+              aria-label={PAGE.BACK}
+              onMouseDown={keepFieldFocus}
+              onClick={back}
+            >
+              <ArrowLeftIcon />
+            </button>
+          </Tooltip>
+          <IntegrationMark provider={row.provider} />
+          <span className="agent-servers-page-title">{row.name}</span>
+          <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
+          <span className="agent-servers-end">
+            <ServerSwitch row={row} servers={servers} />
+          </span>
+        </div>
+        <SearchRow
+          field={field}
+          value={filter}
+          placeholder={`Filter ${toolsCount(row.tools?.length ?? 0)}`}
+          onChange={setFilter}
+          onKeyDown={onPageKey}
+        />
+        <div ref={list} className="plan-compose-menu-list agent-servers-list">
+          {tools.length === 0 ? <p className="plan-compose-menu-note">{PAGE.NONE}</p> : null}
+          {runs.map((run) => (
+            <div key={run.prefix ?? "rest"}>
+              {runs.length > 1 ? (
+                <div
+                  className="plan-compose-menu-section agent-servers-run"
+                  data-prefix={run.prefix !== undefined ? "true" : undefined}
+                >
+                  {run.prefix !== undefined ? `${run.prefix}*` : PAGE.OTHER}
+                </div>
+              ) : null}
+              <ul aria-label={run.prefix !== undefined ? `${run.prefix}*` : `${row.name} tools`}>
+                {run.tools.map((tool) => (
+                  <ToolItem key={tool.name} tool={tool} tokens={tokens} server={row.name} />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
   return (
     <div
-      ref={box}
       id={id}
-      className="plan-compose-menu agent-servers-menu"
+      className="plan-compose-menu searchable-menu agent-servers-menu"
       role="dialog"
-      aria-label={SERVERS_LABEL}
-      tabIndex={-1}
+      aria-label={page !== undefined ? `${page.name} tools` : SERVERS_LABEL}
       onKeyDown={onKey}
       onBlur={(event) => onLeave(event.relatedTarget)}
     >
-      <div className="plan-compose-menu-section agent-servers-head">
-        {SERVERS_LABEL}
-        <Tooltip label={SERVERS_SETTINGS}>
-          <button
-            type="button"
-            className="icon-button agent-servers-settings"
-            aria-label={SERVERS_SETTINGS}
-            onClick={() => {
-              onClose();
-              servers.onOpenSettings();
-            }}
-          >
-            <GearIcon />
-          </button>
-        </Tooltip>
-      </div>
-      <div className="agent-servers-list">
-        {rows.length === 0 ? (
-          <div className="plan-compose-menu-row agent-servers-row" aria-disabled="true">
-            <span className="plan-compose-menu-name">{SERVERS_NONE}</span>
-          </div>
-        ) : null}
-        {rows.map((row) => (
-          <div
-            key={row.provider}
-            className="plan-compose-menu-row plan-compose-menu-branch agent-servers-row"
-            aria-disabled={row.kind === SERVER_ROW.QUIET ? "true" : undefined}
-          >
-            <IntegrationMark provider={row.provider} />
-            <span className="plan-compose-menu-name">{row.name}</span>
-            {row.kind === SERVER_ROW.SIGNING_IN ? (
-              <span
-                className="spinner agent-servers-waiting"
-                data-size={SPINNER_SIZE.INLINE}
-                role="status"
-                title={row.note}
-              >
-                <SpinnerRing />
-                <span className="visually-hidden">{row.note}</span>
-              </span>
-            ) : null}
-            {row.problem !== undefined ? (
-              <span className="agent-servers-problem" title={row.problem}>
-                {row.problem}
-              </span>
-            ) : null}
-            {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-              <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
-                {row.note}
-              </span>
-            ) : null}
-            {end(row)}
-          </div>
-        ))}
+      {page !== undefined ? serverPage(page) : home}
+      <div className="plan-compose-menu-foot">
+        <button
+          type="button"
+          className="plan-compose-menu-row agent-servers-manage"
+          onMouseDown={keepFieldFocus}
+          onClick={() => {
+            onClose();
+            servers.onOpenSettings();
+          }}
+        >
+          <GearIcon />
+          <span className="plan-compose-menu-name">{SERVERS_SETTINGS}</span>
+        </button>
       </div>
     </div>
   );

@@ -11,13 +11,20 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { test } from "vitest";
 import { CONNECTION_HEALTH, connectionHealth } from "../integration-health";
-import { SERVER_ROW, serverRows } from "./agent-servers-model";
+import {
+  SERVER_ROW,
+  SERVER_SECTION,
+  searchServers,
+  serverGroups,
+  serverRows,
+} from "./agent-servers-model";
 
 /**
  * What the MCP servers popover draws of a connected integration, from what
  * its server answered when asked for its tools: its switch and tools where
  * it answered with them, and its reason with Reconnect where it answered
- * why not, so a grant the server will not take never reads as working.
+ * why not, so a grant the server will not take never reads as working;
+ * which section each server stands under; and what a search finds.
  */
 
 /** Slack's row, connected, with its server's tools read answering `read`. */
@@ -85,4 +92,92 @@ test("a connection is checked until its server answers, and stands as the servic
   );
   assert.equal(slackRow(undefined).kind, SERVER_ROW.SWITCH);
   assert.equal(slackRow({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED }).kind, SERVER_ROW.SWITCH);
+});
+
+/** Every offered server's row where each stands as `standing` says, Linear's server answering `tools`. */
+function rowsWhere(
+  standing: Partial<
+    Record<IntegrationProvider, (typeof INTEGRATION_STATUS)[keyof typeof INTEGRATION_STATUS]>
+  >,
+  tools: IntegrationToolsView = { tools: [] },
+) {
+  return serverRows({
+    statusOf: (provider) => standing[provider] ?? INTEGRATION_STATUS.UNAVAILABLE,
+    healthOf: (provider) =>
+      connectionHealth(provider, provider === INTEGRATION_PROVIDER.LINEAR ? tools : { tools: [] }),
+    signInOf: () => undefined,
+    readFailed: false,
+    disabled: [],
+  });
+}
+
+test("connected servers stand under Connected and the rest under Not connected, a lapsed one among the connected", () => {
+  const groups = serverGroups(
+    rowsWhere({
+      [INTEGRATION_PROVIDER.VERCEL]: INTEGRATION_STATUS.CONNECTED,
+      [INTEGRATION_PROVIDER.MERCURY]: INTEGRATION_STATUS.DISCONNECTED,
+      [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
+      [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED,
+      [INTEGRATION_PROVIDER.NEON]: INTEGRATION_STATUS.PENDING,
+    }),
+  );
+
+  assert.deepEqual(
+    groups.map((group) => [group.heading, group.rows.map((row) => row.provider)]),
+    [
+      [
+        SERVER_SECTION.CONNECTED,
+        [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SLACK, INTEGRATION_PROVIDER.VERCEL],
+      ],
+      [SERVER_SECTION.NOT_CONNECTED, [INTEGRATION_PROVIDER.MERCURY, INTEGRATION_PROVIDER.NEON]],
+    ],
+  );
+});
+
+test("servers whose standing is unread stand first under no heading", () => {
+  const groups = serverGroups(
+    serverRows({
+      statusOf: () => undefined,
+      healthOf: () => ({ kind: CONNECTION_HEALTH.CHECKING }),
+      signInOf: () => undefined,
+      readFailed: false,
+      disabled: [],
+    }),
+  );
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]?.heading, undefined);
+});
+
+test("a search finds servers by name and any connected server's tools by name or description, alphabetically", () => {
+  const rows = rowsWhere(
+    {
+      [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
+      [INTEGRATION_PROVIDER.NEON]: INTEGRATION_STATUS.DISCONNECTED,
+    },
+    {
+      tools: [
+        { name: "save_issue", description: "Creates or updates an issue." },
+        { name: "list_projects", description: "Lists projects." },
+        { name: "get_issue", description: "Gets one issue." },
+      ],
+    },
+  );
+
+  const byTool = searchServers(rows, "Issue");
+  assert.deepEqual(byTool.rows, []);
+  assert.deepEqual(
+    byTool.tools.map((hit) => [hit.row.provider, hit.tool.name]),
+    [
+      [INTEGRATION_PROVIDER.LINEAR, "get_issue"],
+      [INTEGRATION_PROVIDER.LINEAR, "save_issue"],
+    ],
+  );
+
+  const byName = searchServers(rows, "ne");
+  assert.deepEqual(
+    byName.rows.map((row) => row.provider),
+    [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NEON],
+  );
+  assert.deepEqual(searchServers(rows, "  ").tools, []);
 });

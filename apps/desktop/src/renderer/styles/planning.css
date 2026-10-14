@@ -2026,59 +2026,86 @@ button.agent-ref:hover .agent-ref-name {
   color: var(--text-tertiary);
 }
 
-/* The MCP servers popover: the model menu's surface and rows, one per
-   server, each its mark and its name, how many tools it offers right after
-   the name, and at its end its switch or the button that connects it. A
-   row with nothing to press is dimmed as the menu's other disabled rows
-   are, and takes no fill; no row is one press, since each holds its own
-   controls. */
-.agent-servers-list {
-  display: block;
-  padding: 0 0 var(--space-4);
+/* The MCP servers popover: the searchable menu's surface, its search field
+   first, then one row per server under Connected and Not connected, and
+   Manage in Settings pinned at its foot. A row is its mark, its name, how
+   many tools it offers in the muted detail type, and at its end its switch,
+   or Connect in the accent's words rather than a bordered button, so the
+   rows to connect never outweigh the switches. A row that opens onto its
+   tools shows its chevron while it holds the highlight; a row with nothing
+   to press is dimmed as the menu's other disabled rows are. The list is
+   taller than the searchable menu's, as tall as a server's page, so going
+   in and back keeps the popover's size, and never taller than the window
+   leaves above the composer once the field and the foot are drawn, so the
+   field stays on screen in the shortest window. */
+.agent-servers-menu .agent-servers-list {
+  max-height: clamp(160px, 100vh - 320px, 400px);
 }
 
-.agent-servers-menu .agent-servers-row:hover {
-  background: none;
+.agent-servers-row[data-opens="true"] {
+  cursor: default;
 }
 
 .agent-servers-row .plan-compose-menu-name {
   flex: 0 1 auto;
 }
 
-.agent-servers-tools {
-  display: flex;
+.agent-servers-count {
   flex: none;
-}
-
-/* The count follows the server's name, in the menu's muted detail type, and
-   lifts to the body's colour while its list is open, which is while its row
-   is hovered or the count focused, as a menu row opens its submenu; the
-   switch or the button keeps the row's end. */
-.agent-servers-tools-count {
-  padding: 0 var(--space-4);
-  border-radius: var(--menu-row-radius);
-  background: none;
   color: var(--text-tertiary);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.agent-servers-row:is(:hover, :focus-within) .agent-servers-tools-count {
-  color: var(--text-body);
+.agent-servers-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: auto;
+}
+
+.agent-servers-chevron {
+  display: flex;
+  color: var(--text-tertiary);
+  visibility: hidden;
+}
+
+.agent-servers-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-servers-row[data-highlighted="true"] .agent-servers-chevron {
+  visibility: visible;
 }
 
 .agent-servers-switch {
   display: flex;
   flex: none;
-  margin-left: auto;
   padding: 0;
   border-radius: var(--menu-row-radius);
   background: none;
 }
 
 .agent-servers-connect {
-  flex: none;
-  margin-left: auto;
+  height: 22px;
+  padding: 0 var(--space-6);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--message-sent);
+  font-size: 12.5px;
+  font-weight: 560;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.agent-servers-connect:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--message-sent) 12%, transparent);
+}
+
+.agent-servers-connect:disabled {
+  opacity: 0.5;
 }
 
 /* Why a connected server lists no tools, after its name in the attention
@@ -2092,7 +2119,6 @@ button.agent-ref:hover .agent-ref-name {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  padding: 0 var(--space-4);
   color: var(--state-attention);
   font-size: 12px;
   text-overflow: ellipsis;
@@ -2102,7 +2128,7 @@ button.agent-ref:hover .agent-ref-name {
 /* A sign-in's line in the same place is no problem: never finished, in the
    muted detail colour. One still waiting on the browser is its small ring
    alone after the name, its words in its title, with Reopen and Cancel at
-   the row's end. */
+   the row's end, Cancel in the muted colour beside the accent's Reopen. */
 .agent-servers-problem[data-tone="quiet"] {
   color: var(--text-secondary);
 }
@@ -2110,98 +2136,142 @@ button.agent-ref:hover .agent-ref-name {
 .agent-servers-row .agent-servers-waiting {
   width: 12px;
   height: 12px;
-  margin-left: var(--space-8);
 }
 
-.agent-servers-reopen {
+.agent-servers-connect[data-tone="quiet"] {
+  color: var(--text-secondary);
+}
+
+.agent-servers-connect[data-tone="quiet"]:hover:not(:disabled) {
+  background: var(--raised-strong);
+}
+
+/* A tool a search found: its name in the code face at the row's size, and
+   its server's name after it as the count is drawn. */
+.agent-servers-hit .agent-servers-tool-id {
+  font-size: 12px;
+}
+
+/* A server's page, in the popover's place: back, its mark and name, its
+   count, and its switch at the end, over a hairline, at the search field's
+   height. */
+.agent-servers-page-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--glyph-gap);
+  height: 40px;
+  padding: 0 var(--space-12) 0 var(--space-6);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.agent-servers-page-head .integration-mark {
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: none;
-  margin-left: auto;
 }
 
-.agent-servers-cancel {
-  flex: none;
+.agent-servers-page-head .agent-servers-back {
+  --control-height: 24px;
 }
 
-/* The tools stand beside the popover, on its leading side since it hangs
-   from the composer's trailing edge, up from the row's foot since it stands
-   at the panel's foot, and scroll down inside themselves past a bounded
-   height and never sideways: each its name in the code face, with the first
-   line of what it does under it in the muted type, both cut where the
-   list's width ends. */
-.agent-servers-menu .agent-servers-tools-menu {
-  display: none;
-  right: calc(100% + var(--menu-inset) + 9px);
-  width: 280px;
-  max-height: 320px;
+.agent-servers-page-head .agent-servers-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.agent-servers-page-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A run's heading is the prefix its tools' names share, drawn in the code
+   face as the pattern it is, and stays at the list's top while its run
+   scrolls under it. */
+.agent-servers-run {
+  position: sticky;
+  z-index: 1;
+  top: calc(var(--menu-inset) * -1);
+  background: var(--surface-popover);
+}
+
+.agent-servers-run[data-prefix="true"] {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.agent-servers-list ul {
   margin: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  padding: 0;
   list-style: none;
 }
 
-.agent-servers-row:is(:hover, :focus-within) .agent-servers-tools-menu {
-  display: block;
-}
-
-/* The list stands outside the row, past the popover's inset and a gap, so a
-   strip of the row's own reaches across both while the list is drawn: the
-   pointer crossing to the list never leaves the row whose hover keeps it
-   drawn. Note that the strip hangs from the row rather than the list,
-   because the list scrolls, and a scroller clips what stands outside it, or
-   scrolls sideways to reach it. */
-.agent-servers-row:is(:hover, :focus-within):has(.agent-servers-tools-menu)::before {
-  position: absolute;
-  top: 0;
-  right: 100%;
-  bottom: 0;
-  width: calc(var(--menu-inset) + 9px + 2px);
-  content: "";
-}
-
+/* A tool: its name in the code face with its badge after it, and what it
+   does under it in the muted type, two lines at most; the whole line is
+   the tool's title. */
 .agent-servers-tool {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 1px;
   padding: var(--space-4) var(--row-inset);
+  border-radius: var(--menu-row-radius);
 }
 
-.agent-servers-tool-name,
-.agent-servers-tool-description {
+.agent-servers-tool-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.agent-servers-tool-id {
   overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-servers-tool-name {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
 .agent-servers-tool-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
-/* The title's row: the title, inset from the top as a section heading's
-   words are from the side, and Settings one quiet gear away at its end, a
-   small square centred on the title's line that reaches past it into the
-   padding rather than making the row any taller than the title alone. Note
-   that the gear names the head's class too, because the window's own
-   `.icon-button` comes later in the sheet and would size it again. */
-.agent-servers-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* The badge a server's own annotations earn a tool: quiet for Read-only,
+   the danger tint for Destructive. */
+.agent-servers-badge {
+  flex: none;
+  padding: 0 var(--space-4);
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 560;
+  line-height: 16px;
 }
 
-.agent-servers-head .agent-servers-settings {
-  --control-height: 24px;
-  margin-block: calc(var(--space-6) * -1);
-  margin-right: calc(var(--space-4) - var(--row-inset));
+.agent-servers-badge[data-destructive="true"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger-text);
 }
 
-.agent-servers-head .agent-servers-settings svg {
+/* Manage in Settings, pinned under the list: a quiet row, its gear a glyph's size. */
+.agent-servers-manage {
+  color: var(--text-secondary);
+}
+
+.agent-servers-manage svg {
   width: 14px;
   height: 14px;
 }
