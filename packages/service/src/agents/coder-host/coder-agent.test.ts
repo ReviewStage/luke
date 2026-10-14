@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
+import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -16,7 +17,6 @@ import {
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { CHAT_TOOLS } from "./chat.js";
-import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -156,9 +156,6 @@ test("the session and the post tool are told never to ask for a credential or a 
     );
   }
   assert.ok(
-    INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
-  );
-  assert.ok(
     CHAT_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
   );
 });
@@ -170,8 +167,8 @@ test("the session is told of the plan's other agents in chat and asks there, by 
     for (const tool of Object.values(CHAT_TOOLS))
       assert.ok(instructions.includes(tool.name), tool.name);
     assert.ok(instructions.includes(`\`${CHAT_NOTICE_LEAD} ·\``), brief);
-    for (const tool of Object.values(INBOX_TOOLS)) {
-      assert.ok(!instructions.includes(tool.name), `${brief} names ${tool.name}`);
+    for (const tool of Object.values(INBOX_TOOL)) {
+      assert.ok(!instructions.includes(tool), `${brief} names ${tool}`);
     }
   }
 });

@@ -86,7 +86,7 @@ export interface InboxAgent {
 }
 
 /** Why a post was not written. */
-export const INBOX_POST_REFUSAL = {
+const INBOX_POST_REFUSAL = {
   /** The agent holds as many open items as it may; it closes one first. */
   TOO_MANY_OPEN: "too-many-open",
   /** The agent is no longer the account's. */
@@ -826,22 +826,6 @@ export function closeInboxItem(
       closeItem({ ...agent, key, reason, now }),
       Option.map((row) => storedItem(row).item),
     ),
-  );
-}
-
-/**
- * The agent's own items as its tools answer with them: every one still
- * open, then the latest settled ones, few enough that a tool's answer stays
- * a small part of the agent's context. Note that the open items are read
- * apart from the bound, so one the developer has yet to answer is never
- * dropped from what the agent holds.
- */
-export function agentInboxItems(
-  agent: Pick<InboxAgent, "userId" | "agentId">,
-): InboxStoreEffect<readonly InboxItem[]> {
-  return scopeItems(
-    { userId: agent.userId, scope: INBOX_SCOPE.AGENT, id: agent.agentId },
-    INBOX_BOUNDS.MAX_SETTLED_TOLD,
   );
 }
 

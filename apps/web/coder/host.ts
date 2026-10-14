@@ -5,13 +5,7 @@ import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
-import {
-  type ChatCall,
-  type CoderHost,
-  coderHost,
-  type InboxCall,
-} from "@luke/service/agents/coder-host/host";
-import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
+import { type ChatCall, type CoderHost, coderHost } from "@luke/service/agents/coder-host/host";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
 import { type PlanEditResult, planEditRejected } from "@luke/service/agents/coder-host/plan-edit";
@@ -161,21 +155,6 @@ export function editPlanNotes(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
       return yield* host.editPlan(admitted.success, input, takenInTurn);
-    }),
-  );
-}
-
-/** One call of the agent's inbox tools run under its session, for the tool, which runs here rather than at an edge of its own. */
-export function runInboxTool(
-  auth: SessionAuth,
-  sessionId: string,
-  call: InboxCall,
-): Promise<InboxToolResult> {
-  return runWeb(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
-      return yield* host.inbox(admitted.success, call);
     }),
   );
 }

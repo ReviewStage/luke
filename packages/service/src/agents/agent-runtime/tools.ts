@@ -28,7 +28,9 @@ export { AGENT_TOOL, type AgentTool };
 const { PLANNER, PLANNER_WORKER, CODER, CODER_WORKER } = AGENT_ROLE;
 
 /**
- * The roles each tool serves. Note that a planning worker is offered only the
+ * The roles each tool serves, none for a tool retired whose name a stored
+ * transcript still carries, such as the inbox's, whose asks are chat posts
+ * now (`../coder-host/chat.ts`). Note that a planning worker is offered only the
  * reads, never a tool that speaks, shows, or draws, because what reaches the
  * developer reaches them through the planning turn the voice follows; and a
  * coding agent's worker only the reads of the checkout and the web, so
@@ -58,9 +60,9 @@ const TOOL_ROLES = {
   [AGENT_TOOL.DELEGATE]: [PLANNER, CODER],
   [AGENT_TOOL.EDIT_PLAN]: [CODER],
   [AGENT_TOOL.WRITE_TODOS]: [CODER],
-  [AGENT_TOOL.POST_TO_INBOX]: [CODER],
-  [AGENT_TOOL.CLOSE_INBOX_ITEM]: [CODER],
-  [AGENT_TOOL.READ_INBOX]: [CODER],
+  [AGENT_TOOL.POST_TO_INBOX]: [],
+  [AGENT_TOOL.CLOSE_INBOX_ITEM]: [],
+  [AGENT_TOOL.READ_INBOX]: [],
   [AGENT_TOOL.POST_CHAT]: [PLANNER, CODER],
   [AGENT_TOOL.READ_CHAT]: [PLANNER, CODER],
   [AGENT_TOOL.RESOLVE_ASK]: [PLANNER, CODER],

@@ -16,6 +16,7 @@ import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
@@ -34,6 +35,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
+  type WireRecord,
 } from "../../core.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
@@ -206,10 +208,25 @@ const composedPrompt = (host: CoderHost, ...composed: Parameters<CoderHost["prom
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
 
-/** One coding turn as eve emits it: the plan received, a shell call answered, a thought, words, and the end given. */
+/** One tool call of a turn's first step, and what it answered. */
+interface TurnCall {
+  readonly toolName: string;
+  readonly input: WireRecord;
+  readonly output: WireRecord;
+}
+
+/** The shell call a coding turn makes unless a test names another. */
+const SHELL_CALL: TurnCall = {
+  toolName: CODER_TOOL.BASH,
+  input: { command: "cat AGENTS.md" },
+  output: { status: "completed", exitCode: 0, stdout: "# Agent guide\n", stderr: "" },
+};
+
+/** One coding turn as eve emits it: the plan received, a call answered (a shell call unless named), a thought, words, and the end given. */
 function codingTurn(
   turnId: string,
   end: "turn.completed" | "turn.failed" | "turn.cancelled",
+  call: TurnCall = SHELL_CALL,
 ): MessageStreamEvent[] {
   const sequence = 0;
   const ended: MessageStreamEvent =
@@ -233,8 +250,8 @@ function codingTurn(
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: CODER_TOOL.BASH,
-            input: { command: "cat AGENTS.md" },
+            toolName: call.toolName,
+            input: call.input,
           },
         ],
       },
@@ -249,8 +266,8 @@ function codingTurn(
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: CODER_TOOL.BASH,
-          output: { status: "completed", exitCode: 0, stdout: "# Agent guide\n", stderr: "" },
+          toolName: call.toolName,
+          output: call.output,
         },
       },
     }),
@@ -624,6 +641,39 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.deepEqual(
           read.channels.map((channel) => channel.name),
           ["#teammate-invitations"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a transcript written while the inbox's tools were offered still reads back, its inbox call a tool part of the answer",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const posted = {
+          toolName: INBOX_TOOL.POST,
+          input: { key: "branch-protection", title: "Require a review on main" },
+          output: { status: ACTION_RESULT_STATUS.ACCEPTED, inbox: [] },
+        };
+        for (const event of codingTurn("turn_0", "turn.completed", posted)) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, { hash: prompt.hash });
+        }
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const call = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(call);
+        assert.equal(call.type, `tool-${INBOX_TOOL.POST}`);
+        assert.equal(call.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+        assert.deepEqual(call.input, posted.input);
+        assert.ok(
+          !Object.values<string>(CODER_TOOL).includes(INBOX_TOOL.POST),
+          "no agent is offered it",
         );
       }),
   );

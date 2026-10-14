@@ -283,7 +283,7 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 });
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
-export const INBOX_ANSWER_LEAD = "Inbox answer";
+const INBOX_ANSWER_LEAD = "Inbox answer";
 
 export { fieldValueWords, knownBlock, knownResponse } from "./chat-blocks.js";
 

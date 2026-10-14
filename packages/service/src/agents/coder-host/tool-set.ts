@@ -18,9 +18,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * search, the hosted public search and page read the planning model has
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
- * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`), the workspace's chat it posts
- * in and reads (`chat.ts`), the load of one of its
+ * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), the workspace's
+ * chat it posts in, asks in, and reads (`chat.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
@@ -49,9 +48,6 @@ export const CODER_TOOL = {
   DELEGATE: AGENT_TOOL.DELEGATE,
   EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
-  POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
-  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
-  READ_INBOX: AGENT_TOOL.READ_INBOX,
   POST_CHAT: AGENT_TOOL.POST_CHAT,
   READ_CHAT: AGENT_TOOL.READ_CHAT,
   RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
@@ -62,12 +58,16 @@ export const CODER_TOOL = {
 
 /**
  * eve's provider-run web reads, which coding agents ran before they had the
- * hosted pair: no agent is offered them now, but a transcript written then
- * names them, and reads back under the same set.
+ * hosted pair, and the inbox's three, whose asks are chat posts now: no
+ * agent is offered them, but a transcript written then names them, and
+ * reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
+  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
+  READ_INBOX: AGENT_TOOL.READ_INBOX,
 } as const;
 
 /**

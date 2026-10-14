@@ -65,7 +65,6 @@
     "./agents/coder-host/delegation": "./src/agents/coder-host/delegation.js",
     "./agents/coder-host/files": "./src/agents/coder-host/files.js",
     "./agents/coder-host/host": "./src/agents/coder-host/host.js",
-    "./agents/coder-host/inbox": "./src/agents/coder-host/inbox.js",
     "./agents/coder-host/inbox-image": "./src/agents/coder-host/inbox-image.js",
     "./agents/coder-host/inbox-page": "./src/agents/coder-host/inbox-page.js",
     "./agents/coder-host/instructions": "./src/agents/coder-host/instructions.js",

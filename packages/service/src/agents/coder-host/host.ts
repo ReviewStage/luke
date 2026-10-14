@@ -12,7 +12,6 @@ import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
-import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -80,14 +79,6 @@ import {
 import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
-import {
-  closeInInbox,
-  INBOX_REFUSAL,
-  type InboxToolResult,
-  inboxRejected,
-  postToInbox,
-  readOwnInbox,
-} from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
@@ -261,11 +252,6 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
     takenInTurn: number,
   ): Effect.Effect<PlanEditResult, never, DatabaseServices>;
-  /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
-  inbox(
-    admitted: AdmittedConversation,
-    call: InboxCall,
-  ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
   /**
    * Runs one of the agent's chat tools (`chat.ts`): a post, told to each
    * agent it addresses through eve as the deployment acting for that agent's
@@ -308,18 +294,6 @@ export interface CoderHost extends HostAdmission {
     prompt: CoderSessionPromptRecord,
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
-
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
-export type InboxCall =
-  | {
-      readonly tool: typeof INBOX_TOOL.POST;
-      readonly input: UnparsedWireValue;
-      readonly sandbox: InboxSandboxDoor;
-    }
-  | {
-      readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
-      readonly input: UnparsedWireValue;
-    };
 
 /** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
 export type ChatCall =
@@ -619,25 +593,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
-      ),
-
-    inbox: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, planId, repository } = found.success;
-        const agent = { userId: admitted.target.userId, planId, agentId };
-        switch (call.tool) {
-          case INBOX_TOOL.POST:
-            return yield* postToInbox({ ...agent, repository }, call.input, call.sandbox);
-          case INBOX_TOOL.CLOSE:
-            return yield* closeInInbox(agent, call.input);
-          case INBOX_TOOL.READ:
-            return yield* readOwnInbox(agent);
-        }
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
       ),
 
     chat: (admitted, call) =>
