@@ -7,9 +7,12 @@
  * back. A server may answer a request with one JSON body or with an event
  * stream whose `data:` lines carry it; both are read. The account's bearer
  * travels on every request and nowhere else, and the session is ended once
- * the list is read. What the list keeps of each tool is its name and the
- * first line of its description: nothing the model would be handed, only
- * what a person picking servers reads.
+ * the list is read. What the list keeps of each tool is its name, the
+ * first line of its description, and the hints the server annotated it
+ * with (`readOnlyHint` and its kin), where it sent any it spelled as the
+ * spec does: nothing the model would be handed, only what a person picking
+ * servers reads. A tool whose hints are malformed is kept without them, so
+ * one server's slip never costs the developer its whole list.
  *
  * Every failure is one word. The one thing kept of what the server said is
  * the first line of a JSON-RPC error's message, bounded, and only where it
@@ -18,6 +21,10 @@
  * developer how to mend a connection, and it reaches their window.
  */
 
+import {
+  type IntegrationToolAnnotations,
+  integrationToolAnnotationsSchema,
+} from "@sidecar/hosted/integration-wire";
 import { Data, Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -94,6 +101,8 @@ const RPC_UNAUTHORIZED = -32001;
 export interface McpTool {
   readonly name: string;
   readonly description: string;
+  /** The hints its server sent, where it sent any. */
+  readonly annotations?: IntegrationToolAnnotations;
 }
 
 const RpcError = Schema.Struct({
@@ -109,7 +118,14 @@ const RpcAnswer = Schema.Struct({
 
 const ToolsPage = Schema.Struct({
   tools: Schema.Array(
-    Schema.Struct({ name: Schema.String, description: Schema.optionalKey(Schema.String) }),
+    Schema.Struct({
+      name: Schema.String,
+      description: Schema.optionalKey(Schema.String),
+      // A malformed hint costs its tool the hints, never the page.
+      annotations: Schema.optionalKey(
+        integrationToolAnnotationsSchema.pipe(Schema.catchDecoding(() => Effect.succeedNone)),
+      ),
+    }),
   ),
   nextCursor: Schema.optionalKey(Schema.String),
 });
@@ -145,6 +161,13 @@ function answersOf(contentType: string, body: string): readonly RpcAnswerType[] 
 function firstLine(text: string | undefined, max: number): string {
   const line = (text ?? "").trim().split(/\r?\n/)[0] ?? "";
   return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
+}
+
+/** The hints a tool keeps of those its server sent: none where it sent none at all. */
+function keptAnnotations(
+  sent: IntegrationToolAnnotations | undefined,
+): IntegrationToolAnnotations | undefined {
+  return sent === undefined || Object.keys(sent).length === 0 ? undefined : sent;
 }
 
 const unreachable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREACHABLE });
@@ -259,11 +282,14 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
       const result = yield* send(MCP_METHOD.TOOLS_LIST, cursor !== undefined ? { cursor } : {});
       const read = Option.getOrUndefined(decodePage(result));
       if (read === undefined) return yield* unreadable;
-      for (const tool of read.tools)
+      for (const tool of read.tools) {
+        const annotations = keptAnnotations(tool.annotations);
         tools.push({
           name: tool.name,
           description: firstLine(tool.description, DESCRIPTION_MAX_CHARS),
+          ...(annotations !== undefined ? { annotations } : undefined),
         });
+      }
       cursor = read.nextCursor;
       if (cursor === undefined) return tools;
     }

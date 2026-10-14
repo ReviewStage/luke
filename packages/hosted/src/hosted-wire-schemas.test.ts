@@ -170,6 +170,7 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationStatusesAnswerSchema: integrationWire.integrationStatusesAnswerSchema,
     integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,
     integrationConnectAnswerSchema: integrationWire.integrationConnectAnswerSchema,
+    integrationToolAnnotationsSchema: integrationWire.integrationToolAnnotationsSchema,
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
