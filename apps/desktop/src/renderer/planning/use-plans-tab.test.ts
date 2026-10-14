@@ -1071,3 +1071,30 @@ test("a refused reopen takes its ask back and rests on the home page", async () 
   assert.deepEqual(selected(tab), [PLAN.id]);
   assert.equal(tab.control().restoring, false);
 });
+
+test("a launch whose list read failed rests on the home page, and opens the plan once Try again reads it", () => {
+  quitWithPlanOpen();
+  const tab = mount(
+    { shown: true, planning: LAUNCHING },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  tab.stand({ planning: { ...LAUNCHING, listStatus: PLANNING_READ.FAILED } });
+  assert.deepEqual(selected(tab), []);
+  assert.equal(tab.control().restoring, false);
+
+  tab.stand({ planning: listRead([listed()]) });
+  assert.deepEqual(selected(tab), [PLAN.id]);
+});
+
+test("another account signing in after a sign-out keeps its own plan, and has it opened", () => {
+  quitWithPlanOpen("other@example.com");
+  document.body.innerHTML = "";
+  const tab = mount(
+    { shown: true, planning: { ...OPEN, plans: [listed()] } },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  tab.stand({ signedIn: false, planning: IDLE_PLANNING_VIEW });
+  tab.stand({ signedIn: true, account: "other@example.com", planning: LAUNCHING });
+  tab.stand({ planning: listRead([listed()]) });
+  assert.deepEqual(selected(tab), [PLAN.id]);
+});

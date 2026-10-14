@@ -22,8 +22,9 @@ import { readKept, writeKept } from "../desktop/folded-groups";
  * closes it, as leaving it for the home page does. Until the list is read,
  * the window is restoring and draws no home page, so a plan about to open
  * does not flash the home page first; once the plan is asked for it stays
- * restoring until the host has it open, or the ask is taken back. A
- * fixture run keeps nothing and opens nothing, as it draws plans of its
+ * restoring until the host has it open, or the ask is taken back. A list
+ * read that failed leaves the home page standing, and the read its Try
+ * again lands still opens the plan. A fixture run keeps nothing and opens nothing, as it draws plans of its
  * own.
  */
 
@@ -43,11 +44,6 @@ function withKept(kept: KeptPlans, account: string, planId: string | undefined):
   if (planId !== undefined) return { ...kept, [account]: planId };
   const { [account]: _gone, ...rest } = kept;
   return rest;
-}
-
-/** Whether the plan list has answered, either way: what the reopen waits for. */
-function listSettled(status: PlanningView["listStatus"]): boolean {
-  return status !== PLANNING_READ.IDLE && status !== PLANNING_READ.READING;
 }
 
 /**
@@ -71,7 +67,8 @@ export function useLastPlan(input: {
   const [decided, setDecided] = useState<{ account: string; asked?: string } | undefined>(
     undefined,
   );
-  const wasOpen = useRef<string | undefined>(undefined);
+  // The plan last seen open, and the account it was open for.
+  const wasOpen = useRef<{ account: string; planId: string } | undefined>(undefined);
   const keep = useCallback(
     (next: (held: KeptPlans) => KeptPlans) =>
       setKept((held) => {
@@ -83,20 +80,25 @@ export function useLastPlan(input: {
   );
 
   // The plan the host opens is kept, and let go once it closes. Note that
-  // only a close seen in this run lets it go, because nothing is open at a
-  // launch until the reopen opens it.
+  // only a close seen in this run, under the same account, lets it go,
+  // because nothing is open at a launch until the reopen opens it, and a
+  // sign-out closes the plan of the account leaving, not the next one's.
   useEffect(() => {
-    if (staged || account === undefined) return;
+    if (staged || account === undefined) {
+      wasOpen.current = undefined;
+      return;
+    }
     const was = wasOpen.current;
-    wasOpen.current = openPlanId;
+    wasOpen.current = openPlanId === undefined ? undefined : { account, planId: openPlanId };
     if (openPlanId !== undefined) keep((held) => withKept(held, account, openPlanId));
-    else if (was !== undefined) keep((held) => withKept(held, account, undefined));
+    else if (was?.account === account) keep((held) => withKept(held, account, undefined));
   }, [staged, account, openPlanId, keep]);
 
-  // Once per account signed in, as soon as the list answers: the kept plan
+  // Once per account signed in, as soon as the list is read: the kept plan
   // where it is listed and not archived, else nothing, and a kept plan the
-  // list read does not offer is let go. A window reloaded over a plan the
-  // host still holds has nothing to reopen.
+  // list does not offer is let go. A read that failed decides nothing, so
+  // the read Try again lands still reopens it. A window reloaded over a
+  // plan the host still holds has nothing to reopen.
   const keptPlan = account === undefined ? undefined : kept[account];
   useEffect(() => {
     if (staged || account === undefined || decided?.account === account) return;
@@ -104,12 +106,10 @@ export function useLastPlan(input: {
       setDecided({ account });
       return;
     }
-    if (!listSettled(listStatus)) return;
+    if (listStatus !== PLANNING_READ.READY) return;
     const plan = plans.find((each) => each.id === keptPlan && each.archivedAt === undefined);
     if (plan === undefined) {
-      if (keptPlan !== undefined && listStatus === PLANNING_READ.READY) {
-        keep((held) => withKept(held, account, undefined));
-      }
+      if (keptPlan !== undefined) keep((held) => withKept(held, account, undefined));
       setDecided({ account });
       return;
     }
@@ -117,7 +117,11 @@ export function useLastPlan(input: {
     select(plan.id);
   }, [staged, account, decided, openPlanId, listStatus, plans, keptPlan, select, keep]);
 
+  // Note that a failed read leaves the home page standing, with the
+  // sidebar's Try again, rather than the bare ground until the list reads.
   if (staged || account === undefined || openPlanId !== undefined) return false;
-  if (decided?.account !== account) return keptPlan !== undefined;
+  if (decided?.account !== account) {
+    return keptPlan !== undefined && listStatus !== PLANNING_READ.FAILED;
+  }
   return decided.asked !== undefined && boundFor === decided.asked;
 }
