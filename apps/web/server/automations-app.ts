@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
+  AUTOMATION_ACCESS,
   type Automation,
   type AutomationChanges,
   type AutomationRunInHistory,
@@ -447,13 +448,14 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const userId = yield* resolvedUserId(seams, request);
   const id = yield* idOf(request);
-  if (incoming.method === HTTP_METHOD.DELETE) {
-    const deleted = yield* hostedStoreOrUnavailable(deleteAutomation(userId, id));
-    if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
-  }
   const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
   if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (incoming.method === HTTP_METHOD.DELETE) {
+    const deleted = yield* hostedStoreOrUnavailable(deleteAutomation(userId, id));
+    // One the account reads but may not delete is refused as not permitted, not as gone.
+    if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
+  }
   if (incoming.method === HTTP_METHOD.GET) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       automation: yield* summaryOf(userId, standing.value),
@@ -464,8 +466,12 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
   );
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { changes, webhookSecret } = yield* changesOf(userId, standing.value, asked.success);
-  const written = yield* hostedStoreOrUnavailable(updateAutomation(userId, id, changes));
-  if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // Turning it on or off alone is the toggle, which more of the workspace may do than change it.
+  const access = Object.keys(asked.success).every((field) => field === "enabled")
+    ? AUTOMATION_ACCESS.TOGGLE
+    : AUTOMATION_ACCESS.CHANGE;
+  const written = yield* hostedStoreOrUnavailable(updateAutomation(userId, id, changes, access));
+  if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     automation: yield* summaryOf(userId, written.value),
     ...(webhookSecret === undefined ? undefined : { webhookSecret }),
@@ -488,8 +494,15 @@ const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(funct
   );
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const key = asked.success.idempotencyKey;
-  const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
-  if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const automation = yield* hostedStoreOrUnavailable(
+    readAutomation(userId, id, AUTOMATION_ACCESS.RUN),
+  );
+  if (Option.isNone(automation)) {
+    const readable = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+    return yield* Effect.fail(
+      Option.isSome(readable) ? HOSTED_REFUSAL.NOT_PERMITTED : HOSTED_REFUSAL.NOT_FOUND,
+    );
+  }
   const firedAt = new Date(yield* Clock.currentTimeMillis);
   const recorded = yield* hostedStoreOrUnavailable(
     recordAutomationRun(automation.value, {
