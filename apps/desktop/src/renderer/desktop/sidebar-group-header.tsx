@@ -1,18 +1,26 @@
 import { ChevronRightIcon } from "@sidecar/panel";
 import type { ReactNode } from "react";
+import { Tooltip } from "../tooltip";
 
 /**
- * sidebar-group-header.tsx -- the header a group of rows folds under, the sidebar's Pinned and Archived and the Inbox's plans alike.
+ * sidebar-group-header.tsx -- the header a group of rows folds under: the sidebar's repositories, Pinned, and Archived, the Inbox's plans, and the summary's archived agents alike.
  *
  * It is a row with the plan rows' own hover, in the headings' voice: the
  * group's glyph, which gives way to the fold's chevron while the header is
  * hovered or reached from the keyboard, pointing down while the group is
- * open and right while it is folded, then the group's name. Folded, it
- * counts what the group holds after its name, shown with the chevron and
- * read as "n plans", so a header at rest says nothing but its name. A
- * steady count, the Inbox's of what needs the developer, stands at rest
- * too, as a mail app's folder counts its unread mail, and is left out at
- * none.
+ * open and right while it is folded, then the group's name and whatever
+ * the group says after it, a repository's pin. Folded, it counts what the
+ * group holds after its name, shown with the chevron and read as "n plans",
+ * so a header at rest says nothing but its name. A steady count, the
+ * Inbox's of what needs the developer, stands at rest too, as a mail app's
+ * folder counts its unread mail, and is left out at none.
+ *
+ * A group with actions, a repository's ⋯ and +, stands them at the header's
+ * end beside the fold rather than inside it, so pressing one folds nothing,
+ * shown while the header is hovered or holds focus; a right-click anywhere
+ * on the header is the ⋯'s second door, and the header stays ringed while
+ * the menu it opened stands. The fold lands at once, as a sidebar's does,
+ * so whatever a header folds is drawn or not in the render that pressed it.
  */
 
 /** What a folded group's count is read as, one and many. */
@@ -28,7 +36,7 @@ const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
  * header is hovered or reached from the keyboard, or at rest too where it
  * is steady, and read as "n plans".
  */
-export function FoldedCount({
+function FoldedCount({
   count,
   noun = PLAN_NOUN,
   steady = false,
@@ -45,7 +53,7 @@ export function FoldedCount({
   );
 }
 
-/** A group's header, its press folding and unfolding the group; `className` names the toggle for a group's own rules. */
+/** A group's header, its press folding and unfolding the group. */
 export function SidebarGroupHeader({
   glyph,
   name,
@@ -53,7 +61,11 @@ export function SidebarGroupHeader({
   count,
   noun = PLAN_NOUN,
   steady = false,
-  className,
+  trailing,
+  actions,
+  tooltip,
+  menuOpen = false,
+  onContextMenu,
   onToggle,
 }: {
   glyph: ReactNode;
@@ -63,30 +75,43 @@ export function SidebarGroupHeader({
   noun?: CountNoun;
   /** Whether the folded count stands at rest rather than only under the pointer, and is left out at none. */
   steady?: boolean;
-  className?: string;
+  /** Said after the name inside the fold, quietly: a pinned repository's pin. */
+  trailing?: ReactNode;
+  /** The group's buttons at the header's end, beside the fold rather than inside it. */
+  actions?: ReactNode;
+  /** The fold's hover hint, where the name alone does not say the whole of it. */
+  tooltip?: string | undefined;
+  /** Whether a menu the header opened stands, which keeps it ringed and its actions shown. */
+  menuOpen?: boolean;
+  onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
   onToggle: () => void;
 }): React.JSX.Element {
   // Note that a steady count says nothing at none, because "0 need you" is no news.
   const counted = folded && !(steady && count === 0);
   return (
-    <div className="sidebar-repository-header">
-      <button
-        type="button"
-        className={
-          className === undefined
-            ? "sidebar-repository-toggle"
-            : `sidebar-repository-toggle ${className}`
-        }
-        aria-expanded={!folded}
-        onClick={onToggle}
-      >
-        <span className="sidebar-repository-glyph">
-          {glyph}
-          <ChevronRightIcon />
-        </span>
-        <span className="sidebar-repository-name">{name}</span>
-        {counted ? <FoldedCount count={count} noun={noun} steady={steady} /> : null}
-      </button>
+    // biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the group's ⋯, which is the keyboard's.
+    <div
+      className="sidebar-repository-header"
+      data-menu-open={menuOpen ? "true" : undefined}
+      onContextMenu={onContextMenu}
+    >
+      <Tooltip label={tooltip}>
+        <button
+          type="button"
+          className="sidebar-repository-toggle"
+          aria-expanded={!folded}
+          onClick={onToggle}
+        >
+          <span className="sidebar-repository-glyph">
+            {glyph}
+            <ChevronRightIcon />
+          </span>
+          <span className="sidebar-repository-name">{name}</span>
+          {trailing}
+          {counted ? <FoldedCount count={count} noun={noun} steady={steady} /> : null}
+        </button>
+      </Tooltip>
+      {actions === undefined ? null : <span className="sidebar-repository-actions">{actions}</span>}
     </div>
   );
 }

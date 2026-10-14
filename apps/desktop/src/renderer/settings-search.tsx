@@ -519,7 +519,7 @@ export function SettingsSearchResults({
     <div className="settings-search-results">
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
-          <h2 className="sidebar-heading">{resultPageWord(group.page)}</h2>
+          <h2 className="section-heading">{resultPageWord(group.page)}</h2>
           <ul>
             {group.items.map((entry) => (
               <li key={entry.id}>

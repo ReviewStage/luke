@@ -4,7 +4,6 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
-  ChevronRightIcon,
   ComposeIcon,
   EllipsisIcon,
   FolderIcon,
@@ -45,7 +44,7 @@ import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
-import { type CountNoun, FoldedCount, SidebarGroupHeader } from "./sidebar-group-header";
+import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -265,7 +264,6 @@ function PinnedSection({
         folded={folded}
         count={rows.length}
         noun={PIN_NOUN}
-        className="sidebar-pinned-row"
         onToggle={folds.togglePinned}
       />
       {drawn.length === 0 ? null : (
@@ -349,78 +347,72 @@ function RepositorySection({
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   return (
     <div className="sidebar-repository">
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
-      <div
-        className="sidebar-repository-header"
-        data-menu-open={String(menu.open !== undefined)}
+      <SidebarGroupHeader
+        glyph={
+          repository === null ? (
+            <FolderIcon />
+          ) : (
+            <RepositoryPicture
+              repository={repository}
+              pictures={context.plans.repositories.pictures}
+              fallback={<FolderIcon />}
+            />
+          )
+        }
+        name={named}
+        folded={folded}
+        count={group.plans.length}
+        trailing={
+          repository !== null && context.plans.pinnedRepositories.includes(repository) ? (
+            <span className="sidebar-repository-pinned">
+              <PinIcon />
+              <span className="visually-hidden">(pinned)</span>
+            </span>
+          ) : null
+        }
+        tooltip={repository === null || label === repository ? undefined : repository}
+        menuOpen={menu.open !== undefined}
         onContextMenu={(event) => {
           event.preventDefault();
           menu.show(atPointer(event), ellipsis.current ?? event.currentTarget);
         }}
-      >
-        <Tooltip label={repository === null || label === repository ? undefined : repository}>
-          <button
-            type="button"
-            className="sidebar-repository-toggle"
-            aria-expanded={!folded}
-            onClick={() => folds.toggle(repository)}
-          >
-            <span className="sidebar-repository-glyph">
-              {repository === null ? (
-                <FolderIcon />
-              ) : (
-                <RepositoryPicture
-                  repository={repository}
-                  pictures={context.plans.repositories.pictures}
-                  fallback={<FolderIcon />}
-                />
-              )}
-              <ChevronRightIcon />
-            </span>
-            <span className="sidebar-repository-name">{named}</span>
-            {repository !== null && context.plans.pinnedRepositories.includes(repository) ? (
-              <span className="sidebar-repository-pinned">
-                <PinIcon />
-                <span className="visually-hidden">(pinned)</span>
-              </span>
-            ) : null}
-            {folded ? <FoldedCount count={group.plans.length} /> : null}
-          </button>
-        </Tooltip>
-        <span className="sidebar-repository-actions">
-          <Tooltip label="Repository actions">
-            <button
-              ref={ellipsis}
-              type="button"
-              className="sidebar-repository-action"
-              aria-label={`Actions for ${named}`}
-              aria-haspopup="menu"
-              aria-expanded={menu.open !== undefined}
-              onClick={(event) => {
-                if (menu.open !== undefined) {
-                  menu.close(true);
-                  return;
-                }
-                menu.show(dropBelow(event.currentTarget), event.currentTarget);
-              }}
-            >
-              <EllipsisIcon />
-            </button>
-          </Tooltip>
-          {repository === null ? null : (
-            <Tooltip label={`New plan in ${label}`}>
+        onToggle={() => folds.toggle(repository)}
+        actions={
+          <>
+            <Tooltip label="Repository actions">
               <button
+                ref={ellipsis}
                 type="button"
-                className="sidebar-repository-action sidebar-repository-new"
-                aria-label={`New plan in ${label}`}
-                onClick={() => onNewPlanIn(repository)}
+                className="sidebar-repository-action"
+                aria-label={`Actions for ${named}`}
+                aria-haspopup="menu"
+                aria-expanded={menu.open !== undefined}
+                onClick={(event) => {
+                  if (menu.open !== undefined) {
+                    menu.close(true);
+                    return;
+                  }
+                  menu.show(dropBelow(event.currentTarget), event.currentTarget);
+                }}
               >
-                <PlusIcon />
+                <EllipsisIcon />
               </button>
             </Tooltip>
-          )}
-        </span>
-      </div>
+            {repository === null ? null : (
+              <Tooltip label={`New plan in ${label}`}>
+                <button
+                  type="button"
+                  className="sidebar-repository-action sidebar-repository-new"
+                  aria-label={`New plan in ${label}`}
+                  onClick={() => onNewPlanIn(repository)}
+                >
+                  <PlusIcon />
+                </button>
+              </Tooltip>
+            )}
+          </>
+        }
+      />
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${named} actions`}
@@ -455,7 +447,6 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
         name="Archived"
         folded={!unfolded}
         count={archived.length}
-        className="sidebar-archived-row"
         onToggle={() => setUnfolded((was) => !was)}
       />
       {unfolded ? <PlanRows rows={archived} context={context} /> : null}
