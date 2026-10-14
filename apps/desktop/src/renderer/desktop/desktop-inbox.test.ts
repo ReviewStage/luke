@@ -418,7 +418,7 @@ test("an archived agent is still named by its name, its card saying it was archi
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("an item's mark in the list hangs its agent's card where its plan's row names the agent, and a press on it chooses the item, as a press anywhere on its row does", async () => {
+test("an item's mark in the list hangs its agent's card where its plan's row names the agent, a press on the card choosing nothing, and a press on the mark chooses the item, as a press anywhere on its row does", async () => {
   const { page, asked } = mount();
   await settle();
   const row = rowNamed(page, "How is a failed email retried?");
@@ -427,6 +427,14 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
+  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
+  const card = document.querySelector<HTMLElement>(".tooltip-card [data-tab-card]");
+  act(() => {
+    card?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    card?.click();
+  });
+  assert.equal(row.getAttribute("aria-current"), null);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   act(() => mark.click());
   assert.equal(row.getAttribute("aria-current"), "page");

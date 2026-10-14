@@ -282,10 +282,22 @@ function TooltipPill({
       style={at === undefined ? undefined : { left: at.left, top: at.top }}
       onPointerEnter={carded ? () => onCard(true) : undefined}
       onPointerLeave={carded ? () => onCard(false) : undefined}
-      onPointerDown={carded ? onCardPress : undefined}
+      // Note that a card's presses go no further than the card, because the
+      // portal still bubbles them through the tree it was drawn from, and a
+      // card hung from a mark inside a row's button would otherwise press
+      // the row, or take itself down through its own control's press.
+      onPointerDown={
+        carded
+          ? (event) => {
+              event.stopPropagation();
+              onCardPress();
+            }
+          : undefined
+      }
       onClick={
         carded
           ? (event) => {
+              event.stopPropagation();
               if (event.target instanceof Element && event.target.closest(CARD_CHOICE) !== null) {
                 onCardChoice();
               }
