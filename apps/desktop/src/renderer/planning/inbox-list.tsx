@@ -199,8 +199,8 @@ function WaitingOnly({
 /**
  * The window's head: the Inbox's name, and Waiting only and the view's menu
  * at the list's top right. Its heading and its buttons glide as the
- * sidebar folds, the name making way for the sidebar's toggle and the
- * buttons keeping to the list's edge.
+ * sidebar folds, the name moving to the list's middle, clear of the
+ * sidebar's toggle, and the buttons keeping to the list's edge.
  */
 function ListHead({
   shown,

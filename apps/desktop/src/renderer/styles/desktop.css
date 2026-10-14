@@ -2568,6 +2568,31 @@ body:has(.app-stage[data-capture="true"])
   padding-right: var(--column-inset);
 }
 
+/* While the sidebar is folded the list is the window's first column, so its
+   name stands centred over the list, as a sidebar's title does, rather than
+   pushed past the title bar's buttons. Each side of the name holds at least
+   what stands there, the title bar's buttons at the left and the list's own
+   at the right, so the name moves aside only once it would meet them, and is
+   cut short only once it no longer fits between them. The bar is inset alike
+   on both sides, so centred in the bar is centred in the list. */
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .inbox-plans-bar {
+  display: grid;
+  grid-template-columns:
+    minmax(calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--control-gap)), 1fr)
+    minmax(0, max-content)
+    minmax(max-content, 1fr);
+  padding-left: var(--column-inset);
+}
+
+.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-heading {
+  grid-column: 2;
+}
+
+.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-actions {
+  grid-column: 3;
+  justify-self: end;
+}
+
 .inbox-plans-scroll {
   min-height: 0;
   flex: 1;
