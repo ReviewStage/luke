@@ -607,6 +607,11 @@ test("a tool pressed in an opened row shows the whole of what it does, one tool 
       ).click(),
     );
 
+  // Note that in Settings a pressed tool takes the focus, as a button does, so Return and Space reach it next.
+  const pressStart = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  page.querySelector(".integration-tool-head")?.dispatchEvent(pressStart);
+  assert.equal(pressStart.defaultPrevented, false);
+
   press("list_projects");
   assert.deepEqual(
     [...page.querySelectorAll(".integration-tool-full")].map((full) => full.textContent),

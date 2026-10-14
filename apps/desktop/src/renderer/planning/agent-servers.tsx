@@ -554,7 +554,12 @@ function ServersPopover({
         />
         <div ref={list} className="plan-compose-menu-list agent-servers-list">
           {tools.length === 0 ? <p className="plan-compose-menu-note">{PAGE.NONE}</p> : null}
-          <IntegrationToolList server={row.name} tools={tools} tokens={tokens} />
+          <IntegrationToolList
+            server={row.name}
+            tools={tools}
+            tokens={tokens}
+            onPressStart={keepFieldFocus}
+          />
         </div>
       </>
     );

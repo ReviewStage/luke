@@ -12,10 +12,11 @@ import { Highlighted } from "./search-field";
  * Return on it, opens it in place onto the whole of what it does, wrapped as
  * its server wrote it and selectable, and a second press closes it; one tool
  * is open at a time. The words a search landed on are marked in the name and
- * the description alike. A pointer's press on a tool leaves the focus where
- * it was, so the MCP popover's filter keeps the keys it hears; Tab still
- * reaches every tool. Where the list is drawn, and what scrolls it, is the
- * owner's.
+ * the description alike. Where the owner holds the keys in a field of its
+ * own, as the MCP popover's filter does, it hands a press-start that keeps
+ * the focus there; elsewhere a pressed tool takes the focus, as a button
+ * does, so Return and Space reach it next. Where the list is drawn, and what
+ * scrolls it, is the owner's.
  */
 
 function ToolItem({
@@ -24,12 +25,14 @@ function ToolItem({
   server,
   open,
   onToggle,
+  onPressStart,
 }: {
   tool: IntegrationTool;
   tokens: readonly string[];
   server: string;
   open: boolean;
   onToggle: () => void;
+  onPressStart: ((event: React.MouseEvent) => void) | undefined;
 }): React.JSX.Element {
   const fullId = useId();
   const badge = toolBadge(tool.annotations);
@@ -41,7 +44,7 @@ function ToolItem({
         className="integration-tool-head"
         aria-expanded={described ? open : undefined}
         aria-controls={open && described ? fullId : undefined}
-        onMouseDown={(event) => event.preventDefault()}
+        onMouseDown={onPressStart}
         onClick={onToggle}
       >
         <span className="integration-tool-name">
@@ -77,12 +80,15 @@ export function IntegrationToolList({
   server,
   tools,
   tokens,
+  onPressStart,
 }: {
   /** The integration's name, which the badges' titles and the list's name say. */
   server: string;
   tools: readonly IntegrationTool[];
   /** The words a search asks for, marked where they landed. */
   tokens: readonly string[];
+  /** A pointer's press on a tool, before it lands: where the owner keeps the focus in a field of its own. */
+  onPressStart?: (event: React.MouseEvent) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState<string | undefined>(undefined);
   return (
@@ -94,6 +100,7 @@ export function IntegrationToolList({
           tokens={tokens}
           server={server}
           open={open === tool.name}
+          onPressStart={onPressStart}
           onToggle={() => {
             // A tool that says nothing of what it does has nothing to open onto.
             if (tool.description !== "") setOpen(open === tool.name ? undefined : tool.name);
