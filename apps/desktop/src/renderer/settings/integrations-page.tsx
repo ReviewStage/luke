@@ -19,13 +19,7 @@ import {
   toolsCount,
 } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
-import {
-  SIGN_IN,
-  SIGN_IN_ACTION,
-  type SignIn,
-  signInLine,
-  waitingLine,
-} from "../integration-sign-in";
+import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration-sign-in";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
@@ -126,9 +120,8 @@ function rowLine(
   if (status === INTEGRATION_STATUS.CONNECTED) return connectedLine(health);
   if (signIn !== undefined) return signInRowLine(provider, signIn);
   switch (status) {
-    // Pending with no sign-in waited on is GitHub's own connect, which the next read settles.
     case INTEGRATION_STATUS.PENDING:
-      return { text: waitingLine(provider), state: LINE_STATE.WAITING };
+      return undefined;
     case INTEGRATION_STATUS.EXPIRED:
       return { text: "Sign-in expired.", state: LINE_STATE.ATTENTION };
     case INTEGRATION_STATUS.DISCONNECTED:

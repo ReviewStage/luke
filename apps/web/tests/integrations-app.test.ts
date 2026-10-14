@@ -27,7 +27,11 @@ import {
   readIntegrationConnections,
   readIntegrationSignIn,
 } from "../server/hosted/integration-store";
-import { integrationsApp, mintIntegrationState } from "../server/integrations-app";
+import {
+  type IntegrationsAppSeams,
+  integrationsApp,
+  mintIntegrationState,
+} from "../server/integrations-app";
 import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { GRANTING_SIGN_IN_URL, integrationConnectOver } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
@@ -84,13 +88,15 @@ function githubServer(listed: () => readonly string[]) {
 /**
  * The group over the test's database and a deployment with these variables
  * and this GitHub App, none unless given, each bearer the account it names,
- * over a Connect that grants everything unless it `declines`.
+ * over a Connect that grants everything unless it `declines`, and over the
+ * real store unless `seams` stands in for part of it.
  */
 const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
   network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
   connect: { readonly declines?: boolean } = {},
+  seams: Partial<IntegrationsAppSeams> = {},
 ) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
@@ -117,6 +123,7 @@ const standing = (
         mintState: mintIntegrationState,
         // The test's own clock, which also stamps a sign-in begun.
         now: () => clock.currentTimeMillisUnsafe(),
+        ...seams,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -288,6 +295,32 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         );
         assert.equal(yield* granting.cancelSlack(finished), INTEGRATION_STATUS.CONNECTED);
         assert.equal(yield* granting.slackStatus(finished), INTEGRATION_STATUS.CONNECTED);
+      }),
+  );
+
+  it.effect(
+    "a Cancel that a sign-in begun again overtakes answers that sign-in pending, and leaves it to run",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(
+          SLACK_CONNECTOR,
+          undefined,
+          undefined,
+          { declines: true },
+          {
+            // A Reopen's Connect lands between the Cancel's read and its ending of the state it read.
+            endSignIn: (userId, provider, state) =>
+              Effect.andThen(
+                beginIntegrationSignIn(userId, provider, "state-reopened"),
+                endIntegrationSignIn(userId, provider, state),
+              ),
+          },
+        );
+        const account = yield* openAccount("sky@reopened.example");
+        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+
+        assert.equal(yield* group.cancelSlack(account), INTEGRATION_STATUS.PENDING);
+        assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.PENDING);
       }),
   );
 

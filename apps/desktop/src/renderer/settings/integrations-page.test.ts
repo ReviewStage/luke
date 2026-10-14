@@ -269,7 +269,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and waits on the browser with no Cancel", async () => {
+test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -279,20 +279,24 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
 
   const connect = buttonNamed("Connect GitHub") ?? assert.fail("Connect GitHub is offered");
   assert.equal(buttonNamed("Connect"), undefined);
-  await act(async () => {
-    connect.click();
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  act(() => connect.click());
+  await settle();
 
   assert.equal(githubConnects, 1);
   assert.deepEqual(links, [], "nothing leaves the page");
   assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u);
+  await focusWindow();
+  assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u, "still waiting");
+
+  const cancel = buttonNamed("Cancel") ?? assert.fail("GitHub's wait offers Cancel");
+  act(() => cancel.click());
+  await settle();
   assert.equal(
-    buttonNamed("Cancel"),
-    undefined,
-    "GitHub's connect has nothing at the service to cancel",
+    sent.some((request) => request.kind === ACT_KIND.INTEGRATIONS_CANCEL),
+    false,
+    "the service holds no GitHub sign-in to end",
   );
-  assert.ok(buttonNamed("Connect GitHub"), "a second press opens the page again");
+  assert.ok(buttonNamed("Connect GitHub"), "Connect GitHub is offered again");
 });
 
 test("GitHub connected stands connected with no Disconnect, whose way out is Settings › Connected accounts", async () => {

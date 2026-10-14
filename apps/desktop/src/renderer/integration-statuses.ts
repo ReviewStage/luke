@@ -49,7 +49,7 @@ export interface IntegrationStatuses {
   readonly read: () => Promise<void>;
   /** One provider's standing as an answer of the host's left it, ahead of the next read. */
   readonly settle: (provider: IntegrationProvider, status: IntegrationStatus) => void;
-  /** A sign-in begun: the provider stands pending and the window waits on it, unless a connection already stands; GitHub's own connect stands pending alone. */
+  /** A sign-in begun: the provider stands pending and the window waits on it, unless a connection already stands. */
   readonly signInBegun: (provider: IntegrationProvider) => void;
   /** Ends a sign-in waited on, at the service too, revoking nothing; answers whether the service answered. */
   readonly cancelSignIn: (provider: IntegrationProvider) => Promise<boolean>;
@@ -81,6 +81,11 @@ function signInsAfterRead(
     if (signIn !== undefined) next.set(provider, signIn);
   }
   return next;
+}
+
+/** Whether the provider is granted by the account's own GitHub, whose connect the service never answers pending. */
+function byGitHub(provider: IntegrationProvider): boolean {
+  return INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN;
 }
 
 /** The earliest deadline of a sign-in waited on, which the wait is armed for whenever it moves. */
@@ -161,29 +166,29 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     setStatuses((standing) => ({ ...standing, [provider]: status }));
   }, []);
 
-  // Note that neither a connection that stands nor GitHub's connect is waited
-  // on, because the service answers the one connected and the other
-  // disconnected throughout, so no read could say how the sign-in ended:
-  // GitHub stands pending until the next read says where it stands.
+  // Note that a connection that stands is not waited on, because the service
+  // answers it connected throughout, so no read could say how the sign-in ended.
   const signInBegun = useCallback(
     (provider: IntegrationProvider) => {
       if (statuses?.[provider] === INTEGRATION_STATUS.CONNECTED) return;
-      setStatuses((standing) => ({ ...standing, [provider]: INTEGRATION_STATUS.PENDING }));
-      if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) return;
       marks.current += 1;
-      const signIn = begunSignIn(marks.current, now());
+      const signIn = begunSignIn(marks.current, now(), !byGitHub(provider));
+      setStatuses((standing) => ({ ...standing, [provider]: INTEGRATION_STATUS.PENDING }));
       setSignIns((standing) => new Map(standing).set(provider, signIn));
     },
     [statuses, now],
   );
 
+  // Note that GitHub's connect is ended here alone, because the service holds no sign-in of it.
   const cancelSignIn = useCallback(
     async (provider: IntegrationProvider): Promise<boolean> => {
-      const answer: IntegrationStatusView | undefined = await act(ACT_KIND.INTEGRATIONS_CANCEL, {
-        provider,
-      }).catch(() => undefined);
+      const answer: IntegrationStatusView | undefined = byGitHub(provider)
+        ? { status: INTEGRATION_STATUS.DISCONNECTED }
+        : await act(ACT_KIND.INTEGRATIONS_CANCEL, { provider }).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return false;
       settle(provider, answer.status);
+      // A sign-in begun again while the Cancel was out still stands, and is still waited on.
+      if (answer.status === INTEGRATION_STATUS.PENDING) return true;
       setSignIns((standing) => {
         const rest = new Map(standing);
         rest.delete(provider);

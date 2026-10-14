@@ -510,9 +510,19 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url });
 });
 
-/** Where a provider stands once no sign-in is under way: its row's own status, or disconnected with none. */
-function standingAfterCancel(row: IntegrationConnectionRow | undefined): IntegrationStatus {
+/**
+ * Where a provider stands once a Cancel ended its sign-in: its row's own
+ * status, or disconnected with none, unless a sign-in begun again while the
+ * Cancel was out still stands, which is pending.
+ */
+function standingAfterCancel(
+  seams: IntegrationsAppSeams,
+  row: IntegrationConnectionRow | undefined,
+): IntegrationStatus {
   if (row?.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
+  if (row?.state !== undefined && signInStands(seams, row.stateIssuedAt)) {
+    return INTEGRATION_STATUS.PENDING;
+  }
   if (row?.status === INTEGRATION_ROW_STATUS.EXPIRED) return INTEGRATION_STATUS.EXPIRED;
   return INTEGRATION_STATUS.DISCONNECTED;
 }
@@ -520,7 +530,8 @@ function standingAfterCancel(row: IntegrationConnectionRow | undefined): Integra
 /**
  * POST: ends the sign-in to one provider under way, under the state the row
  * holds now, so a sign-in completed since has no state left to end and
- * stands connected; answers where the provider then stands. Nothing is
+ * stands connected, and one begun again since keeps its own state and
+ * stands pending; answers where the provider then stands. Nothing is
  * revoked: a grant Connect holds without the row is one no agent reads.
  */
 const cancelEndpoint = /* @__PURE__ */ Effect.fn("web/integrationCancelEndpoint")(function* (
@@ -541,7 +552,10 @@ const cancelEndpoint = /* @__PURE__ */ Effect.fn("web/integrationCancelEndpoint"
     yield* hostedStoreOrUnavailable(seams.endSignIn(userId, provider, row.state));
   }
   const after = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-  const status = standingAfterCancel(after.find((each) => each.provider === provider));
+  const status = standingAfterCancel(
+    seams,
+    after.find((each) => each.provider === provider),
+  );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status });
 });
 

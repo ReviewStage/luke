@@ -42,6 +42,12 @@ export type SignIn =
       readonly since: number;
       /** When the window gives up on it, in the runtime clock's milliseconds. */
       readonly deadline: number;
+      /**
+       * Whether the service answers it pending while it is under way, as it
+       * does a Connect sign-in; GitHub's own connect it answers disconnected
+       * until it lands, so a read can say only that it connected.
+       */
+      readonly seenPending: boolean;
     }
   | { readonly kind: typeof SIGN_IN.FAILED | typeof SIGN_IN.UNFINISHED };
 
@@ -68,8 +74,13 @@ export interface SignInRead {
 }
 
 /** A sign-in begun at `at`, waited on for its whole wait. */
-export function signInBegun(mark: number, at: number): SignIn {
-  return { kind: SIGN_IN.WAITING, since: mark, deadline: at + Duration.toMillis(SIGN_IN_WAIT) };
+export function signInBegun(mark: number, at: number, seenPending: boolean): SignIn {
+  return {
+    kind: SIGN_IN.WAITING,
+    since: mark,
+    deadline: at + Duration.toMillis(SIGN_IN_WAIT),
+    seenPending,
+  };
 }
 
 /** A sign-in as the developer's return to the window at `at` leaves it: one still waited on has the grace at most. */
@@ -82,15 +93,20 @@ export function signInGraced(signIn: SignIn, at: number): SignIn {
  * What a read says of one provider's sign-in. A sign-in pending that the
  * window did not begin, from another surface or before a relaunch, is
  * waited on from the read that found it; a read issued before a sign-in
- * began says nothing of it.
+ * began says nothing of it, and one the service never answers pending
+ * cannot be seen to fail, only to connect or to run out of time.
  */
 export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): SignIn | undefined {
   if (read.status === INTEGRATION_STATUS.CONNECTED) return undefined;
   if (signIn === undefined) {
-    return read.status === INTEGRATION_STATUS.PENDING ? signInBegun(read.mark, read.at) : undefined;
+    return read.status === INTEGRATION_STATUS.PENDING
+      ? signInBegun(read.mark, read.at, true)
+      : undefined;
   }
   if (signIn.kind !== SIGN_IN.WAITING || read.mark <= signIn.since) return signIn;
-  if (read.status !== INTEGRATION_STATUS.PENDING) return { kind: SIGN_IN.FAILED };
+  if (signIn.seenPending && read.status !== INTEGRATION_STATUS.PENDING) {
+    return { kind: SIGN_IN.FAILED };
+  }
   return read.at >= signIn.deadline ? { kind: SIGN_IN.UNFINISHED } : signIn;
 }
 
@@ -101,17 +117,12 @@ export interface SignInLine {
   readonly problem: boolean;
 }
 
-/** What a row says while the browser has a provider's sign-in. */
-export function waitingLine(provider: IntegrationProvider): string {
-  return `Waiting for ${INTEGRATION_NAME[provider]} in your browser…`;
-}
-
 /** The line a row draws for a sign-in. */
 export function signInLine(provider: IntegrationProvider, signIn: SignIn): SignInLine {
   const name = INTEGRATION_NAME[provider];
   switch (signIn.kind) {
     case SIGN_IN.WAITING:
-      return { text: waitingLine(provider), problem: false };
+      return { text: `Waiting for ${name} in your browser…`, problem: false };
     case SIGN_IN.FAILED:
       return {
         text: `Couldn't connect to ${name}: the sign-in came back without access.`,
