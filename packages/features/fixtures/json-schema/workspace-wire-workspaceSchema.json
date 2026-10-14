@@ -43,6 +43,29 @@
         }
       ]
     },
+    "githubInstallations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "installationId": {
+            "type": "number"
+          },
+          "login": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "installationId",
+          "login",
+          "active"
+        ],
+        "additionalProperties": false
+      }
+    },
     "memberCount": {
       "type": "number",
       "minimum": 0

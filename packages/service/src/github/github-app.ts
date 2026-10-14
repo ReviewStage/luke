@@ -1,9 +1,11 @@
 /**
- * github-app.ts -- the Luke GitHub App as the server speaks for it: its own JWT, the installation a workspace connected, and the tokens it mints there.
+ * github-app.ts -- the Luke GitHub App as the server speaks for it: its own JWT, the installations a workspace connected, and the tokens it mints there.
  *
- * A workspace's repositories are the repositories of the one installation of
- * the App connected to it (`@luke/service/github/github-installations`), and nothing
- * else: nobody's own GitHub account is asked what it reaches. The App speaks
+ * A workspace's repositories are the repositories of the installations of
+ * the App connected to it (`@luke/service/github/github-installations`), one
+ * per GitHub account, and nothing else: nobody's own GitHub account is asked
+ * what it reaches, and a repository is reached only through the workspace's
+ * installation on its owner. The App speaks
  * with a JWT signed by its private key, which reads an installation
  * (`GET /app/installations/{id}`) and mints its tokens (`POST
  * /app/installations/{id}/access_tokens`). A listing is read on a token
@@ -81,7 +83,7 @@ import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth/auth-de
 import { type GitHubRepository, text } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import {
-  installationOfWorkspace,
+  installationsOfWorkspace,
   mendInstallationStatus,
   type WorkspaceInstallation,
 } from "./github-installations.js";
@@ -360,8 +362,11 @@ export interface GitHubAppService {
     HttpClient.HttpClient
   >;
   /**
-   * The repositories of the installation connected to the workspace, most
-   * recently updated first; none where it has no active installation.
+   * The repositories of every installation connected to the workspace that
+   * GitHub still runs, read whole, as one list most recently updated first,
+   * each repository once however GitHub spells it; none where it has no
+   * running installation. One installation's listing GitHub does not answer
+   * fails the whole read rather than answering the others alone.
    */
   readonly workspaceRepositories: (
     organizationId: string,
@@ -731,6 +736,21 @@ function byMostRecentlyUpdated(left: GitHubRepository, right: GitHubRepository):
   return right.updatedAt - left.updatedAt || left.fullName.localeCompare(right.fullName);
 }
 
+/**
+ * Several installations' repositories as one list, most recently updated
+ * first, each repository once: the first of any two GitHub spells as one
+ * name in different case, which a transfer between two of them can leave.
+ */
+function combinedRepositories(repositories: readonly GitHubRepository[]): GitHubRepository[] {
+  const seen = new Set<string>();
+  return [...repositories].sort(byMostRecentlyUpdated).filter((repository) => {
+    const folded = repository.fullName.toLowerCase();
+    if (seen.has(folded)) return false;
+    seen.add(folded);
+    return true;
+  });
+}
+
 /** GitHub folds case in logins and repository names, so a name is the same name however it is spelled. */
 function sameName(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -1028,17 +1048,46 @@ function githubAppService(
     });
 
   /**
-   * The installation connected to the workspace as GitHub holds it now; none
-   * where none is connected, GitHub no longer knows the one that is, or its
-   * account suspended it, since GitHub mints a suspended installation no
-   * token to list with.
+   * The installations connected to the workspace that GitHub still runs, as
+   * GitHub holds them now, the first linked first: each one the workspace
+   * holds is read, its status mended, and one GitHub no longer knows or its
+   * account suspended is left out, since GitHub mints a suspended
+   * installation no token to list with.
    */
-  const workspaceInstallation = (organizationId: string) =>
+  const liveWorkspaceInstallations = (organizationId: string) =>
     Effect.gen(function* () {
-      const connected = yield* installationOfWorkspace(organizationId);
-      if (Option.isNone(connected)) return Option.none<GitHubInstallation>();
-      const reached = yield* connectedInstallation(connected.value);
-      return Option.filter(reached, (running) => !running.suspended);
+      const connected = yield* installationsOfWorkspace(organizationId);
+      const read = yield* Effect.forEach(connected, connectedInstallation);
+      return read.flatMap((one) => (Option.isSome(one) && !one.value.suspended ? [one.value] : []));
+    });
+
+  /**
+   * The workspace's installation on the owner as GitHub holds it now, found
+   * among those connected to the workspace alone: the ones whose stored
+   * login names the owner are read first, then the rest, since an account
+   * renamed on GitHub keeps its old login in the store. Each one read has
+   * its status mended. Answers too every installation read that GitHub
+   * still runs, and whether the one the store names on the owner lapsed.
+   */
+  const installationOnOwner = (connected: readonly WorkspaceInstallation[], owner: string) =>
+    Effect.gen(function* () {
+      const named = connected.filter((one) => sameName(one.accountLogin, owner));
+      const others = connected.filter((one) => !sameName(one.accountLogin, owner));
+      const running: GitHubInstallation[] = [];
+      let lapsedOnOwner = false;
+      for (const one of [...named, ...others]) {
+        const read = yield* connectedInstallation(one);
+        if (Option.isNone(read) || read.value.suspended) {
+          lapsedOnOwner ||= sameName(one.accountLogin, owner);
+          continue;
+        }
+        const login = read.value.accountLogin;
+        if (login !== undefined && sameName(login, owner)) {
+          return { onOwner: Option.some(read.value), running, lapsedOnOwner };
+        }
+        running.push(read.value);
+      }
+      return { onOwner: Option.none<GitHubInstallation>(), running, lapsedOnOwner };
     });
 
   /** The installation's repositories, every one or as many as are enough, read on a token minted for the listing alone. */
@@ -1053,32 +1102,38 @@ function githubAppService(
 
   /**
    * The repository and the installation it is reached through, where the
-   * workspace's installation reaches it, or why it does not: only an
-   * installation on the owner can reach it, and the listing is read only as
-   * far as the page the repository is on.
+   * workspace's installation on its owner reaches it, or why it does not:
+   * only an installation of this workspace on the owner can reach it, never
+   * another workspace's, and the listing is read only as far as the page the
+   * repository is on. With none on the owner, the workspace's connection
+   * lapsed where the one on the owner or every one it holds no longer runs,
+   * and is on another account otherwise, named where it holds one alone.
    */
   const reach = (organizationId: string, fullName: string) =>
     Effect.gen(function* () {
       const [owner = ""] = fullName.split("/");
       const unreached = (failure: GitHubRepositoryUnreached): ReachResult => Result.fail(failure);
-      const connected = yield* installationOfWorkspace(organizationId);
-      if (Option.isNone(connected)) {
+      const connected = yield* installationsOfWorkspace(organizationId);
+      if (connected.length === 0) {
         return unreached({ reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: fullName });
       }
-      const reached = yield* connectedInstallation(connected.value);
-      if (Option.isNone(reached) || reached.value.suspended) {
-        return unreached({ reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED, repository: fullName });
-      }
-      const onOwner = reached.value;
-      if (onOwner.accountLogin === undefined || !sameName(onOwner.accountLogin, owner)) {
+      const found = yield* installationOnOwner(connected, owner);
+      if (Option.isNone(found.onOwner)) {
+        if (found.lapsedOnOwner || found.running.length === 0) {
+          return unreached({
+            reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED,
+            repository: fullName,
+          });
+        }
+        const [only] = found.running;
+        const connectedTo = found.running.length === 1 ? only?.accountLogin : undefined;
         return unreached({
           reason: REPOSITORY_UNREACHED.OTHER_OWNER,
           repository: fullName,
-          ...(onOwner.accountLogin === undefined
-            ? undefined
-            : { connectedTo: onOwner.accountLogin }),
+          ...(connectedTo === undefined ? undefined : { connectedTo }),
         });
       }
+      const onOwner = found.onOwner.value;
       const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
       const repositories = yield* repositoriesOf(onOwner, (read) => read.some(isNamed));
       const repository = repositories.find(isNamed);
@@ -1184,10 +1239,10 @@ function githubAppService(
       }),
     workspaceRepositories: (organizationId) =>
       Effect.gen(function* () {
-        const reached = yield* workspaceInstallation(organizationId);
-        if (Option.isNone(reached)) return Option.none();
-        const repositories = yield* repositoriesOf(reached.value);
-        return Option.some([...repositories].sort(byMostRecentlyUpdated));
+        const live = yield* liveWorkspaceInstallations(organizationId);
+        if (live.length === 0) return Option.none();
+        const listed = yield* Effect.forEach(live, (one) => repositoriesOf(one));
+        return Option.some(combinedRepositories(listed.flat()));
       }),
     workspaceRepository: (organizationId, fullName) =>
       Effect.map(

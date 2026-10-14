@@ -103,19 +103,25 @@ is read as `GitHubSignInRequired`, as is a row with no GitHub account, a row
 from before the App, an expired refresh token, or a token that will not open
 under this deployment's secret. No repository read takes that token.
 
-A workspace's repositories are those of the one installation of the App
-connected to it (`src/github/github-installations.ts`), and nothing else: nobody's own GitHub account is asked what it
+A workspace's repositories are those of the installations of the App
+connected to it (`src/github/github-installations.ts`), one per GitHub
+account, and nothing else: nobody's own GitHub account is asked what it
 reaches, so a member who never signed in with GitHub reads, plans, and starts
 agents on the workspace's repositories all the same, and a workspace with
-nothing connected has none. `workspaceRepositories(organizationId)` mints a
-token for the listing alone (`metadata: read`) and pages `GET
+nothing connected has none. `workspaceRepositories(organizationId)` reads
+every installation the workspace holds from GitHub, mending each stored
+status, skips one GitHub no longer knows or its account suspended, mints a
+token for each listing alone (`metadata: read`), and pages `GET
 /installation/repositories` a hundred at a time until a page comes back
-short, most recently updated first; a listing GitHub is still answering full
-pages of at the bound (`PAGING`, fifty pages) is answered as unreadable
-rather than as the part that was read; none where nothing is connected or
-GitHub no longer knows the installation. `workspaceRepository(organizationId,
-"owner/name")` is the check a plan's repository passes before it is kept:
-only an installation on the owner can reach it, so the listing is paged only
+short; the listings are one list, most recently updated first, each
+repository once however GitHub cases its name. One listing GitHub does not
+answer, or is still answering full pages of at the bound (`PAGING`, fifty
+pages), fails the whole read as unavailable or unreadable rather than
+answering the rest; none where no installation is running.
+`workspaceRepository(organizationId, "owner/name")` is the check a plan's
+repository passes before it is kept: only the workspace's own installation
+on the owner can reach it, found by its stored login first and then by
+GitHub's own reading of the rest, so the listing is paged only
 for that one and only as far as the page the repository is on, the name is
 matched the way GitHub folds case, and what is answered is the full name as
 GitHub spells it. `repositoryReadToken(organizationId, "owner/name")` is the
@@ -129,8 +135,8 @@ beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
 read beside it where the installation grants it; `appBot(token)` reads the
 App's bot user (`GET /users/<slug>[bot]`) on a token already minted, which
 is who a coding agent's commits are by. A plan's repository is reached
-through its plan's workspace, read afresh at each use, so a disconnect or a
-replaced installation decides the very next read.
+through its plan's workspace, read afresh at each use, so an installation
+suspended, removed, or reinstalled decides the very next read.
 
 `GET /api/github/repositories` (`src/github/github-repositories-app.ts`) is that
 listing under the account bearer, answered as
@@ -181,9 +187,13 @@ the user access token once, and the token is revoked
 ([Delete an app token](https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token));
 nothing of it is stored. An installation that user cannot see, a code GitHub
 refuses, or a declined authorization is `not-found`. Only then is the
-installation linked to the workspace (`connected`); one already linked to
-another workspace, or another installation on the same GitHub account, is
-`already-connected`.
+installation linked to the workspace, beside any it holds (`connected`), in
+a transaction that reads the account's role again with its member row held,
+because GitHub's authorization ran in between (`expired` where it is no
+longer an owner or admin); a retry of an installation already linked there
+is `connected` again and changes nothing but its names; one whose GitHub
+account already stands for another workspace is `already-connected` and
+stays where it is.
 
 GitHub's "Request user authorization (OAuth) during installation" stays off:
 it disables the Setup URL and returns the code to the App's first callback
@@ -1467,14 +1477,17 @@ rewrite reads the next segment as a plan's id.
 `src/accounts/workspaces-app.ts` answers the account's workspaces
 (`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
-repositories come only from the one Luke GitHub App installation an owner or
-admin connects to it. Every request resolves the bearer first and ensures the
+repositories come only from the Luke GitHub App installations an owner or
+admin connects to it, one per GitHub account. Every request resolves the bearer first and ensures the
 account's first workspace.
 
 - `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
   is a member of, its first one first and the rest by name, each
-  `{ id, name, role, github: { login, active } | null }`. It asks
-  GitHub nothing.
+  `{ id, name, role, github: { login, active } | null, githubInstallations:
+  [{ installationId, login, active }] }`: every installation the workspace
+  holds, the first linked first, and `github` the first still active, else
+  the first, or null,
+  which is all a desktop from before several reads. It asks GitHub nothing.
 - `POST /api/workspaces { name }` creates a workspace through the plugin's
   server-only `auth.api.createOrganization` (`body.userId`, no session
   headers; [docs](https://www.better-auth.com/docs/plugins/organization#create-an-organization)),
@@ -1488,15 +1501,22 @@ account's first workspace.
   account, the workspace, an hour's expiry) and answers `{ url }`: the App's
   install address with that `state`. A member is `not-permitted` (403); a
   workspace the account is not in is `not-found`.
-- `POST /api/workspaces/github/disconnect { workspaceId }`, for an owner or
-  admin, deletes the workspace's `github_installation` row and answers
-  `{ workspace }`.
+- `POST /api/workspaces/github/disconnect { workspaceId }`, which a desktop
+  from before several installations still sends, is `not-permitted` (403) to
+  every account and removes nothing: which installations and repositories a
+  workspace holds is managed on GitHub, where an uninstall reaches the
+  webhook, and the old press must not remove every installation at once.
 
 A `github_installation` row (`packages/database/src/schemas/github-installation.ts`)
-ties one workspace to one installation, keyed on GitHub's installation id and
+ties one installation to one workspace, keyed on GitHub's installation id and
 account id (both unique), with the account's login and kind and the
-installation's status, which the installation webhook keeps. The connect's
-callback links it (above, under the install group). `src/accounts/workspaces-app.test.ts` holds
+installation's status, which the installation webhook keeps and a read of
+GitHub mends. The connect's callback links it (above, under the install
+group) in one statement keyed on the account: a new account's row is added
+beside the workspace's others, the account's own row in the same workspace
+takes a reinstall's new id and keeps its first moment and, for the same
+installation, its status, and an account standing for another workspace is
+refused and stays there. `src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
@@ -1572,15 +1592,16 @@ A `repository-not-reachable` refusal says why in `unreached`
 `GitHubApp`), naming the repository: the workspace has nothing connected
 (`not-connected`); the installation GitHub no longer knows or its account
 suspended (`connection-lapsed`); the installation is on another account
-than the repository's owner (`other-owner`, naming that account); the
+than the repository's owner (`other-owner`, naming that account where the
+workspace holds one alone); the
 installation on the owner was not given the repository (`not-selected`,
 with the installation's settings page on GitHub); or one given every
 repository of the owner still does not list it, which a rename, a
 transfer, or a delete leaves (`gone`). Where the plan's owner asks and the
 workspace has nothing connected or another account's installation, and the
 owner's installation stands for another workspace they are in, the reason
-is `other-workspace`, naming that workspace, since one installation stands
-for one workspace and moving the plan there is what reaches the repository:
+is `other-workspace`, naming that workspace, since an installation stands
+for one workspace alone and moving the plan there is what reaches the repository:
 a plan a personal workspace held before #2524 is left that way.
 
 A plan's text has one write, `src/plans/plan-notes.ts`, and four
