@@ -1,4 +1,8 @@
-import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@sidecar/brain";
+import {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_RUN_EVENT,
+} from "@sidecar/features/brain";
 import { sessionKey } from "@sidecar/runtime/vocabulary";
 import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";

@@ -1,4 +1,4 @@
-import { toolPartType } from "@sidecar/brain";
+import { toolPartType } from "@sidecar/features/brain";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,

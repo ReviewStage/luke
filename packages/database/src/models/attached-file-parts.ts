@@ -1,4 +1,4 @@
-import { UI_PART_STATE, UI_PART_TYPE } from "@sidecar/brain";
+import { UI_PART_STATE, UI_PART_TYPE } from "@sidecar/features/brain";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
