@@ -53,6 +53,8 @@ export interface TranscriptCallRow {
   readonly messages: readonly UIMessage[];
   /** What the record says of the call; nothing for a call the record does not hold yet, or one still standing. */
   readonly record?: CallRecord | undefined;
+  /** The teammate whose call it was, by name; none for the reader's own, a call heard on this Mac, or one nobody can be named for. */
+  readonly caller?: string | undefined;
 }
 
 /** The line a call closes with: none while it stands, and who ended it where this window saw Luke do it. */
@@ -188,6 +190,8 @@ export function transcriptRegion(input: {
   heard: readonly HeardCall[];
   /** The store's id for the session of the last call Luke ended himself, which closes with a line saying so. */
   lukeEndedCall?: string | undefined;
+  /** The signed-in account's id, whose own calls are drawn as theirs; without one, every named caller is named. */
+  readerId?: string | undefined;
 }): TranscriptRegion {
   const stored = input.transcript?.transcript;
   const heard = new Map<string, TranscriptCallRow>();
@@ -205,7 +209,8 @@ export function transcriptRegion(input: {
       const settled = settledMessage(message);
       return settled === undefined ? [] : [settled];
     });
-    const { id, startedAt, messages: _messages, ...record } = call;
+    const { id, startedAt, messages: _messages, by, ...record } = call;
+    const caller = by === undefined || by.userId === input.readerId ? undefined : by.name;
     const ahead = heard.get(id);
     const behind =
       ahead !== undefined && (ahead.live || wordCount(messages) < wordCount(ahead.messages));
@@ -214,7 +219,7 @@ export function transcriptRegion(input: {
     }
     return messages.length === 0
       ? []
-      : [{ key: id, startedAt, live: false, lukeEnded: false, messages, record }];
+      : [{ key: id, startedAt, live: false, lukeEnded: false, messages, record, caller }];
   });
   calls.push(...unrecorded);
   if (calls.length > 0) {

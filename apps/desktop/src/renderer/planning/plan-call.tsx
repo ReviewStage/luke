@@ -213,9 +213,12 @@ function TurnWork({
 function CallEntries({
   entries,
   doors,
+  caller,
 }: {
   entries: Extract<ThreadSection<WorkTurnRow>, { kind: typeof THREAD_ITEM.CALL }>["entries"];
   doors: WorkDoors;
+  /** The teammate whose call it was, whose lines are drawn under their name; none for the reader's own. */
+  caller: string | undefined;
 }): React.JSX.Element {
   const drawn: React.JSX.Element[] = [];
   let run: UIMessage[] = [];
@@ -227,6 +230,7 @@ function CallEntries({
         key={first.id}
         message={spokenMessage(run)}
         plan={false}
+        sender={caller}
         lead={AGENT_LEAD}
         moving={false}
         delegation={undefined}
@@ -269,8 +273,8 @@ function CallSection({
     <>
       {/* Before the checkpoint rather than on it, since a sticky checkpoint stands at the top however far it has scrolled. */}
       {revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
-      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} />
-      <CallEntries entries={entries} doors={doors} />
+      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
+      <CallEntries entries={entries} doors={doors} caller={call.caller} />
       {ended === undefined ? null : (
         <CallEnded line={ended} startedAt={call.startedAt} record={call.record} />
       )}

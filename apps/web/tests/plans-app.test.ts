@@ -715,11 +715,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
                 spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm.", [600, 1_100]),
                 spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?", [9_000, 9_500]),
               ],
+              by: { userId: owner, name: "Test User" },
             },
             {
               id: second,
               startedAt: 2_000_000,
               messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.", [0, 500])],
+              by: { userId: owner, name: "Test User" },
             },
           ],
           earlierOmitted: false,
@@ -736,7 +738,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a teammate's call about a shared plan reads in every member's transcript, with what its record holds",
+    "a teammate's call about a shared plan reads in every member's transcript, with what its record holds and whose call it was",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -778,6 +780,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
               id: ownersCall,
               startedAt: 1_000_000,
               messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.", [0, 500])],
+              by: { userId: owner, name: "Test User" },
             },
             {
               id: teammatesCall,
@@ -786,6 +789,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
               endedAt: 2_060_000,
               ending: VOICE_CLOSE_REASON.CONNECTION_LOST,
               usage: { seconds: 60, confirmed: false },
+              // Whose call each was, which every member reads the same and the window says.
+              by: { userId: other, name: "Test User" },
             },
           ],
           earlierOmitted: false,

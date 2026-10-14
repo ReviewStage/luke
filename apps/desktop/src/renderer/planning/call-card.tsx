@@ -103,11 +103,14 @@ export function CallCheckpoint({
   startedAt,
   live,
   now,
+  caller,
 }: {
   startedAt: number;
   live: boolean;
   /** The moment the log was drawn, which the day is said against. */
   now: number;
+  /** The teammate whose call it was, named before when it started; none for the reader's own. */
+  caller?: string | undefined;
 }): React.JSX.Element {
   return (
     <Checkpoint
@@ -120,7 +123,9 @@ export function CallCheckpoint({
         ) : null
       }
     >
-      {callHeading(startedAt, now)}
+      {caller === undefined
+        ? callHeading(startedAt, now)
+        : `${caller}'s call · ${callHeading(startedAt, now)}`}
     </Checkpoint>
   );
 }

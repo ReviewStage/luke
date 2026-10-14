@@ -304,3 +304,28 @@ test("the call standing is dated from when it was first heard, less how far into
     [5_000],
   );
 });
+
+test("a teammate's call is named for the reader, the reader's own is not, and a call nobody can be named for is not", () => {
+  const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  const [call] = STORED.calls;
+  const transcript: PlanTranscript = {
+    calls: [
+      { ...call!, id: EARLIER_CALL, by: DEAN },
+      { ...call!, id: NEXT_CALL, startedAt: 2_000, by: CHARLES },
+      { ...call!, id: LIVE_CALL, startedAt: 3_000 },
+    ],
+    earlierOmitted: false,
+  };
+  const callers = (readerId: string) => {
+    const region = transcriptRegion({
+      transcript: { status: PLANNING_READ.READY, transcript },
+      heard: [],
+      readerId,
+    });
+    return region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((each) => each.caller) : [];
+  };
+
+  assert.deepEqual(callers(DEAN.userId), [undefined, "Charles Pan", undefined]);
+  assert.deepEqual(callers(CHARLES.userId), ["Dean Stratakos", undefined, undefined]);
+});

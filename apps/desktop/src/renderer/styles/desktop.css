@@ -1926,6 +1926,15 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
+/* The teammate who said or wrote a developer's message on a shared plan,
+   named over its bubble in the muted meta voice; the reader's own carry no
+   name. */
+.message-sender {
+  padding-inline: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
 /* The transcript's way back to its newest line stands on the column's own
    ground rather than the panel's. */
 .desktop-agent .conversation-scroll {
