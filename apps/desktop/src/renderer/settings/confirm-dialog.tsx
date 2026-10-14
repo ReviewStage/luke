@@ -1,8 +1,7 @@
 import type { ActionResult } from "@sidecar/wire";
-import { useEffect, useId, useLayoutEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useId, useRef } from "react";
+import { MODAL_ROLE, ModalShell } from "../modal-shell";
 import { BusyLabel } from "../spinner";
-import { useStagedFocus } from "../staged-focus";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -20,9 +19,9 @@ import {
  * the safe one first and the act in red last, or in the accent for an act
  * that can be undone, such as restoring a version of a plan. Focus lands on Cancel, so a key
  * already pressed changes nothing; Tab stays inside the card; Escape, a press
- * on the dimmed window, and Cancel all withdraw it and hand focus back to
- * whatever asked. Enter is the focused button's own, so it acts only from the
- * act's button.
+ * on the dimmed window, and Cancel all withdraw it, and however it goes,
+ * focus goes back to whatever asked if that still stands. Enter is the
+ * focused button's own, so it acts only from the act's button.
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
  * or its surface goes. An answer already given finishes where it stands with
@@ -53,10 +52,6 @@ export interface DialogQuestion {
   tone?: DialogTone;
 }
 
-/** What Tab may land on inside a modal card: its enabled controls, and never a hidden one. */
-const FOCUSABLE =
-  "button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([hidden])";
-
 /** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
 export interface DialogConfirm extends HeldConfirm {
   standing: boolean;
@@ -80,23 +75,9 @@ export function useConfirmDialog(
   return { ...held, standing };
 }
 
-/** The move Tab makes from the focused element, kept to the card's own controls. */
-export function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
-  const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
-  const at = buttons.findIndex((button) => button === document.activeElement);
-  // Note that the ends wrap and a focus off the controls (the card itself,
-  // while the act runs) comes back onto them, because past either end the
-  // browser's own move would leave the card for the window behind it.
-  const wraps = event.shiftKey ? at <= 0 : at === -1 || at === buttons.length - 1;
-  if (!wraps) return;
-  event.preventDefault();
-  (event.shiftKey ? buttons.at(-1) : buttons[0])?.focus();
-}
-
 /**
  * The question over the window while it is asked, running, or refused, and
- * nothing otherwise. Drawn over `document.body` so no stacking context of the
- * surface that asked can clip or cover it.
+ * nothing otherwise, in the window's one modal frame (`../modal-shell.tsx`).
  */
 export function ConfirmDialog({
   confirm,
@@ -117,133 +98,69 @@ export function ConfirmDialog({
   // presents something else; the act itself finishes all the same.
   const open = confirm.standing && (confirmAsked(stage) || rejection !== undefined);
   const acting = stage === CONFIRM_STAGE.ACTING;
-  const card = useRef<HTMLDivElement | null>(null);
   const cancel = useRef<HTMLButtonElement | null>(null);
-  const invoker = useRef<HTMLElement | null>(null);
-  const answered = useRef(false);
-  const pressedBackdrop = useRef(false);
   const titleId = useId();
   const bodyId = useId();
-
-  // Note that the invoker is read before Cancel takes focus, because once it
-  // has, the element that asked is no longer the one holding it.
-  useLayoutEffect(() => {
-    if (!open) return;
-    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    answered.current = false;
-  }, [open]);
-
-  useStagedFocus<HTMLElement>(field ?? cancel, open && !acting);
-  // Both answers are stilled while the act runs, so the card holds focus
-  // itself rather than letting it fall to the window behind.
-  useStagedFocus(card, open && acting);
-
-  // Only an answer hands focus back: a question withdrawn because its surface
-  // went was never answered, and reaching into a shape that is leaving would
-  // pull it back.
-  useEffect(() => {
-    if (open || !answered.current) return;
-    answered.current = false;
-    if (invoker.current?.isConnected) invoker.current.focus({ preventScroll: true });
-  }, [open]);
 
   if (!open) return null;
 
   const dismiss = () => {
     if (acting) return;
-    answered.current = true;
     if (confirmWithdrawable(stage)) confirm.keep();
     confirm.clear();
   };
-  const act = () => {
-    answered.current = true;
+  // Enter in the question's field answers it, since the field has no second
+  // line to begin; anywhere else Enter is the focused button's own.
+  const fieldKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || event.target !== field?.current || acting) return;
+    event.preventDefault();
     confirm.run();
   };
-  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that no key pressed in the dialog goes on to the window, because
-    // a window chord (Command-comma, Command-B) would change what stands
-    // behind a question nobody has answered. A button's own Enter and Space
-    // are its default action, which this leaves alone.
-    event.stopPropagation();
-    // A key an input method is composing with is the method's, not the dialog's.
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Tab") {
-      trappedTab(event);
-      return;
-    }
-    if (event.key === "Enter" && event.target === field?.current && !acting) {
-      event.preventDefault();
-      act();
-      return;
-    }
-    // The dialog is the nearest layer, so Escape withdraws it alone and
-    // leaves the window behind it as it was.
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    dismiss();
-  };
 
-  return createPortal(
-    // A press that begins and ends on the dimmed window is Cancel, so a text
-    // selection dragged out of the card's field is none; the keys pressed
-    // anywhere in the card reach it on their way out.
-    // biome-ignore lint/a11y/noStaticElementInteractions: the dimmed window is a pointer target alone; the keys it hears come from the card's own focus.
-    <div
-      className="confirm-dialog-backdrop"
-      onPointerDown={(event) => {
-        pressedBackdrop.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        if (pressedBackdrop.current && event.target === event.currentTarget) dismiss();
-        pressedBackdrop.current = false;
-      }}
-      onKeyDown={keyDown}
+  return (
+    <ModalShell
+      role={MODAL_ROLE.ALERT_DIALOG}
+      className="confirm-dialog"
+      labelledBy={titleId}
+      describedBy={bodyId}
+      busy={acting}
+      initialFocus={field ?? cancel}
+      onDismiss={dismiss}
+      onKeyDown={fieldKey}
     >
-      <div
-        ref={card}
-        className="confirm-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={bodyId}
-        aria-busy={acting}
-        tabIndex={-1}
-      >
-        <h2 id={titleId} className="confirm-dialog-title">
-          {question.title}
-        </h2>
-        <p id={bodyId} className="confirm-dialog-body">
-          {question.body}
+      <h2 id={titleId} className="confirm-dialog-title">
+        {question.title}
+      </h2>
+      <p id={bodyId} className="confirm-dialog-body">
+        {question.body}
+      </p>
+      {children}
+      {rejection !== undefined && !acting ? (
+        <p className="error-message" role="alert">
+          {rejection}
         </p>
-        {children}
-        {rejection !== undefined && !acting ? (
-          <p className="error-message" role="alert">
-            {rejection}
-          </p>
-        ) : null}
-        <div className="confirm-dialog-actions">
-          <button
-            type="button"
-            ref={cancel}
-            className="toolbar-button"
-            disabled={acting}
-            onClick={dismiss}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={ACT_BUTTON_CLASS[question.tone ?? DIALOG_TONE.DANGER]}
-            disabled={acting}
-            onClick={act}
-          >
-            <BusyLabel busy={acting} label={question.running}>
-              {question.verb}
-            </BusyLabel>
-          </button>
-        </div>
+      ) : null}
+      <div className="confirm-dialog-actions">
+        <button
+          type="button"
+          ref={cancel}
+          className="toolbar-button"
+          disabled={acting}
+          onClick={dismiss}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={ACT_BUTTON_CLASS[question.tone ?? DIALOG_TONE.DANGER]}
+          disabled={acting}
+          onClick={() => confirm.run()}
+        >
+          <BusyLabel busy={acting} label={question.running}>
+            {question.verb}
+          </BusyLabel>
+        </button>
       </div>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }

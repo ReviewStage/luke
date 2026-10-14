@@ -1,10 +1,8 @@
 import { CloseIcon } from "@sidecar/panel";
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useId } from "react";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { trappedTab } from "../settings/confirm-dialog";
-import { useStagedFocus } from "../staged-focus";
+import { ModalShell } from "../modal-shell";
 import { Tooltip } from "../tooltip";
 import {
   ATTACHMENT_VIEW,
@@ -22,10 +20,10 @@ import { FileTypeIcon } from "./file-type-icon";
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
  * far along the message's files it is, beside Copy for a text file,
- * Download, and the way out. It opens as the window's dialog does
- * (`../settings/confirm-dialog.tsx`): the window dims, Tab stays inside the
- * card, and Escape, a press on the dimmed window or on the image, and the
- * way out all close it and hand focus back to the chip that opened it. The
+ * Download, and the way out. It opens in the window's one modal frame
+ * (`../modal-shell.tsx`): the window dims, Tab stays inside the card, and
+ * Escape, a press on the dimmed window or on the image, and the way out all
+ * close it and hand focus back to the chip that opened it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
  * developer's own, so the card is left out of the screen recording
@@ -158,25 +156,8 @@ export function AttachmentViewer({
   onAt: (at: number) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
-  const card = useRef<HTMLDivElement | null>(null);
-  const invoker = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const file = files[at];
-
-  // Note that the invoker is read before the card takes focus, because once
-  // it has, the chip that opened the viewer no longer holds it. The card
-  // takes it rather than a button, as Quick Look's does, so no ring stands
-  // on a control nobody chose; Tab goes on to the buttons from there.
-  useLayoutEffect(() => {
-    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  }, []);
-  useStagedFocus(card, true);
-  useEffect(
-    () => () => {
-      if (invoker.current?.isConnected) invoker.current.focus({ preventScroll: true });
-    },
-    [],
-  );
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -185,73 +166,54 @@ export function AttachmentViewer({
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
-  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that no key pressed in the viewer goes on to the window, because a
-    // window chord would change what stands behind it; a key's own default,
-    // a copy of the lines selected among them, is left alone.
-    event.stopPropagation();
-    if (event.key === "Tab") trappedTab(event);
-    else if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-    } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      walk(event.key === "ArrowLeft" ? -1 : 1);
-    }
+  // The arrows walk the message's files; a key's own default, a copy of the
+  // lines selected among them, is left alone.
+  const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    walk(event.key === "ArrowLeft" ? -1 : 1);
   };
 
-  return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: the dimmed window is a pointer target alone; the keys it hears come from the card's own focus.
-    <div
-      className="confirm-dialog-backdrop attachment-viewer-backdrop ph-no-capture"
-      onClick={(event) => {
-        // Note that a press goes no further than the viewer, because the
-        // row that opened it is its parent in React's tree, and the message
-        // box around a chip there takes presses of its own.
-        event.stopPropagation();
-        if (event.target === event.currentTarget) onClose();
-      }}
-      onKeyDown={keyDown}
+  // Note that the card takes focus rather than a button, as Quick Look's
+  // does, so no ring stands on a control nobody chose; Tab goes on to the
+  // buttons from there.
+  return (
+    <ModalShell
+      className="attachment-viewer"
+      backdropClassName="attachment-viewer-backdrop ph-no-capture"
+      labelledBy={titleId}
+      onDismiss={onClose}
+      onKeyDown={walkKey}
+      data-view={attachmentView(file)}
     >
-      <div
-        ref={card}
-        className="attachment-viewer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        data-view={attachmentView(file)}
-        tabIndex={-1}
-      >
-        <header className="attachment-viewer-header">
-          <FileTypeIcon name={file.name} />
-          <h2 id={titleId} className="attachment-viewer-title">
-            {file.name}
-          </h2>
-          <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
-          {files.length > 1 ? (
-            <div className="attachment-viewer-walk">
-              <HeaderButton label={VIEWER_LABEL.PREVIOUS} onClick={() => walk(-1)}>
-                <ChevronLeftIcon aria-hidden="true" />
-              </HeaderButton>
-              <span className="attachment-viewer-place">
-                {`${String(at + 1)} of ${String(files.length)}`}
-              </span>
-              <HeaderButton label={VIEWER_LABEL.NEXT} onClick={() => walk(1)}>
-                <ChevronRightIcon aria-hidden="true" />
-              </HeaderButton>
-            </div>
-          ) : null}
-          {text === undefined ? null : <CopyTextButton text={text} />}
-          <HeaderButton label={VIEWER_LABEL.DOWNLOAD} onClick={() => download(file)}>
-            <DownloadIcon aria-hidden="true" />
-          </HeaderButton>
-          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={onClose}>
-            <CloseIcon />
-          </HeaderButton>
-        </header>
-        <AttachmentBody key={at} file={file} base64={base64} text={text} onClose={onClose} />
-      </div>
-    </div>,
-    document.body,
+      <header className="attachment-viewer-header">
+        <FileTypeIcon name={file.name} />
+        <h2 id={titleId} className="attachment-viewer-title">
+          {file.name}
+        </h2>
+        <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+        {files.length > 1 ? (
+          <div className="attachment-viewer-walk">
+            <HeaderButton label={VIEWER_LABEL.PREVIOUS} onClick={() => walk(-1)}>
+              <ChevronLeftIcon aria-hidden="true" />
+            </HeaderButton>
+            <span className="attachment-viewer-place">
+              {`${String(at + 1)} of ${String(files.length)}`}
+            </span>
+            <HeaderButton label={VIEWER_LABEL.NEXT} onClick={() => walk(1)}>
+              <ChevronRightIcon aria-hidden="true" />
+            </HeaderButton>
+          </div>
+        ) : null}
+        {text === undefined ? null : <CopyTextButton text={text} />}
+        <HeaderButton label={VIEWER_LABEL.DOWNLOAD} onClick={() => download(file)}>
+          <DownloadIcon aria-hidden="true" />
+        </HeaderButton>
+        <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={onClose}>
+          <CloseIcon />
+        </HeaderButton>
+      </header>
+      <AttachmentBody key={at} file={file} base64={base64} text={text} onClose={onClose} />
+    </ModalShell>
   );
 }
