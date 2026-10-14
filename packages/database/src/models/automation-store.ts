@@ -1,6 +1,8 @@
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationAction,
   type AutomationFiring,
@@ -8,6 +10,8 @@ import {
   type AutomationPause,
   type AutomationRunReason,
   type AutomationRunStatus,
+  type AutomationScope,
+  type AutomationTargetKind,
   type AutomationTrigger,
   automationActionSchema,
   automationFiringSchema,
@@ -15,6 +19,8 @@ import {
   automationPauseSchema,
   automationRunReasonSchema,
   automationRunStatusSchema,
+  automationScopeSchema,
+  automationTargetKindSchema,
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@sidecar/hosted/automation-wire";
@@ -78,6 +84,12 @@ const AutomationRowSchema = Schema.Struct({
   action: automationActionSchema,
   guards: automationGuardsSchema,
   nextRunAt: Schema.NullOr(InstantColumnSchema),
+  organizationId: Schema.NullOr(Schema.String),
+  scope: automationScopeSchema,
+  repositories: Schema.Array(Schema.String),
+  targetKind: automationTargetKindSchema,
+  targetAgentId: Schema.NullOr(Schema.String),
+  archiveSuccessful: Schema.Boolean,
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
 });
@@ -98,6 +110,18 @@ const AUTOMATION_COLUMNS = {
   action: automation.action,
   guards: automation.guards,
   nextRunAt: automation.nextRunAt,
+  // Note that a row an older build wrote after the backfill, its workspace null and its
+  // repositories empty, reads its plan's, until the contract step fills it for good.
+  organizationId: sql<
+    string | null
+  >`coalesce(${automation.organizationId}, ${plan.organizationId})`,
+  scope: automation.scope,
+  repositories: sql<
+    readonly string[]
+  >`case when ${automation.repositories} = '[]'::jsonb and ${plan.repository} is not null then jsonb_build_array(${plan.repository}) else ${automation.repositories} end`,
+  targetKind: automation.targetKind,
+  targetAgentId: automation.targetAgentId,
+  archiveSuccessful: automation.archiveSuccessful,
   createdAt: automation.createdAt,
   updatedAt: automation.updatedAt,
 };
@@ -111,6 +135,12 @@ export interface NewAutomation {
   readonly guards: AutomationGuards;
   readonly nextRunAt: Date | null;
   readonly webhookSecretHash: string | null;
+  /** Whose it is; personal where left out. */
+  readonly scope?: AutomationScope;
+  /** Where a run lands; a new agent each run where left out. */
+  readonly targetKind?: AutomationTargetKind;
+  readonly targetAgentId?: string | null;
+  readonly archiveSuccessful?: boolean;
 }
 
 /**
@@ -127,6 +157,10 @@ export interface AutomationChanges {
   readonly guards?: AutomationGuards;
   readonly nextRunAt?: Date | null;
   readonly webhookSecretHash?: string | null;
+  readonly scope?: AutomationScope;
+  readonly targetKind?: AutomationTargetKind;
+  readonly targetAgentId?: string | null;
+  readonly archiveSuccessful?: boolean;
 }
 
 const RunRowSchema = Schema.Struct({
@@ -203,10 +237,17 @@ function triggerColumns(
 
 const findReachablePlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    organizationId: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+  }),
   execute: ({ userId, planId }) =>
     Database.use((db) =>
-      db.select({ id: plan.id }).from(plan).where(reachablePlan(userId, planId)),
+      db
+        .select({ id: plan.id, organizationId: plan.organizationId, repository: plan.repository })
+        .from(plan)
+        .where(reachablePlan(userId, planId)),
     ),
 });
 
@@ -220,6 +261,12 @@ const insertAutomation = SqlSchema.findAll({
     guards: automationGuardsSchema,
     nextRunAt: Schema.NullOr(Schema.Date),
     webhookSecretHash: Schema.NullOr(Schema.String),
+    organizationId: Schema.String,
+    repositories: Schema.Array(Schema.String),
+    scope: automationScopeSchema,
+    targetKind: automationTargetKindSchema,
+    targetAgentId: Schema.NullOr(Schema.String),
+    archiveSuccessful: Schema.Boolean,
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -230,6 +277,12 @@ const insertAutomation = SqlSchema.findAll({
         .values({
           userId: row.userId,
           planId: row.planId,
+          organizationId: row.organizationId,
+          repositories: row.repositories,
+          scope: row.scope,
+          targetKind: row.targetKind,
+          targetAgentId: row.targetAgentId,
+          archiveSuccessful: row.archiveSuccessful,
           name: row.name,
           enabled: true,
           ...triggerColumns(row.trigger, row.nextRunAt, row.webhookSecretHash),
@@ -285,6 +338,10 @@ const writeAutomation = SqlSchema.findAll({
     guards: Schema.optionalKey(automationGuardsSchema),
     nextRunAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     webhookSecretHash: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    scope: Schema.optionalKey(automationScopeSchema),
+    targetKind: Schema.optionalKey(automationTargetKindSchema),
+    targetAgentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    archiveSuccessful: Schema.optionalKey(Schema.Boolean),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -743,7 +800,18 @@ export function createAutomation(
     const reached = yield* findReachablePlan({ userId, planId: made.planId });
     if (Option.isNone(reached)) return Option.none();
     const now = yield* DateTime.nowAsDate;
-    const [row] = yield* insertAutomation({ ...made, userId, now });
+    const { repository, organizationId } = reached.value;
+    const [row] = yield* insertAutomation({
+      ...made,
+      userId,
+      organizationId,
+      repositories: repository === null ? [] : [repository],
+      scope: made.scope ?? AUTOMATION_SCOPE.PERSONAL,
+      targetKind: made.targetKind ?? AUTOMATION_TARGET.NEW_AGENT,
+      targetAgentId: made.targetAgentId ?? null,
+      archiveSuccessful: made.archiveSuccessful ?? false,
+      now,
+    });
     return row === undefined ? Option.none() : yield* readWritten(userId, row.id);
   });
 }

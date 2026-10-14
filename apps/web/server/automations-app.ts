@@ -13,7 +13,9 @@ import {
   recordAutomationRun,
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
+import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
+import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
 import { wireUuidSchema } from "@sidecar/hosted";
 import { nextScheduledRun, readSchedule } from "@sidecar/hosted/automation-schedule";
 import {
@@ -21,10 +23,14 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_LIST_QUERY,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationAction,
   type AutomationRunSummary,
+  type AutomationScope,
   type AutomationSummary,
+  type AutomationTarget,
   type AutomationTrigger,
   automationChangeRequestSchema,
   automationCreateRequestSchema,
@@ -239,7 +245,52 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     nextRunAt: automation.nextRunAt?.getTime() ?? null,
     lastRun: lastRun ?? null,
     createdAt: automation.createdAt.getTime(),
+    scope: automation.scope,
+    repositories: automation.repositories,
+    target:
+      automation.targetKind === AUTOMATION_TARGET.SAME_AGENT
+        ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: automation.targetAgentId }
+        : { kind: AUTOMATION_TARGET.NEW_AGENT },
+    archiveSuccessful: automation.archiveSuccessful,
   };
+});
+
+/** Where a run lands, as the store keeps it. */
+interface TargetColumns {
+  readonly targetKind: AutomationTarget["kind"];
+  readonly targetAgentId: string | null;
+}
+
+/**
+ * A target the account may aim runs at: a new agent each run, or an agent
+ * the account reads; an agent it cannot read is refused as no request at
+ * all, the same as a malformed one.
+ */
+const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  target: AutomationTarget,
+): Effect.fn.Return<TargetColumns, HostedRefusal, DatabaseServices> {
+  if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
+    return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
+  }
+  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
+});
+
+/** Refuses a workspace scope in the account's personal workspace, where everything is the account's own. */
+const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string | null,
+  scope: AutomationScope,
+): Effect.fn.Return<AutomationScope, HostedRefusal, DatabaseServices> {
+  if (scope === AUTOMATION_SCOPE.PERSONAL) return scope;
+  const personal = yield* hostedStoreOrUnavailable(personalWorkspaceOf(userId));
+  const inPersonal = Option.isSome(personal) && personal.value === organizationId;
+  if (organizationId === null || inPersonal) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return scope;
 });
 
 /** GET: the account's automations, or one plan's. */
@@ -274,6 +325,12 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const plan = yield* hostedStoreOrUnavailable(readPlan(userId, made.planId));
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (plan.value.plan.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  const scope = yield* checkedScope(
+    userId,
+    plan.value.plan.workspaceId,
+    made.scope ?? AUTOMATION_SCOPE.PERSONAL,
+  );
+  const target = yield* checkedTarget(userId, made.target ?? { kind: AUTOMATION_TARGET.NEW_AGENT });
   const webhook =
     made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
   const created = yield* hostedStoreOrUnavailable(
@@ -285,6 +342,9 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       guards: made.guards ?? AUTOMATION_DEFAULT_GUARDS,
       nextRunAt,
       webhookSecretHash: webhook?.hash ?? null,
+      scope,
+      ...target,
+      archiveSuccessful: made.archiveSuccessful ?? false,
     }),
   );
   if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -344,6 +404,12 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
   const webhook = becameWebhook ? mintWebhookSecret() : undefined;
+  const scope =
+    asked.scope === undefined
+      ? undefined
+      : yield* checkedScope(userId, standing.organizationId, asked.scope);
+  const target =
+    asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
   // Note that only a resume or a pause moves the due instant, so a form that sends `enabled` as it stands skips no firing.
   const reschedules =
     newTrigger !== undefined || (asked.enabled !== undefined && asked.enabled !== standing.enabled);
@@ -357,6 +423,11 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(asked.guards === undefined ? undefined : { guards: asked.guards }),
     ...(reschedules ? { nextRunAt: enabled ? due : null } : undefined),
     ...(webhook === undefined ? undefined : { webhookSecretHash: webhook.hash }),
+    ...(scope === undefined ? undefined : { scope }),
+    ...target,
+    ...(asked.archiveSuccessful === undefined
+      ? undefined
+      : { archiveSuccessful: asked.archiveSuccessful }),
   };
   return { changes, webhookSecret: webhook?.secret };
 });

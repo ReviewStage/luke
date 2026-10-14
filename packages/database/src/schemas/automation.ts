@@ -1,17 +1,21 @@
-import type {
-  AutomationAction,
-  AutomationFiring,
-  AutomationGuards,
-  AutomationPause,
-  AutomationRunReason,
-  AutomationRunStatus,
-  AutomationTrigger,
-  AutomationTriggerKind,
+import {
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
+  type AutomationAction,
+  type AutomationFiring,
+  type AutomationGuards,
+  type AutomationPause,
+  type AutomationRunReason,
+  type AutomationRunStatus,
+  type AutomationScope,
+  type AutomationTargetKind,
+  type AutomationTrigger,
+  type AutomationTriggerKind,
 } from "@sidecar/hosted/automation-wire";
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
 
@@ -30,6 +34,16 @@ import { plan } from "./plan.js";
  * other trigger. `enabled` false is paused; `paused_reason` says why where
  * the service paused it rather than the developer. The row goes with its
  * account and its plan alike.
+ *
+ * An automation belongs to a workspace (`organization_id`), as its owner's
+ * (`scope` personal) or the workspace's own (`scope` workspace), and works
+ * in `repositories`, an ordered list of `owner/name` whose first is where
+ * the agent starts; one entry until full multi-repo. `plan_id` stands only
+ * on the rows made before automations left plans, and goes in the contract
+ * step. `target_kind` says where a run lands: a new agent each run, or the
+ * agent `target_agent_id` names, which goes null where that agent is
+ * deleted. `archive_successful` archives a new agent once its run finishes
+ * without failing.
  */
 export const automation = pgTable(
   "automation",
@@ -38,9 +52,11 @@ export const automation = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    planId: uuid("plan_id")
-      .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    scope: text("scope").$type<AutomationScope>().notNull().default(AUTOMATION_SCOPE.PERSONAL),
+    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     enabled: boolean("enabled").notNull(),
     /** Why the service paused it; null where it runs or the developer paused it. */
@@ -53,6 +69,17 @@ export const automation = pgTable(
     nextRunAt: timestamptz("next_run_at"),
     /** The SHA-256 of a webhook trigger's secret, hex; null for any other trigger. */
     webhookSecretHash: text("webhook_secret_hash"),
+    /** Where the agent works, `owner/name` each, the first where it starts. */
+    repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
+    targetKind: text("target_kind")
+      .$type<AutomationTargetKind>()
+      .notNull()
+      .default(AUTOMATION_TARGET.NEW_AGENT),
+    /** The agent a run continues where `target_kind` is the same agent; null otherwise or once it is deleted. */
+    targetAgentId: uuid("target_agent_id").references(() => codingAgent.id, {
+      onDelete: "set null",
+    }),
+    archiveSuccessful: boolean("archive_successful").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -63,6 +90,8 @@ export const automation = pgTable(
     index("automation_next_run").on(table.nextRunAt).where(sql`${table.nextRunAt} is not null`),
     // A delivery finds the automations of its trigger kind on the plans of its repository.
     index("automation_trigger_plan").on(table.triggerKind, table.planId),
+    // A workspace's automations, each scope newest first.
+    index("automation_org_scope_created").on(table.organizationId, table.scope, table.createdAt),
   ],
 );
 

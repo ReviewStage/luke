@@ -12,6 +12,7 @@ import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
@@ -687,6 +688,26 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
 }
 
 /**
+ * The plan's automations moved along with it: their workspace and their
+ * repository follow the plan's, so a plan moved to another workspace, or
+ * given another repository, leaves no automation naming the old one.
+ */
+const followingAutomations = SqlSchema.void({
+  Request: Schema.Struct({
+    planId: Schema.String,
+    organizationId: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ planId, organizationId, repository }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ organizationId, repositories: repository === null ? [] : [repository] })
+        .where(eq(automation.planId, planId)),
+    ),
+});
+
+/**
  * Changes the plan, a new name with its document's heading, a repository or
  * none, pinned or not, archived or not, its workspace, and answers it as
  * changed, or nothing where the account reaches no such plan. The changes
@@ -740,6 +761,13 @@ export function updatePlan<E = never, R = never>(
           // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
+        if (changes.organizationId !== undefined || changes.repository !== undefined) {
+          yield* followingAutomations({
+            planId,
+            organizationId: row.organizationId,
+            repository: row.repository,
+          });
+        }
         return Option.some(yield* planOf(row));
       }),
     ),

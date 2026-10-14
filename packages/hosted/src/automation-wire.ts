@@ -169,6 +169,41 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
 };
 
 /** Why an automation stands paused where the developer did not pause it. */
+/** Who an automation belongs to: its owner alone, or the workspace it was made in. */
+export const AUTOMATION_SCOPE = {
+  /** Its creator's: only they see and change it; the workspace's owners and admins see and pause it. */
+  PERSONAL: "personal",
+  /** The workspace's: every member sees, runs, and pauses it; its creator, owners, and admins change it. */
+  WORKSPACE: "workspace",
+} as const;
+
+export type AutomationScope = (typeof AUTOMATION_SCOPE)[keyof typeof AUTOMATION_SCOPE];
+
+export const automationScopeSchema = EffectSchema.Literals(Object.values(AUTOMATION_SCOPE));
+
+/** Where an automation's run lands. */
+export const AUTOMATION_TARGET = {
+  /** A fresh agent each run. */
+  NEW_AGENT: "new-agent",
+  /** A follow-up to one chosen agent each run. */
+  SAME_AGENT: "same-agent",
+} as const;
+
+export type AutomationTargetKind = (typeof AUTOMATION_TARGET)[keyof typeof AUTOMATION_TARGET];
+
+export const automationTargetKindSchema = EffectSchema.Literals(Object.values(AUTOMATION_TARGET));
+
+/** Where a run lands: a new agent, or the one agent a run continues. */
+const automationTargetSchema = EffectSchema.Union([
+  EffectSchema.Struct({ kind: EffectSchema.Literal(AUTOMATION_TARGET.NEW_AGENT) }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(AUTOMATION_TARGET.SAME_AGENT),
+    agentId: wireUuidSchema,
+  }),
+]);
+
+export type AutomationTarget = typeof automationTargetSchema.Type;
+
 export const AUTOMATION_PAUSE = {
   /** Its last runs failed one after another, so the service stopped firing it. */
   FAILURES: "failures",
@@ -313,6 +348,19 @@ const automationSummarySchema = EffectSchema.Struct({
   nextRunAt: EffectSchema.NullOr(countedNumber),
   lastRun: EffectSchema.NullOr(automationRunSummarySchema),
   createdAt: countedNumber,
+  scope: EffectSchema.optionalKey(automationScopeSchema),
+  repositories: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
+  /** Where a run lands; a same-agent target whose agent was deleted reads as no agent. */
+  target: EffectSchema.optionalKey(
+    EffectSchema.Union([
+      automationTargetSchema,
+      EffectSchema.Struct({
+        kind: EffectSchema.Literal(AUTOMATION_TARGET.SAME_AGENT),
+        agentId: EffectSchema.Null,
+      }),
+    ]),
+  ),
+  archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;
@@ -338,6 +386,9 @@ export const automationCreateRequestSchema = EffectSchema.Struct({
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: EffectSchema.optionalKey(automationGuardsSchema),
+  scope: EffectSchema.optionalKey(automationScopeSchema),
+  target: EffectSchema.optionalKey(automationTargetSchema),
+  archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** A change to an automation (PATCH): any of its fields, a field left out standing as it was. */
@@ -347,6 +398,9 @@ export const automationChangeRequestSchema = EffectSchema.Struct({
   trigger: EffectSchema.optionalKey(automationTriggerSchema),
   action: EffectSchema.optionalKey(automationActionSchema),
   guards: EffectSchema.optionalKey(automationGuardsSchema),
+  scope: EffectSchema.optionalKey(automationScopeSchema),
+  target: EffectSchema.optionalKey(automationTargetSchema),
+  archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /**

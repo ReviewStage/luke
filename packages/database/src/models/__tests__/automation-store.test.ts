@@ -7,6 +7,8 @@ import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@sidecar/hosted/automation-wire";
 import { eq } from "drizzle-orm";
@@ -14,6 +16,7 @@ import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
+import { plan } from "../../schemas/plan.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
@@ -29,7 +32,7 @@ import {
   settleAutomationRun,
   updateAutomation,
 } from "../automation-store.js";
-import { createPlan } from "../plan-store.js";
+import { createPlan, updatePlan } from "../plan-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
@@ -82,6 +85,83 @@ const nightly = (planId: string): NewAutomation => ({
 });
 
 it.layer(getTestDB())("the automation store", (it) => {
+  it.effect(
+    "a new automation takes its plan's workspace and repository, its owner's alone and a new agent each run where the maker names neither",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const [planRow] = yield* Database.use((db) =>
+          db.select({ organizationId: plan.organizationId }).from(plan).where(eq(plan.id, planId)),
+        );
+
+        assert.deepEqual(
+          [
+            made.organizationId,
+            made.repositories,
+            made.scope,
+            made.targetKind,
+            made.archiveSuccessful,
+          ],
+          [
+            planRow?.organizationId,
+            ["acme/api"],
+            AUTOMATION_SCOPE.PERSONAL,
+            AUTOMATION_TARGET.NEW_AGENT,
+            false,
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan given another repository or moved to another workspace takes its automations along, and a row an older build wrote reads its plan's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const elsewhere = randomUUID();
+        const now = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db.insert(organization).values({
+            id: elsewhere,
+            name: "Elsewhere",
+            slug: `elsewhere-${elsewhere}`,
+            createdAt: now,
+          }),
+        );
+        yield* Database.use((db) =>
+          db.insert(member).values({
+            id: randomUUID(),
+            organizationId: elsewhere,
+            userId: owner,
+            role: "owner",
+            createdAt: now,
+          }),
+        );
+
+        yield* updatePlan(owner, planId, { repository: "acme/moved", organizationId: elsewhere });
+        const followed = Option.getOrThrow(yield* readAutomation(owner, made.id));
+        // An older build's insert: no workspace and no repositories of its own.
+        yield* Database.use((db) =>
+          db
+            .update(automation)
+            .set({ organizationId: null, repositories: [] })
+            .where(eq(automation.id, made.id)),
+        );
+        const older = Option.getOrThrow(yield* readAutomation(owner, made.id));
+
+        assert.deepEqual(
+          [followed.organizationId, followed.repositories],
+          [elsewhere, ["acme/moved"]],
+          "the automation follows its plan",
+        );
+        assert.deepEqual([older.organizationId, older.repositories], [elsewhere, ["acme/moved"]]);
+      }),
+  );
+
   it.effect(
     "an automation is made only on a plan the account reaches, and read, changed, and deleted by its own account alone",
     () =>
