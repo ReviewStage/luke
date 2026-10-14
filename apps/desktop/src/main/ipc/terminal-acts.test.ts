@@ -369,3 +369,30 @@ it("a page is gone when its contents are destroyed, its renderer dies, or it nav
 
   assert.deepEqual(ends, ["reloaded", "crashed", "closed"], "each page ends once");
 });
+
+it.effect(
+  "one shell id under two agents is two shells: a detach of one leaves the other's port",
+  () =>
+    Effect.gen(function* () {
+      const { router, opened, hostSays } = fixture();
+      const panel = panelOf();
+      const otherAgent = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+
+      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
+      yield* router.performAct(
+        { kind: ACT_KIND.TERMINAL_ATTACH, payload: { ...ATTACH, agentId: otherAgent } },
+        panel,
+      );
+      yield* router.performAct(
+        { kind: ACT_KIND.TERMINAL_DETACH, payload: { agentId: otherAgent, terminalId: SHELL_ID } },
+        panel,
+      );
+      hostSays.output("connection-1", "still here");
+
+      assert.deepEqual(
+        opened.map((port) => port.closed),
+        [false, true],
+      );
+      assert.equal(opened[0]?.posted.length, 1, "the first agent's shell still hears its output");
+    }),
+);

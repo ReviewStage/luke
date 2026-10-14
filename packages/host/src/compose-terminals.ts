@@ -178,7 +178,12 @@ interface Connection {
   /** Bytes handed up that the tab has not acked. */
   unacked: number;
   paused: boolean;
+  /** What was typed while the connection was reopening, in order, for the socket that attaches next. */
+  typedWhileAway: Uint8Array[];
 }
+
+/** The most typing a reopening connection holds for its next socket; typing past it is let go, as a terminal far behind would. */
+const TYPED_WHILE_AWAY_MAX_BYTES = 64 * 1024;
 
 const readServiceFrame = readEither(terminalRelayServiceFrameSchema);
 
@@ -309,7 +314,12 @@ function composed(
           if (frame?.type === TERMINAL_RELAY_FRAME.EXITED) exitCode = frame.code;
           if (frame?.type !== TERMINAL_RELAY_FRAME.ATTACHED) return Effect.void;
           attached = true;
-          return tell(connection, TERMINAL_CONNECTION.ATTACHED);
+          // What was typed while the socket was away reaches the shell first, in the order it was typed.
+          const typed = connection.typedWhileAway.splice(0);
+          return Effect.andThen(
+            tell(connection, TERMINAL_CONNECTION.ATTACHED),
+            Effect.forEach(typed, (bytes) => socket.send({ bytes }), { discard: true }),
+          );
         });
         const ended = closeCode === undefined ? undefined : ENDED_BY_CLOSE.get(closeCode);
         if (ended !== undefined) {
@@ -437,7 +447,13 @@ function composed(
           "attaching a shell names the connection, the agent, the shell, and the terminal's size",
         );
         if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
-        const connection: Connection = { ...ask, socket: undefined, unacked: 0, paused: false };
+        const connection: Connection = {
+          ...ask,
+          socket: undefined,
+          unacked: 0,
+          paused: false,
+          typedWhileAway: [],
+        };
         connections.set(ask.connectionId, connection);
         yield* run(connection);
         return {};
@@ -449,9 +465,18 @@ function composed(
           params,
           "typing names the connection and what was typed",
         );
-        // Note that typing on a connection that is not attached is let go, because the tab attaches again on a key press.
-        const socket = named(connectionId)?.socket;
-        if (socket !== undefined) yield* socket.send({ bytes: encoder.encode(data) });
+        const connection = named(connectionId);
+        if (connection === undefined) return {};
+        const bytes = encoder.encode(data);
+        if (connection.socket !== undefined) {
+          yield* connection.socket.send({ bytes });
+          return {};
+        }
+        // Note that typing on a connection that ended is let go, because the tab attaches again on a key press; one still reopening holds it.
+        if (!(yield* FiberMap.has(fibers, connectionId))) return {};
+        const held = connection.typedWhileAway.reduce((sum, typed) => sum + typed.length, 0);
+        if (held + bytes.length <= TYPED_WHILE_AWAY_MAX_BYTES)
+          connection.typedWhileAway.push(bytes);
         return {};
       }),
     [GATEWAY_METHOD.TERMINALS_RESIZE]: (params) =>

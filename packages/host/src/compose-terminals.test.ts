@@ -499,3 +499,32 @@ it.effect("a resize while the socket opens reaches the shell once it has", () =>
     ]);
   }),
 );
+
+it.effect(
+  "what is typed while a connection reopens reaches the shell once it attaches, and typing on an ended one is let go",
+  () =>
+    Effect.gen(function* () {
+      const { call, hand } = yield* subject();
+      const relay = yield* scriptedSocket;
+      const type = (data: string) =>
+        call(GATEWAY_METHOD.TERMINALS_INPUT, { connectionId: CONNECTION_ID, data });
+
+      yield* call(GATEWAY_METHOD.TERMINALS_CONNECT, connected());
+      yield* hand({ unreachable: true });
+      yield* settle;
+      yield* type("git ");
+      yield* type("status\r");
+      yield* hand(relay.opening);
+      yield* TestClock.adjust(TERMINAL_RECONNECT.FIRST);
+      yield* settle;
+      const beforeAttach = [...relay.sent];
+      yield* relay.attached;
+      yield* settle;
+      yield* relay.close(TERMINAL_RELAY_CLOSE.IDLE);
+      yield* settle;
+      yield* type("lost");
+
+      assert.deepEqual(beforeAttach, [], "nothing is sent before the shell is attached");
+      assert.deepEqual(relay.sent, [{ bytes: encode("git ") }, { bytes: encode("status\r") }]);
+    }),
+);

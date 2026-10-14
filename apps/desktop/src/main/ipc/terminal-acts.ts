@@ -138,8 +138,8 @@ export function terminalActRows(
   dependencies: TerminalActsDependencies,
 ): Pick<ActRows, TerminalActKind> {
   const { host, ports, createId, run } = dependencies;
-  /** Each panel's attached shells, by shell. */
-  const panels = new Map<WebContents, Map<string, Attached>>();
+  /** Each panel's attached shells, by agent and then by shell, since a shell's id is its agent's to mint. */
+  const panels = new Map<WebContents, Map<string, Map<string, Attached>>>();
   /** Every attached shell, by connection, which is how the host names its events. */
   const byConnection = new Map<string, MainTerminalPort>();
 
@@ -176,17 +176,24 @@ export function terminalActRows(
     return host.terminalAck({ connectionId, bytes: inbound.bytes });
   };
 
-  /** The panel's attached shells, its page's end watched for the first time it attaches one. */
-  const attachedOf = (sender: WebContents) => {
-    const held = panels.get(sender);
+  /** The panel's attached shells of one agent, its page's end watched for the first time it attaches any. */
+  const attachedOf = (sender: WebContents, agentId: string) => {
+    let agents = panels.get(sender);
+    if (agents === undefined) {
+      const fresh = new Map<string, Map<string, Attached>>();
+      agents = fresh;
+      panels.set(sender, fresh);
+      ports.whenGone(sender, () => {
+        panels.delete(sender);
+        const all = [...fresh.values()].flatMap((shells) => [...shells.values()]);
+        void run(Effect.forEach(all, release, { discard: true }));
+      });
+    }
+    const held = agents.get(agentId);
     if (held !== undefined) return held;
-    const fresh = new Map<string, Attached>();
-    panels.set(sender, fresh);
-    ports.whenGone(sender, () => {
-      panels.delete(sender);
-      void run(Effect.forEach([...fresh.values()], release, { discard: true }));
-    });
-    return fresh;
+    const shells = new Map<string, Attached>();
+    agents.set(agentId, shells);
+    return shells;
   };
 
   return {
@@ -219,7 +226,7 @@ export function terminalActRows(
     [ACT_KIND.TERMINAL_ATTACH]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TERMINAL_ATTACH, sender);
       return Effect.gen(function* () {
-        const held = attachedOf(sender.sender);
+        const held = attachedOf(sender.sender, params.agentId);
         const earlier = held.get(params.terminalId);
         if (earlier !== undefined) {
           held.delete(params.terminalId);
@@ -246,7 +253,7 @@ export function terminalActRows(
     },
     [ACT_KIND.TERMINAL_DETACH]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TERMINAL_DETACH, sender);
-      const held = panels.get(sender.sender);
+      const held = panels.get(sender.sender)?.get(params.agentId);
       const attached = held?.get(params.terminalId);
       if (held === undefined || attached === undefined) return Effect.void;
       held.delete(params.terminalId);
