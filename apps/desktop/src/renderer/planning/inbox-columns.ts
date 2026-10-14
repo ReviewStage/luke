@@ -14,20 +14,20 @@
  * leaves the list gives the list back.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 
 /**
  * The Inbox's widths, in CSS pixels, between which it shows one column or
- * two. Narrower than `ENTER`, its list at its least width would leave the
- * item beside it too narrow to read a question, a code card, and its options
- * by; only wider than `LEAVE` does it split again, so an Inbox dragged
+ * two. Narrower than `ENTER`, its list at its least width (300) would leave
+ * the item beside it less than the 560 a question, a code card, and its
+ * options read in (`inbox-list.tsx`); only wider than `LEAVE` does it split again, so an Inbox dragged
  * across the line does not split and join at every pixel.
  */
 const INBOX_SPLIT = {
-  ENTER: 840,
-  LEAVE: 872,
+  ENTER: 860,
+  LEAVE: 892,
 } as const;
 
 /** Which of the Inbox's columns stand. */
@@ -62,8 +62,10 @@ function oneColumn(width: number, was: boolean): boolean {
  * The Inbox's columns, measured as it resizes. An Inbox that measures
  * nothing is not laid out, and keeps the two columns it starts with. Going
  * one way or the other by a press hands the keyboard on, to the way back
- * once an item opens and to its row once the list is back; a resize moves
- * no focus.
+ * once an item opens and to its row once the list is back; a resize does so
+ * only where it hid the column holding the keyboard, so the keyboard is
+ * never left in what cannot be seen. Note that the keyboard is moved before
+ * the window paints, while the hidden control still holds it.
  */
 export function useInboxColumns(chosen: string | undefined): InboxColumns {
   const [single, setSingle] = useState(false);
@@ -88,9 +90,15 @@ export function useInboxColumns(chosen: string | undefined): InboxColumns {
       ? INBOX_COLUMNS.ITEM
       : INBOX_COLUMNS.LIST;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const held = view.current;
-    if (!pressed.current || held === null) return;
+    if (held === null) return;
+    const focused = document.activeElement;
+    const stranded =
+      focused instanceof HTMLElement &&
+      held.contains(focused) &&
+      focused.closest("[hidden]") !== null;
+    if (!pressed.current && !stranded) return;
     pressed.current = false;
     if (shown === INBOX_COLUMNS.ITEM) held.querySelector<HTMLElement>(".inbox-back")?.focus();
     if (shown !== INBOX_COLUMNS.LIST) return;

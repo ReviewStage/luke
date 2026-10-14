@@ -709,20 +709,27 @@ test("an Inbox too narrow for the list and the item side by side shows its list 
   assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
 });
 
-test("the Inbox splits again only once widened past the band, an item a press opened standing beside the list, and joins again only once narrowed past it; narrowed with nothing pressed, it lands on its list", async () => {
+test("the Inbox splits again only once widened past the band, an item a press opened standing beside the list, and joins again only once narrowed past it; narrowed with nothing pressed, it lands on its list, the keyboard on the chosen row where the item held it", async () => {
   const { page } = mount();
   await settle();
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   layOut(page, 860);
   assert.deepEqual(columnsShown(page), ["list", "item"], "within the band it stays split");
-  layOut(page, 830);
+  const option = page.querySelector<HTMLElement>(".inbox-view-items button");
+  assert.ok(option, "the item offers a press");
+  option.focus();
+  layOut(page, 850);
   assert.deepEqual(columnsShown(page), ["list"], "the item it chose for itself is not opened");
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "the keyboard leaves the hidden item for its row",
+  );
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
-  layOut(page, 860);
-  assert.deepEqual(columnsShown(page), ["item"], "within the band it stays one column");
   layOut(page, 880);
+  assert.deepEqual(columnsShown(page), ["item"], "within the band it stays one column");
+  layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
