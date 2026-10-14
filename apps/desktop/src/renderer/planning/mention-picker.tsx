@@ -2,13 +2,13 @@ import { encodeMention, MENTION_KIND, type Mention } from "@luke/features/mentio
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { DocumentIcon } from "@luke/ui";
+import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
-import { fileFolder, fileName } from "./code-pane-model";
 import { FileTypeIcon } from "./file-type-icon";
 
 /**

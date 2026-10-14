@@ -526,7 +526,7 @@ as a chat does: each call from a divider saying its day and time, oldest
 first, and each run of lines from one speaker as one turn, the developer's
 in a bubble at the right and Luke's under his mark at the left, with a copy
 of the turn's words under it (`planning/plan-transcript.tsx`,
-`planning/transcript-model.ts`).
+`@luke/voice/transcript-model`).
 
 - **The record.** The service keeps each call's words as timed fragments
   (`voice_transcript_segments`) and answers them at
@@ -602,7 +602,7 @@ says now.
 
 The developer edits the plan whole, in place, with its title
 (`planning/plan-document-editor.tsx`; the editor is `renderer/plan-editor/`,
-its saves `planning/use-plan-editing.ts` and `planning/plan-edit-model.ts`).
+its saves `planning/use-plan-editing.ts` and `@luke/features/plan-edit-model`).
 The service lays each save over what Luke wrote meanwhile
 (`packages/features/src/plan-edit.ts`).
 
@@ -1237,7 +1237,7 @@ the exact shape.
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open plan's call alone. |
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
-| Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
+| Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |

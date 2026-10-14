@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import type { Plan } from "@luke/features/plan-wire";
+import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -11,7 +12,6 @@ import { test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
-import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";

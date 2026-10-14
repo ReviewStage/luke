@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { type RunningBuild, UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { test } from "vitest";
-import { UPDATE_ROW_ACTION, updateInSidebar, updateRow } from "./update-row";
+import { type RunningBuild, UPDATE_STATUS, type UpdateSnapshot } from "./update.js";
+import { UPDATE_ROW_ACTION, updateInSidebar, updateRow } from "./update-row.js";
 
 const RELEASE: RunningBuild = { packaged: true };
 

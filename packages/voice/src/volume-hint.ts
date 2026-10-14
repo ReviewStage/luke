@@ -1,4 +1,4 @@
-import type { OutputAudioState } from "@luke/voice/audio";
+import type { OutputAudioState } from "./audio.js";
 
 /**
  * The decisions behind the volume hint, kept pure so they can be tested: when

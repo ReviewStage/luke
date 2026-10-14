@@ -3,7 +3,7 @@ import {
   type RunningBuild,
   UPDATE_STATUS,
   type UpdateSnapshot,
-} from "@luke/settings/update";
+} from "./update.js";
 
 /** The one action the row's button offers in each state. */
 export const UPDATE_ROW_ACTION = {

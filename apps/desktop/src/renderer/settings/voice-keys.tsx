@@ -12,6 +12,8 @@ import {
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
+import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
+import type { ShortcutControl } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -22,9 +24,7 @@ import {
   shortcutAccelerator,
   shortcutLabel,
 } from "#shared/shortcuts";
-import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { Shortcut } from "../shortcut";
-import type { ShortcutControl } from "./controls";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";
 import { SettingsGroup } from "./settings-group";

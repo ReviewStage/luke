@@ -39,7 +39,7 @@
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
-    "apps/desktop/src/main/update-service.ts",
+    "packages/host/src/update-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [

@@ -19,12 +19,12 @@ import {
   type SettingsView,
 } from "@luke/settings/settings-views";
 import { CloseIcon, SearchIcon } from "@luke/ui";
+import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
-import { integrationLines } from "./integration-search";
 import { focusSearchField, Highlighted } from "./search-field";
 import { settingsPageOf } from "./settings/pages";
 import { Shortcut } from "./shortcut";

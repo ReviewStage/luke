@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { PAGE_SCHEME } from "@luke/features/page-frame";
+import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
@@ -19,8 +21,6 @@ import {
 } from "electron";
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
-import { WINDOW_ROLE } from "#shared/messages/session";
-import { PAGE_SCHEME } from "#shared/page-frame";
 import { APP_COMMAND } from "#shared/shortcuts";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";

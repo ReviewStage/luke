@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
-import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
 import { test } from "vitest";
+import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import {
   DOCUMENT_EDITOR_STATE,
   type DocumentEditor,
@@ -14,7 +13,8 @@ import {
   editorSent,
   editorTyped,
   pendingSave,
-} from "./plan-edit-model";
+} from "./plan-edit-model.js";
+import { PLAN_CALL_FAILURE } from "./planning-view.js";
 
 const TEXT = "# Context\n\nOnly an admin can add a member.\n";
 

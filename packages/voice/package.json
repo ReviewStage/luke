@@ -12,7 +12,13 @@
     "./testing": "./src/testing.js",
     "./live-captions": "./src/live-captions.js",
     "./audio": "./src/audio.js",
-    "./voice-view": "./src/voice-view.js"
+    "./voice-view": "./src/voice-view.js",
+    "./microphone-access": "./src/microphone-access.js",
+    "./volume-hint": "./src/volume-hint.js",
+    "./settings-controls": "./src/settings-controls.js",
+    "./transcript-model": "./src/transcript-model.js",
+    "./call-thread": "./src/call-thread.js",
+    "./code-pane-model": "./src/code-pane-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -32,6 +38,7 @@
     "@luke/runtime": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/wire": "workspace:*",
+    "ai": "catalog:",
     "effect": "catalog:"
   }
 }

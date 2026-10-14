@@ -4,10 +4,22 @@ import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import type {
+  MicrophoneControl,
+  ShortcutControl,
+  UpdateControl,
+} from "@luke/voice/settings-controls";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
+import {
+  outputSilent,
+  type VolumeHintDismissal,
+  volumeHintDismissed,
+  volumeHintText,
+} from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -40,12 +52,10 @@ import { PLANS_PAGE } from "./planning/planning-model";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
-import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink } from "./settings-link";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
-import { fixtureUpdate } from "./update-row";
 import { useUpdatedToast } from "./update-toast";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
@@ -53,12 +63,6 @@ import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
 import { useStateWithRef } from "./use-state-with-ref";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
-import {
-  outputSilent,
-  type VolumeHintDismissal,
-  volumeHintDismissed,
-  volumeHintText,
-} from "./volume-hint";
 import { useWindowFullScreen } from "./window-full-screen";
 import { useWindowZoom } from "./window-zoom";
 

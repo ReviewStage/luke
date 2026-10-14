@@ -15,7 +15,9 @@
     "./theme.css": "./src/theme.css",
     "./search-tokens": "./src/search-tokens.js",
     "./skill-mention": "./src/skill-mention.js",
-    "./tab-strip-model": "./src/tab-strip-model.js"
+    "./tab-strip-model": "./src/tab-strip-model.js",
+    "./integration-search": "./src/integration-search.js",
+    "./agent-servers-model": "./src/agent-servers-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {

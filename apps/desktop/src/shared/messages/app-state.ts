@@ -1,5 +1,10 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { PlanningView } from "@luke/features/planning-view";
+import {
+  type SessionReplayBootstrap,
+  WINDOW_ROLE,
+  type WindowRole,
+} from "@luke/gateway/window-session";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
@@ -11,7 +16,6 @@ import {
   isWireString,
   type UnparsedWireValue,
 } from "@luke/wire";
-import { type SessionReplayBootstrap, WINDOW_ROLE, type WindowRole } from "./session";
 
 /**
  * The launch profiles a window answers to. A capture run stages a

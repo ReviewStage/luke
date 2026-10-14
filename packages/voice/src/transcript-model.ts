@@ -1,7 +1,7 @@
 import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@luke/features/transcript-wire";
-import type { VoiceView } from "@luke/voice/voice-view";
 import type { UIMessage } from "ai";
+import type { VoiceView } from "./voice-view.js";
 
 /**
  * transcript-model.ts -- what the open plan's Call tab draws, decided from the stored transcript and the call standing now.

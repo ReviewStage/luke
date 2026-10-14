@@ -5,7 +5,7 @@ import {
   callEndedLine,
   callStart,
   type TranscriptCallRow,
-} from "./transcript-model";
+} from "./transcript-model.js";
 
 /**
  * code-pane-model.ts -- what the Code tab's feed says, apart from drawing it: which call each code was shown on, how a range of lines is said, the lines lit, and what its copy carries.
@@ -77,7 +77,7 @@ export function copiedLines(code: PlanCode): string {
  * none where no call started before it, or where that call's record says
  * it had ended before the turn that showed the code began. Note that the
  * ended call does not take it, because the call closes on its end line
- * (`call-card.tsx`), and code drawn above that line would read as shown
+ * (the desktop's `planning/call-card.tsx`), and code drawn above that line would read as shown
  * before the call ended.
  */
 function callOf(

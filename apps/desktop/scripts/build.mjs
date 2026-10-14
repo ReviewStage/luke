@@ -60,7 +60,7 @@ const EXCALIDRAW_FONTS = path.join(
 const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
 
 // The commit the bundle is cut from, which Settings › Updates names
-// (`src/main/build-commit.ts`): the short SHA, whether the tree held
+// (`@luke/host`'s `build-commit.ts`): the short SHA, whether the tree held
 // uncommitted changes (a new file the bundle may carry counts too), and the
 // branch unless the head is detached, as a tag's checkout is. A build made
 // where git cannot answer stamps none.

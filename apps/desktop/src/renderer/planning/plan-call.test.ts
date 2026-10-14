@@ -6,6 +6,7 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { PLAN_WORK_STATE } from "@luke/features/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import { TURN_ORIGIN } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,7 +19,6 @@ import { NOTHING_HELD } from "./agent-ref";
 import { CodeCardHeader } from "./code-pane";
 import { PlanCall } from "./plan-call";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workRowsOf } from "./work-model";
 
 /** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */

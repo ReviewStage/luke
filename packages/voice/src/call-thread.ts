@@ -34,7 +34,7 @@
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import type { UIMessage } from "ai";
 import { Option, Schema } from "effect";
-import { callStart, type TranscriptCallRow } from "./transcript-model";
+import { callStart, type TranscriptCallRow } from "./transcript-model.js";
 
 /** What the thread is made of: a call with its lines and the work under them, a line, and a turn's work. */
 export const THREAD_ITEM = {

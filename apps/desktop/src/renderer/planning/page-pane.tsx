@@ -1,3 +1,4 @@
+import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, PlanningPageSourceAnswer } from "@luke/features/planning-view";
 import {
@@ -8,7 +9,6 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { pageFrameUrl } from "#shared/page-frame";
 import { useCopyToast } from "../copy-feedback";
 import { FindScope } from "../find-in-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";

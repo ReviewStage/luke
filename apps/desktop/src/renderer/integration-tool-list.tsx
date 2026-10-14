@@ -1,6 +1,6 @@
 import type { IntegrationTool } from "@luke/features/integration-health";
+import { byName, TOOL_BADGE, toolBadge } from "@luke/features/integration-tool-model";
 import { useId, useState } from "react";
-import { byName, TOOL_BADGE, toolBadge } from "./integration-tool-model";
 import { Highlighted } from "./search-field";
 
 /**

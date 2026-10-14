@@ -17,10 +17,10 @@ import type { PlanNote } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
+import { fileRefText } from "@luke/voice/code-pane-model";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
-import { fileRefText } from "./code-pane-model";
 import { shortCommit } from "./file-tab-model";
 
 /**

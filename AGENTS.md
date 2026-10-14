@@ -243,9 +243,9 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   object, and the ordering those callers and this file's own tests depend on —
   a listener's patch is not lost, a re-announce lands before the caller's next
   statement — is what turning them into effects a caller awaits would give up.
-- **`apps/desktop/src/main/update-service.ts`** — synchronous Electron
+- **`packages/host/src/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
-  the launch handed them, on the same terms as `app-state.ts` beside it.
+  the launch handed them, on the same terms as the desktop's `app-state.ts`.
 - **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing

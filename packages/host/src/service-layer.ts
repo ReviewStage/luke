@@ -1,5 +1,5 @@
-import type { DesktopService, EffectDesktopService } from "@luke/host/desktop-service";
 import { Effect, Layer } from "effect";
+import type { DesktopService, EffectDesktopService } from "./desktop-service.js";
 
 /**
  * A desktop service as a `Layer`: its `start` runs when the layer is built and

@@ -2,18 +2,18 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
-import type { ActionResult } from "@luke/wire";
-import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
-import type { SettingsSearchInput } from "../settings-search";
-import { AccountSection } from "./account-section";
-import { AppearanceSection } from "./appearance-page";
-import { CodingAgentsPage } from "./coding-agents-page";
+import { microphoneAccessRow, voiceAttentionNote } from "@luke/voice/microphone-access";
 import type {
   MicrophoneControl,
   NotificationsControl,
   ShortcutControl,
   UpdateControl,
-} from "./controls";
+} from "@luke/voice/settings-controls";
+import type { ActionResult } from "@luke/wire";
+import type { SettingsSearchInput } from "../settings-search";
+import { AccountSection } from "./account-section";
+import { AppearanceSection } from "./appearance-page";
+import { CodingAgentsPage } from "./coding-agents-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";

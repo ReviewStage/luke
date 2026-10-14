@@ -20,6 +20,11 @@ import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
+  messageText,
+  TRANSCRIPT_REGION,
+  type TranscriptRegion,
+} from "@luke/voice/transcript-model";
+import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   type VoiceCommand,
@@ -41,7 +46,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { PLANS_PAGE } from "./planning-model";
-import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";

@@ -3,21 +3,21 @@ import { PRODUCT_EXCHANGE_KIND } from "@luke/features/analytics";
 import { sanitizedTraceEvent } from "@luke/gateway/devtrace";
 import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { hostedVoiceUnavailableNote } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
 } from "@luke/voice/orchestrator";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
+import { outputSilent } from "@luke/voice/volume-hint";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
-import { outputSilent } from "../volume-hint";
 import { LiveCall, type LiveStreamSlot } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";

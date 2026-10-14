@@ -3,8 +3,8 @@ import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
 import type { UIMessage } from "ai";
 import { test } from "vitest";
-import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
-import { messageText, type TranscriptCallRow } from "./transcript-model";
+import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread.js";
+import { messageText, type TranscriptCallRow } from "./transcript-model.js";
 
 /** Synthetic calls and lines throughout. */
 const LIVE_CALL = "call-live";

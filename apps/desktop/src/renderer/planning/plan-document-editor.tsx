@@ -1,4 +1,9 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
+import {
+  CONFLICT_NOTE,
+  DOCUMENT_EDITOR_STATE,
+  type DocumentEditor,
+} from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@luke/features/plan-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
@@ -15,7 +20,6 @@ import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
 import { type MentionDoors, MentionNodeChip, retargetedMention } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**

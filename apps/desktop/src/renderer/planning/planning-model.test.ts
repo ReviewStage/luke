@@ -3,8 +3,8 @@ import type { Plan } from "@luke/features/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
-import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { MICROPHONE_PRESS, microphoneButton } from "./planning-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

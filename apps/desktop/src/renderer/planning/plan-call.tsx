@@ -3,6 +3,19 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { PLAN_WORK_STATE } from "@luke/features/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CallIcon } from "@luke/ui";
+import {
+  type CallTurn,
+  callThread,
+  THREAD_ITEM,
+  type ThreadSection,
+} from "@luke/voice/call-thread";
+import {
+  callEndedLine,
+  TRANSCRIPT_EMPTY_LINE,
+  TRANSCRIPT_REGION,
+  type TranscriptCallRow,
+  type TranscriptRegion,
+} from "@luke/voice/transcript-model";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -18,16 +31,8 @@ import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallCheckpoint, CallEnded } from "./call-card";
-import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
-import {
-  callEndedLine,
-  TRANSCRIPT_EMPTY_LINE,
-  TRANSCRIPT_REGION,
-  type TranscriptCallRow,
-  type TranscriptRegion,
-} from "./transcript-model";
 import {
   type PlanConversation,
   type WorkTurnRow,

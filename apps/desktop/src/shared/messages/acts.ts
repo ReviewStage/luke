@@ -120,6 +120,19 @@ import {
   planningWorkspaceParamsSchema,
 } from "@luke/features/planning-view";
 import {
+  type TerminalCreatedActAnswer,
+  type TerminalResumedActAnswer,
+  type TerminalsActAnswer,
+  terminalAgentParamsSchema,
+  terminalAttachParamsSchema,
+  terminalCreatedActAnswerSchema,
+  terminalCreateParamsSchema,
+  terminalRenameParamsSchema,
+  terminalResumedActAnswerSchema,
+  terminalShellParamsSchema,
+  terminalsActAnswerSchema,
+} from "@luke/features/terminal-acts";
+import {
   type WorkspaceInvitation,
   workspaceInvitationSchema,
 } from "@luke/features/workspace-invitation-wire";
@@ -167,19 +180,6 @@ import {
   wireResult,
 } from "@luke/wire/wire-guard";
 import { Schema as EffectSchema, Result } from "effect";
-import {
-  type TerminalCreatedActAnswer,
-  type TerminalResumedActAnswer,
-  type TerminalsActAnswer,
-  terminalAgentParamsSchema,
-  terminalAttachParamsSchema,
-  terminalCreatedActAnswerSchema,
-  terminalCreateParamsSchema,
-  terminalRenameParamsSchema,
-  terminalResumedActAnswerSchema,
-  terminalShellParamsSchema,
-  terminalsActAnswerSchema,
-} from "./terminal";
 
 /**
  * Every effect a window may ask this build's main process for, named once.

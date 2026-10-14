@@ -24,6 +24,8 @@ import {
   sameTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
+import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -43,7 +45,6 @@ import {
   lastFinished,
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
-import { type ShownFile, shownFiles } from "../planning/code-pane-model";
 import {
   agentGlyphState,
   agentStateWords,
@@ -63,7 +64,6 @@ import {
   readWholeTranscript,
   type TranscriptCopy,
 } from "../planning/transcript-copy";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { TranscriptReader } from "../planning/use-agent-transcript";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {

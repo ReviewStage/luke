@@ -8,11 +8,11 @@ import {
   type SettingsView,
 } from "@luke/settings/settings-views";
 import { BackIcon } from "@luke/ui";
+import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
-import { integrationNamed } from "../integration-search";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { settingsPageOf } from "../settings/pages";

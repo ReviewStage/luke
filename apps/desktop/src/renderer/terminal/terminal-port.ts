@@ -8,14 +8,14 @@
  * script posting to this window — is no port of main's and is ignored.
  */
 
-import { isRecord, unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Result } from "effect";
 import {
   TERMINAL_PORT_CHANNEL,
   type TerminalPortTicket,
   terminalPortTicketSchema,
-} from "#shared/messages/terminal";
+} from "@luke/features/terminal-acts";
+import { isRecord, unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Result } from "effect";
 
 const readTicket = readEither(terminalPortTicketSchema);
 

@@ -82,7 +82,7 @@ export function signingModeDefine(env) {
  * downloadUpdate path), so a bundle without one fails with ENOENT the moment
  * a newer build is found. electron-builder writes this file from the generic
  * publish config. The URL must equal `UPDATE_ENDPOINT.UPDATE_FEED_URL` in
- * src/update-service.ts, and the cache directory must stay `luke-updater` so
+ * `@luke/host`'s update-service.ts, and the cache directory must stay `luke-updater` so
  * downloaded updates from the pre-builder transition are not orphaned.
  */
 export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";

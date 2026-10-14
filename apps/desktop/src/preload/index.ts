@@ -1,8 +1,8 @@
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
 import { contextBridge, ipcRenderer } from "electron";
 import { type AppBridge, bridgeEntries } from "#shared/bridge";
-import { TERMINAL_PORT_CHANNEL } from "#shared/messages/terminal";
 
 Sentry.init();
 

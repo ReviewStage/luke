@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import type { PlanCodeShowing } from "@luke/features/planning-view";
+import { TRANSCRIPT_REGION, type TranscriptCallRow } from "@luke/voice/transcript-model";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { CodePane } from "./code-pane";
 import { PlanCall } from "./plan-call";
-import { TRANSCRIPT_REGION, type TranscriptCallRow } from "./transcript-model";
 import { RUN_CARD } from "./turn-card";
 
 /**

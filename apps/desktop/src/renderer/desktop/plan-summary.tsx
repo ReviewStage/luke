@@ -1,12 +1,12 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { ChangesCard } from "../planning/agent-changes-tab";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
-import { shownFiles } from "../planning/code-pane-model";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { FileCard, newestFileNote } from "../planning/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "../planning/inbox-model";

@@ -7,6 +7,7 @@ import {
   layersInOrder,
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
+import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
@@ -21,7 +22,6 @@ import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
 import { createOperatorClient, type OperatorClient } from "./operator-client";
-import { effectServiceLayer, serviceLayer } from "./service-layer";
 import { createTelemetryService, type TelemetryService } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";

@@ -55,7 +55,11 @@
     "./workspace-role": "./src/workspace-role.js",
     "./integration-health": "./src/integration-health.js",
     "./failure-remedy": "./src/failure-remedy.js",
-    "./integration-sign-in": "./src/integration-sign-in.js"
+    "./integration-sign-in": "./src/integration-sign-in.js",
+    "./plan-edit-model": "./src/plan-edit-model.js",
+    "./integration-tool-model": "./src/integration-tool-model.js",
+    "./terminal-acts": "./src/terminal-acts.js",
+    "./page-frame": "./src/page-frame.js"
   },
   "types": "./src/index.ts",
   "scripts": {

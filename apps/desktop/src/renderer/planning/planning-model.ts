@@ -10,8 +10,8 @@ import {
 } from "@luke/features/planning-view";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
+import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { VoiceView } from "@luke/voice/voice-view";
-import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
 
 /**
  * planning-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.

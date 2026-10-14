@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { test } from "vitest";
-import { TERMINAL_PORT_CHANNEL } from "#shared/messages/terminal";
 import { onTerminalPort } from "./terminal-port";
 
 /**

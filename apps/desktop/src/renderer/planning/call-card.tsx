@@ -1,11 +1,11 @@
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
 import { cn } from "@luke/ui";
+import type { CallRecord } from "@luke/voice/transcript-model";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import { Tooltip } from "../tooltip";
 import { callHeading, useMinute } from "./plan-time";
-import type { CallRecord } from "./transcript-model";
 import { RUN_CARD, RunCard } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 

@@ -1,6 +1,7 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
 import { ArrowLeftIcon, ArrowRightIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import { shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
   type ReactNode,
@@ -14,7 +15,6 @@ import {
 import { paneTiming } from "../desktop/pane-motion";
 import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
-import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";
 import type { FileNotes } from "./file-note";

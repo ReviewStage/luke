@@ -17,18 +17,6 @@ import {
   ProviderMark,
   SearchIcon,
 } from "@luke/ui";
-import { searchTokens } from "@luke/ui/search-tokens";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
-import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
-import { matchIntegration, shownTools } from "../integration-search";
-import type { IntegrationStatuses } from "../integration-statuses";
-import { IntegrationToolList } from "../integration-tool-list";
-import { useIntegrationTools } from "../integration-tools";
-import { Highlighted } from "../search-field";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner";
-import { Switch } from "../switch";
-import { Tooltip } from "../tooltip";
 import {
   opensTools,
   SERVER_ACTION,
@@ -40,7 +28,19 @@ import {
   serverRows,
   switchedServers,
   type ToolHit,
-} from "./agent-servers-model";
+} from "@luke/ui/agent-servers-model";
+import { matchIntegration, shownTools } from "@luke/ui/integration-search";
+import { searchTokens } from "@luke/ui/search-tokens";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
+import type { IntegrationStatuses } from "../integration-statuses";
+import { IntegrationToolList } from "../integration-tool-list";
+import { useIntegrationTools } from "../integration-tools";
+import { Highlighted } from "../search-field";
+import { SPINNER_SIZE, SpinnerRing } from "../spinner";
+import { Switch } from "../switch";
+import { Tooltip } from "../tooltip";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.

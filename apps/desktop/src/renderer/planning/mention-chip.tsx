@@ -6,11 +6,11 @@ import {
   type PlanMention,
 } from "@luke/features/mention-link";
 import { DocumentIcon } from "@luke/ui";
+import { fileName } from "@luke/voice/code-pane-model";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
-import { fileName } from "./code-pane-model";
 import { FileCard } from "./file-ref";
 import { FileTypeIcon } from "./file-type-icon";
 

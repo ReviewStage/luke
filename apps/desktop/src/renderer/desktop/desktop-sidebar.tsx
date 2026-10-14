@@ -15,6 +15,7 @@ import {
   UnpinIcon,
 } from "@luke/ui";
 import { sameTab } from "@luke/ui/tab-strip-model";
+import type { UpdateControl } from "@luke/voice/settings-controls";
 import { HouseIcon, InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -36,7 +37,6 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";
 import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
-import type { UpdateControl } from "../settings/controls";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
