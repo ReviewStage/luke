@@ -9,8 +9,7 @@ import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { GitHubApp } from "../../github/github-app.js";
-import { githubReadOrRefusal } from "../../github/github-refusal.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -20,6 +19,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";
 import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import { workspaceRepository } from "../workspace-repository.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**
@@ -113,11 +113,11 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (held.value.plan.archivedAt !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
   }
-  const app = yield* GitHubApp;
-  const reached = yield* githubReadOrRefusal(
-    app.workspaceRepository(held.value.plan.workspaceId, agent.repository),
+  yield* workspaceRepository(
+    held.value.plan.workspaceId,
+    agent.repository,
+    held.value.ownerId === userId ? userId : undefined,
   );
-  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.

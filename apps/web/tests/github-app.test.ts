@@ -5,9 +5,10 @@ import { Database } from "@sidecar/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { account } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
+import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Option, Redacted } from "effect";
+import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
@@ -96,6 +97,7 @@ it.effect(
         accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
         repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED,
         ciReadable: false,
+        suspended: false,
       });
       assert.equal(Option.isNone(missing), true);
       const [read] = fake.sent;
@@ -235,6 +237,171 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
       assert.ok(failure._tag === "GitHubUnavailable");
       assert.equal(failure.status, 403);
     }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect("a repository the workspace reaches is its reach, spelled as GitHub spells it", () =>
+    Effect.gen(function* () {
+      const relay = relayInstallation(20);
+      const fake = githubReaching([relay]);
+      const workspace = yield* openWorkspace(yield* openGithubUser());
+      yield* connectWorkspaceGitHub(workspace, relay);
+      const app = yield* GitHubApp;
+
+      const reach = yield* app
+        .repositoryReach(workspace, "Octo-Org/Relay")
+        .pipe(Effect.provide(fake.layer));
+
+      assert.equal(
+        Result.getOrUndefined(Result.map(reach, (repository) => repository.fullName)),
+        "octo-org/relay",
+      );
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect("a workspace with nothing connected reaches no repository, and says so", () =>
+    Effect.gen(function* () {
+      const fake = githubReaching([relayInstallation(22)]);
+      const workspace = yield* openWorkspace(yield* openGithubUser());
+      const app = yield* GitHubApp;
+
+      const reach = yield* app
+        .repositoryReach(workspace, "octo-org/relay")
+        .pipe(Effect.provide(fake.layer));
+
+      assert.deepEqual(
+        Result.getFailure(reach),
+        Option.some({
+          reason: REPOSITORY_UNREACHED.NOT_CONNECTED,
+          repository: "octo-org/relay",
+        }),
+      );
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "an installation GitHub no longer knows, or one its account suspended, is a connection that lapsed",
+    () =>
+      Effect.gen(function* () {
+        const uninstalled = relayInstallation(24);
+        const suspended = { ...relayInstallation(26), suspendedAt: "2026-10-10T00:00:00Z" };
+        const fake = githubReaching([suspended]);
+        const owner = yield* openGithubUser();
+        const gone = yield* openWorkspace(owner);
+        const paused = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(gone, uninstalled);
+        yield* connectWorkspaceGitHub(paused, suspended);
+        const app = yield* GitHubApp;
+
+        const reaches = yield* Effect.forEach([gone, paused], (workspace) =>
+          app.repositoryReach(workspace, "octo-org/relay").pipe(Effect.provide(fake.layer)),
+        );
+
+        assert.deepEqual(
+          reaches.map(Result.getFailure),
+          [gone, paused].map(() =>
+            Option.some({
+              reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED,
+              repository: "octo-org/relay",
+            }),
+          ),
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository of another account than the installation's is out of reach, naming the account it is on",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(28);
+        const fake = githubReaching([relay]);
+        const workspace = yield* openWorkspace(yield* openGithubUser());
+        yield* connectWorkspaceGitHub(workspace, relay);
+        const app = yield* GitHubApp;
+
+        const reach = yield* app
+          .repositoryReach(workspace, "octocat/dotfiles")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.deepEqual(
+          Result.getFailure(reach),
+          Option.some({
+            reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+            repository: "octocat/dotfiles",
+            connectedTo: "octo-org",
+          }),
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository an installation of chosen repositories was not given is out of reach, with the settings page where it is given",
+    () =>
+      Effect.gen(function* () {
+        const organization = {
+          ...relayInstallation(30),
+          accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+        };
+        const personal = {
+          id: 32,
+          login: "octocat",
+          repositories: [{ owner: "octocat", name: "dotfiles" }],
+        };
+        const fake = githubReaching([organization, personal]);
+        const owner = yield* openGithubUser();
+        const ofOrganization = yield* openWorkspace(owner);
+        const ofUser = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(ofOrganization, organization);
+        yield* connectWorkspaceGitHub(ofUser, personal);
+        const app = yield* GitHubApp;
+
+        const fromOrganization = yield* app
+          .repositoryReach(ofOrganization, "octo-org/absent")
+          .pipe(Effect.provide(fake.layer));
+        const fromUser = yield* app
+          .repositoryReach(ofUser, "octocat/absent")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.deepEqual(
+          Result.getFailure(fromOrganization),
+          Option.some({
+            reason: REPOSITORY_UNREACHED.NOT_SELECTED,
+            repository: "octo-org/absent",
+            settingsUrl: "https://github.com/organizations/octo-org/settings/installations/30",
+          }),
+        );
+        assert.deepEqual(
+          Result.getFailure(fromUser),
+          Option.some({
+            reason: REPOSITORY_UNREACHED.NOT_SELECTED,
+            repository: "octocat/absent",
+            settingsUrl: "https://github.com/settings/installations/32",
+          }),
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository an installation of every repository does not list is gone: renamed, transferred, or deleted",
+    () =>
+      Effect.gen(function* () {
+        const relay = { ...relayInstallation(34), repositorySelection: "all" as const };
+        const fake = githubReaching([relay]);
+        const workspace = yield* openWorkspace(yield* openGithubUser());
+        yield* connectWorkspaceGitHub(workspace, relay);
+        const app = yield* GitHubApp;
+
+        const reach = yield* app
+          .repositoryReach(workspace, "octo-org/renamed")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.deepEqual(
+          Result.getFailure(reach),
+          Option.some({
+            reason: REPOSITORY_UNREACHED.GONE,
+            repository: "octo-org/renamed",
+          }),
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect(

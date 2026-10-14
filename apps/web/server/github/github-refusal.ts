@@ -5,7 +5,9 @@
  * GitHub the service could not reach, or a store that could not name the
  * installation. Both are an outage the caller may retry, refused as
  * unavailable, and logged by kind: nothing of a token, the request that
- * carried it, or GitHub's body reaches a line.
+ * carried it, or GitHub's body reaches a line. Where the read is whether
+ * the workspace reaches a plan's repository, a GitHub that did not answer is
+ * refused as its own kind, so the desktop says GitHub, not Luke, failed.
  */
 
 import { Effect } from "effect";
@@ -36,5 +38,19 @@ export function githubReadOrRefusal<A, R>(
   return effect.pipe(
     Effect.tapError(logWorkspaceReadFailure),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+}
+
+/** A read of whether the workspace reaches a repository, refused on the terms above, a GitHub that did not answer as unanswered. */
+export function githubReachOrRefusal<A, R>(
+  effect: Effect.Effect<A, GitHubWorkspaceReadFailure, R>,
+): Effect.Effect<A, HostedRefusal, R> {
+  return effect.pipe(
+    Effect.tapError(logWorkspaceReadFailure),
+    Effect.mapError((failure) =>
+      failure._tag === "GitHubUnavailable"
+        ? HOSTED_REFUSAL.GITHUB_UNANSWERED
+        : HOSTED_REFUSAL.UNAVAILABLE,
+    ),
   );
 }

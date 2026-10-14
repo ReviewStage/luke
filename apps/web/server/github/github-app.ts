@@ -50,6 +50,10 @@ import {
 } from "@sidecar/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { account } from "@sidecar/database/schemas/auth";
+import {
+  REPOSITORY_UNREACHED,
+  type RepositoryUnreached,
+} from "@sidecar/hosted/repository-reach-wire";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";
@@ -63,6 +67,7 @@ import {
   Layer,
   Option,
   Redacted,
+  Result,
   Schema,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -79,6 +84,7 @@ const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
 const GITHUB_AUTHORIZE_ENDPOINT = "https://github.com/login/oauth/authorize";
 const GITHUB_APPS = "https://github.com/apps";
+const GITHUB_WEB = "https://github.com";
 const GITHUB_HEADERS = {
   accept: "application/vnd.github+json",
   "x-github-api-version": "2022-11-28",
@@ -199,6 +205,8 @@ interface GitHubInstallation {
   readonly repositorySelection: GitHubRepositorySelection;
   /** Whether the installation grants the App every permission that reads a pull request's CI (`CI_READ_PERMISSIONS`). */
   readonly ciReadable: boolean;
+  /** Whether the account it is on suspended it, which leaves it minting nothing until it is brought back. */
+  readonly suspended: boolean;
 }
 
 /** One GitHub account as a commit names it: its id and login, which together make its noreply address, and the name it set, if any. */
@@ -278,6 +286,21 @@ export type GitHubWorkspaceReadFailure = GitHubReadFailure | StoreFailure;
 /** What a read on the user's own token can fail with. */
 export type GitHubUserReadFailure = GitHubReadFailure | GitHubSignInRequired | StoreFailure;
 
+/** Why the workspace's installation does not reach a repository, as GitHub says it; another workspace's reach is the store's to say. */
+type GitHubRepositoryUnreached = Exclude<
+  RepositoryUnreached,
+  { readonly reason: typeof REPOSITORY_UNREACHED.OTHER_WORKSPACE }
+>;
+
+/** A repository the workspace's installation reaches, spelled as GitHub spells it, or why it does not. */
+type GitHubRepositoryReach = Result.Result<GitHubRepository, GitHubRepositoryUnreached>;
+
+/** A repository the workspace's installation reaches, with the installation, or why it does not. */
+type ReachResult = Result.Result<
+  { readonly installation: GitHubInstallation; readonly repository: GitHubRepository },
+  GitHubRepositoryUnreached
+>;
+
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
 export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
@@ -353,6 +376,21 @@ export interface GitHubAppService {
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepository>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * The same read, answering why where the installation does not reach the
+   * repository: none connected, one GitHub no longer runs or that was
+   * suspended, one on another account than the owner, one on the owner never
+   * given the repository, or one given all of the owner's that still does
+   * not list it, which a rename, a transfer, or a delete leaves.
+   */
+  readonly repositoryReach: (
+    organizationId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    GitHubRepositoryReach,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -451,6 +489,8 @@ const InstallationSchema = Schema.Struct({
   repository_selection: Schema.Literals(Object.values(GITHUB_REPOSITORY_SELECTION)),
   /** What the installation grants the App, by permission name; read for the CI permissions alone. */
   permissions: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** When the account suspended it; null or absent while it runs. */
+  suspended_at: Schema.optional(Schema.NullOr(Schema.String)),
 });
 type InstallationRecord = typeof InstallationSchema.Type;
 
@@ -624,7 +664,16 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
     accountType: ACCOUNT_TYPES.find((type) => type === record.account?.type),
     repositorySelection: record.repository_selection,
     ciReadable: Object.keys(CI_READ_PERMISSIONS).every((permission) => permission in granted),
+    suspended: record.suspended_at !== undefined && record.suspended_at !== null,
   };
+}
+
+/** Where on GitHub the account the installation is on chooses which repositories it reaches. */
+function installationSettingsUrl(installation: GitHubInstallation): string {
+  return installation.accountType === GITHUB_ACCOUNT_TYPE.ORGANIZATION &&
+    installation.accountLogin !== undefined
+    ? `${GITHUB_WEB}/organizations/${installation.accountLogin}/settings/installations/${installation.id}`
+    : `${GITHUB_WEB}/settings/installations/${installation.id}`;
 }
 
 /** A blank name is one the account never set. */
@@ -974,26 +1023,54 @@ function githubAppService(
 
   /**
    * The repository and the installation it is reached through, where the
-   * workspace's installation reaches it: only an installation on the owner
-   * can, and the listing is read only as far as the page the repository is
-   * on.
+   * workspace's installation reaches it, or why it does not: only an
+   * installation on the owner can reach it, and the listing is read only as
+   * far as the page the repository is on.
    */
-  const reachableRepository = (organizationId: string, fullName: string) =>
+  const reach = (organizationId: string, fullName: string) =>
     Effect.gen(function* () {
-      const [owner] = fullName.split("/");
-      const reached = yield* workspaceInstallation(organizationId);
-      if (Option.isNone(reached)) return Option.none();
+      const [owner = ""] = fullName.split("/");
+      const unreached = (failure: GitHubRepositoryUnreached): ReachResult => Result.fail(failure);
+      const connected = yield* installationOfWorkspace(organizationId);
+      if (Option.isNone(connected)) {
+        return unreached({ reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: fullName });
+      }
+      const reached = yield* installation(connected.value);
+      if (Option.isNone(reached) || reached.value.suspended) {
+        return unreached({ reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED, repository: fullName });
+      }
       const onOwner = reached.value;
-      if (onOwner.accountLogin === undefined || !sameName(onOwner.accountLogin, owner ?? "")) {
-        return Option.none();
+      if (onOwner.accountLogin === undefined || !sameName(onOwner.accountLogin, owner)) {
+        return unreached({
+          reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+          repository: fullName,
+          ...(onOwner.accountLogin === undefined
+            ? undefined
+            : { connectedTo: onOwner.accountLogin }),
+        });
       }
       const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
       const repositories = yield* repositoriesOf(onOwner, (read) => read.some(isNamed));
-      return Option.map(Option.fromNullishOr(repositories.find(isNamed)), (repository) => ({
-        installation: onOwner,
-        repository,
-      }));
+      const repository = repositories.find(isNamed);
+      if (repository !== undefined) {
+        const reachedThrough: ReachResult = Result.succeed({ installation: onOwner, repository });
+        return reachedThrough;
+      }
+      // Note that an installation given only some repositories cannot tell one it was never given from one renamed or deleted, so it asks for the one GitHub can mend.
+      return unreached(
+        onOwner.repositorySelection === GITHUB_REPOSITORY_SELECTION.SELECTED
+          ? {
+              reason: REPOSITORY_UNREACHED.NOT_SELECTED,
+              repository: fullName,
+              settingsUrl: installationSettingsUrl(onOwner),
+            }
+          : { reason: REPOSITORY_UNREACHED.GONE, repository: fullName },
+      );
     });
+
+  /** The repository and its installation as `reach` reads them, none where it does not reach it. */
+  const reachableRepository = (organizationId: string, fullName: string) =>
+    Effect.map(reach(organizationId, fullName), Result.getSuccess);
 
   /** A token minted as the App for the one repository the workspace reaches, cut to the permissions chosen for its installation; none where it does not reach it. */
   const repositoryToken = (
@@ -1086,6 +1163,11 @@ function githubAppService(
       Effect.map(
         reachableRepository(organizationId, fullName),
         Option.map((reached) => reached.repository),
+      ),
+    repositoryReach: (organizationId, fullName) =>
+      Effect.map(
+        reach(organizationId, fullName),
+        Result.map((reached) => reached.repository),
       ),
     repositoryReadToken: (organizationId, fullName) =>
       repositoryToken(organizationId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),

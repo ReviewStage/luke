@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { writePage } from "@sidecar/database/models/plan-pages";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
@@ -35,6 +36,10 @@ import {
   planRevisionsAnswerSchema,
 } from "@sidecar/hosted/plan-wire";
 import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
+import {
+  REPOSITORY_UNREACHED,
+  type RepositoryUnreached,
+} from "@sidecar/hosted/repository-reach-wire";
 import {
   planTranscriptAnswerSchema,
   TRANSCRIPT_PART_TYPE,
@@ -222,6 +227,12 @@ function startedId(started: Answer): string {
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/** The repository out of reach, with why, as the routes refuse it. */
+const unreachable = (unreached: RepositoryUnreached): Answer => ({
+  status: HOSTED_HTTP_STATUS.FORBIDDEN,
+  body: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached },
+});
 
 /** What the contents API holds of the fixture repository, by path: a file's text, a directory, a link, or a file past the bound. */
 const CONTENTS = new Map([
@@ -584,11 +595,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        const notReachable = refusal(
-          HOSTED_HTTP_STATUS.FORBIDDEN,
-          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-        );
-
         const unchosen = yield* ask(
           request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/ledger" } }),
         );
@@ -600,7 +606,16 @@ it.layer(getTestDB())("the plan routes", (it) => {
           }),
         );
 
-        assert.deepEqual([unchosen, elsewhere], [notReachable, notReachable]);
+        assert.deepEqual(
+          [unchosen, elsewhere],
+          [
+            unreachable({ reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/ledger" }),
+            unreachable({
+              reason: REPOSITORY_UNREACHED.NOT_CONNECTED,
+              repository: "octocat/relay",
+            }),
+          ],
+        );
         const opened = readAnswer(
           planAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1222,10 +1237,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { repository } }));
         const repositoryOf = (status: number, answered: Answer) =>
           readAnswer(planAnswerSchema, status, answered).plan.repository;
-        const notReachable = refusal(
-          HOSTED_HTTP_STATUS.FORBIDDEN,
-          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-        );
+        const ofOtherOwner = unreachable({
+          reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+          repository: "octocat/dotfiles",
+          connectedTo: "acme",
+        });
+        const notConnected = (repository: string) =>
+          unreachable({ reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository });
 
         const relay = yield* start({ ...RELAY, workspaceId: acme, repository: "acme/relay" });
         const otherStart = yield* start({
@@ -1245,11 +1263,15 @@ it.layer(getTestDB())("the plan routes", (it) => {
         ];
 
         assert.equal(repositoryOf(HOSTED_HTTP_STATUS.CREATED, relay), "acme/relay");
-        assert.deepEqual([otherStart, otherChange], [notReachable, notReachable]);
+        assert.deepEqual([otherStart, otherChange], [ofOtherOwner, ofOtherOwner]);
         assert.equal(repositoryOf(HOSTED_HTTP_STATUS.OK, ownChange), "acme/relay");
         assert.deepEqual(
           [personalStart, ...personalChanges],
-          [notReachable, notReachable, notReachable],
+          [
+            notConnected("acme/relay"),
+            notConnected("octocat/dotfiles"),
+            notConnected("acme/relay"),
+          ],
         );
         const opened = readAnswer(
           planAnswerSchema,
@@ -1263,6 +1285,68 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(PLANS, owner)),
         );
         assert.equal(listed.plans.length, 3);
+      }),
+  );
+
+  it.effect(
+    "a plan's owner moves it to a workspace of theirs whose GitHub reaches its repository; a teammate may not, a workspace the owner is not in answers as none, and one that does not reach the repository says why",
+    () =>
+      Effect.gen(function* () {
+        const acmeInstallation = {
+          id: 7201,
+          login: "acme",
+          accountId: 9201,
+          repositories: [{ owner: "acme", name: "relay" }],
+        };
+        const octocatInstallation = {
+          id: 7202,
+          login: "octocat",
+          accountId: 9202,
+          repositories: [{ owner: "octocat", name: "dotfiles" }],
+        };
+        const github = githubReaching([acmeInstallation, octocatInstallation]);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const bare = yield* openWorkspace(owner);
+        const acme = yield* openConnectedWorkspace(owner, acmeInstallation);
+        const octocat = yield* openConnectedWorkspace(owner, octocatInstallation);
+        const strangers = yield* openWorkspace(other);
+        yield* joinWorkspace(bare, other);
+        const plan = yield* createPlan(owner, {
+          organizationId: bare,
+          name: RELAY.name,
+          repository: "acme/relay",
+        });
+        const move = (bearer: string, workspaceId: string) =>
+          ask(request(ONE_PLAN, bearer, { id: plan.id, method: "PATCH", body: { workspaceId } }));
+
+        const byTeammate = yield* move(other, acme);
+        const toStrangers = yield* move(owner, strangers);
+        const toOctocat = yield* move(owner, octocat);
+        const toAcme = yield* move(owner, acme);
+
+        assert.deepEqual(
+          byTeammate,
+          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
+        assert.deepEqual(
+          toStrangers,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          toOctocat,
+          unreachable({
+            reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+            repository: "acme/relay",
+            connectedTo: "octocat",
+          }),
+        );
+        const moved = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, toAcme).plan;
+        assert.deepEqual([moved.workspaceId, moved.repository], [acme, "acme/relay"]);
+        // The teammate was in the workspace the plan left, not the one it moved to.
+        assert.deepEqual(
+          yield* ask(request(ONE_PLAN, other, { id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 });

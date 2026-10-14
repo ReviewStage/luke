@@ -1383,9 +1383,13 @@ a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
 in the account's first workspace, ensured first, where it names none,
 `GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
-pinned, whether it is archived, or several at once, each pin and archive a
-stamp on the row (`pinned_at`, `archived_at`) answered as `pinnedAt` and
-`archivedAt` only where it stands, and
+pinned, whether it is archived, the workspace it belongs to, or several at
+once, each pin and archive a stamp on the row (`pinned_at`, `archived_at`)
+answered as `pinnedAt` and `archivedAt` only where it stands; a move
+(`workspaceId`) is the plan's owner's alone (`not-permitted` for a
+teammate), into a workspace they are a member of (`not-found` otherwise)
+whose installation reaches the plan's repository, refused as a repository
+change would be otherwise, and its coding agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
 and their conversations stamped deleted beside the plan's own (`deletePlan`),
 the id moved into
@@ -1516,8 +1520,25 @@ could not reach at the moment it was named; the stored spelling is GitHub's,
 whatever case the request used. A start or a change naming one outside that
 installation, or any in a workspace with nothing connected, is
 `repository-not-reachable` (403) with nothing written, the name beside it
-included; a GitHub the service could not read is `unavailable`, the plan
-standing as it was. A change naming null clears it.
+included; a GitHub that did not answer is `github-unanswered` (502), and an
+App or store the service could not read `unavailable`, the plan standing as
+it was. A change naming null clears it.
+
+A `repository-not-reachable` refusal says why in `unreached`
+(`@sidecar/hosted/repository-reach-wire`, read by `repositoryReach` on the
+`GitHubApp`), naming the repository: the workspace has nothing connected
+(`not-connected`); the installation GitHub no longer knows or its account
+suspended (`connection-lapsed`); the installation is on another account
+than the repository's owner (`other-owner`, naming that account); the
+installation on the owner was not given the repository (`not-selected`,
+with the installation's settings page on GitHub); or one given every
+repository of the owner still does not list it, which a rename, a
+transfer, or a delete leaves (`gone`). Where the plan's owner asks and the
+workspace has nothing connected or another account's installation, and the
+owner's installation stands for another workspace they are in, the reason
+is `other-workspace`, naming that workspace, since one installation stands
+for one workspace and moving the plan there is what reaches the repository:
+a plan a personal workspace held before #2524 is left that way.
 
 A plan's text has one write, `server/hosted/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the

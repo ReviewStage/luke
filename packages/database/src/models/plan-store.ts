@@ -67,6 +67,15 @@ export interface PlanDeleteGuard<R> {
   ) => Effect.Effect<void, QueryError | Schema.SchemaError, R>;
 }
 
+/**
+ * What a change that moves a plan runs first: given the repository the row
+ * names under its lock, the caller's confirmation that the workspace it moves
+ * to reaches it, so a repository changed while the move was asked cannot
+ * ride into a workspace that does not reach it. Its failure leaves the plan
+ * unchanged.
+ */
+export type PlanMoveGuard<E, R> = (repository: string | null) => Effect.Effect<void, E, R>;
+
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
   readonly label: string;
@@ -79,6 +88,8 @@ export interface LabelledAgentEdit extends PlanAgentEdit {
  */
 export interface StoredPlan {
   readonly plan: Plan;
+  /** The account that started the plan, the one that may move it to another workspace. */
+  readonly ownerId: string;
   /** The plan's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
@@ -96,9 +107,15 @@ export interface NewPlan {
   readonly repository?: string | null;
 }
 
-/** What a change to a plan names: a new name, a repository or null to clear it, pinned or not, archived or not, or any of them at once. */
+/**
+ * What a change to a plan names: a new name, a repository or null to clear
+ * it, pinned or not, archived or not, the workspace it moves to, or any of
+ * them at once. A move is its owner's alone, into a workspace they are a
+ * member of, which the caller confirms first.
+ */
 export interface PlanChanges {
   readonly name?: string;
+  readonly organizationId?: string;
   readonly repository?: string | null;
   readonly pinned?: boolean;
   readonly archived?: boolean;
@@ -261,6 +278,7 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         document: { body: row.document, assumptions: [] },
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
+      ownerId: row.userId,
       text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
@@ -379,12 +397,13 @@ const lockPlan = SqlSchema.findOneOption({
     ),
 });
 
-/** The row changed: whichever of the name, the repository, the pin, and the archive the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace, the repository, the pin, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     planId: Schema.String,
     name: Schema.optionalKey(Schema.String),
+    organizationId: Schema.optionalKey(Schema.String),
     repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
     pinnedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
@@ -669,33 +688,47 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
 
 /**
  * Changes the plan, a new name with its document's heading, a repository or
- * none, pinned or not, archived or not, and answers it as changed, or nothing
- * where the account reaches no such plan. The changes arrive already read under
- * the wire's rules, and a repository already confirmed reachable. A change is
+ * none, pinned or not, archived or not, its workspace, and answers it as
+ * changed, or nothing where the account reaches no such plan. The changes
+ * arrive already read under the wire's rules, and a repository already
+ * confirmed reachable; a move runs the caller's guard under the row's lock
+ * on the repository the plan will name once it lands. A change is
  * not a save: the document's `updatedAt` and the list's order stand. A pin
  * and an archive are kept apart, so a pinned plan archived and brought back
  * is pinned again. An archived plan is neither renamed nor given another
  * repository, read under the same lock, unless the same change brings it
  * back; its pin and its archive still change.
  */
-export function updatePlan(
+export function updatePlan<E = never, R = never>(
   userId: string,
   planId: string,
   changes: PlanChanges,
-): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived, DatabaseServices> {
+  moveGuard?: PlanMoveGuard<E, R>,
+): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived | E, DatabaseServices | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return Option.none();
         const stillArchived = locked.value.archivedAt !== null && changes.archived !== false;
-        const reworded = changes.name !== undefined || changes.repository !== undefined;
+        const reworded =
+          changes.name !== undefined ||
+          changes.repository !== undefined ||
+          changes.organizationId !== undefined;
         if (stillArchived && reworded) return yield* new PlanArchived();
+        if (changes.organizationId !== undefined && moveGuard !== undefined) {
+          yield* moveGuard(
+            changes.repository === undefined ? locked.value.repository : changes.repository,
+          );
+        }
         const now = yield* DateTime.nowAsDate;
         const row = yield* applyChanges({
           userId,
           planId,
           ...(changes.name === undefined ? undefined : { name: changes.name }),
+          ...(changes.organizationId === undefined
+            ? undefined
+            : { organizationId: changes.organizationId }),
           ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
           ...(changes.pinned === undefined
             ? undefined

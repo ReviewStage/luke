@@ -22,6 +22,11 @@
     },
     "archived": {
       "type": "boolean"
+    },
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
     }
   },
   "required": [],

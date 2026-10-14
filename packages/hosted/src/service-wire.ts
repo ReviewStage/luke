@@ -53,6 +53,12 @@ export const HOSTED_API_ERROR = {
    * repository, or the workspace has none connected. Nothing was written.
    */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
+  /**
+   * GitHub did not answer whether the workspace reaches the repository: it
+   * was down, rate limiting, or slow past the deadline. Nothing was written,
+   * and the same request a moment later may be taken.
+   */
+  GITHUB_UNANSWERED: "github-unanswered",
   /** The plan names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
   NO_REPOSITORY: "no-repository",
   /** The message spells more characters than one message to a coding agent may; shortened, it is taken. */

@@ -1,4 +1,5 @@
 import type { PlanArchived } from "@sidecar/database/models/plan-store";
+import type { RepositoryUnreached } from "@sidecar/hosted/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { UnparsedWireValue } from "../core.js";
@@ -27,6 +28,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: HOSTED_HTTP_STATUS.BAD_GATEWAY,
   [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -38,7 +40,11 @@ const HOSTED_REFUSAL_STATUS = {
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-export type HostedRefusal = { readonly error: HostedRefusalSlug };
+/** A refusal: its slug, and for a repository out of reach, why (`repositoryNotReachable`). */
+export type HostedRefusal = {
+  readonly error: HostedRefusalSlug;
+  readonly unreached?: RepositoryUnreached;
+};
 
 /**
  * Resolves the signed-in account behind what a request carries, or none.
@@ -56,7 +62,7 @@ export type SessionUserIdResolver = (
   request: Request,
 ) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
-/** The refusal values themselves, since not one of them carries a field. */
+/** The refusal values themselves, each bare; a repository out of reach carries its reason through `repositoryNotReachable`. */
 export const HOSTED_REFUSAL = {
   INVALID_TOKEN: { error: HOSTED_API_ERROR.INVALID_TOKEN },
   INVALID_REQUEST: { error: HOSTED_API_ERROR.INVALID_REQUEST },
@@ -72,6 +78,8 @@ export const HOSTED_REFUSAL = {
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
   /** The workspace's GitHub installation reaches no such repository, or it has none; nothing was written. */
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
+  /** GitHub did not answer whether the workspace reaches the repository; nothing was written, and a retry may be taken. */
+  GITHUB_UNANSWERED: { error: HOSTED_API_ERROR.GITHUB_UNANSWERED },
   /** The plan names no repository, so no coding agent can be started on it; nothing was written. */
   NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
   /** The message to a coding agent spells more than the wire's bound; nothing was sent. */
@@ -87,6 +95,11 @@ export const HOSTED_REFUSAL = {
   /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
 } as const satisfies Record<string, HostedRefusal>;
+
+/** The repository out of reach, with why, so the desktop can offer what mends it. */
+export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {
+  return { ...HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE, unreached };
+}
 
 /**
  * A store read or write the handler cannot answer without: its failure is
@@ -111,10 +124,12 @@ export function hostedStoreOrUnavailable<A, R>(
 export function hostedStoreOrArchived<A, R>(
   effect: Effect.Effect<A, StoreFailure | PlanArchived, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(effect, (failure) =>
-    "_tag" in failure && failure._tag === "PlanArchived"
-      ? Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED)
-      : hostedStoreOrUnavailable(Effect.fail(failure)),
+  return Effect.catch(
+    effect,
+    (failure): Effect.Effect<never, HostedRefusal> =>
+      "_tag" in failure && failure._tag === "PlanArchived"
+        ? Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED)
+        : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
 }
 

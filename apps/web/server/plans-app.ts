@@ -10,6 +10,7 @@ import {
   deletePlan,
   listPlans,
   readPlan,
+  type StoredPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
 import { standingSessionsNamed } from "@sidecar/database/models/recorded-session";
@@ -38,7 +39,7 @@ import {
   planTreeRequestSchema,
 } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -321,15 +322,50 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.fullName;
 });
 
-/** The workspace the account's plan belongs to, or not found for a plan it does not own. */
-const planWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+/** The account's plan, or not found for a plan it does not reach. */
+const reachedPlan = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   planId: string,
-): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<StoredPlan, HostedRefusal, DatabaseServices> {
   const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
   if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return opened.value.plan.workspaceId;
+  return opened.value;
 });
+
+/** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the route's refusal. */
+class MoveRefused extends Data.TaggedError("MoveRefused")<{ readonly refusal: HostedRefusal }> {}
+
+/**
+ * The workspace a plan moves to, confirmed: the plan is the account's own,
+ * since a teammate's plan moved out of a shared workspace would leave the
+ * teammates who wrote it behind, and the account is a member of the
+ * workspace, which answers as none where it is not. That the workspace's
+ * GitHub reaches the plan's repository is confirmed under the plan's lock
+ * (`movedRepositoryReached`), so a move never strands one.
+ */
+const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  stored: StoredPlan,
+  workspaceId: string,
+): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
+  if (stored.ownerId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, workspaceId));
+  if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return workspaceId;
+});
+
+/** The move's guard: the workspace's GitHub reaches the repository the plan names under its lock, where it names one. */
+const movedRepositoryReached =
+  (workspaceId: string) =>
+  (
+    repository: string | null,
+  ): Effect.Effect<void, MoveRefused, GitHubApp | HttpClient.HttpClient | DatabaseServices> =>
+    repository === null
+      ? Effect.void
+      : workspaceRepository(workspaceId, repository).pipe(
+          Effect.asVoid,
+          Effect.mapError((refusal) => new MoveRefused({ refusal })),
+        );
 
 /**
  * The workspace a start lands in: the one the request named, where the
@@ -403,9 +439,13 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
 });
 
 /**
- * PATCH: the plan's name, its repository, its pin, its archive, or any of
- * them changed, answered with its document. A repository is confirmed before
- * the row is touched, so a refused one leaves the rest unchanged too.
+ * PATCH: the plan's name, its repository, its pin, its archive, its
+ * workspace, or any of them changed, answered with its document. A
+ * repository and a move are confirmed before the row is touched, so a
+ * refused one leaves the rest unchanged too; a repository named beside a
+ * move is confirmed in the workspace the plan moves to, and a move confirms
+ * the repository the row names under its lock, so one changed meanwhile is
+ * the one confirmed.
  */
 const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -415,17 +455,33 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const update = readEither(planUpdateRequestSchema)(body);
   if (Result.isFailure(update)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const changes = update.success;
+  const organizationId =
+    changes.workspaceId === undefined
+      ? undefined
+      : yield* movedToWorkspace(userId, yield* reachedPlan(userId, planId), changes.workspaceId);
+  const workspace =
+    organizationId === undefined
+      ? Effect.map(reachedPlan(userId, planId), (stored) => stored.plan.workspaceId)
+      : Effect.succeed(organizationId);
   const repository =
-    "repository" in changes
-      ? yield* reachableRepository(planWorkspace(userId, planId), changes.repository)
-      : undefined;
-  const plan = yield* hostedStoreOrArchived(
-    updatePlan(userId, planId, {
+    "repository" in changes ? yield* reachableRepository(workspace, changes.repository) : undefined;
+  const plan = yield* updatePlan(
+    userId,
+    planId,
+    {
       ...("name" in changes ? { name: changes.name } : undefined),
+      ...(organizationId === undefined ? undefined : { organizationId }),
       ...(repository === undefined ? undefined : { repository }),
       ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
       ...("archived" in changes ? { archived: changes.archived } : undefined),
-    }),
+    },
+    organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
+  ).pipe(
+    Effect.catch((failure) =>
+      failure._tag === "MoveRefused"
+        ? Effect.fail(failure.refusal)
+        : hostedStoreOrArchived(Effect.fail(failure)),
+    ),
   );
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: plan.value });
