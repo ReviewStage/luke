@@ -236,8 +236,8 @@ test("a pointer's press on a server page's switch leaves the focus in the filter
   assert.equal(container.querySelector(".agent-servers-page-title"), null);
 });
 
-test("pressing a tool opens it in place onto its whole description and leaves the popover open; a second press closes it", async () => {
-  const { container } = await opened();
+test("pressing a tool opens it in place onto its whole description, the popover open and its filter still hearing the keys; a second press closes it", async () => {
+  const { container, key } = await opened();
   act(() =>
     [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
       .find((row) => row.textContent?.includes("Vercel"))
@@ -248,12 +248,14 @@ test("pressing a tool opens it in place onto its whole description and leaves th
       button.textContent?.startsWith("delete_project"),
     ) ?? assert.fail("delete_project has its row");
 
-  // Note that a press focuses the pressed button first, as the browser would, which is what used to close the popover.
+  // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.
+  const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {
-    head().focus();
+    head().dispatchEvent(press);
     head().click();
   });
 
+  assert.equal(press.defaultPrevented, true);
   assert.notEqual(container.querySelector(".agent-servers-menu"), null);
   assert.equal(head().getAttribute("aria-expanded"), "true");
   assert.equal(
@@ -263,4 +265,7 @@ test("pressing a tool opens it in place onto its whole description and leaves th
 
   act(() => head().click());
   assert.equal(container.querySelector(".integration-tool-full"), null);
+
+  key("Backspace");
+  assert.equal(container.querySelector(".agent-servers-page-title"), null);
 });

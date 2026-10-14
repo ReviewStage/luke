@@ -404,7 +404,9 @@ interface FoundRow {
 /**
  * A provider's row as a query finds it: opened onto the tools it found where
  * it found its tools alone, else onto every one. Note that a query that finds
- * the integration by its own name finds the whole of it, every tool kept.
+ * the integration by its own name finds the whole of it, every tool kept, and
+ * that a word naming the integration counts toward each of its tools, as
+ * Settings' search reads them together ("vercel logs").
  */
 function foundRow(
   provider: IntegrationProvider,
@@ -416,7 +418,9 @@ function foundRow(
   const hits =
     tokens.length === 0 || named
       ? []
-      : all.filter((tool) => matchesTokens([tool.name, tool.description], tokens));
+      : all.filter((tool) =>
+          matchesTokens([tool.name, tool.description, INTEGRATION_NAME[provider]], tokens),
+        );
   const toolsFound = hits.length > 0;
   return { provider, health, all, shown: toolsFound ? hits : all, toolsFound };
 }

@@ -12,8 +12,10 @@ import { Highlighted } from "./search-field";
  * Return on it, opens it in place onto the whole of what it does, wrapped as
  * its server wrote it and selectable, and a second press closes it; one tool
  * is open at a time. The words a search landed on are marked in the name and
- * the description alike. Where the list is drawn, and what scrolls it, is
- * the owner's.
+ * the description alike. A pointer's press on a tool leaves the focus where
+ * it was, so the MCP popover's filter keeps the keys it hears; Tab still
+ * reaches every tool. Where the list is drawn, and what scrolls it, is the
+ * owner's.
  */
 
 function ToolItem({
@@ -39,6 +41,7 @@ function ToolItem({
         className="integration-tool-head"
         aria-expanded={described ? open : undefined}
         aria-controls={open && described ? fullId : undefined}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={onToggle}
       >
         <span className="integration-tool-name">
@@ -91,7 +94,10 @@ export function IntegrationToolList({
           tokens={tokens}
           server={server}
           open={open === tool.name}
-          onToggle={() => setOpen(open === tool.name ? undefined : tool.name)}
+          onToggle={() => {
+            // A tool that says nothing of what it does has nothing to open onto.
+            if (tool.description !== "") setOpen(open === tool.name ? undefined : tool.name);
+          }}
         />
       ))}
     </ul>
