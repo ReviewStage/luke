@@ -1,3 +1,8 @@
+import { scheduleRepeat } from "@sidecar/runtime/effect";
+import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
+import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   type AccountToken,
@@ -6,12 +11,7 @@ import {
   CALL_FAULT,
   callAnswered,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/features";
-import { scheduleRepeat } from "@sidecar/runtime/effect";
-import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../index.js";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,

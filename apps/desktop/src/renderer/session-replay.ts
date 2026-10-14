@@ -12,7 +12,7 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * Recording the shape of what Luke's own panel draws, and none of its words.
  *
  * This is not the counted-event stream and does not share its guarantee. A
- * counted event can only say what `packages/analytics/src/product-events.ts`
+ * counted event can only say what `packages/features/src/analytics/product-events.ts`
  * declared; this client is the analytics library posting straight to the
  * processor, and a recording is the rendered panel. What keeps a session
  * title, a branch, an error line, a caption, or the account's own name out of

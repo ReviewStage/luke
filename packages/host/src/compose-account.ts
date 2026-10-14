@@ -1,4 +1,3 @@
-import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/analytics";
 import {
   AccountClient,
   AccountSessionManager,
@@ -17,6 +16,7 @@ import {
   hostedVoiceServiceOrigin,
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/features";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/features/analytics";
 import {
   carried,
   GATEWAY_EVENT,

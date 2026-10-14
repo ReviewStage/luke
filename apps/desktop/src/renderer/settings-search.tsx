@@ -1,4 +1,4 @@
-import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/features/analytics";
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
 import type { Workspace } from "@sidecar/features/workspace-wire";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";

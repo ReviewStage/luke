@@ -1,7 +1,7 @@
 /**
  * The one re-export surface server code reaches the workspace packages through.
  */
-export * from "@sidecar/analytics";
+
 // The brain is named rather than starred: what is listed is what the server
 // imports through this door and nothing more.
 export {
@@ -35,6 +35,7 @@ export {
 } from "@sidecar/brain";
 export { wireValidatedTool } from "@sidecar/brain/tool-set";
 export * from "@sidecar/features";
+export * from "@sidecar/features/analytics";
 // The planning vocabulary stands behind doors of its own, which the barrel
 // above re-exports nothing of.
 export * from "@sidecar/features/plan-wire";

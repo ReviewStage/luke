@@ -1,4 +1,4 @@
-import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
+import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/features/analytics";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";

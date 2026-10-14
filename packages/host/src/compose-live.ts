@@ -1,10 +1,10 @@
-import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@sidecar/analytics";
 import type {
   PlanActivityFrame,
   PlanCodeFrame,
   PlanDraftFrame,
   PlanWorkFrame,
 } from "@sidecar/features";
+import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@sidecar/features/analytics";
 import {
   carried,
   GATEWAY_EVENT,

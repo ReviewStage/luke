@@ -16,7 +16,6 @@ export default defineConfig({
       "packages/voice",
       "packages/features",
       "packages/credentials",
-      "packages/analytics",
       "packages/database",
       "apps/desktop",
       "apps/web",

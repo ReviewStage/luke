@@ -1,5 +1,5 @@
-import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@sidecar/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
 import { BackIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";

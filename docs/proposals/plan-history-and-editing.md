@@ -467,7 +467,7 @@ CREATE TABLE "plan_revision" (
   is written during a planning call" (`:170-181`). This lands with PR 3.
 - **Name `agent_edits`.** The section doesn't mention it today. PR 1 adds it.
 - **Usage data.** Optionally add two property-less events, `plan_edited` and
-  `plan_version_restored`, to `packages/analytics/src/product-events.ts` and
+  `plan_version_restored`, to `packages/features/src/analytics/product-events.ts` and
   the fixed list (`PRIVACY.md:219-226`). Never a field name, never text.
   Plan text enters no counted event, trace, or fixture, per the root "Never"
   rule.

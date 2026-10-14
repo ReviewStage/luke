@@ -19,7 +19,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@sidecar/analytics": "workspace:*",
+    "@sidecar/features": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"

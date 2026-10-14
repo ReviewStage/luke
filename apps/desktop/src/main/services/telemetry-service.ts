@@ -3,7 +3,7 @@ import {
   PRODUCT_EVENT,
   productSessionCountBucket,
   type RecordProductEvent,
-} from "@sidecar/analytics";
+} from "@sidecar/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@sidecar/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@sidecar/features/feedback";
 import { type RunMode, sentryReportingEnabled } from "@sidecar/host";
@@ -34,7 +34,7 @@ export function initializeCrashReporting(runMode: RunMode): void {
 export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
-   * `@sidecar/analytics` fixed. It travels to Luke's own service through the
+   * `@sidecar/features/analytics` fixed. It travels to Luke's own service through the
    * host, never to an analytics provider from here.
    */
   readonly recordProductEvent: RecordProductEvent;

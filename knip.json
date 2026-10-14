@@ -50,7 +50,12 @@
       "project": ["src/**", "server/**", "scripts/**", "tests/**"]
     },
     "packages/*": {
-      "entry": ["src/ui-messages/index.ts", "src/testing/index.ts", "src/effect/index.ts"],
+      "entry": [
+        "src/ui-messages/index.ts",
+        "src/testing/index.ts",
+        "src/effect/index.ts",
+        "src/analytics/index.ts"
+      ],
       "project": ["src/**"]
     },
     "apps/web/coder": {
