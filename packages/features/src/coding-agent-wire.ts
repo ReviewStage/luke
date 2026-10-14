@@ -437,6 +437,27 @@ export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 /** A started, stopped, or changed agent (POST, PATCH). */
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
 
+/**
+ * One agent as its own page reads it, which is how an agent an automation
+ * started with no plan is read, having no plan's tab to stand in: the
+ * summary the tabs draw, with the plan it works on or none in place of the
+ * plan the summary must name, the automation whose run started it or none,
+ * the workspace it belongs to, and the repository it works in. An agent on
+ * a plan reads so too, by the same id.
+ */
+export const codingAgentPageSchema = EffectSchema.Struct({
+  ...codingAgentSummarySchema.fields,
+  planId: EffectSchema.NullOr(wireUuidSchema),
+  automationId: EffectSchema.NullOr(wireUuidSchema),
+  workspaceId: EffectSchema.String,
+  repository: EffectSchema.String,
+});
+
+export type CodingAgentPage = typeof codingAgentPageSchema.Type;
+
+/** One agent read by its id (GET), on a plan or with none. */
+export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
+
 /** The plan's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(codingAgentSummarySchema),

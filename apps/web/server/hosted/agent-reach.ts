@@ -62,26 +62,38 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The agent the path names, where the account is a member of its
- * workspace, or not found; its conversation is targeted under the member
- * who started it, which is whom the conversation belongs to. Note that an
- * agent with no plan reads as not found here, before any route acts on it,
- * because the agent routes answer with its summary and the wire's summary
- * names a plan; the routes reach it once the wire's summary does.
+ * The agent the path names, on a plan or with none, where the account is a
+ * member of its workspace, or not found; its conversation is targeted
+ * under the member who started it, which is whom the conversation belongs
+ * to. Only a route that answers an agent with no plan as its own page
+ * reads through this; every other reads through `reachedAgent`.
  */
-export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const reachedAnyAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountResolving,
   request: Request,
 ): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
   const agentId = yield* uuidOf(request, AGENT_ID_QUERY);
   const userId = yield* resolvedUserId(seams, request);
   const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
-  if (Option.isNone(agent) || !plannedAgent(agent.value)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  }
+  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return {
     userId,
     agent: agent.value,
     target: { userId: agent.value.userId, conversationId: agent.value.conversationId },
   };
+});
+
+/**
+ * The agent the path names as `reachedAnyAgent` reads it, where it works on
+ * a plan. Note that an agent with no plan reads as not found here, before
+ * any route acts on it, because these routes answer with the agent's
+ * summary and the summary names a plan.
+ */
+export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: AccountResolving,
+  request: Request,
+): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
+  const reached = yield* reachedAnyAgent(seams, request);
+  if (!plannedAgent(reached.agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return reached;
 });

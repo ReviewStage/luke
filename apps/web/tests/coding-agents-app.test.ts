@@ -33,6 +33,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPageAnswerSchema,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
@@ -124,6 +125,7 @@ import {
 const ORIGIN = "https://luke.test";
 const PLAN_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
+const AGENT = "/api/agents/agent";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const PLAN = "/api/plans/plan";
 
@@ -953,6 +955,43 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(sent, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
         assert.deepEqual(read, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
         assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "an agent reads as its own page by its id, its plan named, and with no plan once an automation's run left it so, for a member of its workspace and no one else",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        const page = () =>
+          Effect.map(ask(request(AGENT, owner, { id: agent.id })), (answered) =>
+            readAnswer(codingAgentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+
+        const onPlan = yield* page();
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const planless = yield* page();
+        const outside = yield* ask(request(AGENT, other, { id: agent.id }));
+
+        assert.deepEqual(
+          [onPlan.agent.id, onPlan.agent.planId, onPlan.agent.workspaceId, onPlan.agent.repository],
+          [agent.id, plan.id, plan.workspaceId, RELAY_FULL_NAME],
+        );
+        assert.deepEqual(
+          [planless.agent.planId, planless.agent.automationId, planless.agent.workspaceId],
+          [null, null, plan.workspaceId],
+        );
+        assert.equal(planless.agent.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.deepEqual(
+          outside,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 

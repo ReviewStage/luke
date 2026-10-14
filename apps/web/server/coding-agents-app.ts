@@ -65,7 +65,7 @@ import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } fr
 import type { GitHubApp } from "./github/github-app.js";
 import { githubReadOrRefusal } from "./github/github-refusal.js";
 import { pullRequestFiles } from "./github/pull-requests.js";
-import { reachedAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
+import { reachedAgent, reachedAnyAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   agentPullRequestReach,
@@ -74,7 +74,7 @@ import {
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
-import { codingAgentSummary, plannedAgent } from "./hosted/coder-host/status.js";
+import { codingAgentPage, codingAgentSummary, plannedAgent } from "./hosted/coder-host/status.js";
 import { steerCodingAgent } from "./hosted/coder-host/steer.js";
 import {
   type EveReach,
@@ -182,7 +182,7 @@ const AGENTS_PATH = {
   OF_PLAN: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
-  /** PATCH changes the agent's model, effort, and context window, renames it, or archives it; the rewrite moves the path's agent id into the `id` query. */
+  /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, or archives it; the rewrite moves the path's agent id into the `id` query. */
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
@@ -584,6 +584,23 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   });
 });
 
+/** GET reads the agent as its own page, an agent with no plan as much as one on a plan; PATCH changes it as `changeEndpoint` does. */
+const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) return yield* changeEndpoint(seams, writer);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { agent } = yield* reachedAnyAgent(seams, request);
+  const standing = yield* standingsOf([agent.conversationId]);
+  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  const now = yield* Clock.currentTimeMillis;
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    agent: codingAgentPage(agent, standing(agent.conversationId), now, names),
+  });
+});
+
 /** POST stops the agent: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
 const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -861,11 +878,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.MESSAGES,
           hostedRefusing(messagesEndpoint(seams, writer)),
         ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.AGENT,
-          hostedRefusing(changeEndpoint(seams, writer)),
-        ),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(agentEndpoint(seams, writer))),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
         HttpRouter.add(
           ANY_METHOD,
