@@ -48,6 +48,24 @@ export interface IntegrationDefinition {
 
 export const INTEGRATION = {
   /*
+   * Executor's server fronts every app the developer set up in Executor
+   * behind a few fixed tools (`skills`, `search`, `describe`, `call`,
+   * `execute`, `resume`) and attaches each app's credential itself. Its
+   * plain `/mcp` is its default `model` elicitation mode, which answers a
+   * call an app's policy holds for approval as a tool result for the agent
+   * to put to the developer and `resume`, where `native` would ask over an
+   * MCP elicitation that eve's client never answers
+   * (https://executor.sh/docs/mcp, "Elicitation modes").
+   */
+  [INTEGRATION_PROVIDER.EXECUTOR]: {
+    CONNECTOR_VARIABLE: "EXECUTOR_CONNECTOR_UID",
+    ALLOWED_ACCOUNTS_VARIABLE: "EXECUTOR_ALLOWED_ACCOUNTS",
+    MCP_URL: "https://mcp.executor.sh/mcp",
+    DESCRIPTION:
+      "Executor, the developer's gateway to the apps they set up in it (MCP servers, OpenAPI and GraphQL APIs, skills, and automations), as their own account sees it: read the apps' skills, search and describe their tools, and call them or run a script over them, writes included. A call that pauses for an approval or for input answers with a request id: put the question to the developer, and resume it only with their answer.",
+    REMOTE_TOOL: "executor_remote",
+  },
+  /*
    * GitHub's server takes the GitHub App user token the account's own
    * sign-in holds, so it has no connector; `/x/all` is the server with
    * every toolset on rather than its default few.

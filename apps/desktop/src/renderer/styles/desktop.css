@@ -2181,11 +2181,12 @@ body,
 }
 
 /* An integration whose brand publishes its one-colour mark in named inks
-   wears them by the ground: Notion's pure white on dark and pure black on
-   light, Sentry's white on dark and its dark blurple on light, Neon's two
-   greens, and Mercury's near-white on dark and near-black on light
-   (`provider-marks.tsx`). */
+   wears them by the ground: Executor's and Notion's pure white on dark and
+   pure black on light, Sentry's white on dark and its dark blurple on light,
+   Neon's two greens, and Mercury's near-white on dark and near-black on
+   light (`provider-marks.tsx`). */
 :root {
+  --integration-ink-executor: #fff;
   --integration-ink-mercury: #f4f5f9;
   --integration-ink-neon: #34d59a;
   --integration-ink-notion: #fff;
@@ -2194,11 +2195,16 @@ body,
 
 @media (prefers-color-scheme: light) {
   :root {
+    --integration-ink-executor: #000;
     --integration-ink-mercury: #272735;
     --integration-ink-neon: #37c38f;
     --integration-ink-notion: #000;
     --integration-ink-sentry: #181225;
   }
+}
+
+.integration-mark-executor {
+  color: var(--integration-ink-executor);
 }
 
 .integration-mark-mercury {

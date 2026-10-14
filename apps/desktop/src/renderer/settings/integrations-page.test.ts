@@ -326,6 +326,7 @@ test("a provider the deployment does not offer the account has no row, and every
   const page = await mount();
 
   assert.deepEqual(rowNames(page), [
+    "Executor",
     "GitHub",
     "Granola",
     "Linear",
@@ -341,7 +342,7 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.equal(
     [...page.querySelectorAll("button")].filter((button) => button.textContent === "Connect")
       .length,
-    11,
+    12,
   );
 });
 
@@ -671,7 +672,7 @@ test("while Settings' search holds a query, a row with tools it found opens onto
   const handed: IntegrationToolIndex[] = [];
   const page = await mount(undefined, { query: "deploy", onTools: (tools) => handed.push(tools) });
 
-  assert.equal(rowNames(page).length, 12);
+  assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
   assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
   assert.equal(page.querySelector(".integration-tools-found")?.textContent, "1 of 3 tools match");
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");

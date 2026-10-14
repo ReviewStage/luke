@@ -23,6 +23,7 @@ import { Schema as EffectSchema } from "effect";
  * agent's `connections/`, and the path segment its routes are addressed by.
  */
 export const INTEGRATION_PROVIDER = {
+  EXECUTOR: "executor",
   GITHUB: "github",
   GRANOLA: "granola",
   LINEAR: "linear",
@@ -45,6 +46,7 @@ export const INTEGRATION_PROVIDER_LIST: readonly IntegrationProvider[] =
 
 /** What each provider is called wherever Luke names it, to the developer and to a model alike. */
 export const INTEGRATION_NAME = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: "Executor",
   [INTEGRATION_PROVIDER.GITHUB]: "GitHub",
   [INTEGRATION_PROVIDER.GRANOLA]: "Granola",
   [INTEGRATION_PROVIDER.LINEAR]: "Linear",
@@ -75,6 +77,7 @@ export type IntegrationGrant = (typeof INTEGRATION_GRANT)[keyof typeof INTEGRATI
 
 /** How each provider is granted. */
 export const INTEGRATION_GRANT_OF = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: INTEGRATION_GRANT.CONNECT,
   [INTEGRATION_PROVIDER.GITHUB]: INTEGRATION_GRANT.GITHUB_SIGN_IN,
   [INTEGRATION_PROVIDER.GRANOLA]: INTEGRATION_GRANT.CONNECT,
   [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_GRANT.CONNECT,

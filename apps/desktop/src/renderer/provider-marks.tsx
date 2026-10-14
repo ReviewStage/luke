@@ -58,6 +58,32 @@ function GoogleMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
+ * Executor's mark, its serif E on its disc, traced from `assets/executor-icon.png`
+ * in Executor's own repository (https://github.com/UsefulSoftwareCo/executor),
+ * the same artwork executor.sh serves as its logo, since Executor publishes
+ * no vector of it. The site draws it black and inverts it on a dark ground,
+ * so the E is cut out of the disc and the disc drawn in `currentColor`, with
+ * `.integration-mark-executor` (`styles/desktop.css`) setting which.
+ */
+function ExecutorMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={`${className} integration-mark-executor`}
+      viewBox="0 0 191 191"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M95.5 0A95.5 95.5 0 1 1 95.5 191A95.5 95.5 0 1 1 95.5 0ZM115 43.9 C116.4 44.5 116.7 45.4 116.9 49.1 C117 52.3 117.2 55 117.3 57.1 C117.4 58.2 117.4 60.3 117.5 61.9 C117.6 63.5 117.6 65.5 117.7 66.4 C118 71.4 117.9 72 116.3 72.1 C114.8 72.2 114.3 71.5 114 68.8 C111.9 53.2 106.2 47.1 94 47.1 C87.9 47 85.7 48 84.5 51.3 C84.2 52 84.1 62.5 84.3 63.6 C84.6 65 83.5 63.6 97.6 79.9 C110.5 94.8 110 94.3 110 95.5 C109.9 96.5 110.2 96.1 97.3 111.1 C84.2 126.2 84.6 125.7 84.3 126.8 C84.1 128.2 84.2 133.2 84.5 134.3 C85.6 138 87.8 139.5 92.9 140 C97.9 140.5 102 139.9 105.7 138 C110.9 135.4 113.3 131.1 115.2 121.6 C116.8 113.9 116.7 114 117.7 113.6 C119.5 112.8 120.4 113.8 120.2 116.5 C120.1 118 120 119.7 119.8 123.4 C119.7 124.4 119.6 126.4 119.5 127.7 C119.5 129 119.3 131.6 119.2 133.4 C118.9 141.7 118.8 142.3 117.3 143.1 L116.8 143.4 L91.4 143.5 C74.3 143.5 65.8 143.5 65.6 143.4 C65 143.2 64.7 142.8 64.7 142.2 C64.7 141.1 65.3 140.7 67.8 140.2 C70.6 139.7 70.9 139.6 71.8 139.3 C73.4 138.7 74 137.8 74.2 135.9 C74.3 134.7 74.3 52.4 74.2 51.2 C73.9 48.8 72.7 47.8 69.5 47.3 C68.2 47.1 66.4 46.7 66 46.6 C64.4 46.1 64.1 44.3 65.6 43.7 C65.9 43.6 70.1 43.6 90.2 43.6 L114.5 43.6 L115 43.9 Z M87.1 81.4 C85.8 81.6 84.6 82.5 84.4 83.4 C84.2 84 84.1 106.5 84.3 107.2 C85 109.6 88.3 110.2 91.8 108.4 C95.6 106.5 100.8 101.8 104.5 96.9 C105.6 95.5 105.6 95.2 104.6 93.9 C98.4 85.9 91.2 80.7 87.1 81.4 Z"
+      />
+    </svg>
+  );
+}
+
+/**
  * GitHub's mark, the Octicon GitHub publishes as its logo
  * (https://github.com/logos); GitHub's guidance shows it in one colour, so it
  * is drawn in `currentColor` for either ground.
@@ -504,6 +530,8 @@ export function ProviderMark({ provider }: { provider: MarkedProvider }): React.
   switch (provider) {
     case ACCOUNT_PROVIDER.GOOGLE:
       return <GoogleMark className={MARK_CLASS} />;
+    case INTEGRATION_PROVIDER.EXECUTOR:
+      return <ExecutorMark className={MARK_CLASS} />;
     case INTEGRATION_PROVIDER.GITHUB:
       return <GitHubMark className={MARK_CLASS} />;
     case INTEGRATION_PROVIDER.GRANOLA:

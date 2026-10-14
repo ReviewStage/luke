@@ -4,6 +4,7 @@
     "provider": {
       "type": "string",
       "enum": [
+        "executor",
         "github",
         "granola",
         "linear",
