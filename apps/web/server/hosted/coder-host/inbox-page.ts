@@ -3,7 +3,9 @@ import type { AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
 import { Clock, type Duration, Effect, Schedule } from "effect";
 import {
+  accountInboxAutomations,
   accountInboxPlans,
+  accountPlanlessItems,
   accountWaitingItems,
   accountWaitingStamps,
   type InboxStamp,
@@ -35,6 +37,8 @@ import { CODER } from "./bounds.js";
  * answered at the hold's end at the latest. Note that it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
+ * The open items of agents with no plan, and the automations holding them,
+ * ride beside the plans' under keys of their own, and move the same cursor.
  */
 
 /** How many characters of the digest a cursor carries: far more than any two inboxes of a plan could share by chance. */
@@ -101,8 +105,12 @@ export function accountInboxPast(
     const readAt = yield* Clock.currentTimeMillis;
     const rows = yield* accountWaitingItems(userId);
     const plans = yield* accountInboxPlans(userId);
+    const planlessRows = yield* accountPlanlessItems(userId);
+    const automations = yield* accountInboxAutomations(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
-    return { items, plans, cursor: cursorOf(rows), readAt };
+    const planless = planlessRows.map(({ status: _status, ...entry }) => entry);
+    const cursor = cursorOf([...rows, ...planlessRows]);
+    return { items, plans, planless, automations, cursor, readAt };
   });
   return heldUntilMoved(accountWaitingStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
     Effect.andThen(read),

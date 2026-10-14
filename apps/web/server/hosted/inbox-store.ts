@@ -7,11 +7,17 @@ import {
   planReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
+import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
 import { plan } from "@luke/database/schemas/plan";
-import type { AccountInboxEntry, AccountInboxPlan } from "@luke/features/account-inbox-wire";
+import type {
+  AccountInboxAutomation,
+  AccountInboxEntry,
+  AccountInboxPlan,
+  AccountPlanlessEntry,
+} from "@luke/features/account-inbox-wire";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -28,7 +34,7 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@luke/features/inbox-wire";
-import { and, count, desc, eq, isNull, max, ne, notInArray, type SQL, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, max, ne, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -479,6 +485,15 @@ function accountWaiting(userId: string) {
   );
 }
 
+/** The open items of agents with no plan in the account's workspaces, whichever member's agent posted each: what the account's read names beside the plans' items. */
+function planlessWaiting(userId: string) {
+  return and(
+    isNull(inboxItem.planId),
+    itemReachableBy(userId),
+    eq(inboxItem.status, INBOX_STATUS.OPEN),
+  );
+}
+
 const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
 
 /** One open item as the account's read carries it, with its agent as its row names it now. */
@@ -521,6 +536,51 @@ const findWaitingItems = SqlSchema.findAll({
     ),
 });
 
+/** One open item of an agent with no plan as the account's read carries it, with its automation and repository where a plan's item names its plan. */
+const PlanlessRowSchema = Schema.Struct({
+  id: Schema.String,
+  agentId: Schema.String,
+  agentTitle: Schema.NullOr(Schema.String),
+  agentModel: Schema.String,
+  automationId: Schema.NullOr(Schema.String),
+  automationName: Schema.NullOr(Schema.String),
+  repository: Schema.String,
+  title: Schema.String,
+  revision: Schema.Number,
+  status: Schema.Literals(Object.values(INBOX_STATUS)),
+  postedAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
+});
+
+const findPlanlessWaitingItems = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: PlanlessRowSchema,
+  execute: ({ userId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: inboxItem.id,
+          agentId: inboxItem.agentId,
+          agentTitle: codingAgent.title,
+          agentModel: codingAgent.model,
+          automationId: codingAgent.automationId,
+          automationName: automation.name,
+          repository: codingAgent.repository,
+          title: inboxItem.title,
+          revision: inboxItem.revision,
+          status: inboxItem.status,
+          postedAt: inboxItem.postedAt,
+          updatedAt: inboxItem.updatedAt,
+        })
+        .from(inboxItem)
+        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .leftJoin(automation, eq(automation.id, codingAgent.automationId))
+        .where(planlessWaiting(userId))
+        .orderBy(...LATEST_FIRST),
+    ),
+});
+
+/** Where every item the account's read names stands, a plan's or an agent's with no plan. Note that the plan is joined on the left, because an item with no plan has none to join. */
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
@@ -529,8 +589,8 @@ const findWaitingStamps = SqlSchema.findAll({
       db
         .select(STAMP_COLUMNS)
         .from(inboxItem)
-        .innerJoin(plan, eq(plan.id, inboxItem.planId))
-        .where(accountWaiting(userId))
+        .leftJoin(plan, eq(plan.id, inboxItem.planId))
+        .where(or(accountWaiting(userId), planlessWaiting(userId)))
         .orderBy(...LATEST_FIRST),
     ),
 });
@@ -562,6 +622,34 @@ const findPlansWithItems = SqlSchema.findAll({
         .where(and(planReachableBy(userId), isNull(plan.archivedAt)))
         .groupBy(inboxItem.planId)
         .orderBy(desc(LATEST_ITEM), desc(inboxItem.planId)),
+    ),
+});
+
+/** One automation holding items of its runs' agents with no plan, as the account's read lists it; null for the agents no standing automation names. */
+const AutomationItemsRowSchema = Schema.Struct({
+  automationId: Schema.NullOr(Schema.String),
+  items: Schema.Number,
+  updatedAt: InstantColumnSchema,
+});
+
+/**
+ * Every automation whose runs' agents with no plan hold an item in the
+ * account's workspaces, open or settled, whichever member's agent posted
+ * it, the automation whose item changed latest first, as the plans are
+ * listed.
+ */
+const findAutomationsWithItems = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: AutomationItemsRowSchema,
+  execute: ({ userId }) =>
+    Database.use((db) =>
+      db
+        .select({ automationId: codingAgent.automationId, items: count(), updatedAt: LATEST_ITEM })
+        .from(inboxItem)
+        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .where(and(isNull(inboxItem.planId), itemReachableBy(userId)))
+        .groupBy(codingAgent.automationId)
+        .orderBy(desc(LATEST_ITEM), desc(codingAgent.automationId)),
     ),
 });
 
@@ -837,7 +925,28 @@ export function accountWaitingItems(
   );
 }
 
-/** Where each item `accountWaitingItems` reads stands, the same items and none of their words: what a held read of the account compares between looks. */
+/** One open item of an agent with no plan as the account's read carries it, and where it stands. */
+type AccountPlanlessRow = AccountPlanlessEntry & Pick<InboxStamp, "status">;
+
+/**
+ * Every item that waits on the developer from an agent with no plan in the
+ * account's workspaces, the latest changed first, with the automation and
+ * repository that stand in a plan's place; none is left out for being old,
+ * as `accountWaitingItems` leaves none out.
+ */
+export function accountPlanlessItems(
+  userId: string,
+): InboxStoreEffect<readonly AccountPlanlessRow[]> {
+  return Effect.map(findPlanlessWaitingItems({ userId }), (rows) =>
+    rows.map((row) => ({
+      ...row,
+      postedAt: row.postedAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+    })),
+  );
+}
+
+/** Where each item `accountWaitingItems` and `accountPlanlessItems` read stands, the same items and none of their words: what a held read of the account compares between looks. */
 export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
   return Effect.map(findWaitingStamps({ userId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
@@ -851,6 +960,15 @@ export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly 
  */
 export function accountInboxPlans(userId: string): InboxStoreEffect<readonly AccountInboxPlan[]> {
   return Effect.map(findPlansWithItems({ userId }), (rows) =>
+    rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
+  );
+}
+
+/** Every automation whose runs' agents with no plan hold an item, waiting or settled, listed as `accountInboxPlans` lists the plans. */
+export function accountInboxAutomations(
+  userId: string,
+): InboxStoreEffect<readonly AccountInboxAutomation[]> {
+  return Effect.map(findAutomationsWithItems({ userId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }

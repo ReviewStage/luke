@@ -91,6 +91,125 @@
         "additionalProperties": false
       }
     },
+    "planless": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "agentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "agentTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agentModel": {
+            "type": "string"
+          },
+          "automationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "automationName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repository": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "number",
+            "minimum": 0
+          },
+          "postedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "agentTitle",
+          "agentModel",
+          "automationId",
+          "automationName",
+          "repository",
+          "title",
+          "revision",
+          "postedAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "automations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "automationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "automationId",
+          "items",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
     "cursor": {
       "type": "string"
     },
