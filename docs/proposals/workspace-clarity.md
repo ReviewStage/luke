@@ -1,7 +1,7 @@
 # Proposal: which workspace am I in, and what does it mean for my plans
 
-Status: **Dean picked variant A** (decision 1) and the Settings labels
-(decision 8) on 2026-10-14; the other decisions are still his. The one
+Status: **Dean picked variant A** (decision 1) and decided the Settings
+labels (decision 8) on 2026-10-14; the other decisions are still his. The one
 product change so far is the attribution fix, #2638 (§1.6).
 
 The design show is `docs/proposals/workspace-clarity/index.html`. It is one
@@ -119,8 +119,7 @@ decisions they draw.
 8. **Settings, and #2570's heading.**
    - The page list gets three headings, as Linear and Notion group theirs:
      - the listed workspace by its name, *Acme*, over *Members and GitHub*;
-     - *Account*, with the hint *Applies in all your workspaces* under it,
-       over *Profile* (today's Account page, renamed so no row repeats its
+     - *Account*, with no subtext under it, over *Profile* (today's Account page, renamed so no row repeats its
        heading), *Coding agents*, *Integrations* and *Plan template*;
      - *This Mac*, over Voice, Appearance, Notifications, This Mac,
        Keyboard shortcuts and About.
@@ -128,9 +127,10 @@ decisions they draw.
      name.
    - The workspace's GitHub stays on that page.
 
-   **Dean picked "Account" beside the workspace's name, with the hint.** His
-   words on the first draft's *You, in every workspace*: "doesn't sound
-   polished". #2570 merged at 20:29 (luke-agent). It put the workspace's
+   **Dean decided: "Account" beside the workspace's name, and no subtext.**
+   His words on the first draft's *You, in every workspace*: "doesn't sound
+   polished". A second draft's hint under Account, *Applies in all your
+   workspaces*, came out too. #2570 merged at 20:29 (luke-agent). It put the workspace's
    GitHub under an *Integrations* heading, the same name as Account ›
    Integrations, which holds your personal GitHub link. **Recommend** that
    heading read *GitHub*, keeping #2570's Manage menu.
@@ -497,8 +497,8 @@ message its agents", and lists them with their roles.
 ### 3.4 Settings (decision 8)
 
 - **The page list:** three headings, in the list's own `.section-heading`:
-  the workspace's tile and name, *Account* with its hint in the tertiary
-  ink, and *This Mac*.
+  the workspace's tile and name, *Account*, and *This Mac*, none with a
+  line under it.
 - **The workspace page:** titled with the workspace's name. Its picker gives
   way to a row with the tile, the role and member count, and *Rename*
   (decision 9). Its GitHub group reads *GitHub*.
@@ -608,6 +608,5 @@ access findings in §1.4 are fixed in their own PRs, apart from this plan.
 - **Workspace deletion, role changes and ownership transfer.** These are
   real gaps (§1.4), but not about clarity. Each is its own proposal.
 - **Workspace-shared model keys, billing or templates.** These stay with the
-  account, and the *Account* heading's hint, *Applies in all your
-  workspaces*, now says so.
+  account, under the *Account* heading, apart from the workspace's.
 - **Moving many plans at once,** or a bulk merge like ChatGPT's.
