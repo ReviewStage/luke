@@ -2961,13 +2961,6 @@ body:has(.app-stage[data-capture="true"])
   animation: none;
 }
 
-/* The list on the left is the way between pages and the page names itself,
-   so the panel's own index and page head are not drawn. */
-.settings-page-scroll .settings-index,
-.settings-page-scroll .settings-header {
-  display: none;
-}
-
 /* Version history ------------------------------------------------------------ */
 
 /* The versions, newest first, one row each, the row whose version is drawn

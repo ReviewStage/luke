@@ -3,14 +3,8 @@ import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
-import { useEffect, useRef } from "react";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
-import {
-  SETTINGS_SUBVIEW_LIST,
-  SETTINGS_VIEW,
-  type SettingsView,
-  settingsNavRowId,
-} from "../settings-views";
+import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsPage } from "./coding-agents-page";
@@ -23,12 +17,12 @@ import type {
 import { GitHubSection, type GitHubSettingsControl } from "./github-section";
 import { IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
-import { MembersSection, type WorkspaceSettingsControl } from "./members-section";
 import { NotificationsSection } from "./notifications-section";
-import { SettingsNavRow, SettingsPageHeader } from "./pages";
-import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
+import { WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
+import { ShortcutSection } from "./voice-keys";
 import { VoiceSection } from "./voice-page";
+import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 import { useSettingsWrites } from "./writes";
 
 /**
@@ -45,9 +39,8 @@ export interface SettingsPanelProps {
    */
   onDeleteAccount: () => Promise<ActionResult>;
   /**
-   * Which settings page is showing: the front page, or one of the pages a
-   * front-page row opens. Held by the app rather than here because Escape
-   * unwinds it.
+   * Which settings page is showing. Held by the app rather than here because
+   * a shortcut, a voice request, or a button elsewhere in the window turns it.
    */
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
@@ -56,7 +49,7 @@ export interface SettingsPanelProps {
   updates: UpdateControl;
   settings?: AppSettingsView;
   shortcuts: ShortcutControl;
-  /** The workspace the sidebar lists, its members, and the install, drawn while an account is signed in. */
+  /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
   /** Whether the account has GitHub connected, and the pages that connect and disconnect it, drawn while an account is signed in. */
   github?: GitHubSettingsControl;
@@ -94,8 +87,8 @@ export function settingsRowsInput({
  * page because the mark has to stand while that page is not drawn: it is the
  * list saying a page one press away still needs a hand. The keyless half moved
  * to the Account and usage heading with the ways in, so the row marks only a
- * microphone still ungranted for a voice that can run. The panel's front page
- * and the desktop's list of pages both read it, so the two never disagree.
+ * microphone still ungranted for a voice that can run. The Settings sidebar
+ * reads it, and the Voice page wears the same mark on the row it means.
  */
 export function voicePageAttention(microphone: MicrophoneControl): string | undefined {
   return microphone.voiceAvailable
@@ -103,12 +96,16 @@ export function voicePageAttention(microphone: MicrophoneControl): string | unde
     : undefined;
 }
 
+/**
+ * The page the Settings sidebar has chosen, as the groups that draw it. Every
+ * option has one home: a page draws only its own groups, and the sidebar is
+ * the one list of pages, so no page repeats another's rows.
+ */
 export function SettingsPanel({
   account,
   onSignOut,
   onDeleteAccount,
   view,
-  onViewChange,
   microphone,
   notifications,
   updates,
@@ -118,117 +115,61 @@ export function SettingsPanel({
   github,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
-  const voiceNote = voicePageAttention(microphone);
   const panelView = settingsRowsInput({ settings, microphone, account });
-  // Moving between pages moves the keyboard with it: into a page, onto its
-  // back button; back out, onto the row that opened the page just left. Keyed
-  // to the page, because the control being reached for only exists once the
-  // new page is mounted.
-  const backControl = useRef<HTMLButtonElement | null>(null);
-  const heldView = useRef(view);
-  useEffect(() => {
-    const previous = heldView.current;
-    heldView.current = view;
-    if (previous === view) return;
-    if (view === SETTINGS_VIEW.ROOT) {
-      if (previous !== SETTINGS_VIEW.ROOT) {
-        document.getElementById(settingsNavRowId(previous))?.focus();
-      }
-      return;
-    }
-    backControl.current?.focus();
-  }, [view]);
+  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   return (
     <div className="settings">
-      {view !== SETTINGS_VIEW.ROOT ? (
-        <SettingsPageHeader
-          view={view}
-          onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
-          backControl={backControl}
-        />
-      ) : null}
-
-      {view === SETTINGS_VIEW.ROOT ? (
-        /* A newer release waiting is marked on the tab rather than given a
-           section of its own here: a section that changed places as its own
-           check found news would rearrange the page under the hand that
-           pressed it. */
-        <section className="settings-section settings-index">
-          {SETTINGS_SUBVIEW_LIST.map((subview) => (
-            <SettingsNavRow
-              key={subview}
-              view={subview}
-              onOpen={onViewChange}
-              {...(subview === SETTINGS_VIEW.VOICE && voiceNote
-                ? { attention: voiceNote }
-                : undefined)}
+      {view === SETTINGS_VIEW.ACCOUNT ? (
+        signedIn ? (
+          <>
+            <AccountSection
+              account={account}
+              onSignOut={onSignOut}
+              onDeleteAccount={onDeleteAccount}
             />
-          ))}
-        </section>
+            {github !== undefined ? <GitHubSection control={github} /> : null}
+          </>
+        ) : (
+          <p className="settings-note">Not signed in.</p>
+        )
       ) : null}
 
-      {/* Under the index, where every refusal for GitHub not connected points. */}
-      {view === SETTINGS_VIEW.ROOT &&
-      github !== undefined &&
-      account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-        <GitHubSection control={github} />
+      {view === SETTINGS_VIEW.WORKSPACE && workspace !== undefined && signedIn ? (
+        <WorkspacePage control={workspace} />
       ) : null}
 
-      {/* Under the index, so the sidebar's Members… lands in sight of it. */}
-      {view === SETTINGS_VIEW.ROOT &&
-      workspace !== undefined &&
-      account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-        <MembersSection control={workspace} />
-      ) : null}
+      {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
 
-      {view === SETTINGS_VIEW.VOICE && panelView ? (
-        <VoiceSection view={panelView} writes={writes} microphone={microphone} />
+      {view === SETTINGS_VIEW.INTEGRATIONS ? <IntegrationsSection signedIn={signedIn} /> : null}
+
+      {view === SETTINGS_VIEW.VOICE ? (
+        <>
+          {panelView ? (
+            <VoiceSection view={panelView} writes={writes} microphone={microphone} />
+          ) : null}
+          <ShortcutSection
+            shortcuts={shortcuts}
+            {...(panelView ? { view: panelView } : undefined)}
+            voiceAvailable={microphone.voiceAvailable}
+          />
+        </>
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView ? (
         <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.CODING_AGENTS ? (
-        <>
-          <CodingAgentsPage signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
-          {panelView ? (
-            <NotificationsSection view={panelView} writes={writes} control={notifications} />
-          ) : null}
-        </>
+      {view === SETTINGS_VIEW.NOTIFICATIONS && panelView ? (
+        <NotificationsSection view={panelView} writes={writes} control={notifications} />
       ) : null}
 
-      {view === SETTINGS_VIEW.INTEGRATIONS ? (
-        <IntegrationsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
+        <MacCommandsSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? (
-        <>
-          <ShortcutSection
-            shortcuts={shortcuts}
-            writes={writes}
-            {...(panelView ? { view: panelView } : undefined)}
-            voiceAvailable={microphone.voiceAvailable}
-          />
-          <WindowShortcutSections />
-        </>
-      ) : null}
+      {view === SETTINGS_VIEW.ABOUT ? <UpdatesSection control={updates} /> : null}
 
-      {view !== SETTINGS_VIEW.ROOT ? null : (
-        <>
-          {panelView ? <MacCommandsSection view={panelView} writes={writes} /> : null}
-
-          <UpdatesSection control={updates} />
-
-          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <AccountSection
-              account={account}
-              onSignOut={onSignOut}
-              onDeleteAccount={onDeleteAccount}
-            />
-          ) : null}
-        </>
-      )}
+      {view === SETTINGS_VIEW.SHORTCUTS ? <WindowShortcutSections /> : null}
     </div>
   );
 }

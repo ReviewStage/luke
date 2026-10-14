@@ -567,7 +567,6 @@ export function DesktopSidebar({
   onTabChange,
   account,
   updates,
-  onSignOut,
   call,
 }: {
   sidebar: SidebarCollapse;
@@ -577,8 +576,6 @@ export function DesktopSidebar({
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
-  /** Signs the account out, once the account menu's Log out is answered. */
-  onSignOut: () => Promise<void>;
   /** The call card, at the column's foot above the account row, while one is to be drawn here. */
   call: CallCardInput | undefined;
 }): React.JSX.Element {
@@ -730,13 +727,7 @@ export function DesktopSidebar({
       <hr className="sidebar-rule" />
       {/* The workspace the list is, while the account is in more than one;
           it stands over the scroller, so it never scrolls away. */}
-      {plans.signedIn ? (
-        <WorkspaceSwitcher
-          plans={plans}
-          inSight={!sidebar.collapsed}
-          onOpenMembers={() => onTabChange(PANEL_TAB.SETTINGS)}
-        />
-      ) : null}
+      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
@@ -794,7 +785,6 @@ export function DesktopSidebar({
           shown={!sidebar.collapsed}
           settingsOpen={tab === PANEL_TAB.SETTINGS}
           onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
-          onSignOut={onSignOut}
         />
       </div>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}

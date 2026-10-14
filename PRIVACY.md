@@ -30,7 +30,7 @@ the Inbox. None of it is sent anywhere.
 hands work to, every coding agent, and the workers a coding agent hands work
 to can each run any shell command on your Mac, at once and without asking you,
 as many at a time as they like. This holds whenever Luke is open on the Mac
-and signed in to your account with Settings › General › "Let agents run
+and signed in to your account with Settings › This Mac › "Let agents run
 commands on this Mac" on. The switch is kept on each Mac, not with your
 account, and is on by default on every Mac, as is opening Luke at login. A
 command runs in your login shell, from your home folder, as your macOS user,
@@ -759,7 +759,7 @@ reports by Sentry.
 ## Your choices
 
 - Sign out of your Luke account to turn voice off.
-- Turn off Settings › General › "Let agents run commands on this Mac" to stop
+- Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
   Luke and coding agents running commands on that Mac; it is set on each Mac
   apart, and signing out stops it too.
 - Switch an integration off for one coding agent in its message box's MCP

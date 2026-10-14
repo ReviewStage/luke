@@ -4,23 +4,30 @@ import {
   type WorkspaceMember,
 } from "@sidecar/hosted/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { SETTINGS_SECTION } from "../settings-views";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { SelectRow } from "./select-row";
 import { SettingsGroup } from "./settings-group";
 
 /**
- * members-section.tsx -- Settings' Members section: the listed team workspace's members, the removal, the leave, and its GitHub organization.
+ * workspace-page.tsx -- Settings' Workspace page: one workspace the account is in, its members, and its GitHub repositories.
  *
- * While the sidebar lists a team's workspace the section reads its members
- * as the service holds them now, each with its name, email, and role. An
+ * A picker at the page's head chooses the workspace, the one the sidebar
+ * lists until another is chosen or a link names one. Under it the
+ * workspace's name and the account's role. A team's workspace then lists its
+ * members as the service holds them now, each with its name, email, and
+ * role: Invite people opens the service's invite page in the browser, an
  * owner or an admin removes a member who is not an owner, and anyone but an
- * owner leaves, which lists the personal workspace again. Both ask first in
- * the confirm dialog, since neither is undone from here, and a refusal is
- * said in it: the account's role's own line where that is why, the act's
- * own sentence otherwise. The personal workspace has no team, so it draws
- * no section.
+ * owner leaves. For an owner or an admin, GitHub repositories connects one
+ * GitHub organization's installation of the Luke GitHub App to the
+ * workspace, or names the connected account with Disconnect and the way to
+ * choose its repositories on GitHub. Every act that cannot be undone asks
+ * first in the confirm dialog, and a refusal is said where it was asked:
+ * the account's role's own line where that is why, the act's own sentence
+ * otherwise. The personal workspace has no team, so it draws no members.
  */
 
 /** What each role reads as on a member's row. */
@@ -42,7 +49,7 @@ function refusedWith(refused: Error): ActionResult {
 }
 
 /** Whether the account's role lets it manage the workspace's members and GitHub organization. */
-export function managesWorkspace(workspace: Workspace): boolean {
+function managesWorkspace(workspace: Workspace): boolean {
   return workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN;
 }
 
@@ -190,30 +197,69 @@ function TeamMembers({
   );
 }
 
-/** The team's GitHub organization, for an owner or admin: the connected login with Disconnect, or Connect GitHub org… while none is. */
-function GitHubRow({
-  workspace,
-  onConnect,
+/** A row whose button opens a page in the browser for the workspace, the act's refusal said under it. */
+function OpenerRow({
+  name,
+  line,
+  verb,
+  className,
+  open,
+  children,
 }: {
-  workspace: Workspace;
-  onConnect: () => void;
+  name: string;
+  line?: string | undefined;
+  verb: string;
+  className: string;
+  open: () => Promise<void>;
+  children?: React.ReactNode;
 }): React.JSX.Element {
+  const [refusal, setRefusal] = useState<string>();
+  return (
+    <Row className={className} name={name} line={refusal ?? line}>
+      {children}
+      <button
+        type="button"
+        className="toolbar-button bordered-button"
+        onClick={() => {
+          setRefusal(undefined);
+          open().catch((refused: Error) => setRefusal(refused.message));
+        }}
+      >
+        {verb}
+      </button>
+    </Row>
+  );
+}
+
+/**
+ * The workspace's GitHub repositories, for an owner or an admin: Connect
+ * while none is, which installs the Luke GitHub App on a GitHub organization
+ * for this workspace, or the connected account's repositories with
+ * Disconnect and Choose repositories…, the App's page on GitHub where its
+ * repositories are chosen. Both GitHub pages open in the browser through
+ * the one connect, whose return to Luke links the installation to this
+ * workspace.
+ */
+function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
   const { github } = workspace;
-  if (github === null) {
-    return (
-      <Row className="workspace-github" name="GitHub">
-        <button type="button" className="toolbar-button bordered-button" onClick={onConnect}>
-          Connect GitHub org…
-        </button>
-      </Row>
-    );
-  }
-  return (
-    <Row
+  const workspaceId = workspace.id;
+  const open = () => act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId });
+  return github === null ? (
+    <OpenerRow
       className="workspace-github"
-      name={`GitHub: ${github.login}`}
+      name="No GitHub organization connected"
+      line="Connect one to use its repositories in this workspace."
+      verb="Connect…"
+      open={open}
+    />
+  ) : (
+    <OpenerRow
+      className="workspace-github"
+      name={`Repositories from ${github.login}`}
       line={github.active ? undefined : "Suspended or removed on GitHub."}
+      verb="Choose repositories…"
+      open={open}
     >
       <ConfirmedButton
         verb="Disconnect"
@@ -221,40 +267,97 @@ function GitHubRow({
         title={`Disconnect ${github.login} from ${workspace.name}?`}
         body="Its plans lose the organization's repositories until one is connected again."
         action={() =>
-          act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId: workspace.id }).then(
+          act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId }).then(
             () => ACCEPTED,
             refusedWith,
           )
         }
       />
-    </Row>
+    </OpenerRow>
   );
 }
 
-/** What Settings' Members section is handed: the workspace the sidebar lists, the fall back after a leave, and the GitHub connect. */
+/** What Settings' Workspace page is handed: the workspaces, the one the page shows, the picker, and the fall back after a leave. */
 export interface WorkspaceSettingsControl {
-  /** The workspace the sidebar lists, absent before the workspaces are read. */
-  workspace: Workspace | undefined;
-  /** Lists the personal workspace again, once the chosen one is left. */
-  onLeft: () => void;
-  /** Opens GitHub to connect an organization to the listed workspace. */
-  onConnectGitHub: () => void;
+  /** Every workspace the account is a member of, its personal one first. */
+  workspaces: readonly Workspace[];
+  /** The workspace the page shows, absent before the workspaces are read. */
+  workspaceId: string | undefined;
+  /** Shows another workspace on the page, as its picker chose it. */
+  onChooseWorkspace: (workspaceId: string) => void;
+  /** Lists the personal workspace again where the workspace left was the one listed. */
+  onLeft: (workspaceId: string) => void;
 }
 
-/** The listed team workspace's members and, for an owner or admin, its GitHub organization; nothing for the personal workspace, which has no team. */
-export function MembersSection({
+/** What each workspace is called in the page's picker. */
+function pickerLabel(workspace: Workspace): string {
+  return workspace.personal ? `${workspace.name} (personal)` : workspace.name;
+}
+
+/** The page's head: the picker, then the workspace's name and the account's role in it. */
+function WorkspaceHead({
+  control,
+  workspace,
+}: {
+  control: WorkspaceSettingsControl;
+  workspace: Workspace;
+}): React.JSX.Element {
+  return (
+    <SettingsGroup>
+      <SelectRow
+        label="Workspace"
+        value={workspace.id}
+        options={control.workspaces.map((each) => ({ value: each.id, label: pickerLabel(each) }))}
+        parse={(raw) => control.workspaces.find((each) => each.id === raw)?.id}
+        onChange={control.onChooseWorkspace}
+      />
+      <Row
+        className="workspace-identity"
+        name={workspace.name}
+        line={
+          workspace.personal
+            ? "Your personal workspace. Its plans are yours alone."
+            : `Your role: ${ROLE_WORDS[workspace.role]}`
+        }
+      />
+    </SettingsGroup>
+  );
+}
+
+/**
+ * The page for one workspace: its head, a team's members, and, for an owner
+ * or an admin, its GitHub repositories; nothing before the workspaces are read.
+ */
+export function WorkspacePage({
   control,
 }: {
   control: WorkspaceSettingsControl;
 }): React.JSX.Element | null {
-  const { workspace } = control;
-  if (workspace === undefined || workspace.personal) return null;
+  const { act } = useAct();
+  const workspace =
+    control.workspaces.find((each) => each.id === control.workspaceId) ?? control.workspaces[0];
+  if (workspace === undefined) return null;
   return (
-    <SettingsGroup title={`Members of ${workspace.name}`}>
-      <TeamMembers key={workspace.id} workspace={workspace} onLeft={control.onLeft} />
+    <>
+      <WorkspaceHead control={control} workspace={workspace} />
+      {workspace.personal ? null : (
+        <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
+          <Fragment key={workspace.id}>
+            <OpenerRow
+              className="workspace-invite"
+              name="Invite people"
+              verb="Invite people…"
+              open={() => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: workspace.id })}
+            />
+            <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
+          </Fragment>
+        </SettingsGroup>
+      )}
       {managesWorkspace(workspace) ? (
-        <GitHubRow key={workspace.id} workspace={workspace} onConnect={control.onConnectGitHub} />
+        <SettingsGroup title="GitHub repositories" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+          <GitHubRepositories key={workspace.id} workspace={workspace} />
+        </SettingsGroup>
       ) : null}
-    </SettingsGroup>
+    </>
   );
 }

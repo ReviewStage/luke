@@ -25,7 +25,7 @@ import {
  */
 
 /** One tool as a list draws it. */
-export interface IntegrationTool {
+interface IntegrationTool {
   readonly name: string;
   readonly description: string;
 }

@@ -1,9 +1,10 @@
 import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
+import { SETTINGS_SECTION } from "../settings-views";
 import { SettingsGroup } from "./settings-group";
 
 /**
- * github-section.tsx -- Settings' GitHub row: whether the account has GitHub connected, and the way to connect or disconnect it.
+ * github-section.tsx -- Settings' Connected accounts: whether the account has its own GitHub connected, and the way to connect or disconnect it.
  *
  * GitHub is connected apart from signing in, as an integration is. Both
  * Connect GitHub and Disconnect open a page of the service's in the
@@ -26,11 +27,12 @@ export interface GitHubSettingsControl {
 export function GitHubSection({ control }: { control: GitHubSettingsControl }): React.JSX.Element {
   const connected = control.connection?.connected === true;
   return (
-    <SettingsGroup title="GitHub">
+    <SettingsGroup title="Connected accounts" anchor={SETTINGS_SECTION.CONNECTED_ACCOUNTS}>
       <div className="settings-row">
         <span className="settings-copy">
+          <strong>GitHub</strong>
           {/* The service holds no login, so the row names none. */}
-          <strong>{connected ? "Connected" : "Not connected"}</strong>
+          <small>{connected ? "Connected" : "Not connected"}</small>
         </span>
         <button
           type="button"

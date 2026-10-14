@@ -41,10 +41,9 @@ import { SettingsGroup } from "./settings-group";
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
  *
- * The page is three groups under their own headings: this file's Default
- * model, then the account's own API keys (`api-keys-section.tsx`) and the
- * notification as an agent ends (`notifications-section.tsx`), drawn by the
- * panel in that order. The first two share the one read of the keys, so a
+ * The page is two groups under their own headings: this file's Default
+ * model, then the account's own API keys (`api-keys-section.tsx`). The two
+ * share the one read of the keys, so a
  * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
  * and by a Start that named a model alike, so the page reads it afresh as it

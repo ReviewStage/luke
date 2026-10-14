@@ -50,7 +50,7 @@ function mount(connection: GitHubConnection | undefined) {
     page: container,
     opened,
     press,
-    line: () => container.querySelector("strong")?.textContent,
+    line: () => container.querySelector(".settings-copy small")?.textContent,
   };
 }
 

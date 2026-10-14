@@ -4,19 +4,30 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {
-  ROOT: "root",
+  /** Who is signed in and the ways out, the page Settings opens on. */
+  ACCOUNT: "account",
+  /** The voice, its controls, and the two system-wide keys that reach Luke. */
   VOICE: "voice",
   APPEARANCE: "appearance",
+  /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
   /** The Markdown the account's new plans start from, which is the account's on the service rather than a stored setting. */
   PLAN_TEMPLATE: "plan-template",
   /**
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
-   * the service rather than stored settings, and the stored switch that notifies as an agent ends.
+   * the service rather than stored settings.
    */
   CODING_AGENTS: "coding-agents",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
+  /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */
+  WORKSPACE: "workspace",
+  /** The stored switch that notifies as a coding agent ends or needs the developer. */
+  NOTIFICATIONS: "notifications",
+  /** What this Mac lets agents do on it: the stored switch for running commands here. */
+  THIS_MAC: "this-mac",
+  /** The running version, its updates, and the changelog. */
+  ABOUT: "about",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
@@ -39,7 +50,6 @@ export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTI
 export const SETTINGS_RESET_SCOPE = {
   VOICE: "voice",
   APPEARANCE: "appearance",
-  SHORTCUTS: "shortcuts",
 } as const;
 
 export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETTINGS_RESET_SCOPE];

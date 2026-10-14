@@ -15,7 +15,6 @@ import {
   callAnswered,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
-import type { PlanCallResult } from "./plan-client.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -23,6 +22,11 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import {
+  WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
+  type WorkspaceCallResult,
+} from "./workspace-call.js";
 import {
   WORKSPACE_MEMBERS_QUERY,
   type Workspace,
@@ -49,22 +53,6 @@ import {
  * caller draws why it did not happen: the account's role does not allow
  * it, the workspace is not one it is in, or no answer came.
  */
-
-/** Why a workspace call did not happen. */
-export const WORKSPACE_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub or removing a member takes an owner or admin, an owner neither leaves nor is removed, and a personal workspace's members are read, removed, and left by nobody. */
-  NOT_PERMITTED: "not-permitted",
-  /** The workspace is not one the account is a member of. */
-  NOT_FOUND: "not-found",
-} as const;
-
-export type WorkspaceCallFailure =
-  (typeof WORKSPACE_CALL_FAILURE)[keyof typeof WORKSPACE_CALL_FAILURE];
-
-/** One workspace call's answer, or why there is none. */
-export type WorkspaceCallResult<Answer> = PlanCallResult<Answer, WorkspaceCallFailure>;
 
 export interface HostedWorkspaceClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */

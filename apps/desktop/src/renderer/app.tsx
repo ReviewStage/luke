@@ -29,6 +29,7 @@ import { FeedbackDialog } from "./feedback-dialog";
 import { useKeyboardModality } from "./keyboard-modality";
 import { useLastSignIn } from "./last-sign-in";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
+import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
@@ -37,7 +38,8 @@ import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { settingsRowsInput } from "./settings/settings-panel";
-import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { followSettingsLink } from "./settings-link";
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { fixtureUpdate } from "./update-row";
@@ -75,7 +77,9 @@ export function App(): React.JSX.Element {
   const account = state?.account;
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
-  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
+  /** The workspace Settings' Workspace page shows, where a link or its picker named one; the sidebar's otherwise. */
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string>();
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -109,11 +113,11 @@ export function App(): React.JSX.Element {
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);
-      // Arriving at the tab is arriving at its front page: a page left open
-      // behind a tab switch would greet the next visit with a corner of the
-      // settings rather than the settings. A flow that needs a deeper page
-      // sets it right after this reset.
-      setSettingsView(SETTINGS_VIEW.ROOT);
+      // Arriving at the tab is arriving at its first page, Account: a page
+      // left open behind a tab switch would greet the next visit with a
+      // corner of the settings rather than the settings. A flow that needs
+      // another page sets it right after this reset.
+      setSettingsView(SETTINGS_VIEW.ACCOUNT);
       // `PanelTab` and the counted tab are the same union: both are
       // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
@@ -121,6 +125,21 @@ export function App(): React.JSX.Element {
       });
     },
     [setSettingsView, setTab],
+  );
+  /**
+   * Opens Settings at the place a link names: its page, the workspace the
+   * Workspace page shows, and its section, which is looked for once drawn
+   * and given up on by itself.
+   */
+  const openSettings = useCallback(
+    (link: SettingsLink) => {
+      followSettingsLink(link, {
+        changeTab,
+        changeView: setSettingsView,
+        changeWorkspace: setSettingsWorkspaceId,
+      });
+    },
+    [changeTab, setSettingsView],
   );
 
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
@@ -220,15 +239,9 @@ export function App(): React.JSX.Element {
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
-    // Arriving at Settings lands on its front page, so the page is turned after.
-    onOpenIntegrations: () => {
-      changeTab(PANEL_TAB.SETTINGS);
-      setSettingsView(SETTINGS_VIEW.INTEGRATIONS);
-    },
-    onOpenApiKeys: () => {
-      changeTab(PANEL_TAB.SETTINGS);
-      setSettingsView(SETTINGS_VIEW.CODING_AGENTS);
-    },
+    onOpenSettings: (link) => openSettings(link),
+    onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+    onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
   // Read through a ref, because the tab hands a new closure each render and
@@ -446,109 +459,115 @@ export function App(): React.JSX.Element {
   };
 
   return (
-    <div
-      className="app-stage"
-      data-capture={String(state.run.captureMode)}
-      // The panel is drawn as an ordinary app window's content; desktop.css
-      // lays it out.
-      data-surface="desktop"
-      // The sidebar's width lays out the shell and Settings' page list, and
-      // places the captions over the work column beside it.
-      style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-    >
-      {/* The window's content. */}
-      <div className="desktop-stage">
-        <DesktopShell
-          gates={{
-            accountRequired: state.run.accountRequired,
-            signInWait: signIn.signInWait,
-            signInFailure: signIn.signInFailure,
-            lastSignIn,
-            onBeginSignIn: signIn.beginSignIn,
-            onCancelSignIn: signIn.cancelSignIn,
-            signInFace,
-          }}
+    <OpenSettingsProvider value={openSettings}>
+      <div
+        className="app-stage"
+        data-capture={String(state.run.captureMode)}
+        // The panel is drawn as an ordinary app window's content; desktop.css
+        // lays it out.
+        data-surface="desktop"
+        // The sidebar's width lays out the shell and Settings' page list, and
+        // places the captions over the work column beside it.
+        style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+      >
+        {/* The window's content. */}
+        <div className="desktop-stage">
+          <DesktopShell
+            gates={{
+              accountRequired: state.run.accountRequired,
+              signInWait: signIn.signInWait,
+              signInFailure: signIn.signInFailure,
+              lastSignIn,
+              onBeginSignIn: signIn.beginSignIn,
+              onCancelSignIn: signIn.cancelSignIn,
+              signInFace,
+            }}
+            tab={tab}
+            onTabChange={changeTab}
+            plans={plans}
+            history={history}
+            sidebar={sidebar}
+            call={call}
+            captions={{
+              caption,
+              volumeHint: {
+                wanted: volumeHintWanted,
+                text: volumeHintText(outputAudio),
+                onDismiss: dismissVolumeHint,
+              },
+            }}
+            settings={{
+              account: state.account,
+              onSignOut: async () => {
+                await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+              },
+              // The delete happens at the service before anything local moves,
+              // so a failure resolves to why and the account is still standing.
+              onDeleteAccount: async () => {
+                try {
+                  await act(ACT_KIND.ACCOUNT_DELETE);
+                  return { status: ACTION_RESULT_STATUS.ACCEPTED };
+                } catch {
+                  return {
+                    status: ACTION_RESULT_STATUS.REJECTED,
+                    reason:
+                      "Luke's service could not delete the account, so it still stands. Try again in a moment.",
+                  };
+                }
+              },
+              view: settingsView,
+              onViewChange: setSettingsView,
+              microphone,
+              notifications: {
+                refused: state.notifications.refused,
+                onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+              },
+              updates,
+              settings,
+              shortcuts,
+              // The Workspace page shows the workspace a link or its picker chose, the sidebar's otherwise.
+              workspace: {
+                workspaces: plans.workspaces,
+                workspaceId: settingsWorkspaceId ?? plans.workspace?.id,
+                onChooseWorkspace: setSettingsWorkspaceId,
+                onLeft: (workspaceId) => {
+                  plans.onLeftWorkspace(workspaceId);
+                  setSettingsWorkspaceId(undefined);
+                },
+              },
+              github: {
+                connection: plans.github,
+                onConnect: plans.onConnectAccountGitHub,
+                onDisconnect: plans.onDisconnectAccountGitHub,
+              },
+            }}
+          />
+        </div>
+        {/* A note to the people who make Luke, written in a dialog over the
+          window. */}
+        <FeedbackDialog
+          kind={feedbackKind}
+          account={account}
+          onClose={() => setFeedbackKind(undefined)}
+        />
+        {/* The window's passing notice: the thank-you after a note lands, what
+          came of a change made from a menu, and an update arrived. */}
+        <ToastHost />
+        {/* The plans, the open plan's agents and files, every command the
+          window can run now, and the settings, behind ⌘K, past the sign-in
+          alone. */}
+        <CommandPalette
+          available={!accountGated}
           tab={tab}
           onTabChange={changeTab}
           plans={plans}
-          history={history}
-          sidebar={sidebar}
-          call={call}
-          captions={{
-            caption,
-            volumeHint: {
-              wanted: volumeHintWanted,
-              text: volumeHintText(outputAudio),
-              onDismiss: dismissVolumeHint,
-            },
-          }}
           settings={{
-            account: state.account,
-            onSignOut: async () => {
-              await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-            },
-            // The delete happens at the service before anything local moves,
-            // so a failure resolves to why and the account is still standing.
-            onDeleteAccount: async () => {
-              try {
-                await act(ACT_KIND.ACCOUNT_DELETE);
-                return { status: ACTION_RESULT_STATUS.ACCEPTED };
-              } catch {
-                return {
-                  status: ACTION_RESULT_STATUS.REJECTED,
-                  reason:
-                    "Luke's service could not delete the account, so it still stands. Try again in a moment.",
-                };
-              }
-            },
-            view: settingsView,
+            rows: settingsRowsInput({ settings, microphone, account: state.account }),
             onViewChange: setSettingsView,
-            microphone,
-            notifications: {
-              refused: state.notifications.refused,
-              onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-            },
-            updates,
-            settings,
-            shortcuts,
-            // The workspace Settings shows members of is the one the sidebar lists.
-            workspace: {
-              workspace: plans.workspace,
-              onLeft: plans.onLeftWorkspace,
-              onConnectGitHub: plans.onConnectGitHub,
-            },
-            github: {
-              connection: plans.github,
-              onConnect: plans.onConnectAccountGitHub,
-              onDisconnect: plans.onDisconnectAccountGitHub,
-            },
           }}
+          readFiles={(planId) => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
         />
       </div>
-      {/* A note to the people who make Luke, written in a dialog over the
-          window. */}
-      <FeedbackDialog
-        kind={feedbackKind}
-        account={account}
-        onClose={() => setFeedbackKind(undefined)}
-      />
-      {/* The window's passing notice: the thank-you after a note lands, what
-          came of a change made from a menu, and an update arrived. */}
-      <ToastHost />
-      {/* The plans, the open plan's agents and files, every command the
-          window can run now, and the settings, behind ⌘K, past the sign-in
-          alone. */}
-      <CommandPalette
-        available={!accountGated}
-        tab={tab}
-        onTabChange={changeTab}
-        plans={plans}
-        settings={{
-          rows: settingsRowsInput({ settings, microphone, account: state.account }),
-          onViewChange: setSettingsView,
-        }}
-        readFiles={(planId) => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
-      />
-    </div>
+    </OpenSettingsProvider>
   );
 }

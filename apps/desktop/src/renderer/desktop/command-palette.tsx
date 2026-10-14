@@ -70,9 +70,9 @@ import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../planning/use-side-panel
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
-import { settingsPageOf } from "../settings/pages";
-import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
-import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
+import { SETTINGS_PAGE } from "../settings/pages";
+import { landOnSettingsRow, resultPageWord, settingsSearchEntries } from "../settings-search";
+import { SETTINGS_VIEW_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
 import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
@@ -436,8 +436,8 @@ function panelTabRows(
 
 /** Every Settings page, in the sidebar's order, under its own glyph and name. */
 function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.map((page) => {
-    const { title, icon } = settingsPageOf(page);
+  return SETTINGS_VIEW_LIST.map((page) => {
+    const { title, icon } = SETTINGS_PAGE[page];
     return {
       icon,
       label: title,
@@ -457,7 +457,7 @@ function settingRows(
   return settingsSearchEntries(rows).map((entry) => ({
     icon: <GearIcon />,
     label: entry.label,
-    detail: RESULT_PAGE_WORD[entry.page],
+    detail: resultPageWord(entry.page),
     terms: [entry.label],
     keywords: entry.haystack,
     onChoose: () => land(entry.page, entry.id),

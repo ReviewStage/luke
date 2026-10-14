@@ -182,16 +182,7 @@ export function EllipsisIcon(): React.JSX.Element {
   );
 }
 
-/** Points into a page: the row it sits on opens one. */
-export function ChevronIcon(): React.JSX.Element {
-  return (
-    <Glyph className="settings-chevron">
-      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
-    </Glyph>
-  );
-}
-
-/** Points back out of one: the control that returns to the front page. */
+/** Points back: the control that returns to where the window was. */
 export function BackIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

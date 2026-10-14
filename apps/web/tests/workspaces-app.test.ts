@@ -248,13 +248,11 @@ it.effect(
           ["Ada Lovelace", "Acme Platform", "Acme Platform"],
         );
         assert.deepEqual(
-          yield* Database.use((_db) =>
-            Database.use((db) =>
-              db
-                .select({ userId: member.userId, role: member.role })
-                .from(member)
-                .where(eq(member.organizationId, acme.id)),
-            ),
+          yield* Database.use((db) =>
+            db
+              .select({ userId: member.userId, role: member.role })
+              .from(member)
+              .where(eq(member.organizationId, acme.id)),
           ),
           [{ userId: ada, role: WORKSPACE_ROLE.OWNER }],
         );

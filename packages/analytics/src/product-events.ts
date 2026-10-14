@@ -200,7 +200,7 @@ export const PRODUCT_PANEL_SOURCE = {
 type ProductPanelSource = (typeof PRODUCT_PANEL_SOURCE)[keyof typeof PRODUCT_PANEL_SOURCE];
 
 /**
- * Which settings page a front-page row opened. It repeats the settings
+ * Which settings page a row of the Settings sidebar opened. It repeats the settings
  * package's own page set rather than importing it, because that package reads
  * this file for a setting's counted value and the edge would close a loop; the
  * desktop closes the gap with a total `Record` bridge, so a new page does not
@@ -217,6 +217,11 @@ export const PRODUCT_SETTINGS_VIEW = {
   INTEGRATIONS: "integrations",
   API_KEYS: "api_keys",
   PLAN_TEMPLATE: "plan_template",
+  WORKSPACE: "workspace",
+  ACCOUNT: "account",
+  NOTIFICATIONS: "notifications",
+  THIS_MAC: "this_mac",
+  ABOUT: "about",
 } as const;
 
 export type ProductSettingsView =
