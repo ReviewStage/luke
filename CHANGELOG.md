@@ -192,6 +192,8 @@ Anthropic refuses runs again at standard speed, and its turn's card says so.
   ([#2523](https://github.com/ReviewStage/luke/pull/2523))
 - A file is named one way wherever it stands, hangs its card, and opens in the
   side panel ([#2559](https://github.com/ReviewStage/luke/pull/2559))
+- Copy a link to a plan section from its heading's ⋯, and a mention of it in
+  the plan opens it ([#2577](https://github.com/ReviewStage/luke/pull/2577))
 - A page tab's code toggle shows its version's HTML as a File tab draws a file
   ([#2487](https://github.com/ReviewStage/luke/pull/2487))
 - An agent's Changes tab is kept, pinned, and named for its agent like the
@@ -200,7 +202,8 @@ Anthropic refuses runs again at standard speed, and its turn's card says so.
 - A press on a skill's chip opens its SKILL.md, and a coding agent's Loaded
   skill row names the skill as /name with its card
   ([#2473](https://github.com/ReviewStage/luke/pull/2473),
-  [#2557](https://github.com/ReviewStage/luke/pull/2557))
+  [#2557](https://github.com/ReviewStage/luke/pull/2557),
+  [#2578](https://github.com/ReviewStage/luke/pull/2578))
 - The Call tab stands a call's first ask and opening look-around where they
   happened, and folds a spoken turn's words with its work
   ([#2433](https://github.com/ReviewStage/luke/pull/2433),
