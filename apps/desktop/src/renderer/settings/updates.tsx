@@ -67,14 +67,15 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
 }
 
 /**
- * Where the build stands against the latest release. It stays below the pages
- * while the sidebar's update row carries the news outside.
+ * Where the build stands against the latest release, and what it changed: the
+ * About page's one group, while the sidebar's update row carries the news
+ * outside.
  */
 export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const { tell } = useAct();
   const row = updateRow(control.update, control.build);
   return (
-    <SettingsGroup title="Updates">
+    <SettingsGroup>
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
         <span className="settings-copy">
           <span className="settings-name">

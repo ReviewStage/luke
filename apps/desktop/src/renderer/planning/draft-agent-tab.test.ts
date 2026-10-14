@@ -155,7 +155,7 @@ test("a Start GitHub refused points to Settings, and Open Settings opens the acc
   await tab.press("Open Settings");
 
   assert.deepEqual(tab.links, [
-    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
   ]);
   assert.deepEqual(tab.starts, [DRAFT.task]);
 });

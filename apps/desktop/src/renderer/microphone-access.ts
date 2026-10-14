@@ -4,7 +4,7 @@ import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio
 /**
  * Why voice as a whole is off: nothing it can run on stands, which since
  * LUKE-205 means no signed-in account carrying hosted voice. One sentence,
- * shared by every mark that stands for the same absence — the front page's
+ * shared by every mark that stands for the same absence — the sidebar's
  * Voice row, the Voice page's own heading, and the shortcut rows whose chords
  * answer nothing without it — so it never reads as two different problems.
  */
@@ -86,7 +86,7 @@ export function microphoneAccessRow(input: {
 }
 
 /**
- * Why the front page's Voice row wears its exclamation mark, or nothing while
+ * Why the Settings sidebar's Voice row wears its exclamation mark, or nothing while
  * voice is ready to run. One sentence naming the first thing still missing —
  * the key before the microphone, because the key is what makes the microphone
  * worth asking for — worded for the hover and the screen reader alike. The

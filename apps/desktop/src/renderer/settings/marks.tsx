@@ -12,7 +12,7 @@ export function ChangedMark(): React.JSX.Element {
 /**
  * The small mark beside a name while the feature it belongs to still needs a
  * hand — the same mark wherever it stands, so one urgency reads the same on
- * the front page's Voice row, on the row that supplies the missing thing, and
+ * the Settings sidebar's Voice row, on the row that supplies the missing thing, and
  * on a shortcut whose key answers nothing until it is supplied. A statement,
  * not a control: the words are the hover's and the screen reader's, and the
  * page around it is where the missing thing is explained.
