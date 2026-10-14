@@ -441,3 +441,54 @@ function read() {
       chat.answer.messages.find((message) => message.seq === seq)?.channelId,
   };
 }
+
+test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words under its head", () => {
+  const read = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(read);
+  const answer = {
+    ...read.answer,
+    messages: read.answer.messages.map((message) =>
+      message.seq === 43
+        ? {
+            ...message,
+            blocks: [
+              {
+                type: "link" as const,
+                url: "https://github.com/acme/relay/pull/214",
+                label: "#214",
+              },
+            ],
+          }
+        : message,
+    ),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: NOTICE,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: {
+            models: [],
+            chat: {
+              chat: answer,
+              names: chatNames([], read.agents, undefined),
+              onOpen: () => undefined,
+            },
+          },
+        }),
+      ),
+    ),
+  );
+  assert.equal(
+    container.querySelector(".chat-notice-words")?.textContent?.trim(),
+    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
+  );
+});
