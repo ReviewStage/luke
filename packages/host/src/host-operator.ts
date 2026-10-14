@@ -137,6 +137,17 @@ import {
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
 } from "@luke/features/planning-view";
+import {
+  type TerminalCreatedActAnswer,
+  type TerminalResumedActAnswer,
+  type TerminalStateEvent,
+  type TerminalsActAnswer,
+  terminalCreatedActAnswerSchema,
+  terminalOutputEventSchema,
+  terminalResumedActAnswerSchema,
+  terminalStateEventSchema,
+  terminalsActAnswerSchema,
+} from "@luke/features/terminal-view";
 import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@luke/gateway";
 import {
   carried,
@@ -165,6 +176,7 @@ import {
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
+import { Base64 } from "effect/encoding";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -411,6 +423,50 @@ export interface HostOperator {
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onPlanningChanged(listener: (view: PlanningView) => void): () => void;
+  /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
+  terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
+  terminalCreate(params: {
+    agentId: string;
+    title?: string | undefined;
+  }): Effect.Effect<TerminalCreatedActAnswer | undefined>;
+  terminalRename(params: {
+    agentId: string;
+    terminalId: string;
+    title: string;
+  }): Effect.Effect<TerminalsActAnswer | undefined>;
+  terminalKill(params: {
+    agentId: string;
+    terminalId: string;
+  }): Effect.Effect<TerminalsActAnswer | undefined>;
+  terminalResume(params: { agentId: string }): Effect.Effect<TerminalResumedActAnswer | undefined>;
+  /** One shell attached under the connection id given; whether the host took the attach. */
+  terminalConnect(params: {
+    connectionId: string;
+    agentId: string;
+    terminalId: string;
+    cols: number;
+    rows: number;
+  }): Effect.Effect<boolean>;
+  terminalInput(params: { connectionId: string; data: string }): Effect.Effect<void>;
+  terminalResize(params: { connectionId: string; cols: number; rows: number }): Effect.Effect<void>;
+  terminalAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
+  terminalDisconnect(params: { connectionId: string }): Effect.Effect<void>;
+  /** Every waiting connection opened again now, as after the Mac woke. */
+  terminalWake(): Effect.Effect<void>;
+  /** What an attached shell printed, by its connection. */
+  onTerminalOutput(
+    listener: (output: { connectionId: string; data: Uint8Array }) => void,
+  ): () => void;
+  /** How an attached shell's connection stands, by its connection. */
+  onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
+}
+
+/** The host's answer to a terminal call, read by its schema; none where the host refused it or the shape is not read. */
+function terminalAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) {
+  return (answer: GatewayCallResult): Answer | undefined =>
+    answer.ok
+      ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+      : undefined;
 }
 
 interface HostOperatorOptions {
@@ -1167,6 +1223,96 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           Result.getOrUndefined(
             readEither(planningViewSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
+        listener,
+      ),
+    terminalList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: params.agentId }),
+        terminalAnswer(terminalsActAnswerSchema),
+      ),
+    terminalCreate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_CREATE, {
+          agentId: params.agentId,
+          ...(params.title === undefined ? undefined : { title: params.title }),
+        }),
+        terminalAnswer(terminalCreatedActAnswerSchema),
+      ),
+    terminalRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_RENAME, {
+          agentId: params.agentId,
+          terminalId: params.terminalId,
+          title: params.title,
+        }),
+        terminalAnswer(terminalsActAnswerSchema),
+      ),
+    terminalKill: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_KILL, {
+          agentId: params.agentId,
+          terminalId: params.terminalId,
+        }),
+        terminalAnswer(terminalsActAnswerSchema),
+      ),
+    terminalResume: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_RESUME, { agentId: params.agentId }),
+        terminalAnswer(terminalResumedActAnswerSchema),
+      ),
+    terminalConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TERMINALS_CONNECT, {
+          connectionId: params.connectionId,
+          agentId: params.agentId,
+          terminalId: params.terminalId,
+          cols: params.cols,
+          rows: params.rows,
+        }),
+        (answer) => answer.ok,
+      ),
+    terminalInput: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TERMINALS_INPUT, {
+          connectionId: params.connectionId,
+          data: params.data,
+        }),
+      ),
+    terminalResize: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TERMINALS_RESIZE, {
+          connectionId: params.connectionId,
+          cols: params.cols,
+          rows: params.rows,
+        }),
+      ),
+    terminalAck: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TERMINALS_ACK, {
+          connectionId: params.connectionId,
+          bytes: params.bytes,
+        }),
+      ),
+    terminalDisconnect: (params) =>
+      fire(client.call(GATEWAY_METHOD.TERMINALS_DISCONNECT, { connectionId: params.connectionId })),
+    terminalWake: () => fire(client.call(GATEWAY_METHOD.TERMINALS_WAKE)),
+    onTerminalOutput: (listener) =>
+      on(
+        GATEWAY_EVENT.TERMINAL_OUTPUT,
+        (payload) => {
+          const output = Result.getOrUndefined(readEither(terminalOutputEventSchema)(payload));
+          if (output === undefined) return undefined;
+          const bytes = Base64.decode(output.data);
+          return Result.isSuccess(bytes)
+            ? { connectionId: output.connectionId, data: bytes.success }
+            : undefined;
+        },
+        listener,
+      ),
+    onTerminalState: (listener) =>
+      on(
+        GATEWAY_EVENT.TERMINAL_STATE,
+        (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
         listener,
       ),
     onSessionReplayChanged: (listener) =>

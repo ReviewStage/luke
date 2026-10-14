@@ -4,6 +4,7 @@ import {
   HostedIntegrationsClient,
   HostedMacCommandClient,
   HostedPlanClient,
+  HostedTerminalClient,
   HostedWorkspaceClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
@@ -30,6 +31,7 @@ import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
+import { composeTerminals } from "./compose-terminals.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
@@ -44,6 +46,7 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
+import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
 
 /** The seven concerns, by the name each is built under. */
 const HOST_CONCERN = {
@@ -54,6 +57,7 @@ const HOST_CONCERN = {
   CODING_AGENTS: "codingAgents",
   INTEGRATIONS: "integrations",
   MAC_COMMANDS: "macCommands",
+  TERMINALS: "terminals",
 } as const;
 
 type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -179,6 +183,15 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
+    const terminals = yield* composeTerminals({
+      kernel,
+      account,
+      client: new HostedTerminalClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+      openSocket: openTerminalSocketOverWs,
+    });
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
@@ -200,6 +213,7 @@ export const hostAssemblyLayer: Layer.Layer<
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
       yield* planning.reset;
+      yield* terminals.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -228,6 +242,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
+      [HOST_CONCERN.TERMINALS]: terminals,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

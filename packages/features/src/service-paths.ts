@@ -408,3 +408,18 @@ export function agentPullRequestPath(agentId: string): string {
 export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
 }
+
+/** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
+export function agentTerminalsPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/terminals`;
+}
+
+/** One of an agent's shells: named anew (PATCH) or ended (DELETE), each answering the shells as they stand after. */
+export function agentTerminalPath(agentId: string, terminalId: string): string {
+  return `${agentTerminalsPath(agentId)}/${encodeURIComponent(terminalId)}`;
+}
+
+/** Resumes one agent's stopped sandbox (POST), on the developer's click and nothing else. */
+export function agentSandboxResumePath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/sandbox/resume`;
+}

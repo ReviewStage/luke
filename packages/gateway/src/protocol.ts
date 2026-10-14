@@ -148,6 +148,25 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  /**
+   * A coding agent's terminals (`@luke/features/terminal-view`): its shells
+   * listed, started, named, and ended, and its sandbox resumed on the
+   * developer's click; and a shell attached for one panel under a
+   * connection id the desktop minted, typed into, resized, acked, woken
+   * after a sleep, and detached. What a shell prints is heard as
+   * `TERMINAL_OUTPUT` events, never answered.
+   */
+  TERMINALS_LIST: "terminals.list",
+  TERMINALS_CREATE: "terminals.create",
+  TERMINALS_RENAME: "terminals.rename",
+  TERMINALS_KILL: "terminals.kill",
+  TERMINALS_RESUME: "terminals.resume",
+  TERMINALS_CONNECT: "terminals.connect",
+  TERMINALS_INPUT: "terminals.input",
+  TERMINALS_RESIZE: "terminals.resize",
+  TERMINALS_ACK: "terminals.ack",
+  TERMINALS_DISCONNECT: "terminals.disconnect",
+  TERMINALS_WAKE: "terminals.wake",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -433,6 +452,10 @@ export const GATEWAY_EVENT = {
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's plans, active plan, and document, whole, whenever a read moved them. */
   PLANNING_CHANGED: "planning.changed",
+  /** What an attached shell printed, named by its connection, for the one panel that connection's port reaches. */
+  TERMINAL_OUTPUT: "terminal.output",
+  /** How an attached shell's connection stands, named by its connection. */
+  TERMINAL_STATE: "terminal.state",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
