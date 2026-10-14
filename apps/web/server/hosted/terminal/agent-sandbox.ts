@@ -30,15 +30,15 @@ import {
 import { killTerminal, listTerminals, renameTerminal, startTerminal, terminalsOf } from "./tmux.js";
 
 /** Vercel's sandbox states, read as the tab reads them. */
-const STATE_OF_STATUS: Readonly<Record<string, SandboxState>> = {
-  running: SANDBOX_STATE.RUNNING,
-  pending: SANDBOX_STATE.STARTING,
-  stopping: SANDBOX_STATE.STOPPED,
-  snapshotting: SANDBOX_STATE.STOPPED,
-  stopped: SANDBOX_STATE.STOPPED,
-  failed: SANDBOX_STATE.STOPPED,
-  aborted: SANDBOX_STATE.STOPPED,
-};
+const STATE_OF_STATUS = new Map<string, SandboxState>([
+  ["running", SANDBOX_STATE.RUNNING],
+  ["pending", SANDBOX_STATE.STARTING],
+  ["stopping", SANDBOX_STATE.STOPPED],
+  ["snapshotting", SANDBOX_STATE.STOPPED],
+  ["stopped", SANDBOX_STATE.STOPPED],
+  ["failed", SANDBOX_STATE.STOPPED],
+  ["aborted", SANDBOX_STATE.STOPPED],
+]);
 
 /** Why a shell could not be had: the sandbox is not running, as it stands, or the shell named is not there. */
 export const SHELL_REFUSAL = {
@@ -76,7 +76,7 @@ export class AgentSandbox extends Context.Service<AgentSandbox, AgentSandboxServ
 /** Where a listed sandbox stands; none listed is one the agent has not opened yet. */
 function stateOf(sandbox: ListedSandbox | undefined): SandboxState {
   if (sandbox === undefined) return SANDBOX_STATE.STARTING;
-  return STATE_OF_STATUS[sandbox.status ?? ""] ?? SANDBOX_STATE.STOPPED;
+  return STATE_OF_STATUS.get(sandbox.status ?? "") ?? SANDBOX_STATE.STOPPED;
 }
 
 /** The service over the REST calls the API makes. */

@@ -109,10 +109,11 @@ const FoundSandboxSchema = Schema.Struct({
   ),
 });
 
-/** One line of a command's stream: the command, which carries its exit code once it ended, or a line it printed. */
+/** One line of a command's stream: the command, which carries its exit code once it ended, a line it printed, or the stream's own error. */
 const CommandLineSchema = Schema.Union([
   Schema.Struct({ command: Schema.Struct({ exitCode: Schema.NullOr(Schema.Number) }) }),
-  Schema.Struct({ stream: Schema.String, data: Schema.Unknown }),
+  Schema.Struct({ stream: Schema.Literals(["stdout", "stderr"]), data: Schema.String }),
+  Schema.Struct({ stream: Schema.Literal("error"), data: Schema.Unknown }),
 ]);
 
 const readClaims = readEither(OidcClaimsSchema, { excess: EXCESS_KEYS.DROP });
@@ -185,7 +186,7 @@ function commandRunOf(text: string): CommandRun | undefined {
       continue;
     }
     if (value.stream === "error") return undefined;
-    if (value.stream === "stdout" && typeof value.data === "string") stdout += value.data;
+    if (value.stream === "stdout") stdout += value.data;
   }
   return exitCode === undefined ? undefined : { exitCode, stdout };
 }
