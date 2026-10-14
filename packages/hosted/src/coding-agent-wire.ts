@@ -100,6 +100,22 @@ export const CONTEXT_WINDOW = {
 
 export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW];
 
+/**
+ * What an agent started for a plan's rollout does there: a builder writes
+ * the one pull request at its position, and the keeper, one per rollout and
+ * at no position, owns the stack's git structure (linking, restacking,
+ * retargeting, and merging on the developer's word) and writes no feature
+ * code.
+ */
+export const ROLLOUT_ROLE = {
+  BUILDER: "builder",
+  KEEPER: "keeper",
+} as const;
+
+export type RolloutRole = (typeof ROLLOUT_ROLE)[keyof typeof ROLLOUT_ROLE];
+
+export const rolloutRoleSchema = EffectSchema.Literals(Object.values(ROLLOUT_ROLE));
+
 /** A context window as a choice names it. */
 export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
@@ -424,6 +440,16 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   archivedAt: EffectSchema.optionalKey(countedNumber),
   /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
+  /**
+   * The pull request of the plan's rollout the agent works, counted from
+   * one. Absent for an agent started outside a rollout, and from a service
+   * older than the rollout.
+   */
+  position: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  /** What the agent does for the plan's rollout; absent for an agent started outside one. */
+  role: EffectSchema.optionalKey(rolloutRoleSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

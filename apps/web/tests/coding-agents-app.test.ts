@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
-import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { createCodingAgent, readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
 import {
@@ -26,6 +26,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  ROLLOUT_ROLE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_BLOCK,
@@ -534,6 +535,39 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
         );
         assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a rollout's builder lists first, carrying its position and role, and an agent outside the rollout carries neither",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const plain = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, plain);
+        // A Start naming a position is the rollout's to make, so the worker is written to the store directly.
+        yield* createCodingAgent(owner, {
+          planId: plan.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: RELAY_FULL_NAME,
+          planSnapshot: SNAPSHOT,
+          task: null,
+          role: ROLLOUT_ROLE.BUILDER,
+          position: 1,
+        });
+
+        const listed = yield* ask(request(PLAN_AGENTS, owner, { method: "GET", id: plan.id }));
+        assert.deepEqual(
+          readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).agents.map(
+            (each) => [each.position, each.role],
+          ),
+          [
+            [1, ROLLOUT_ROLE.BUILDER],
+            [undefined, undefined],
+          ],
+        );
       }),
   );
 

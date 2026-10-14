@@ -173,6 +173,8 @@ export function codingAgentSummary(
     ...(agent.disabledServers.length === 0
       ? undefined
       : { disabledServers: agent.disabledServers }),
+    ...(agent.position === null ? undefined : { position: agent.position }),
+    ...(agent.role === null ? undefined : { role: agent.role }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
