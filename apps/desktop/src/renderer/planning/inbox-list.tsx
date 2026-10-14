@@ -39,15 +39,18 @@ import { cardTitle } from "./tool-call-model";
  * pane beside the list to show. The mark hangs the agent's tab's card
  * while the pointer rests on it (`agent-ref.tsx`), where the plan's row
  * names the agent, and leaves the press to its row, whose pane opens the
- * agent. An item that needs the developer's answer reads as unread mail
- * does, its title in the heavier weight and the primary ink, as every
- * unread row and tab in the window reads, in either grouping and filtered
- * or not; an answered one is settled, in the body's weight. A folded plan
+ * agent. An item that needs the developer's answer reads as a mail app's
+ * unread mail does, a blue dot past its time beside its title in the
+ * weight every unread row and tab reads in, in either grouping and
+ * filtered or not; an answered one is settled, in the body's weight with
+ * no dot. Only an item waiting on the developer wears the dot: a plan or a
+ * tab with something unseen on it is unread, not waiting, and wears the
+ * weight alone. A folded plan
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
- * developer, the way a mail app shows unread mail only, its glyph a dot
- * in a ring, filled blue while pressed; and one whose menu says
+ * developer, the way a mail app shows unread mail only, its glyph the
+ * rows' dot in a ring, filled blue while pressed; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
  * checked; both are kept across launches. The plan page's own Inbox lists
  * one plan's items, so its list has neither head nor groups. Either list
@@ -94,7 +97,7 @@ function ItemGlyph({
   );
 }
 
-/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer marked unread, and said to need them. */
+/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the unread weight with a dot past its time. */
 function ItemRow({
   listed,
   chosen,
@@ -127,8 +130,12 @@ function ItemRow({
               <ItemGlyph plan={plan} agentId={item.agentId} models={models} />
             </span>
             <span className="sidebar-plan-name">{title}</span>
-            {needsYou ? <span className="visually-hidden">{NEEDS_YOU.LABEL}</span> : null}
             <span className="sidebar-plan-time">{sinceText(item.updatedAt, now)}</span>
+            {needsYou ? (
+              <span className="inbox-row-dot">
+                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+              </span>
+            ) : null}
           </span>
         </button>
       </Tooltip>

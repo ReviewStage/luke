@@ -586,11 +586,12 @@ body,
   font-size: 13px;
 }
 
-/* The one unread mark: what arrived unseen, a plan saved since the developer
-   last looked at it on this Mac, an Inbox item that needs them, a tab that
-   moved while another was chosen, reads in the heavier weight and the
-   primary ink until they look, as a mail app's unread mail and a chat app's
-   channels do. There is no dot, so no row keeps a column for one. */
+/* The one unread mark: what the developer has not seen, a plan saved since
+   they last looked at it on this Mac, a tab that something arrived on while
+   another was chosen, and an Inbox item that needs them, reads in the
+   heavier weight and the primary ink until they look, as a chat app's
+   channels do. Only what waits on them, the Inbox item, also wears the
+   blue dot (`.inbox-row-dot`). */
 .sidebar-plan[data-unread="true"] .sidebar-plan-name,
 .tab[data-unread="true"] .tab-label {
   color: var(--text-primary);
@@ -2571,6 +2572,32 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-6);
 }
 
+/* An item that needs the developer wears a mail app's unread dot in the system
+   blue, beside its title's unread weight; an answered one wears neither. The
+   dot is the window's one mark for what waits on the developer, as a plan or
+   a tab with something unseen on it is unread, not waiting. The dots stand
+   in a column of their own past the times, kept on every row, so the times
+   line up whether a row wears one or not. */
+.inbox-row {
+  --inbox-dot: 7px;
+}
+
+.inbox-row .sidebar-plan-line {
+  position: relative;
+  padding-right: calc(var(--inbox-dot) + var(--space-6));
+}
+
+.inbox-row-dot {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--inbox-dot);
+  height: var(--inbox-dot);
+  border-radius: 50%;
+  background: var(--message-sent);
+  transform: translateY(-50%);
+}
+
 /* The pane's words under the agent's byline start where its name does, past its mark. */
 .inbox-indent {
   padding-left: calc(var(--control-glyph) + var(--glyph-gap));
@@ -3348,8 +3375,9 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
-/* Needs you's glyph is a dot in a ring: the dot filled in the glyph's ink,
-   and in the system blue while the button is pressed. */
+/* Needs you's glyph is the rows' dot in a ring: the dot filled in the
+   glyph's ink, and in the rows' blue while the button is pressed, so the
+   filter says which rows it keeps. */
 .inbox-needs-you-only svg circle[r="1"] {
   r: 3.5px;
   fill: currentColor;
