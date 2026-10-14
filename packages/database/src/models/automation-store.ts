@@ -229,7 +229,10 @@ export type AutomationAccess = (typeof AUTOMATION_ACCESS)[keyof typeof AUTOMATIO
 const automationAccessSchema = Schema.Literals(Object.values(AUTOMATION_ACCESS));
 
 /** The condition that the account is a member of the automation's workspace, in one of `roles` where it names any. */
-function memberOfAutomationWorkspace(userId: string, roles?: readonly WorkspaceRole[]): SQL {
+function memberOfAutomationWorkspace(
+  userId: string | typeof automation.userId,
+  roles?: readonly WorkspaceRole[],
+): SQL {
   return exists(
     queryBuilder
       .select({ id: member.id })
@@ -242,7 +245,13 @@ function memberOfAutomationWorkspace(userId: string, roles?: readonly WorkspaceR
             sql`coalesce(${automation.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${automation.planId}))`,
           ),
           eq(member.userId, userId),
-          roles === undefined ? undefined : inArray(member.role, [...roles]),
+          // The plugin's role text may name several roles, comma-separated, as `roleOf` reads it.
+          roles === undefined
+            ? undefined
+            : sql`string_to_array(replace(${member.role}, ' ', ''), ',') && array[${sql.join(
+                roles.map((role) => sql`${role}`),
+                sql`, `,
+              )}]::text[]`,
         ),
       ),
   );
@@ -603,7 +612,6 @@ const lockDue = SqlSchema.findAll({
             eq(automation.enabled, true),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.SCHEDULE),
             lte(automation.nextRunAt, now),
-            OWNER_REACHES_PLAN,
           ),
         )
         .orderBy(asc(automation.nextRunAt), asc(automation.id))
@@ -1043,6 +1051,25 @@ export function expireQueuedAutomationRuns(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
   );
+}
+
+const findCreatorMembership = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (automationId) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id })
+        .from(automation)
+        .where(
+          and(eq(automation.id, automationId), memberOfAutomationWorkspace(automation.userId)),
+        ),
+    ),
+});
+
+/** Whether the automation's creator is a member of its workspace still, which a run that starts as them needs. */
+export function creatorStillMember(automationId: string): PlanStoreEffect<boolean> {
+  return Effect.map(findCreatorMembership(automationId), (rows) => rows.length > 0);
 }
 
 /**

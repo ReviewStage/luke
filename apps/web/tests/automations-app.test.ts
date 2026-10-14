@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { createPlan } from "@sidecar/database/models/plan-store";
+import { member as memberTable } from "@sidecar/database/schemas/auth";
 import { automation as automationTable } from "@sidecar/database/schemas/automation";
 import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
 import { getTestDB } from "@sidecar/database/testing";
@@ -590,7 +591,14 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const member = yield* openGithubUser();
         const admin = yield* openGithubUser();
         yield* joinWorkspace(plan.workspaceId, member, WORKSPACE_ROLE.MEMBER);
-        yield* joinWorkspace(plan.workspaceId, admin, WORKSPACE_ROLE.ADMIN);
+        yield* joinWorkspace(plan.workspaceId, admin, WORKSPACE_ROLE.MEMBER);
+        // The plugin's role text may name several roles; this admin is one only among them.
+        yield* Database.use((db) =>
+          db
+            .update(memberTable)
+            .set({ role: `${WORKSPACE_ROLE.MEMBER},${WORKSPACE_ROLE.ADMIN}` })
+            .where(eq(memberTable.userId, admin)),
+        );
         const { ask } = yield* standing(
           new Map([
             [`Bearer ${owner}`, owner],

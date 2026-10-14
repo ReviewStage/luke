@@ -7,6 +7,7 @@ import {
   automationRunsSince,
   claimAutomationRun,
   claimedRunsStarting,
+  creatorStillMember,
   failClaimedRun,
   readAutomationToRun,
   type StrandedRun,
@@ -218,6 +219,7 @@ const heldBack = Effect.fnUntraced(function* (automation: Automation, now: numbe
 /** What the locked look at a run came to: held back by a guard, claimed for its start, or settled by another act already. */
 const DECISION = {
   HELD: "held",
+  REFUSED: "refused",
   CLAIMED: "claimed",
   TAKEN: "taken",
 } as const;
@@ -225,6 +227,11 @@ const DECISION = {
 type Decision =
   | {
       readonly kind: typeof DECISION.HELD;
+      readonly reason: AutomationRunReason;
+      readonly automation: Automation;
+    }
+  | {
+      readonly kind: typeof DECISION.REFUSED;
       readonly reason: AutomationRunReason;
       readonly automation: Automation;
     }
@@ -248,6 +255,17 @@ const decide = (automationId: string, run: AutomationRun) =>
       const read = yield* readAutomationToRun(automationId);
       if (Option.isNone(read)) return { kind: DECISION.TAKEN } satisfies Decision;
       const automation = read.value;
+      // A run starts as its creator, so one whose creator left the workspace fails, saying so, and the next firing tries again.
+      if (!(yield* creatorStillMember(automationId))) {
+        const reason = AUTOMATION_RUN_REASON.CREATOR_LEFT;
+        const settled = yield* settleAutomationRun(run.id, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason,
+        });
+        return settled
+          ? ({ kind: DECISION.REFUSED, reason, automation } satisfies Decision)
+          : ({ kind: DECISION.TAKEN } satisfies Decision);
+      }
       // A run queued before its automation was paused starts nothing; the owner's own "Run now" still runs.
       const paused = !automation.enabled && run.firing.kind !== AUTOMATION_FIRING.MANUAL;
       // A GitHub event is about the repository it named; a plan moved to another since starts nothing.
@@ -319,6 +337,14 @@ const outcomeOf = Effect.fnUntraced(function* (eveFor: EveForAccount, run: Autom
       return {
         outcome: {
           status: AUTOMATION_RUN_STATUS.SKIPPED,
+          reason: decision.reason,
+        } satisfies AutomationRunOutcome,
+        automation: decision.automation,
+      };
+    case DECISION.REFUSED:
+      return {
+        outcome: {
+          status: AUTOMATION_RUN_STATUS.FAILED,
           reason: decision.reason,
         } satisfies AutomationRunOutcome,
         automation: decision.automation,

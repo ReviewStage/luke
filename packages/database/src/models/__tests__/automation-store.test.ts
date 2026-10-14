@@ -284,7 +284,7 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "the schedules due are claimed once, each moved on to its next instant, one missed by more than the grace is moved on without a run, and neither a webhook nor a leaver's schedule is claimed",
+    "the schedules due are claimed once, each moved on to its next instant, one missed by more than the grace is moved on without a run, a webhook's is not claimed, and a leaver's is claimed to fail as its run starts",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -327,7 +327,9 @@ it.layer(getTestDB())("the automation store", (it) => {
         const second = yield* claimDueAutomations(claim);
 
         assert.deepEqual(
-          first.map((each) => [each.automation.id, each.run.firing]),
+          first
+            .filter((each) => each.automation.userId === owner)
+            .map((each) => [each.automation.id, each.run.firing]),
           [[due.id, { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: due.nextRunAt?.getTime() }]],
         );
         assert.deepEqual(second, [], "a claim after finds nothing left due");
@@ -348,10 +350,10 @@ it.layer(getTestDB())("the automation store", (it) => {
           ),
         ]);
         assert.deepEqual(webhookRuns, [], "a due instant left on a webhook fires nothing");
-        assert.deepEqual(
-          leaverRuns,
-          [],
-          "nor does a schedule whose owner left the plan's workspace",
+        assert.equal(
+          leaverRuns.length,
+          1,
+          "a schedule whose owner left still fires, so its run fails and says why",
         );
 
         // A second claim that read the row at its old instant records no second run.
