@@ -43,6 +43,7 @@ import {
 } from "./hosted/http-effect.js";
 import { MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH } from "./hosted/maintenance-bounds.js";
 import {
+  checkFastAccess,
   checkProviderKey,
   PROVIDER_KEY_CHECK,
   providerKeyHint,
@@ -163,10 +164,13 @@ const saveEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const checked = yield* checkProviderKey(provider, key);
   if (checked !== PROVIDER_KEY_CHECK.ACCEPTED) return yield* keysResponse(userId, ring, checked);
+  // An Anthropic key is asked about fast mode too, which the catalog offers by; OpenAI has none Luke runs.
+  const fastAccess =
+    provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? yield* checkFastAccess(key) : undefined;
   const sealed = sealProviderKey(ring, { userId, provider }, key);
   const now = yield* DateTime.nowAsDate;
   yield* hostedStoreOrUnavailable(
-    saveProviderKey(userId, provider, sealed, providerKeyHint(key), now),
+    saveProviderKey(userId, provider, sealed, providerKeyHint(key), fastAccess ?? null, now),
   );
   return yield* keysResponse(userId, ring);
 });

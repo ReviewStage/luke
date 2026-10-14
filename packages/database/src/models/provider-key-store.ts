@@ -1,4 +1,6 @@
 import {
+  FAST_ACCESS,
+  type FastAccess,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeyProvider,
@@ -22,11 +24,14 @@ import type { SealedProviderKey } from "./provider-key-seal.js";
  * and a row read here is opened by its caller with the ring the
  * environment holds. A save replaces the provider's row whole, as a new
  * key added now and verified now, since a key is saved only once its
- * provider accepted it. A status is written against the sealed key a step
+ * provider accepted it, with whether its organization may run fast mode as
+ * the save's own fast request found it. A status is written against the sealed key a step
  * ran on, so a step on a key since replaced marks nothing of its successor.
  */
 
 const ProviderSchema = Schema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
+
+const FastAccessSchema = Schema.Literals(Object.values(FAST_ACCESS));
 
 const SealedRowSchema = Schema.Struct({
   provider: ProviderSchema,
@@ -36,6 +41,7 @@ const SealedRowSchema = Schema.Struct({
   hint: Schema.String,
   status: Schema.Literals(Object.values(PROVIDER_KEY_STATUS)),
   statusAt: InstantColumnSchema,
+  fastAccess: Schema.NullOr(FastAccessSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -57,6 +63,7 @@ const ROW_COLUMNS = {
   hint: accountProviderKey.hint,
   status: accountProviderKey.status,
   statusAt: accountProviderKey.statusAt,
+  fastAccess: accountProviderKey.fastAccess,
   createdAt: accountProviderKey.createdAt,
 } as const;
 
@@ -92,6 +99,7 @@ const upsertRow = SqlSchema.void({
     sealedDataKey: Schema.String,
     sealedKey: Schema.String,
     hint: Schema.String,
+    fastAccess: Schema.NullOr(FastAccessSchema),
     now: Schema.Date,
   }),
   execute: (write) => {
@@ -102,6 +110,7 @@ const upsertRow = SqlSchema.void({
       hint: write.hint,
       status: PROVIDER_KEY_STATUS.VERIFIED,
       statusAt: write.now,
+      fastAccess: write.fastAccess,
       createdAt: write.now,
     };
     return Database.use((db) =>
@@ -185,15 +194,16 @@ export function listProviderKeyRows(userId: string): PlanStoreEffect<readonly Pr
   return findRows(userId);
 }
 
-/** Keeps the provider's key for the account, replacing the one it held, as added and verified now. */
+/** Keeps the provider's key for the account, replacing the one it held, as added and verified now, with its fast access where the save found it. */
 export function saveProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
   sealed: SealedProviderKey,
   hint: string,
+  fastAccess: FastAccess | null,
   now: Date,
 ): PlanStoreEffect<void> {
-  return upsertRow({ userId, provider, ...sealed, hint, now });
+  return upsertRow({ userId, provider, ...sealed, hint, fastAccess, now });
 }
 
 /** Removes the provider's key from the account; removing one it does not hold moves nothing. */

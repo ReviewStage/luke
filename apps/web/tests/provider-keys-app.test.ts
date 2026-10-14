@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { listProviderKeyRows } from "@sidecar/database/models/provider-key-store";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
+  FAST_ACCESS,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
@@ -17,7 +19,7 @@ import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import { eq } from "drizzle-orm";
-import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
+import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -29,7 +31,8 @@ import { providerKeysApp } from "../server/provider-keys-app";
  * The account's own provider keys, answered by the group the way a function
  * answers them, over a real dialect and a provider faked at its HTTP door:
  * a key is kept only once its provider accepts it, kept sealed, answered
- * only as a hint, and never logged; the bearer names the account and
+ * only as a hint, and never logged, an Anthropic key with whether its
+ * organization may run fast mode; the bearer names the account and
  * nothing else does.
  *
  * Synthetic accounts, bearers, and keys throughout; the key-encryption keys
@@ -53,6 +56,19 @@ const PROVIDER_URL = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "https://api.anthropic.com/v1/models?limit=1",
   [PROVIDER_KEY_PROVIDER.OPENAI]: "https://api.openai.com/v1/models",
 } as const;
+
+/** Where Anthropic is asked whether a key's organization may run fast mode. */
+const FAST_CHECK_URL = "https://api.anthropic.com/v1/messages";
+
+/** Anthropic's refusal of a fast request for an organization fast mode was never enabled for, as production met it. */
+const FAST_LIMIT_ZERO = {
+  type: "error",
+  error: {
+    type: "rate_limit_error",
+    message:
+      "This request would exceed your organization's rate limit of 0 fast mode input tokens per minute (model: claude-opus-5-5).",
+  },
+};
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   openAiKey: undefined,
@@ -87,8 +103,18 @@ function keyOf(headers: Headers): string {
   return headers.get("x-api-key") ?? headers.get("authorization")?.replace(/^Bearer /u, "") ?? "";
 }
 
+/** What a fast check asks Anthropic for: the model, at fast speed, for one token. */
+const readFastCheck = Schema.decodeUnknownSync(
+  Schema.Struct({ model: Schema.String, max_tokens: Schema.Number, speed: Schema.String }),
+);
+
+/** How the fake Anthropic answers a fast request, per key: run where the key is not named here. */
+type FastAnswers = ReadonlyMap<string, Response>;
+
 /** Two accounts behind their own bearers, a provider, and the group answering under the ring given. */
-const openAccounts = (options: { ring?: string; provider?: ProviderAnswers } = {}) =>
+const openAccounts = (
+  options: { ring?: string; provider?: ProviderAnswers; fast?: FastAnswers } = {},
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -101,7 +127,9 @@ const openAccounts = (options: { ring?: string; provider?: ProviderAnswers } = {
     ]);
     const answers = options.provider ?? ACCEPTING;
     const provider = recordingHttpClient((request) =>
-      jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
+      request.url === FAST_CHECK_URL
+        ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))
+        : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
     );
     const logged: string[] = [];
     const app = providerKeysApp({
@@ -211,9 +239,70 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         for (const answered of [saved, read]) assert.ok(!answered.text.includes(KEY.ANTHROPIC));
         assert.deepEqual(
           checks.map((check) => [check.url, keyOf(check.headers)]),
-          [[PROVIDER_URL[PROVIDER_KEY_PROVIDER.ANTHROPIC], KEY.ANTHROPIC]],
-          "the provider is asked once, with the key",
+          [
+            [PROVIDER_URL[PROVIDER_KEY_PROVIDER.ANTHROPIC], KEY.ANTHROPIC],
+            [FAST_CHECK_URL, KEY.ANTHROPIC],
+          ],
+          "the provider is asked once whether it accepts the key and once about fast mode, with the key",
         );
+      }),
+  );
+
+  it.effect(
+    "an Anthropic key is kept with whether its organization runs fast mode: enabled where a fast request runs, not enabled at a fast limit of 0, and unsaid where the answer says neither; an OpenAI key is never asked",
+    () =>
+      Effect.gen(function* () {
+        const notEnabled = "sk-ant-api03-no-fast-00000000000000000nfst";
+        const unsaid = "sk-ant-api03-fast-500-0000000000000000f500";
+        const options = {
+          ring: KEK.ONE,
+          provider: new Map([
+            [KEY.ANTHROPIC, HTTP_STATUS.OK],
+            [KEY.OPENAI, HTTP_STATUS.OK],
+            [notEnabled, HTTP_STATUS.OK],
+            [unsaid, HTTP_STATUS.OK],
+          ]),
+          fast: new Map([
+            [notEnabled, jsonResponse(FAST_LIMIT_ZERO, 429)],
+            [unsaid, jsonResponse({}, HTTP_STATUS.SERVER_ERROR)],
+          ]),
+        };
+        const { owner, other, ask, checks } = yield* openAccounts(options);
+        const later = yield* openAccounts(options);
+
+        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)));
+        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
+        keysOf(yield* ask(save(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, notEnabled)));
+        keysOf(yield* later.ask(save(later.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, unsaid)));
+
+        const fastOf = (userId: string) =>
+          Effect.map(listProviderKeyRows(userId), (rows) =>
+            rows.map((row) => [row.provider, row.fastAccess]),
+          );
+        assert.deepEqual(yield* fastOf(owner), [
+          [PROVIDER_KEY_PROVIDER.ANTHROPIC, FAST_ACCESS.ENABLED],
+          [PROVIDER_KEY_PROVIDER.OPENAI, null],
+        ]);
+        assert.deepEqual(yield* fastOf(other), [
+          [PROVIDER_KEY_PROVIDER.ANTHROPIC, FAST_ACCESS.NOT_ENABLED],
+        ]);
+        assert.deepEqual(yield* fastOf(later.owner), [[PROVIDER_KEY_PROVIDER.ANTHROPIC, null]]);
+        assert.ok(
+          !checks.some(
+            (check) => check.url === FAST_CHECK_URL && keyOf(check.headers) === KEY.OPENAI,
+          ),
+          "an OpenAI key is never sent to Anthropic",
+        );
+        const fastCheck = checks.find(
+          (check) => check.url === FAST_CHECK_URL && keyOf(check.headers) === KEY.ANTHROPIC,
+        );
+        assert.equal(fastCheck?.headers.get("anthropic-beta"), "fast-mode-2026-02-01");
+        const asked = yield* Effect.promise(() => new Response(fastCheck?.init.body).text());
+        assert.deepEqual(readFastCheck(JSON.parse(asked)), {
+          model: "claude-opus-5-5",
+          max_tokens: 1,
+          speed: "fast",
+        });
       }),
   );
 

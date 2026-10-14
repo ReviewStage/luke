@@ -1,0 +1,1 @@
+ALTER TABLE "account_provider_key" ADD COLUMN "fast_access" text;

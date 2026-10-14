@@ -1,4 +1,8 @@
-import type { ProviderKeyProvider, ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import type {
+  FastAccess,
+  ProviderKeyProvider,
+  ProviderKeyStatus,
+} from "@sidecar/hosted/provider-key-wire";
 import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
@@ -27,6 +31,8 @@ export const accountProviderKey = pgTable(
     hint: text("hint").notNull(),
     status: text("status").$type<ProviderKeyStatus>().notNull(),
     statusAt: timestamptz("status_at").notNull(),
+    /** Whether the key's organization may run Anthropic's fast mode, as a fast request on the key last settled; null where none has. */
+    fastAccess: text("fast_access").$type<FastAccess>(),
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.provider] })],
