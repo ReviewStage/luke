@@ -18,6 +18,7 @@ import {
 } from "@sidecar/database/models/automation-store";
 import {
   awaitingLinesOfReached,
+  discardCodingAgent,
   latestTurnsOfReached,
   readCodingAgentByKey,
 } from "@sidecar/database/models/coding-agent-store";
@@ -319,16 +320,23 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
 
 /**
  * A claimed run whose function died between the claim and its agent,
- * settled as the start its key made where one stands, and failed as
- * unavailable where none does, so no run is left starting for good.
+ * settled as the start its key made where that agent's session ran, and
+ * failed as unavailable where none did, an agent made but never opened let
+ * go with it, so no run is left starting for good.
  */
 export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStrandedRun")(function* (
   stranded: StrandedRun,
 ): Effect.fn.Return<void, unknown, DatabaseServices> {
   const started = yield* readCodingAgentByKey(stranded.userId, stranded.id);
-  if (Option.isSome(started)) {
+  // Note that an agent made under the key whose session never ran a turn was never opened, the
+  // function gone between making it and eve taking it, so it is let go rather than taken as started.
+  const opened = Option.isSome(started)
+    ? (yield* latestTurnsOfReached([started.value.conversationId])).size > 0
+    : false;
+  if (Option.isSome(started) && opened) {
     yield* attachRunAgent(stranded.id, started.value.id);
     return;
   }
+  if (Option.isSome(started)) yield* discardCodingAgent(stranded.userId, started.value.id);
   yield* failClaimedRun(stranded.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
 });

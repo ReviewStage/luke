@@ -682,7 +682,7 @@ const findClaimed = SqlSchema.findAll({
           and(
             eq(automationRun.automationId, automationId),
             CLAIMED,
-            gte(automationRun.firedAt, since),
+            gte(automationRun.settledAt, since),
           ),
         ),
     ),
@@ -957,7 +957,7 @@ export function failClaimedRun(
   );
 }
 
-/** How many of the automation's runs fired at or after `since` are claimed and still starting, which count against its concurrency. */
+/** How many of the automation's runs claimed at or after `since` are still starting, which count against its concurrency; a claim is dated by when it was made, whenever its run fired. */
 export function claimedRunsStarting(automationId: string, since: Date): PlanStoreEffect<number> {
   return Effect.map(findClaimed({ automationId, since }), (rows) => rows.length);
 }
