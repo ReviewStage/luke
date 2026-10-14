@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import {
+  lineParts,
+  MENTIONED_HEADING,
+  receivedPartsOf,
+} from "@sidecar/database/models/attached-file-parts";
+import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
+import { MENTION_KIND, mentionMarkdown } from "@sidecar/hosted/mention-link";
+import type { Plan } from "@sidecar/hosted/plan-wire";
+import { test } from "vitest";
+import { eveContent, receivedMessage } from "../server/hosted/attached-files";
+import { MENTIONED_BOUNDS, mentionedContext } from "../server/hosted/mentioned-context";
+
+/**
+ * What a coding agent's message mentions of its plan, handed beside its
+ * words as it stood at the send, within its bounds; and the line that
+ * carried it matched by eve's receipt of what eve was handed, its words
+ * alone read back as the developer's. Synthetic plan.
+ */
+
+const PLAN: Plan = {
+  id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
+  workspaceId: "workspace-personal",
+  name: "Teammate invitations",
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  repository: "acme/relay",
+  document: {
+    body: [
+      "## Goal",
+      "",
+      "Any member can invite a teammate by email.",
+      "",
+      "## Rollout",
+      "",
+      "Store first, then the desktop.",
+    ].join("\n"),
+    assumptions: [],
+  },
+};
+
+const section = (heading: string) =>
+  mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN.id, heading }, heading);
+
+test("a section the words mention is handed as it stands, under the part's heading", () => {
+  const part = mentionedContext(`Do what ${section("Rollout")} says.`, PLAN);
+
+  assert.equal(
+    part,
+    `${MENTIONED_HEADING}\n\nThe plan's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`,
+  );
+});
+
+test("the whole plan the words mention is handed as an agent started on it is", () => {
+  const part = mentionedContext(
+    `Read ${mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name)} first.`,
+    PLAN,
+  );
+
+  assert.match(part ?? "", /The whole plan:\n\n# Teammate invitations\n\n## Goal/u);
+  assert.match(part ?? "", /Store first, then the desktop\.$/u);
+});
+
+test("a section the plan no longer holds is named as gone", () => {
+  const part = mentionedContext(`See ${section("Old flow")}.`, PLAN);
+
+  assert.match(part ?? "", /The section "Old flow": no longer in the plan\./u);
+});
+
+test("words that mention only files, folders, another plan, or nothing are handed nothing more", () => {
+  for (const words of [
+    "Fix [@a.ts](luke://file/src/a.ts) and look through [@src/](luke://folder/src/).",
+    `See ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: "another-plan", heading: "Goal" }, "Goal")}.`,
+    "No mention here, only [a link](https://example.com).",
+    "`[@Rollout](luke://plan/7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d#Rollout)` is code.",
+  ]) {
+    assert.equal(mentionedContext(words, PLAN), undefined, words);
+  }
+});
+
+test("a section mentioned twice is handed once", () => {
+  const part = mentionedContext(`${section("Goal")} and again ${section("Goal")}.`, PLAN);
+
+  assert.equal(part?.split('The plan\'s section "Goal"').length, 2);
+});
+
+test("a long section is cut on a line, saying how much was left out, and a full part names what it left out", () => {
+  const long = Array.from({ length: 400 }, (_, at) => `- step ${at}: ${"x".repeat(20)}`).join("\n");
+  const headings = ["One", "Two", "Three", "Four", "Five", "Six", "Seven"];
+  const plan: Plan = {
+    ...PLAN,
+    document: {
+      body: headings.map((heading) => `## ${heading}\n\n${long}`).join("\n\n"),
+      assumptions: [],
+    },
+  };
+
+  const part = mentionedContext(headings.map(section).join(" "), plan) ?? "";
+
+  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
+  assert.match(part, /… \(\d+ more characters\)/u);
+  assert.match(part, /The section "Seven": left out, since this part is full/u);
+});
+
+test("a line carrying what it mentioned is matched by eve's receipt of it, and reads back as its words alone", () => {
+  const words = `Do what ${section("Rollout")} says.`;
+  const mentioned = mentionedContext(words, PLAN);
+  const handed = eveContent(words, [], mentioned);
+  assert.ok(Array.isArray(handed));
+  const receipt = receivedMessage({
+    message: words,
+    parts: handed.flatMap((part) =>
+      part.type === "text" ? [{ type: "text", text: part.text }] : [],
+    ),
+  });
+
+  const line = receivedPartsOf(lineParts(words, [], mentioned));
+
+  assert.equal(line?.join(COALESCED_LINE_SEPARATOR), receipt.text);
+  assert.equal(receipt.words, words);
+});
+
+test("words that mention nothing of the plan go to eve as the words alone, as every message did before", () => {
+  assert.equal(eveContent("Use the helper.", [], undefined), "Use the helper.");
+});

@@ -8,6 +8,7 @@ import {
   type Mention,
   mentionMarkdown,
   mentionName,
+  mentionsIn,
 } from "./mention-link.js";
 
 const PLAN: Mention = { kind: MENTION_KIND.PLAN, planId: "pl_7Hq2Xc" };
@@ -76,4 +77,69 @@ test("a heading at its bound in the widest characters still reads back from its 
   };
 
   assert.deepEqual(decodeMention(encodeMention(section)), section);
+});
+
+test("a file and a folder read back as the paths they were written from", () => {
+  for (const mention of [
+    { kind: MENTION_KIND.FILE, path: "apps/web/server/hosted/session-store.ts" },
+    { kind: MENTION_KIND.FILE, path: "docs/A plan (draft)#2.md" },
+    { kind: MENTION_KIND.FOLDER, path: "apps/web/server/auth" },
+  ] as const) {
+    assert.deepEqual(decodeMention(encodeMention(mention)), mention, mention.path);
+  }
+});
+
+test("a step back at a path's root is taken by the address itself, and stays inside the repository", () => {
+  assert.deepEqual(decodeMention("luke://file/%2E%2E/secrets.txt"), {
+    kind: MENTION_KIND.FILE,
+    path: "secrets.txt",
+  });
+});
+
+test("a path that climbs out of the repository names nothing", () => {
+  for (const target of [
+    "luke://file/apps/%2E%2E%2F%2E%2E/etc/passwd",
+    "luke://file//etc/passwd",
+    "luke://file/apps%5Cweb",
+    "luke://file/",
+  ]) {
+    assert.equal(decodeMention(target), undefined, target);
+  }
+});
+
+test("the mentions in a message are its @ links outside code, in order, their labels unescaped", () => {
+  const words = [
+    "Move [@session-store.ts](luke://file/apps/web/session-store.ts) as",
+    "[@Rollout \\[draft\\]](luke://plan/pl_1#Rollout) says, not like",
+    "`[@inline](luke://file/a.ts)` or [a plain link](https://example.com) or [@nothing](luke://page/1).",
+    "```",
+    "[@fenced](luke://file/b.ts)",
+    "```",
+  ].join("\n");
+
+  const found = mentionsIn(words);
+
+  assert.deepEqual(
+    found.map(({ label, mention }) => ({ label, mention })),
+    [
+      {
+        label: "@session-store.ts",
+        mention: { kind: MENTION_KIND.FILE, path: "apps/web/session-store.ts" },
+      },
+      {
+        label: "@Rollout [draft]",
+        mention: { kind: MENTION_KIND.SECTION, planId: "pl_1", heading: "Rollout" },
+      },
+    ],
+  );
+  assert.equal(
+    words.slice(found[0]?.start, found[0]?.end),
+    "[@session-store.ts](luke://file/apps/web/session-store.ts)",
+  );
+});
+
+test("a message is read for at most twenty mentions", () => {
+  const words = Array.from({ length: 25 }, (_, at) => `[@f${at}](luke://file/f${at}.ts)`).join(" ");
+
+  assert.equal(mentionsIn(words).length, 20);
 });

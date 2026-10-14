@@ -1,10 +1,11 @@
 import {
   decodeMention,
   isMentionLabel,
+  isPlanMention,
   MENTION_KIND,
-  type Mention,
   mentionMarkdown,
   mentionName,
+  type PlanMention,
 } from "@sidecar/hosted/mention-link";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
 import { EllipsisIcon } from "@sidecar/panel";
@@ -69,7 +70,7 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
 
 /** What a plan's own page does with its sections' links: opens what a mention names, and the section it was last asked to show. */
 export interface SectionLinks {
-  readonly onOpen: (mention: Mention) => void;
+  readonly onOpen: (mention: PlanMention) => void;
   readonly reveal: SectionReveal | undefined;
 }
 
@@ -320,7 +321,7 @@ function unitClass(view: UnitView, changed: boolean): string {
 function useMentionChips(
   planId: string,
   views: readonly UnitView[],
-  onOpen: ((mention: Mention) => void) | undefined,
+  onOpen: ((mention: PlanMention) => void) | undefined,
 ): LinkDrawer | undefined {
   const opener = useRef(onOpen);
   opener.current = onOpen;
@@ -336,7 +337,8 @@ function useMentionChips(
     return (href: string, label: string) => {
       if (!isMentionLabel(label)) return undefined;
       const mention = decodeMention(href);
-      if (mention === undefined) return undefined;
+      // Note that only the plan and its sections are drawn as chips here so far; a file's is words.
+      if (mention === undefined || !isPlanMention(mention)) return undefined;
       return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
     };
   }, [offered, planId, headingKey]);

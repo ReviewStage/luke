@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
+import { MENTIONED_HEADING } from "@sidecar/database/models/attached-file-parts";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
@@ -36,6 +37,7 @@ import {
   type InboxPost,
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
+import { MENTION_KIND, mentionMarkdown } from "@sidecar/hosted/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
@@ -998,6 +1000,27 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           lines: [SNAPSHOT, "Use the helper."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
+      }),
+  );
+
+  it.effect(
+    "a message mentioning a section of the agent's plan hands eve the section as it stands beside the words, and the line reads as the words alone",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { plan, transcript, sent } = yield* startedAgent(eve, { running: true });
+        const words = `Do what ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: plan.id, heading: "Goal" }, "Goal")} says.`;
+
+        yield* sent(words);
+
+        assert.deepEqual(eve.sent.at(-1)?.message.message, [
+          { type: "text", text: words },
+          {
+            type: "text",
+            text: `${MENTIONED_HEADING}\n\nThe plan's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
+          },
+        ]);
+        assert.deepEqual((yield* transcript()).lines, [SNAPSHOT, words]);
       }),
   );
 

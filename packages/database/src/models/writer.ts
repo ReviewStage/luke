@@ -306,6 +306,8 @@ interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
+  readonly mentioned?: string | undefined;
 }
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
@@ -1999,7 +2001,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     id: clientId,
     role: MESSAGE_ROLE.USER,
     metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-    parts: lineParts(line.text, line.attachments ?? []),
+    parts: lineParts(line.text, line.attachments ?? [], line.mentioned),
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
   if (!(yield* dispatchedWithinDeadline(dispatch))) return Result.succeed(Option.none());

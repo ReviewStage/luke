@@ -1,4 +1,4 @@
-import { MENTION_KIND, type Mention } from "@sidecar/hosted/mention-link";
+import { MENTION_KIND, type PlanMention } from "@sidecar/hosted/mention-link";
 import { DocumentIcon } from "@sidecar/panel";
 import { HashIcon } from "lucide-react";
 import { CardDetail } from "../desktop/plan-card";
@@ -41,7 +41,7 @@ type MentionState = (typeof MENTION_STATE)[keyof typeof MENTION_STATE];
 export interface MentionDoors {
   readonly planId: string;
   readonly headings: ReadonlySet<string>;
-  readonly onOpen: (mention: Mention) => void;
+  readonly onOpen: (mention: PlanMention) => void;
 }
 
 /** What a gone section's card says of it. */
@@ -54,7 +54,7 @@ const OPEN_WORDS = {
 } as const;
 
 /** Whether what the mention names is there to open: a section of this plan is there while the plan holds its heading. */
-function mentionState(mention: Mention, doors: MentionDoors): MentionState {
+function mentionState(mention: PlanMention, doors: MentionDoors): MentionState {
   if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
     return MENTION_STATE.FOUND;
   }
@@ -62,12 +62,12 @@ function mentionState(mention: Mention, doors: MentionDoors): MentionState {
 }
 
 /** What a press opens: what the mention names where it is there, else the plan it was in, at its top. */
-function opened(mention: Mention, state: MentionState): Mention {
+function opened(mention: PlanMention, state: MentionState): PlanMention {
   if (state === MENTION_STATE.FOUND) return mention;
   return { kind: MENTION_KIND.PLAN, planId: mention.planId };
 }
 
-function MentionGlyph({ mention }: { mention: Mention }): React.JSX.Element {
+function MentionGlyph({ mention }: { mention: PlanMention }): React.JSX.Element {
   return mention.kind === MENTION_KIND.SECTION ? <HashIcon aria-hidden="true" /> : <DocumentIcon />;
 }
 
@@ -78,7 +78,7 @@ function MentionCard({
   state,
   onOpen,
 }: {
-  mention: Mention;
+  mention: PlanMention;
   name: string;
   state: MentionState;
   onOpen: () => void;
@@ -110,7 +110,7 @@ export function MentionChip({
   name,
   doors,
 }: {
-  mention: Mention;
+  mention: PlanMention;
   /** The name it was written with, without its `@`. */
   name: string;
   doors: MentionDoors;

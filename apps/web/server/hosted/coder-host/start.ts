@@ -31,6 +31,7 @@ import {
   hostedStoreOrArchived,
   hostedStoreOrUnavailable,
 } from "../http-effect.js";
+import { mentionedContext } from "../mentioned-context.js";
 import {
   acceptedModelChoice,
   type ModelCatalog,
@@ -159,7 +160,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
       message:
-        brief.task === null ? brief.planSnapshot : eveContent(brief.task, ask.attachments ?? []),
+        brief.task === null
+          ? brief.planSnapshot
+          : eveContent(
+              brief.task,
+              ask.attachments ?? [],
+              mentionedContext(brief.task, plan.value.plan),
+            ),
     })
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>

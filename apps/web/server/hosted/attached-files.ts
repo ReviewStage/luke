@@ -2,6 +2,7 @@ import {
   dataUrl,
   fileMark,
   inlinedFile,
+  isMentionedText,
   textOf,
 } from "@sidecar/database/models/attached-file-parts";
 import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
@@ -39,15 +40,18 @@ const INLINED_FILE = /^Attached file: ([^\n]+)\n(`{3,})\n([\s\S]*)\n\2$/u;
 
 /**
  * What eve is handed for a message: the words alone where nothing is
- * attached, as every message went before files, and otherwise the words
- * where there are any, the text files inlined, and the images and PDFs as
- * file parts, so a model is never handed an empty text part.
+ * attached and nothing mentioned, as every message went before files, and
+ * otherwise the words where there are any, what they mention that the agent
+ * cannot read for itself (`mentioned-context.ts`), the text files inlined,
+ * and the images and PDFs as file parts, so a model is never handed an
+ * empty text part.
  */
 export function eveContent(
   text: string,
   attachments: readonly CodingAgentAttachment[],
+  mentioned?: string,
 ): string | UserContent {
-  if (attachments.length === 0) return text;
+  if (attachments.length === 0 && mentioned === undefined) return text;
   const texts = attachments.flatMap((file) =>
     file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
       ? [{ type: "text" as const, text: inlinedFile(file.name, textOf(file.data)) }]
@@ -65,7 +69,12 @@ export function eveContent(
           },
         ],
   );
-  return [...(text === "" ? [] : [{ type: "text" as const, text }]), ...texts, ...files];
+  return [
+    ...(text === "" ? [] : [{ type: "text" as const, text }]),
+    ...(mentioned === undefined ? [] : [{ type: "text" as const, text: mentioned }]),
+    ...texts,
+    ...files,
+  ];
 }
 
 /** A message eve received, read back: the parts a line is matched by, joined, and the words and files a receipt's own row keeps. */
@@ -111,6 +120,8 @@ export function receivedMessage(received: {
   for (const part of received.parts) {
     if (part.type === "text") {
       texts.push(part.text);
+      // The part a line's mentions were handed in matches the line, and is no words of its own.
+      if (isMentionedText(part.text)) continue;
       const inlined = inlinedFileOf(part.text);
       if (inlined === undefined) words.push(part.text);
       else files.push(inlined);
