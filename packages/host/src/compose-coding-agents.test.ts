@@ -7,6 +7,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
+  type CodingAgentPage,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -56,6 +57,15 @@ const AGENT: CodingAgentSummary = {
   createdAt: 1_800_000_000_000,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+};
+
+/** The agent as its own page reads it, with no plan, as an automation's run leaves one. */
+const PAGE: CodingAgentPage = {
+  ...AGENT,
+  planId: null,
+  automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+  workspaceId: "workspace-1",
+  repository: "acme/relay",
 };
 
 const MODELS = [
@@ -220,6 +230,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
         return { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } };
+      }),
+    agent: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`page:${agentId}`);
+        return { agent: PAGE };
       }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
@@ -427,6 +442,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
       { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
     );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: AGENT_ID }), {
+      agent: PAGE,
+    });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
@@ -488,6 +506,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `servers:${AGENT_ID}:linear`,
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
+      `page:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,

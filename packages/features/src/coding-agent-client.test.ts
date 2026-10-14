@@ -168,3 +168,32 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "reads one agent as its own page by its id, an agent with no plan among them, and one the account does not reach as not found",
+  () =>
+    Effect.gen(function* () {
+      const page = {
+        ...AGENT,
+        planId: null,
+        automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+        workspaceId: "workspace-1",
+        repository: "acme/relay",
+      };
+      const api = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: page }) },
+      });
+      const refusing = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().agent(AGENT_ID), api.layer);
+      const refused = yield* Effect.provide(client().agent(AGENT_ID), refusing.layer);
+
+      assert.deepEqual(read, { agent: page });
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);

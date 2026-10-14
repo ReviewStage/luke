@@ -17,6 +17,8 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
+  type CodingAgentPageParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -78,6 +80,7 @@ export interface CodingAgentActsDependencies {
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
@@ -136,6 +139,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_ARCHIVE
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
+  | typeof ACT_KIND.CODING_AGENTS_PAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.CODING_AGENTS_CHANGES
   | typeof ACT_KIND.PROVIDER_KEYS_READ
@@ -241,6 +245,10 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
       notices.shownInbox(inboxPlanId);
+    },
+    [ACT_KIND.CODING_AGENTS_PAGE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PAGE, sender);
+      return host.codingAgentPage(params);
     },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);

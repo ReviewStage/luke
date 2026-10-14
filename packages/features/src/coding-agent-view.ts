@@ -6,6 +6,7 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
@@ -269,6 +270,21 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
+
+/** One agent, as the window asks to read it whole as its own page, on a plan or with none. */
+export const codingAgentPageParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentPageParams = typeof codingAgentPageParamsSchema.Type;
+
+/** One agent as its own page, as the window hears it: the agent, or why there is no answer. */
+export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
+  codingAgentPageAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
 
 /** One agent, as the window asks what it published. */
 export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({

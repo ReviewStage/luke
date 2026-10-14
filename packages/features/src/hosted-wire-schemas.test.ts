@@ -135,6 +135,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentRenameParamsSchema: codingAgentView.codingAgentRenameParamsSchema,
     codingAgentStopParamsSchema: codingAgentView.codingAgentStopParamsSchema,
     codingAgentArchiveParamsSchema: codingAgentView.codingAgentArchiveParamsSchema,
+    codingAgentPageParamsSchema: codingAgentView.codingAgentPageParamsSchema,
+    codingAgentPageAnswerViewSchema: codingAgentView.codingAgentPageAnswerViewSchema,
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,

@@ -162,6 +162,8 @@ function fixture() {
           asked.push(`archive:${agentId}:${String(archived)}`);
           return STARTED;
         }),
+      codingAgentPage: () =>
+        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
       codingAgentPullRequest: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`pull-request:${agentId}`);
