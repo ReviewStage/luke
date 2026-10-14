@@ -1,7 +1,7 @@
+import { cn } from "@luke/ui";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PROMPT_INPUT_FIELD_CLASS } from "../ai-elements/prompt-input";
-import { cn } from "../ai-elements/utils";
 import type {
   ComposerChip,
   ComposerEditorHandle,

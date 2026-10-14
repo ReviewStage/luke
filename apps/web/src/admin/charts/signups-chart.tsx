@@ -1,15 +1,15 @@
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@luke/ui/chart";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import type {
   AdminDailySignups,
   AdminMetrics,
   AdminTrend,
 } from "../../../server/admin/admin-metrics";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "../../components/ui/chart";
 import { partialDayKey, seriesHasNoData } from "../../daily-series";
 import { formatDayTick, formatNumber, formatTooltipDay, PARTIAL_DAY_OPACITY } from "../format";
 import { ChartHeading } from "./chart-heading";

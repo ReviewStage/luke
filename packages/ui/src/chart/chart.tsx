@@ -1,9 +1,11 @@
 /**
  * shadcn/ui's chart primitives (registry `new-york-v4/ui/chart`, built for
- * recharts 3), vendored because this app is not shadcn-scaffolded: there is no
+ * recharts 3), vendored because no app here is shadcn-scaffolded: there is no
  * components.json for the CLI to install into, and the one shared utility the
- * registry file expects — `cn` from `@/lib/utils` — is inlined below instead
- * of pulling clsx and tailwind-merge in for a single call site. Series colors
+ * registry file expects — `cn` from `@/lib/utils` — is this package's own
+ * `cn`. Exported at `@luke/ui/chart` alone, so recharts rides into no bundle
+ * behind the barrel. The utilities it spells read the tokens `../theme.css`
+ * names, which every app that mounts it defines. Series colors
  * arrive through `ChartConfig`, whose values this repository fixes at build
  * time, never from anything observed.
  */
@@ -11,16 +13,8 @@
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
-import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css";
-
-type ClassValue = string | false | null | undefined;
-
-/** The registry file's `cn` calls join static strings and toggle whole class
- * names; nothing here merges conflicting Tailwind utilities, so a filter-and-
- * join is the entire contract. */
-function cn(...values: ClassValue[]): string {
-  return values.flatMap((value) => (value ? [value] : [])).join(" ");
-}
+import { cn } from "../cn.js";
+import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css.js";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;

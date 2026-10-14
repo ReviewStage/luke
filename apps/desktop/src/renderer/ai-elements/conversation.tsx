@@ -1,3 +1,4 @@
+import { cn } from "@luke/ui";
 import { ArrowDownIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -11,7 +12,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { cn } from "./utils";
 
 /**
  * conversation.tsx -- AI Elements' Conversation: a log of messages that keeps to its newest line while the reader is there.

@@ -1,3 +1,4 @@
+import { cn } from "@luke/ui";
 import { type ComponentProps, type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { CodeBlock } from "./code-block";
@@ -10,7 +11,6 @@ import {
   type FoldSummaryProps,
   useFoldBodyDrawn,
 } from "./fold";
-import { cn } from "./utils";
 
 /**
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.

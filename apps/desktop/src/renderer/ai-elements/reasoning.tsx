@@ -1,3 +1,4 @@
+import { cn } from "@luke/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -9,7 +10,6 @@ import {
   type FoldSummaryProps,
   useFoldBodyDrawn,
 } from "./fold";
-import { cn } from "./utils";
 
 /**
  * reasoning.tsx -- AI Elements' Reasoning: a model's thinking, folded under one quiet line until the reader opens it.

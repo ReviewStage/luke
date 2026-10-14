@@ -1,3 +1,4 @@
+import { cn } from "@luke/ui";
 import type { ReactNode } from "react";
 import {
   Fold,
@@ -8,7 +9,6 @@ import {
   FoldSummary,
   type FoldSummaryProps,
 } from "./fold";
-import { cn } from "./utils";
 
 /**
  * plan.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.

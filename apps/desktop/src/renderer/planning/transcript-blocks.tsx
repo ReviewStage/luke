@@ -5,6 +5,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { decodeMention, isMentionLabel, mentionName } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { cn } from "@luke/ui";
 import {
   AppWindowIcon,
   BookOpenIcon,
@@ -58,7 +59,6 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool";
-import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { MentionChip } from "./mention-chip";

@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Shared React for the desktop panel: Luke's face and glyphs, traced from the brand's generated art",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./chart": "./src/chart/chart.js",
+    "./theme.css": "./src/theme.css"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -15,7 +17,10 @@
   "dependencies": {
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
-    "react": "catalog:"
+    "clsx": "2.1.1",
+    "react": "catalog:",
+    "recharts": "3.8.0",
+    "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
