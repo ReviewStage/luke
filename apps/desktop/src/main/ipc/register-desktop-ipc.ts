@@ -15,6 +15,7 @@ import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
 import { planningActRows } from "./planning-acts";
 import { settingsActRows } from "./settings-rows";
+import { terminalActRows } from "./terminal-acts";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 
@@ -105,6 +106,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
+    ...terminalActRows(),
     ...integrationActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
