@@ -97,6 +97,13 @@ const EFFECT_MODULE_SCHEMAS = {
     chatMessageSchema: chatWire.chatMessageSchema,
     chatCursorSchema: chatWire.chatCursorSchema,
     chatAnswerSchema: chatWire.chatAnswerSchema,
+    chatPostRequestSchema: chatWire.chatPostRequestSchema,
+    chatAnswerRequestSchema: chatWire.chatAnswerRequestSchema,
+    chatResolveRequestSchema: chatWire.chatResolveRequestSchema,
+    chatReadToRequestSchema: chatWire.chatReadToRequestSchema,
+    chatWriteRequestSchema: chatWire.chatWriteRequestSchema,
+    chatReceiptSchema: chatWire.chatReceiptSchema,
+    chatWriteAnswerSchema: chatWire.chatWriteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof chatWire>,
   "coding-agent-wire": {
     contextWindowSchema: codingAgentWire.contextWindowSchema,
@@ -219,6 +226,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPictureParamsSchema: codingAgentView.codingAgentPictureParamsSchema,
     codingAgentInboxAttachmentViewSchema: codingAgentView.codingAgentInboxAttachmentViewSchema,
     codingAgentChatAnswerViewSchema: codingAgentView.codingAgentChatAnswerViewSchema,
+    codingAgentChatWriteAnswerViewSchema: codingAgentView.codingAgentChatWriteAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "dictation-wire": {
     dictationRequestSchema: dictationWire.dictationRequestSchema,

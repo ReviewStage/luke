@@ -15,6 +15,7 @@ import {
   inboxReplyRefusal,
   inboxReplySchema,
   inboxResponseSchema,
+  inboxWordBlockSchema,
 } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -516,3 +517,99 @@ export function replyWords(reply: InboxReply): string {
 export function replyRefusal(response: InboxReadResponse, reply: InboxReply): string | undefined {
   return inboxReplyRefusal({ response }, reply);
 }
+
+/** Whether a window's post carries its words one way: as text, or as blocks, never both or neither. */
+function wordsOnce(post: { readonly text?: string; readonly blocks?: unknown }): boolean {
+  return (post.text === undefined) !== (post.blocks === undefined);
+}
+
+/** Whether a window's post names one place: a `to`, or the message it replies to, never both. */
+function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): boolean {
+  return post.to === undefined || post.replyTo === undefined;
+}
+
+/**
+ * A person's post from the window: the words, as Markdown text or as word
+ * blocks, a link or lines of code among them and never a picture, which a
+ * window has no way to hand in yet; where it goes, a channel by `#name` or
+ * a member's DM by `@handle`, `#general` where unsaid, or the message it
+ * replies to by its place; and the window's own key for the post, which a
+ * retry carries again. An `@handle` in the words tells that member.
+ */
+export const chatPostRequestSchema = EffectSchema.Struct({
+  text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
+  blocks: EffectSchema.optionalKey(
+    EffectSchema.Array(inboxWordBlockSchema).check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_BLOCKS),
+    ),
+  ),
+  to: EffectSchema.optionalKey(chatTargetSchema),
+  replyTo: EffectSchema.optionalKey(countedNumber),
+  clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
+}).check(EffectSchema.makeFilter(wordsOnce), EffectSchema.makeFilter(placedOnce));
+
+/** @public */
+export type ChatPostRequest = typeof chatPostRequestSchema.Type;
+
+/** A person's answer to an ask from the window: the ask by its place, the revision they saw, the answer, and the window's key for it. */
+export const chatAnswerRequestSchema = EffectSchema.Struct({
+  answer: EffectSchema.Struct({
+    seq: countedNumber,
+    revision: countedNumber,
+    reply: inboxReplySchema,
+  }),
+  clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
+});
+
+/** A person resolving an ask of their own from the window: the ask by its place, and why. */
+export const chatResolveRequestSchema = EffectSchema.Struct({
+  resolve: EffectSchema.Struct({
+    seq: countedNumber,
+    reason: filledText(CHAT_BOUNDS.MAX_REASON_CHARS),
+  }),
+});
+
+/** A person's window saying they have read to a place. */
+export const chatReadToRequestSchema = EffectSchema.Struct({ readTo: countedNumber });
+
+/**
+ * What the window writes to a workspace's chat (POST): a post, an answer to
+ * an ask, an ask of the person's own resolved, or how far they have read.
+ * @public
+ */
+export const chatWriteRequestSchema = EffectSchema.Union([
+  chatPostRequestSchema,
+  chatAnswerRequestSchema,
+  chatResolveRequestSchema,
+  chatReadToRequestSchema,
+]);
+
+/** @public */
+export type ChatWriteRequest = typeof chatWriteRequestSchema.Type;
+
+/** Who a post came to, by handle: told now, held for their next read, left, and the handles its words mention that name no member. */
+export const chatReceiptSchema = EffectSchema.Struct({
+  told: EffectSchema.Array(EffectSchema.String),
+  held: EffectSchema.Array(EffectSchema.String),
+  left: EffectSchema.Array(EffectSchema.String),
+  unresolved: EffectSchema.Array(EffectSchema.String),
+});
+
+/**
+ * What a write to the chat answers, one key for each kind of write: a post,
+ * the message and who it came to, a repeat under its key telling no one
+ * again; an answer, the ask as it then stands and whether the answer was
+ * taken, which it is not at a revision its poster has moved past or on an
+ * ask no longer open; a resolve, the ask resolved; and a read, where the
+ * person's cursor then stands.
+ */
+export const chatWriteAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema }),
+  EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean }),
+  EffectSchema.Struct({ resolved: chatMessageSchema }),
+  EffectSchema.Struct({ readSeq: countedNumber }),
+]);
+
+/** @public */
+export type ChatWriteAnswer = typeof chatWriteAnswerSchema.Type;

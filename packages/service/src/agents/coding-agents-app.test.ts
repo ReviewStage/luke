@@ -89,6 +89,8 @@ import {
   CHAT_BOUNDS,
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
+  chatAnswerSchema,
+  chatWriteAnswerSchema,
   MEMBER_KIND,
   mentionedHandles,
 } from "@luke/features/chat-wire";
@@ -215,6 +217,7 @@ import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
+import { chatApp } from "./chat-app.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 
 /**
@@ -245,6 +248,8 @@ const AGENT_OVERVIEW = [
 const TASK = "/api/plans/plan";
 /** The account's tasks, served by the tasks group, each naming its agents in brief. */
 const TASKS = "/api/plans";
+/** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
+const CHAT = "/api/workspaces/chat";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -449,13 +454,17 @@ const standing = (
       tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
+    const chat = HttpRouter.toWebHandler(chatApp(seams).pipe(HttpRouter.provideRequest(services)), {
+      disableLogger: true,
+    });
     yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose()])),
+      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose(), chat.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path and the list land on the tasks group. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path and the list land on the tasks group, and the chat's on the chat's. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const { pathname } = new URL(request.url);
+        if (pathname === CHAT) return chat.handler(request);
         return pathname === TASK || pathname === TASKS
           ? tasks.handler(request)
           : agents.handler(request);
@@ -5088,6 +5097,213 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           thirdSteps[0]?.summary,
           secondSteps[0]?.summary,
           "the chain's oldest kept step went to make room for the new one",
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("a person's chat from the window", (it) => {
+  /**
+   * The owner's plan with one agent on it, its session claimed so a notice
+   * reaches it, its chat member, the plan's channel, and the chat's writes
+   * and reads as the bearer given makes them.
+   */
+  const openWindowChat = (eve = fakeEve()) =>
+    Effect.gen(function* () {
+      const opened = yield* openPlan({ eve });
+      const workspace = opened.plan.workspaceId;
+      const started = yield* startedAgent(opened.owner, opened.plan.id, opened.ask);
+      const sessionId = eve.opened[0]?.sessionId ?? "";
+      assert.equal(
+        yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
+        true,
+      );
+      const agent = Option.getOrThrow(
+        yield* ensureMember(opened.owner, workspace, {
+          kind: MEMBER_KIND.AGENT,
+          agentId: started.agent.id,
+        }),
+      );
+      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.plan.id));
+      const at = (bearer: string | undefined, method: string, body?: WireBoundaryInput) => {
+        const url = new URL(CHAT, ORIGIN);
+        url.searchParams.set("workspaceId", workspace);
+        return new Request(url, {
+          method,
+          headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+          ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
+        });
+      };
+      /** A write as the bearer makes it, the owner's where unsaid. */
+      const write = (body: WireBoundaryInput, bearer: string | undefined = opened.owner) =>
+        opened.ask(at(bearer, "POST", body));
+      /** A write read as the wire declares its answer. */
+      const wrote = (body: WireBoundaryInput) =>
+        Effect.map(write(body), (answered) =>
+          readAnswer(chatWriteAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+        );
+      /** The chat as the owner reads it from the start. */
+      const read = Effect.map(opened.ask(at(opened.owner, "GET")), (answered) =>
+        readAnswer(chatAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+      );
+      /** An ask the agent posts in the plan's channel under the key, as its tool will post one. */
+      const agentAsks = (text: string) =>
+        Effect.map(
+          postAsk(opened.owner, workspace, {
+            authorMemberId: agent.id,
+            to: { channelId: channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: [],
+            clientKey: randomUUID(),
+            key: "invite-expiry",
+            ask: { response: { type: CHAT_ASK.APPROVAL } },
+          }),
+          Result.getOrThrow,
+        );
+      return {
+        ...opened,
+        ...started,
+        workspace,
+        sessionId,
+        agent,
+        channel,
+        write,
+        wrote,
+        read,
+        agentAsks,
+      };
+    });
+
+  it.effect(
+    "a person's DM to an agent steers it once as a chat line, the receipt naming it told, and the post repeated under its key tells no one again",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openWindowChat(eve);
+        const send = {
+          text: "Rename the helper, @nobody.",
+          to: "@agent-1",
+          clientKey: randomUUID(),
+        };
+
+        const sent = yield* chat.wrote(send);
+        assert.ok("posted" in sent);
+        assert.deepEqual(sent.receipt, {
+          told: ["agent-1"],
+          held: [],
+          left: [],
+          unresolved: ["nobody"],
+        });
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [[`Bearer ${chat.owner}`, chat.sessionId]],
+        );
+        const page = yield* listMessagesPast(
+          chat.target.userId,
+          chat.target.conversationId,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          50,
+        );
+        const notices = (page.read.ok ? page.read.value : []).flatMap(({ message }) =>
+          message.role === MESSAGE_ROLE.USER &&
+          message.metadata !== undefined &&
+          "channel" in message.metadata &&
+          message.metadata.channel === MESSAGE_CHANNEL.CHAT
+            ? [message.metadata]
+            : [],
+        );
+        assert.deepEqual(notices, [
+          {
+            author: MESSAGE_AUTHOR.HUMAN,
+            channel: MESSAGE_CHANNEL.CHAT,
+            chat_seq: sent.posted.seq,
+            from: "test-user",
+          },
+        ]);
+
+        const again = yield* chat.wrote(send);
+        assert.ok("posted" in again);
+        assert.equal(again.posted.id, sent.posted.id);
+        assert.deepEqual(again.receipt, { told: [], held: [], left: [], unresolved: [] });
+        assert.equal(eve.sent.length, 1);
+        // A plain post in a channel tells nobody.
+        const plain = yield* chat.wrote({ text: "Morning, all.", clientKey: randomUUID() });
+        assert.ok("posted" in plain);
+        assert.deepEqual(plain.receipt.told, []);
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "an answer at a revision the agent moved past is not taken and tells nothing; one at the revision drawn is taken as the person's reply in the thread, which steers the agent",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openWindowChat(eve);
+        const first = yield* chat.agentAsks("Ship with seven-day invites?");
+        yield* chat.agentAsks("Ship with fourteen-day invites?");
+        const answer = (revision: number, reply: WireBoundaryInput) => ({
+          answer: { seq: first.message.seq, revision, reply },
+          clientKey: randomUUID(),
+        });
+
+        const stale = yield* chat.wrote(answer(1, { reply: CHAT_REPLY.APPROVED }));
+        assert.ok("ask" in stale);
+        assert.deepEqual(
+          [stale.taken, stale.ask.ask?.revision, stale.ask.ask?.status],
+          [false, 2, ASK_STATUS.OPEN],
+        );
+        assert.equal(eve.sent.length, 0);
+        assert.deepEqual(
+          yield* chat.write(answer(2, { reply: CHAT_REPLY.CHOSE, choices: ["Yes"] })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+
+        const taken = yield* chat.wrote(answer(2, { reply: CHAT_REPLY.APPROVED }));
+        assert.ok("ask" in taken);
+        assert.deepEqual([taken.taken, taken.ask.ask?.status], [true, ASK_STATUS.ANSWERED]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [chat.sessionId],
+        );
+        const replies = (yield* chat.read).messages.filter(
+          (message) => message.parentId === first.message.id,
+        );
+        assert.equal(replies.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a read moves the person's cursor on, never back, and the chat's read answers it; a resolve of an ask not the person's, a write to a workspace the account is not in, and a write that is none are refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const asked = yield* chat.agentAsks("Ship it?");
+
+        assert.deepEqual(yield* chat.wrote({ readTo: asked.message.seq }), {
+          readSeq: asked.message.seq,
+        });
+        assert.deepEqual(yield* chat.wrote({ readTo: 0 }), { readSeq: asked.message.seq });
+        assert.equal((yield* chat.read).readSeq, asked.message.seq);
+
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(
+          yield* chat.write({ resolve: { seq: asked.message.seq, reason: "Not mine." } }),
+          notFound,
+        );
+        assert.deepEqual(yield* chat.write({ readTo: 1 }, chat.other), notFound);
+        assert.deepEqual(
+          yield* chat.write({ text: "To no one.", to: "#nowhere", clientKey: randomUUID() }),
+          notFound,
+        );
+        assert.deepEqual(
+          yield* chat.write({ text: "Two ways.", blocks: [], clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* chat.write({ readTo: 1 }, "no-such-bearer"),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
       }),
   );
