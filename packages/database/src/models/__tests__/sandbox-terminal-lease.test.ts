@@ -11,9 +11,9 @@ import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   claimLapsedLease,
-  deferLapsedLease,
   holdSandbox,
   lapsedSandboxLeases,
+  releaseLapsedLease,
   sandboxHeld,
 } from "../sandbox-terminal-lease.js";
 
@@ -21,10 +21,12 @@ import {
  * The lease a developer's typing holds on a coding agent's sandbox, over a
  * real dialect: it moves on and never back and holds until its instant; it
  * lapses for the sweep with the session its sandbox is tagged with, only
- * while no turn of its agent runs; a claim takes it only while it is still
- * lapsed; and a stop that failed puts it back behind the leases not yet
- * tried, unless the developer typed since. Every conversation is minted per test and every read is of its
- * ids, since the lease is the deployment's and not an account's.
+ * while no turn of its agent runs; a claim takes it once, only while it is
+ * still lapsed and no turn runs, and a claimed lease waits behind the leases
+ * not yet tried until the retry bound; and a release lets go of a lease only
+ * while it is still lapsed. Every conversation is minted per test and every
+ * read is of its ids, since the lease is the deployment's and not an
+ * account's.
  *
  * Synthetic accounts, conversations, and sessions throughout.
  */
@@ -52,9 +54,13 @@ const openAgent = (turn?: TurnStatus) =>
     return { conversationId: row.id, sessionId };
   });
 
-/** The lapsed leases the sweep would take before the instant given, narrowed to the conversations named. */
-const lapsedAmong = (lapsedBefore: Date, conversationIds: readonly string[]) =>
-  Effect.map(lapsedSandboxLeases(lapsedBefore, 1_000), (leases) =>
+/** The lapsed leases the sweep would take before the instant given, narrowed to the conversations named; a claim before `triedBefore` is taken up again. */
+const lapsedAmong = (
+  lapsedBefore: Date,
+  conversationIds: readonly string[],
+  triedBefore: Date = lapsedBefore,
+) =>
+  Effect.map(lapsedSandboxLeases(lapsedBefore, triedBefore, 1_000), (leases) =>
     leases.filter((lease) => conversationIds.includes(lease.conversationId)),
   );
 
@@ -101,54 +107,90 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
       }),
   );
 
-  it.effect("a claim takes a lease only while it is still lapsed", () =>
-    Effect.gen(function* () {
-      const claimed = yield* openAgent();
-      const retaken = yield* openAgent();
-      yield* holdSandbox(claimed.conversationId, at(1));
-      yield* holdSandbox(retaken.conversationId, at(1));
-      // Typing again after the sweep read the lease as lapsed before at(3).
-      yield* holdSandbox(retaken.conversationId, at(8));
+  it.effect(
+    "a claim takes a lease once, only while it is still lapsed and no turn of its agent runs",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const claimed = yield* openAgent();
+        const retaken = yield* openAgent();
+        const resumed = yield* openAgent(TURN_STATUS.SETTLED);
+        for (const { conversationId } of [claimed, retaken, resumed]) {
+          yield* holdSandbox(conversationId, at(1));
+        }
+        // Typing again, and a turn beginning, after the sweep read the leases as lapsed before at(3).
+        yield* holdSandbox(retaken.conversationId, at(8));
+        const [row] = yield* db
+          .select({ userId: conversations.userId })
+          .from(conversations)
+          .where(eq(conversations.id, resumed.conversationId));
+        assert.ok(row);
+        yield* db.insert(turns).values({
+          userId: row.userId,
+          conversationId: resumed.conversationId,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.RUNNING,
+        });
 
-      assert.equal(yield* claimLapsedLease(claimed.conversationId, at(3)), true);
-      assert.equal(
-        yield* claimLapsedLease(claimed.conversationId, at(3)),
-        false,
-        "a claim is had once",
-      );
-      assert.equal(yield* claimLapsedLease(retaken.conversationId, at(3)), false);
-      assert.equal(yield* sandboxHeld(retaken.conversationId, at(7)), true);
-    }),
+        assert.equal(yield* claimLapsedLease(claimed.conversationId, at(3), at(0), at(3)), true);
+        assert.equal(
+          yield* claimLapsedLease(claimed.conversationId, at(3), at(0), at(3)),
+          false,
+          "a claim is had once",
+        );
+        assert.equal(yield* claimLapsedLease(retaken.conversationId, at(3), at(0), at(3)), false);
+        assert.equal(yield* claimLapsedLease(resumed.conversationId, at(3), at(0), at(3)), false);
+        assert.equal(yield* sandboxHeld(retaken.conversationId, at(7)), true);
+      }),
   );
 
   it.effect(
-    "a lease whose stop failed waits behind the leases not yet tried, and typing since keeps the developer's lease",
+    "a claimed lease waits behind the leases not yet tried until the retry bound, and typing clears its claim",
     () =>
       Effect.gen(function* () {
-        const failed = yield* openAgent();
+        const claimed = yield* openAgent();
         const untried = yield* openAgent();
         const retaken = yield* openAgent();
-        yield* holdSandbox(failed.conversationId, at(1));
-        yield* holdSandbox(untried.conversationId, at(2));
-        yield* holdSandbox(retaken.conversationId, at(1));
-        const [failedLease] = yield* lapsedAmong(at(5), [failed.conversationId]);
-        const [retakenLease] = yield* lapsedAmong(at(5), [retaken.conversationId]);
-        assert.ok(failedLease !== undefined && retakenLease !== undefined);
-        yield* claimLapsedLease(failed.conversationId, at(5));
-        yield* claimLapsedLease(retaken.conversationId, at(5));
-        yield* holdSandbox(retaken.conversationId, at(20));
+        for (const { conversationId } of [claimed, untried, retaken]) {
+          yield* holdSandbox(conversationId, at(1));
+        }
+        yield* claimLapsedLease(claimed.conversationId, at(5), at(0), at(6));
+        yield* claimLapsedLease(retaken.conversationId, at(5), at(0), at(6));
+        yield* holdSandbox(retaken.conversationId, at(7));
+        const ids = [claimed.conversationId, untried.conversationId, retaken.conversationId];
 
-        yield* deferLapsedLease(failedLease, at(6));
-        yield* deferLapsedLease(retakenLease, at(6));
+        const withinBound = yield* lapsedAmong(at(10), ids, at(6));
+        const pastBound = yield* lapsedAmong(at(10), ids, at(12));
 
         assert.deepEqual(
-          (yield* lapsedAmong(at(7), [failed.conversationId, untried.conversationId])).map(
-            (lease) => lease.conversationId,
-          ),
-          [untried.conversationId, failed.conversationId],
+          withinBound.map((lease) => lease.conversationId),
+          [untried.conversationId, retaken.conversationId],
+          "a claim within the bound is no sweep's to take; typing cleared the other",
         );
-        assert.equal(yield* sandboxHeld(retaken.conversationId, at(19)), true);
+        assert.deepEqual(
+          pastBound.map((lease) => lease.conversationId),
+          [untried.conversationId, retaken.conversationId, claimed.conversationId],
+        );
       }),
+  );
+
+  it.effect("a release lets go of a lease only while it is still lapsed", () =>
+    Effect.gen(function* () {
+      const stopped = yield* openAgent();
+      const retaken = yield* openAgent();
+      yield* holdSandbox(stopped.conversationId, at(1));
+      yield* holdSandbox(retaken.conversationId, at(1));
+      yield* claimLapsedLease(stopped.conversationId, at(3), at(0), at(3));
+      yield* claimLapsedLease(retaken.conversationId, at(3), at(0), at(3));
+      // The developer typed while Vercel stopped the sandbox.
+      yield* holdSandbox(retaken.conversationId, at(9));
+
+      yield* releaseLapsedLease(stopped.conversationId, at(3));
+      yield* releaseLapsedLease(retaken.conversationId, at(3));
+
+      assert.deepEqual(yield* lapsedAmong(at(20), [stopped.conversationId]), []);
+      assert.equal(yield* sandboxHeld(retaken.conversationId, at(8)), true);
+    }),
   );
 
   it.effect("a lease goes with its conversation", () =>
