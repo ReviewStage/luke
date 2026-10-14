@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import {
   AgentSandbox,
@@ -60,8 +60,14 @@ function commandStream(exitCode: number, stdout = ""): Response {
  * tmux holding the shells the list prints, refusing to name a shell it does
  * not hold, and a resume that brings the sandbox up under a fresh session.
  */
-function vercel(status: string | undefined, shells: readonly string[] = [], listExit = 0) {
+function vercel(
+  status: string | undefined,
+  shells: readonly string[] = [],
+  listExit = 0,
+  interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
+) {
   const asked: Asked[] = [];
+  const policies: unknown[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
     fakeHttpClientLayer(async (url, init) => {
@@ -79,6 +85,13 @@ function vercel(status: string | undefined, shells: readonly string[] = [], list
         return commandStream(named ? 0 : 1);
       }
       asked.push({ method, url: parsed });
+      if (parsed.pathname.endsWith("/interactive")) {
+        return Response.json({ url: interactiveUrl, token: "pty-token" });
+      }
+      if (parsed.pathname.endsWith("/network-policy")) {
+        policies.push(JSON.parse(await new Response(init.body).text()));
+        return Response.json({});
+      }
       if (parsed.searchParams.get("resume") === "true") {
         return Response.json({
           sandbox: { name: SANDBOX, status: "stopped" },
@@ -93,7 +106,7 @@ function vercel(status: string | undefined, shells: readonly string[] = [], list
       });
     }),
   );
-  return { layer, asked };
+  return { layer, asked, policies };
 }
 
 /** One field as the list prints it: what tmux printed, newline and all, in base64. */
@@ -218,4 +231,83 @@ it.effect("a resume wakes the stopped sandbox by its name and answers it running
     const woken = api.asked.find((call) => call.url.searchParams.get("resume") === "true");
     assert.equal(woken?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
   }),
+);
+
+it.effect("an attach mints the running session's PTY and never wakes a stopped sandbox", () =>
+  Effect.gen(function* () {
+    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+    const running = vercel("running");
+    const stopped = vercel("stopped");
+
+    const attached = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+      sandbox.attach(SESSION, SHELL),
+    ).pipe(Effect.provide(running.layer));
+    const refused = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+      sandbox.attach(SESSION, SHELL),
+    ).pipe(Effect.provide(stopped.layer));
+
+    assert.equal(attached.state, SANDBOX_STATE.RUNNING);
+    assert.ok("shell" in attached && attached.shell.url === "wss://sbx-fixture.vercel.run/ws");
+    const mint = running.asked.find((call) => call.url.pathname.endsWith("/interactive"));
+    assert.equal(mint?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/interactive`);
+    assert.deepEqual(refused, { state: SANDBOX_STATE.STOPPED });
+    assert.ok(stopped.asked.every((call) => call.url.searchParams.get("resume") === null));
+    assert.ok(stopped.asked.every((call) => !call.url.pathname.endsWith("/interactive")));
+  }),
+);
+
+it.effect(
+  "a minted PTY address off Vercel's sandbox domain is refused, its token never handed on",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const addresses = [
+        "wss://pty.attacker.test/ws",
+        "wss://vercel.run.attacker.test/ws",
+        "ws://sbx-fixture.vercel.run/ws",
+        "wss://user:pass@sbx-fixture.vercel.run/ws",
+      ];
+
+      for (const address of addresses) {
+        const api = vercel("running", [], 0, address);
+        const attached = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.attach(SESSION, SHELL),
+        ).pipe(Effect.provide(api.layer), Effect.flip);
+        assert.ok(attached instanceof SandboxUnavailable, address);
+      }
+    }),
+);
+
+it.effect("an attach to a shell tmux does not hold is gone, and no PTY is minted for it", () =>
+  Effect.gen(function* () {
+    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+    const api = vercel("running");
+    const unknown = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
+
+    const attached = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+      sandbox.attach(SESSION, unknown),
+    ).pipe(Effect.provide(api.layer));
+
+    assert.deepEqual(attached, { state: SANDBOX_STATE.RUNNING, gone: true });
+    assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/interactive")));
+  }),
+);
+
+it.effect(
+  "a GitHub token is set at the firewall on GitHub's two hosts alone, every other host left open",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel("running");
+
+      yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+        sandbox.setGitHubToken(RUNNING_SESSION, Redacted.make("ghs_fixture")),
+      ).pipe(Effect.provide(api.layer));
+
+      const authorization = `Basic ${Buffer.from("x-access-token:ghs_fixture").toString("base64")}`;
+      const injected = [{ transform: [{ headers: { authorization } }] }];
+      assert.deepEqual(api.policies, [
+        { allow: { "*": [], "github.com": injected, "api.github.com": injected } },
+      ]);
+    }),
 );

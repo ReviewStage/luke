@@ -97,6 +97,7 @@ const EXPECTED_STATUS = {
     ["/api/maintenance/sweep", PROBE_STATUS.UNAUTHORIZED],
     ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
+    ["/api/terminal/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
     [EVE_HEALTH_PATH, PROBE_STATUS.OK],
   ]),

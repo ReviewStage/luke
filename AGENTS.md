@@ -46,7 +46,11 @@ lands. A component is placed by review under the same rule.
   tool's events as it printed; a trace, a counted event, and a fixture still never
   carry it where that can be avoided. And an integration's MCP tool calls and
   results, a credential its provider answers among them, may reach the
-  conversation, the model, an agent's transcript, and its traces.
+  conversation, the model, an agent's transcript, and its traces. And, approved by
+  Dean on 2026-10-14, a Terminal tab's bytes go only to the tab that opened
+  them: through the terminal relay (`apps/web/server/terminal/`) and the host
+  to that panel's window, never into a trace, a counted event, a fixture, app
+  state, or the voice window.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
@@ -167,13 +171,15 @@ reads it, the moment the root first reaches it, so the edge is here rather than
 at the root that imports it), the renderer's own fiber sites — the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the three doors
+module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
 function module under `apps/web/server/routes/**` exports its `HttpRouter`
 through, which reads that runtime once per instance and lets the handler it
 builds do its own running), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
-request, so there is no request fiber to compose it into) and
+request, so there is no request fiber to compose it into),
+`apps/web/server/terminal/function.ts` (the terminal relay, stood for a
+function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
 its own process), the eve project's authored files —
 `apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,

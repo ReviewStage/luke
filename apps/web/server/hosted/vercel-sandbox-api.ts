@@ -5,10 +5,12 @@
  * and hands Luke's own code no handle to it. What Luke asks of a sandbox
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
- * terminal's list — it asks here, of the calls that SDK's `APIClient` makes
- * (`@vercel/sandbox` 3.3.0, the copy eve 0.74.0 bundles: re-read
- * `listSandboxes`, `getSandbox`, `deleteSandbox`, `stopSession`, and
- * `runCommand` when it moves), directly rather than through the SDK, because
+ * terminal's list, a terminal's PTY, the GitHub credential at its firewall —
+ * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
+ * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
+ * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`, and
+ * `updateNetworkPolicy` when it moves), directly rather than through the SDK,
+ * because
  * the SDK bundled into a function fails it as it loads and carries a dozen
  * Node modules these calls never use.
  *
@@ -22,7 +24,7 @@
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Effect, Result, Schema } from "effect";
+import { Data, Effect, Redacted, Result, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 
 /** The tag eve sets on every session's sandbox, its value the session's id. */
@@ -64,6 +66,28 @@ export interface CommandRun {
   readonly stdout: string;
 }
 
+/**
+ * Where a sandbox session's PTY is reached: a WebSocket address and the
+ * token it is opened with, minted for one connection. Both stay on the
+ * service; nothing of either reaches a device.
+ */
+export interface InteractiveShell {
+  readonly url: string;
+  readonly token: Redacted.Redacted;
+}
+
+/** A sandbox session's network policy as the API takes it: every host open, and on the hosts named, headers the firewall sets on the way out. */
+interface NetworkPolicy {
+  readonly allow: Readonly<
+    Record<
+      string,
+      readonly {
+        readonly transform: readonly { readonly headers: Readonly<Record<string, string>> }[];
+      }[]
+    >
+  >;
+}
+
 /** The argv of a command Luke wrote, and where it runs. */
 export interface CommandAsk {
   readonly command: string;
@@ -87,6 +111,15 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     ask: CommandAsk,
   ) => Effect.Effect<CommandRun, SandboxUnavailable>;
+  /** Mints a connection to the running sandbox session's PTY; a session not running is unavailable, and nothing is resumed. */
+  readonly openInteractive: (
+    sandboxSessionId: string,
+  ) => Effect.Effect<InteractiveShell, SandboxUnavailable>;
+  /** Sets the running sandbox session's network policy whole. */
+  readonly updateNetworkPolicy: (
+    sandboxSessionId: string,
+    policy: NetworkPolicy,
+  ) => Effect.Effect<void, SandboxUnavailable>;
 }
 
 /** The OIDC token's claims the API is asked under: the project and team it names. */
@@ -116,7 +149,30 @@ const CommandLineSchema = Schema.Union([
   Schema.Struct({ stream: Schema.Literal("error"), data: Schema.Unknown }),
 ]);
 
+/** A minted PTY connection. */
+const InteractiveSchema = Schema.Struct({ url: Schema.String, token: Schema.String });
+
+/** Where a sandbox's own PTY server is served: Vercel's sandbox domain, as it addresses a sandbox's routes, on a secure socket. */
+const SANDBOX_SHELL_ADDRESS = {
+  HOST_SUFFIX: ".vercel.run",
+  PROTOCOLS: new Set(["wss:", "https:"]),
+} as const;
+
+/** Whether a minted PTY address is one of Vercel's sandboxes, by its protocol and host alone, so the shell's token is never sent anywhere else. */
+function isSandboxShellAddress(address: string): boolean {
+  const url = Result.try(() => new URL(address));
+  if (Result.isFailure(url)) return false;
+  const { protocol, hostname, username, password } = url.success;
+  return (
+    SANDBOX_SHELL_ADDRESS.PROTOCOLS.has(protocol) &&
+    hostname.endsWith(SANDBOX_SHELL_ADDRESS.HOST_SUFFIX) &&
+    username === "" &&
+    password === ""
+  );
+}
+
 const readClaims = readEither(OidcClaimsSchema, { excess: EXCESS_KEYS.DROP });
+const readInteractive = readEither(InteractiveSchema, { excess: EXCESS_KEYS.DROP });
 const readListed = readEither(ListedSandboxesSchema, { excess: EXCESS_KEYS.DROP });
 const readFound = readEither(FoundSandboxSchema, { excess: EXCESS_KEYS.DROP });
 const readCommandLine = readEither(CommandLineSchema, { excess: EXCESS_KEYS.DROP });
@@ -308,6 +364,42 @@ export function vercelSandboxApi(
             return yield* new SandboxUnavailable({ status: ran.status });
           }
           return run;
+        }),
+      openInteractive: (sandboxSessionId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/interactive`,
+            asked.teamId,
+          );
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({}),
+          );
+          const minted = yield* callApi(client, request);
+          const read = readInteractive(jsonOf(minted.text));
+          if (!succeeded(minted.status) || Result.isFailure(read)) {
+            return yield* new SandboxUnavailable({ status: minted.status });
+          }
+          if (!isSandboxShellAddress(read.success.url)) {
+            yield* Effect.logWarning("a minted PTY address was not on Vercel's sandbox domain");
+            return yield* new SandboxUnavailable({});
+          }
+          return { url: read.success.url, token: Redacted.make(read.success.token) };
+        }),
+      updateNetworkPolicy: (sandboxSessionId, policy) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/network-policy`,
+            asked.teamId,
+          );
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe(policy),
+          );
+          const updated = yield* callApi(client, request);
+          if (!succeeded(updated.status)) {
+            return yield* new SandboxUnavailable({ status: updated.status });
+          }
         }),
     };
   });

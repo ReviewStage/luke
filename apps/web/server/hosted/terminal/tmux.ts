@@ -157,6 +157,16 @@ export function startTerminal(terminalId: string, title: string | undefined): Co
   );
 }
 
+/** Attaches a terminal's PTY to a shell that stands; one that does not is never started here, which only the shell route does. */
+export function attachTerminal(terminalId: string): CommandAsk {
+  return tmux(["attach-session", "-t", targetOf(terminalId)]);
+}
+
+/** Whether a shell stands: exit 0 where its session does. */
+export function holdsTerminal(terminalId: string): CommandAsk {
+  return tmux(["has-session", "-t", targetOf(terminalId)]);
+}
+
 /** Names a shell anew. */
 export function renameTerminal(terminalId: string, title: string): CommandAsk {
   return tmux(["set-option", "-t", optionTargetOf(terminalId), TMUX.TITLE_OPTION, title]);

@@ -25,6 +25,7 @@
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",
     "apps/web/server/voice/function.ts",
+    "apps/web/server/terminal/function.ts",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
