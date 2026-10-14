@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PLUGIN_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REPOSITORY_ROOT = path.resolve(PLUGIN_DIRECTORY, "..", "..", "..");
+const REPOSITORY_ROOT = path.resolve(PLUGIN_DIRECTORY, "..", "..");
 
 /**
  * The machine-readable twin of root AGENTS.md's "Effect idioms" section.

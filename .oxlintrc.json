@@ -6,12 +6,12 @@
     ".codex/**",
     ".cursor/**",
     ".opencode/**",
-    "tools/oxlint/anti-slop/**"
+    "tools/anti-slop/**"
   ],
   "jsPlugins": [
     {
       "name": "anti-slop",
-      "specifier": "./tools/oxlint/anti-slop/index.ts"
+      "specifier": "./tools/anti-slop/index.ts"
     }
   ],
   "rules": {

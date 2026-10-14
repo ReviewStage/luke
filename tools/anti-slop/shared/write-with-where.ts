@@ -1,4 +1,4 @@
-import type { ESTree, Node } from "@oxlint/plugins";
+import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
 /**
@@ -18,8 +18,8 @@ function isHandleMethod(callee: ESTree.Expression, method: string): boolean {
 }
 
 /** Whether a later link of the builder chain the call starts is `.where(...)`. */
-function chainHasWhere(call: Node): boolean {
-  let link: Node = call;
+function chainHasWhere(call: ESTree.Node): boolean {
+  let link: ESTree.Node = call;
   let parent = link.parent;
   while (parent !== null && parent !== undefined) {
     if (parent.type === "MemberExpression" && parent.object === link) {

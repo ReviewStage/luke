@@ -1,0 +1,16 @@
+{
+  "name": "@luke/anti-slop",
+  "version": "0.13.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@oxlint/plugins": "1.79.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

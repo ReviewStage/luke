@@ -9,7 +9,7 @@ import ts from "typescript";
  *
  * Deciding it needs types: the expression is an ordinary call, and only its
  * type says whether what came back was a description or a result. The oxlint
- * plugins in `tools/oxlint/anti-slop` see an AST and no checker, so this check
+ * plugins in `tools/anti-slop` see an AST and no checker, so this check
  * lives here instead, over a program of its own.
  *
  * The compiler is the one `apps/web` already compiles under (6.0.3, `catalog:web`)

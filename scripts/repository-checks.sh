@@ -281,7 +281,7 @@ if [[ -n "$literal_effect_versions" ]]; then
     exit 1
 fi
 
-# `tools/oxlint/anti-slop/effect-edges.json` is the machine-readable twin of
+# `tools/anti-slop/effect-edges.json` is the machine-readable twin of
 # root AGENTS.md's "Effect idioms" section: `no-run-promise-outside-edges` and
 # `no-raw-async-primitives` read it, so the lint itself is what catches a file
 # that starts running an Effect without being written down. This is the other
@@ -293,7 +293,7 @@ node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const root = process.argv[1];
-  const allowlistPath = "tools/oxlint/anti-slop/effect-edges.json";
+  const allowlistPath = "tools/anti-slop/effect-edges.json";
   const allowlist = JSON.parse(await readFile(path.join(root, allowlistPath), "utf8"));
   const agents = await readFile(path.join(root, "AGENTS.md"), "utf8");
   const section = agents.slice(

@@ -19,6 +19,9 @@ const CONSTRUCTED = {
   ABORT_CONTROLLER: "AbortController",
 } as const;
 
+/** Every node an `Identifier` visitor is handed: a reference, a binding, a label, a name. */
+type IdentifierNode = Extract<ESTree.Node, { type: "Identifier" }>;
+
 type FileBindings = {
   readonly timerNames: Set<string>;
   readonly watchNames: Set<string>;
@@ -56,7 +59,7 @@ function fileSystemNamespaceName(callee: ESTree.Expression | ESTree.Super): stri
   return inner !== null && inner.type === "Identifier" ? inner.name : null;
 }
 
-function includesNode(list: readonly unknown[], node: ESTree.Identifier): boolean {
+function includesNode(list: readonly unknown[], node: IdentifierNode): boolean {
   return list.includes(node);
 }
 
@@ -70,7 +73,7 @@ function includesNode(list: readonly unknown[], node: ESTree.Identifier): boolea
  * `CallExpression`/`NewExpression` below and would otherwise be reported
  * twice.
  */
-function isBareReference(node: ESTree.Identifier): boolean {
+function isBareReference(node: IdentifierNode): boolean {
   const parent = node.parent;
   switch (parent.type) {
     case "CallExpression":
