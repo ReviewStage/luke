@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF, ROLLOUT_ROLE } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_BRIEF,
+  CODING_AGENT_REPORT_TOOL,
+  ROLLOUT_ROLE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -163,6 +167,27 @@ test("a worker handed one pull request is told to read the whole plan, and one h
   assert.ok(worker.includes("Read it before you take a note with `edit_plan`"));
   assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false).includes("read_plan"));
   assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false).includes("read_plan"));
+});
+
+test("a rollout's builder is told to report its pull request open and green, when to ask Luke, to keep small calls its own, to leave its branch's place to the stack keeper, and to resync when told; an agent handed the plan or a task is told of no report", () => {
+  const worker = coderInstructions(STACKED_WORKER, CODING_AGENT_BRIEF.PULL_REQUEST, false);
+  for (const kept of [
+    `\`${CODING_AGENT_REPORT_TOOL}\``,
+    "the moment your pull request is open",
+    "when its checks are green",
+    "never rebase onto a moved base, retarget your pull request, merge it, or run `gh stack`",
+    "push only your own branch",
+    "`git reset --hard origin/<your-branch>`",
+    "when the brief and the code disagree",
+    "when the acceptance cannot be met",
+    "an interface another pull request of the rollout depends on",
+    "record them with `edit_plan`",
+  ]) {
+    assert.ok(worker.includes(kept), kept);
+  }
+  for (const brief of [CODING_AGENT_BRIEF.PLAN, CODING_AGENT_BRIEF.TASK]) {
+    assert.ok(!coderInstructions(RELAY_AGENT, brief, false).includes("Reporting to Luke"), brief);
+  }
 });
 
 /** Every brief of an agent that writes code and cuts a branch of its own: all but the stack keeper's. */
