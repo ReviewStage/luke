@@ -47,16 +47,11 @@ import { modelChoiceSchema } from "@sidecar/features/models-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import {
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  unparsedWire,
-  wireUuidSchema,
-} from "./core.js";
+import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "./core.js";
 import type { GitHubApp } from "./github/github-app.js";
 import { githubReadOrRefusal } from "./github/github-refusal.js";
 import { pullRequestFiles } from "./github/pull-requests.js";
+import { reachedAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   agentPullRequestReach,
@@ -260,31 +255,6 @@ export type CodingAgentsAppServices =
 
 type AgentsServices = CodingAgentsAppServices | HttpServerRequest.HttpServerRequest;
 
-/** The bearer's account, or the invalid-token refusal. */
-const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return account.value;
-});
-
-/** The one id the path put under the query name; two is refused, and one that is no UUID names no row. */
-const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-  name: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const ids = new URL(request.url).searchParams.getAll(name);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
 /** The one id the path named under `id`. */
 const idOf = (request: Request) => uuidOf(request, QUERY.ID);
 
@@ -435,30 +405,6 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
   });
-});
-
-/**
- * The agent the path names, where the account is a member of its plan's
- * workspace, or not found; its conversation is targeted under the member
- * who started it, which is whom the conversation belongs to.
- */
-const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  request: Request,
-): Effect.fn.Return<
-  { readonly userId: string; readonly agent: CodingAgent; readonly target: ConversationTarget },
-  HostedRefusal,
-  DatabaseServices
-> {
-  const agentId = yield* idOf(request);
-  const userId = yield* resolvedUserId(seams, request);
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
-  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return {
-    userId,
-    agent: agent.value,
-    target: { userId: agent.value.userId, conversationId: agent.value.conversationId },
-  };
 });
 
 /** Why a message body was not read as one: its words run past the bound, or it is not a message at all. */

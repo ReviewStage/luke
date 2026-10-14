@@ -32,6 +32,7 @@ import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
 import { CODER } from "../coder-host/bounds.js";
+import { TMUX_SETTINGS } from "../terminal/tmux.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
@@ -44,6 +45,13 @@ const PREPARE_SCRIPT = [
   '  if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y python3; else sudo -n apt-get update && sudo -n apt-get install -y python3; fi',
   "fi",
   "pnpm --version && python3 --version",
+  // tmux holds each Terminal tab's shell, so it outlives any connection to it (`terminal/tmux.ts`).
+  'SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"',
+  "if ! command -v tmux >/dev/null 2>&1; then",
+  "  if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y tmux; else $SUDO apt-get update && $SUDO apt-get install -y tmux; fi",
+  "fi",
+  `printf '%s\\n' ${TMUX_SETTINGS.map((line) => `'${line}'`).join(" ")} | $SUDO tee /etc/tmux.conf >/dev/null`,
+  "tmux -V",
 ].join("\n");
 
 /**

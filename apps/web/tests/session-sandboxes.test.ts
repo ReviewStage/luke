@@ -3,11 +3,8 @@ import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
-import {
-  SandboxUnavailable,
-  SessionSandboxes,
-  sessionSandboxesLayer,
-} from "../server/hosted/session-sandboxes";
+import { SessionSandboxes, sessionSandboxesLayer } from "../server/hosted/session-sandboxes";
+import { SandboxUnavailable } from "../server/hosted/vercel-sandbox-api";
 
 /**
  * A session's sandboxes stopped through Vercel Sandbox's REST API, as the

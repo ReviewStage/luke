@@ -36,6 +36,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -94,6 +95,8 @@ export const HOSTED_REFUSAL = {
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
   /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
+  /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
+  SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** The repository out of reach, with why, so the desktop can offer what mends it. */

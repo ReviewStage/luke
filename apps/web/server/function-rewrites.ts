@@ -101,6 +101,13 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/terminals/([^/]+)",
+    route: "agents/terminal",
+    query: "id=$1&terminal=$2",
+  },
+  { src: "/api/agents/([^/]+)/terminals", route: "agents/terminals", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/sandbox/resume", route: "agents/sandbox-resume", query: "id=$1" },
   { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",
