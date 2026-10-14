@@ -16,12 +16,13 @@
  * resamples it cleanly (Pearson 0.9916 against a decimated 48 kHz copy, no
  * lag), so the worklet carries no filter of its own.
  *
- * Its caller is #10, which runs it from `use-voice-session.ts`.
+ * `voice/live-call.ts` runs it while the avatar is starting or live, handed
+ * it by `voice/use-voice-session.ts`.
  */
 
 import { Effect, type Scope } from "effect";
+import type { AvatarFeed } from "#shared/messages/avatar";
 import { PCM_SAMPLE_RATE, PCM_TEE } from "./contract";
-import type { AvatarFeed } from "./feed";
 import { closeTurnGate, stepTurnGate, TURN_GATE_IDLE } from "./turn-gate";
 
 export interface AvatarFeedOptions {

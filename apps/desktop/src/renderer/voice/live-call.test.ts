@@ -11,6 +11,8 @@ import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestra
 import type { WireRecord } from "@sidecar/wire";
 import { type Context, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import { AVATAR_FEED_KIND, AVATAR_STATUS, type AvatarFeed } from "#shared/messages/avatar";
+import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
 import { LiveCall, type LiveStreamSlot, SESSION_CLOSE_TIMEOUT_MS } from "./live-call";
 import {
   LIVE_EVENTS_CHANNEL_LABEL,
@@ -19,6 +21,7 @@ import {
   type LiveSilence,
   type LiveTrackSender,
 } from "./live-peer";
+import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice-level-meter";
 
 /**
  * Lets the fibers the call forked and the fake peer's own promises settle with
@@ -202,6 +205,36 @@ interface FixtureOptions {
   voiceSessionId?: string;
   /** The window's slots, shared with another call; a call of its own otherwise. */
   streams?: WindowStreams;
+  /** Whether the call carries the avatar feed path. */
+  avatar?: boolean;
+}
+
+/**
+ * The tee over Luke's track, which in the window reads it through Web Audio:
+ * here its feed is whatever the test hands it, for as long as its scope stands.
+ */
+class FakeTee {
+  starts = 0;
+  #onFeed: ((feed: AvatarFeed) => void) | undefined;
+
+  get standing(): boolean {
+    return this.#onFeed !== undefined;
+  }
+
+  start(options: AvatarFeedOptions) {
+    return Effect.acquireRelease(
+      Effect.sync(() => {
+        this.starts += 1;
+        this.#onFeed = options.onFeed;
+      }),
+      () => Effect.sync(() => (this.#onFeed = undefined)),
+    );
+  }
+
+  /** The gate's output for one chunk or a turn's end. */
+  emit(feed: AvatarFeed): void {
+    this.#onFeed?.(feed);
+  }
 }
 
 function build(services: Context.Context<never>, options: FixtureOptions) {
@@ -229,6 +262,10 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
   const sessionId = options.sessionId ?? "sess_1";
   /** The element Luke plays through, as far as its `muted` goes. */
   let outputSilenced = false;
+  let avatarVoiced = false;
+  const tee = new FakeTee();
+  /** What went to main for the call window. */
+  const fed: AvatarFeed[] = [];
   const wire: string[] = [];
   const call = new LiveCall({
     events: {
@@ -281,6 +318,15 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
     onOutputSilenced: (silenced) => {
       outputSilenced = silenced;
     },
+    ...(options.avatar === true && {
+      avatarFeed: {
+        acts: { feed: (feed: AvatarFeed) => fed.push(feed) },
+        startTee: (teeOptions: AvatarFeedOptions) => tee.start(teeOptions),
+        onAvatarVoiced: (voiced: boolean) => {
+          avatarVoiced = voiced;
+        },
+      },
+    }),
     onWireEvent: (direction, event) => wire.push(`${direction}:${String(event.type)}`),
     services,
   });
@@ -340,6 +386,17 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
     remote: streams.remote.shown,
     local: streams.local.shown,
     outputSilenced: () => outputSilenced,
+    avatarVoiced: () => avatarVoiced,
+    tee,
+    fed,
+    /** Luke's track arriving on the peer, as the browser hands it up. */
+    remoteTrack: () => {
+      // SAFETY: the call hands the stream to its slot and its tee and reads nothing off it.
+      const stream = new FakeStream([new FakeTrack()]) as unknown as MediaStream;
+      // SAFETY: the peer reads only `streams` off the track event.
+      peer.ontrack?.({ streams: [stream] } as unknown as RTCTrackEvent);
+      return stream;
+    },
     wire,
     channel,
     started,
@@ -494,4 +551,133 @@ it.effect(
       assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
       assert.deepEqual(g.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
     }),
+);
+
+const AUDIO: AvatarFeed = { kind: AVATAR_FEED_KIND.AUDIO, pcm: "AAAA" };
+const TURN_END: AvatarFeed = { kind: AVATAR_FEED_KIND.TURN_END };
+const INTERRUPT: AvatarFeed = { kind: AVATAR_FEED_KIND.INTERRUPT };
+
+/** A call with the avatar feed path, standing, with Luke's track arrived. */
+const standingWithAvatar = Effect.gen(function* () {
+  const f = yield* fixture({ avatar: true });
+  const opening = yield* Effect.forkChild(f.call.open(OPENING));
+  yield* settle;
+  f.remoteTrack();
+  f.peer.gathered();
+  yield* settle;
+  f.started();
+  yield* Fiber.join(opening);
+  return f;
+});
+
+it.effect(
+  "the avatar voices Luke from the first turn after it goes live, and gives his voice back to the element the moment it ends",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* standingWithAvatar;
+      assert.equal(f.tee.standing, false);
+      f.call.reportAvatarStatus(AVATAR_STATUS.STARTING);
+      yield* settle;
+      assert.equal(f.tee.standing, true);
+      // A turn under way when the avatar goes live finishes on the element.
+      f.tee.emit(AUDIO);
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      f.tee.emit(AUDIO);
+      f.tee.emit(TURN_END);
+      assert.deepEqual(f.fed, []);
+      assert.equal(f.avatarVoiced(), true);
+      f.tee.emit(AUDIO);
+      f.tee.emit(TURN_END);
+      assert.deepEqual(f.fed, [AUDIO, TURN_END]);
+      f.tee.emit(AUDIO);
+      f.call.reportAvatarStatus(AVATAR_STATUS.ENDED);
+      yield* settle;
+      assert.equal(f.avatarVoiced(), false);
+      assert.equal(f.tee.standing, false);
+      assert.deepEqual(f.fed, [AUDIO, TURN_END, AUDIO]);
+    }),
+);
+
+it.effect(
+  "a call without the feed path stands no tee and never mutes the element for the avatar",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
+      yield* settle;
+      f.remoteTrack();
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      yield* settle;
+      assert.equal(f.tee.starts, 0);
+      assert.equal(f.avatarVoiced(), false);
+    }),
+);
+
+it.effect("the stop's silence drops the feed, and the stop key flushes the avatar", () =>
+  Effect.gen(function* () {
+    const f = yield* standingWithAvatar;
+    f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+    yield* settle;
+    f.call.reportRemoteAudioLevel(true);
+    f.tee.emit(AUDIO);
+    f.call.silenceOutput();
+    assert.equal(f.outputSilenced(), true);
+    f.tee.emit(AUDIO);
+    f.call.interruptAvatar();
+    assert.deepEqual(f.fed, [AUDIO, INTERRUPT]);
+    // Nothing reached the avatar since, so a second press has nothing to flush.
+    f.call.interruptAvatar();
+    assert.deepEqual(f.fed, [AUDIO, INTERRUPT]);
+  }),
+);
+
+it.effect(
+  "a held talk key flushes the avatar once Luke's track has been quiet 350 ms, and not again within a second",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* standingWithAvatar;
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      yield* settle;
+      f.call.reportRemoteAudioLevel(true);
+      f.tee.emit(AUDIO);
+      f.call.reportTalkKey(true);
+      // The meter reports quiet once its own hangover has passed since Luke's last word.
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(350 - VOICE_ACTIVITY_HANGOVER_MS - 1);
+      assert.deepEqual(f.fed, [AUDIO]);
+      yield* advance(1);
+      assert.deepEqual(f.fed, [AUDIO, INTERRUPT]);
+      // Luke speaks again under the same hold and yields again inside the cooldown.
+      f.call.reportRemoteAudioLevel(true);
+      f.tee.emit(AUDIO);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(350 - VOICE_ACTIVITY_HANGOVER_MS);
+      assert.deepEqual(f.fed, [AUDIO, INTERRUPT, AUDIO]);
+      yield* advance(1_000 - (350 - VOICE_ACTIVITY_HANGOVER_MS));
+      assert.deepEqual(f.fed, [AUDIO, INTERRUPT, AUDIO, INTERRUPT]);
+      // With the key up, Luke going quiet flushes nothing.
+      f.call.reportTalkKey(false);
+      f.call.reportRemoteAudioLevel(true);
+      f.tee.emit(AUDIO);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(2_000);
+      assert.deepEqual(f.fed, [AUDIO, INTERRUPT, AUDIO, INTERRUPT, AUDIO]);
+    }),
+);
+
+it.effect("the call's end gives Luke's voice back to the element and takes the tee down", () =>
+  Effect.gen(function* () {
+    const f = yield* standingWithAvatar;
+    f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+    yield* settle;
+    assert.equal(f.avatarVoiced(), true);
+    f.channel().dropped();
+    yield* settle;
+    assert.equal(f.avatarVoiced(), false);
+    assert.equal(f.tee.standing, false);
+  }),
 );
