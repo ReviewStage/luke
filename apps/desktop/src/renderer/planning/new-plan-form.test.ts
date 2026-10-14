@@ -244,7 +244,7 @@ test("a list refused for GitHub not connected points to Settings, and the menu's
   assert.equal(alert, "Connect GitHub in Settings to use a repository with Luke.");
   assert.equal(retry, undefined);
   assert.deepEqual(page.links, [
-    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
   ]);
   assert.equal(page.container.querySelector(".plan-compose-menu"), null);
 });

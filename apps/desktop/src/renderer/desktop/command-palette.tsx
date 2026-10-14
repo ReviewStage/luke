@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the plans, the open plan's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the plans, the open plan's agents and files, every command the window can run now, and the settings, found by typing, in a dialog over the window.
  *
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -18,13 +18,10 @@
  * beside it, so two plans of one name can be told apart, and an archived
  * plan says so. An agent opens its tab as the column's "+" would, a subagent
  * its tab as the side panel's "+" would, a file in a tab of its own as one
- * chosen in a File tab's tree would, a Settings page opens as the Settings
- * sidebar's row for it does, and a setting lands on its row as the settings
- * search does. The pages are the sidebar's own list, and a page found ranks
- * above every setting found, so "voice" offers the page before its rows. The
- * files are the open plan's repository read whole in the one listing the File
- * tab's search reads, the first time a file is searched, and fuzzy-matched on
- * their paths.
+ * chosen in a File tab's tree would, and a setting lands on its row as the
+ * settings search does. The files are the open plan's repository read whole
+ * in the one listing the File tab's search reads, the first time a file is
+ * searched, and fuzzy-matched on their paths.
  *
  * It is the nearest layer while it stands: no key pressed in it goes on to
  * the window, so Escape closes the palette and nothing else, a call's reply
@@ -70,9 +67,8 @@ import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../planning/use-side-panel
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
-import { settingsPageOf } from "../settings/pages";
-import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
-import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
+import { landOnSettingsRow, resultPageWord, settingsSearchEntries } from "../settings-search";
+import type { SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
 import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
@@ -175,9 +171,6 @@ const FOOTER_HINTS: readonly { chords: readonly ShortcutChord[]; label: string }
     label: "Filter",
   },
 ];
-
-/** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
-const SETTINGS_WORD = "Settings";
 
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
 const PALETTE_COMMANDS: readonly AppCommand[] = [
@@ -434,20 +427,6 @@ function panelTabRows(
   });
 }
 
-/** Every Settings page, in the sidebar's order, under its own glyph and name. */
-function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.map((page) => {
-    const { title, icon } = settingsPageOf(page);
-    return {
-      icon,
-      label: title,
-      terms: [title],
-      keywords: [title, SETTINGS_WORD],
-      onChoose: () => open(page),
-    };
-  });
-}
-
 /** Every settings row the pages draw now, as the settings search finds them, beside its page's name. */
 function settingRows(
   rows: SettingsRowsInput | undefined,
@@ -457,7 +436,7 @@ function settingRows(
   return settingsSearchEntries(rows).map((entry) => ({
     icon: <GearIcon />,
     label: entry.label,
-    detail: RESULT_PAGE_WORD[entry.page],
+    detail: resultPageWord(entry.page),
     terms: [entry.label],
     keywords: entry.haystack,
     onChoose: () => land(entry.page, entry.id),
@@ -650,13 +629,6 @@ export function CommandPalette({
       landing.current?.();
       landing.current = landOnSettingsRow(id);
     });
-  const openPage = (page: SettingsView) =>
-    choose(() => {
-      landing.current?.();
-      landing.current = undefined;
-      onTabChange(PANEL_TAB.SETTINGS);
-      settings.onViewChange(page);
-    });
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Note that no key pressed in the palette goes on to the window, because
@@ -718,23 +690,19 @@ export function CommandPalette({
     [paths, fileQuery, limit],
   );
 
-  // Each kind's rows in tiers, built only for the filter shown and only
-  // while open: every row a tier matches ranks above the next tier's.
+  // Each kind's rows, built only for the filter shown and only while open.
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
-  const tiersOf = {
-    [PALETTE_FILTER.PLANS]: () => [
+  const rowsOf = {
+    [PALETTE_FILTER.PLANS]: () =>
       plans.signedIn ? planRows(plans, (id) => onPlans(() => plans.onSelect(id))) : [],
-    ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onPlans)],
+    [PALETTE_FILTER.AGENTS]: () => agentRows(plans, onPlans),
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
-      [
-        ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(plans, onPlans),
-      ],
+      ...actionRows((command) => choose(() => runAppCommand(command))),
+      ...panelTabRows(plans, onPlans),
     ],
-    [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
-  } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
+    [PALETTE_FILTER.SETTINGS]: () => settingRows(settings.rows, land),
+  } as const satisfies Record<PaletteKind, () => readonly PaletteRow[]>;
   // Note that a file found opens in a tab of its own, as one chosen in a
   // File tab's tree with ⌘ held does, or chooses the tab it has.
   const openFile = (path: string) =>
@@ -742,9 +710,7 @@ export function CommandPalette({
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
       ? matchedPaths.map((path) => fileRow(path, openFile))
-      : tiersOf[kind]()
-          .flatMap((tier) => ranked(tier, query, limit, byRow))
-          .slice(0, limit);
+      : ranked(rowsOf[kind](), query, limit, byRow);
   const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );

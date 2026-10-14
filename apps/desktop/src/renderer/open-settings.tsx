@@ -12,7 +12,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "./settings-v
 
 /** Where a note about the account's own GitHub not being connected leads: the account's connected accounts. */
 export const CONNECTED_ACCOUNTS_LINK: SettingsLink = {
-  page: SETTINGS_VIEW.ROOT,
+  page: SETTINGS_VIEW.ACCOUNT,
   section: SETTINGS_SECTION.CONNECTED_ACCOUNTS,
 };
 

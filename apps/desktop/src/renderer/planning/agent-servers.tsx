@@ -1,17 +1,10 @@
-import {
-  INTEGRATION_PROVIDER_LIST,
-  INTEGRATION_STATUS,
-  type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { GearIcon, McpIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
-import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
 import type { IntegrationStatuses } from "../integration-statuses";
-import { useIntegrationTools } from "../integration-tools";
+import { type IntegrationTool, useIntegrationTools } from "../integration-tools";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
@@ -20,6 +13,7 @@ import {
   type ServerRow,
   serverRows,
   switchedServers,
+  toolsCount,
 } from "./agent-servers-model";
 
 /**
@@ -31,12 +25,10 @@ import {
  * as the model menu is: one row per server with its mark and its name
  * (`agent-servers-model.ts`). A connected server's row names how many tools
  * it offers, a count that opens the list of them beside the popover on
- * hover or focus, and ends with this agent's switch; one whose server
- * answered why it lists none says why beside its name and ends with
- * Reconnect instead (`../integration-health.ts`). One not connected ends
- * with Connect, which sends the browser to sign in there and then, as
- * Settings does, and becomes the switch once the sign-in settles; Settings
- * is one press away at the gear beside the title for everything else. Where
+ * hover or focus, and ends with this agent's switch. One not connected, or
+ * whose sign-in expired, ends with Open Settings, which leaves for Settings ›
+ * Integrations, the one place a server is connected; the gear beside the
+ * title goes there too. Where
  * every connection stands is the composer's read (`../integration-statuses.ts`),
  * taken as it is drawn and again when the window is focused, which is how
  * the developer comes back from the browser, so the popover stays open while
@@ -52,15 +44,12 @@ export interface AgentServersControl {
   readonly disabled: readonly IntegrationProvider[];
   /** Switches the agent's servers, the whole list of those off. */
   readonly onSwitch: (next: readonly IntegrationProvider[]) => void;
-  /** Opens Settings on its Integrations page, where a server is disconnected. */
+  /** Opens Settings on its Integrations page, where a server is connected and disconnected. */
   readonly onOpenSettings: () => void;
 }
 
 /** What the gear beside the popover's title is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
-
-/** What the popover's list says where the deployment offers the account no server at all. */
-const SERVERS_NONE = "No servers available";
 
 /**
  * A connected server's count of tools, and the list of them beside the
@@ -125,20 +114,14 @@ function ServersPopover({
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
-  const { act } = useAct();
-  const reads = useIntegrationTools(
-    INTEGRATION_PROVIDER_LIST.filter(
-      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
-    ),
-  );
   const rows = serverRows({
     statusOf: statuses.statusOf,
-    healthOf: (provider) => connectionHealth(provider, reads[provider]),
     readFailed: statuses.readFailed,
     disabled: servers.disabled,
   });
-  const [connecting, setConnecting] = useState<IntegrationProvider | undefined>(undefined);
-
+  const tools = useIntegrationTools(
+    rows.filter((row) => row.kind === SERVER_ROW.SWITCH).map((row) => row.provider),
+  );
   // The popover takes focus as it opens, so Escape and focus leaving it are heard.
   useEffect(() => {
     box.current?.focus();
@@ -150,15 +133,9 @@ function ServersPopover({
     onClose();
   };
 
-  /** A sign-in begun from the row: the browser opens, and the row waits on the window's return to read it. */
-  const connect = (provider: IntegrationProvider) => {
-    setConnecting(provider);
-    act(ACT_KIND.INTEGRATIONS_CONNECT, { provider })
-      .catch(() => undefined)
-      .then((answer) => {
-        setConnecting(undefined);
-        if (answer !== undefined && !("failure" in answer)) statuses.signInBegun(provider);
-      });
+  const openSettings = () => {
+    onClose();
+    servers.onOpenSettings();
   };
 
   const end = (row: ServerRow): React.JSX.Element | null => {
@@ -166,7 +143,9 @@ function ServersPopover({
       case SERVER_ROW.SWITCH:
         return (
           <>
-            {row.tools !== undefined ? <ToolsCount name={row.name} tools={row.tools} /> : null}
+            {tools[row.provider] !== undefined ? (
+              <ToolsCount name={row.name} tools={tools[row.provider] ?? []} />
+            ) : null}
             <button
               type="button"
               className="agent-servers-switch"
@@ -183,17 +162,15 @@ function ServersPopover({
             </button>
           </>
         );
-      case SERVER_ROW.CONNECT:
-      case SERVER_ROW.RECONNECT:
+      case SERVER_ROW.SETTINGS:
         return (
           <button
             type="button"
             className="toolbar-button bordered-button agent-servers-connect"
-            disabled={connecting === row.provider}
-            title={`Sign in to ${row.name} in your browser`}
-            onClick={() => connect(row.provider)}
+            title={`Connect ${row.name} in Settings`}
+            onClick={openSettings}
           >
-            {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
+            {SERVER_ACTION.SETTINGS}
           </button>
         );
       case SERVER_ROW.RETRY:
@@ -229,21 +206,13 @@ function ServersPopover({
             type="button"
             className="icon-button agent-servers-settings"
             aria-label={SERVERS_SETTINGS}
-            onClick={() => {
-              onClose();
-              servers.onOpenSettings();
-            }}
+            onClick={openSettings}
           >
             <GearIcon />
           </button>
         </Tooltip>
       </div>
       <div className="agent-servers-list">
-        {rows.length === 0 ? (
-          <div className="plan-compose-menu-row agent-servers-row" aria-disabled="true">
-            <span className="plan-compose-menu-name">{SERVERS_NONE}</span>
-          </div>
-        ) : null}
         {rows.map((row) => (
           <div
             key={row.provider}
@@ -252,11 +221,6 @@ function ServersPopover({
           >
             <IntegrationMark provider={row.provider} />
             <span className="plan-compose-menu-name">{row.name}</span>
-            {row.problem !== undefined ? (
-              <span className="agent-servers-problem" title={row.problem}>
-                {row.problem}
-              </span>
-            ) : null}
             {end(row)}
           </div>
         ))}
@@ -309,7 +273,7 @@ export function AgentServersButton({
             statuses={statuses}
             onClose={close}
             onLeave={(left) => {
-              // The window losing focus is the browser opened for a sign-in, whose outcome the popover waits to read.
+              // The window losing focus leaves the popover standing for the developer's return.
               if (!document.hasFocus()) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
