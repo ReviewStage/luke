@@ -83,8 +83,8 @@ const ENCODED_STEP = /%(?:2[Ff]|5[Cc]|2[Ee])/u;
 /** A line that starts a block of its own, a heading or a list's item, which ends any code span left open before it. */
 const BLOCK_START_LINE = /^ {0,3}(?:#{1,6}(?:\s|$)|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/u;
 
-/** A line's quote markers, however deep the quote, which a line inside a quote is read past: a quote's blank line is a line of markers alone. */
-const QUOTE_MARKERS = /^(?: {0,3}>)+ ?/u;
+/** A line's quote markers, however deep the quote, each up to three spaces after the one before and its own space: a quote's blank line is a line of markers alone. */
+const QUOTE_MARKERS = /^(?: {0,3}> ?)+/u;
 
 /** A line indented as code: four spaces, or a tab, before anything. */
 const INDENTED_LINE = /^(?: {4}|\t)/u;

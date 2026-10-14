@@ -239,3 +239,17 @@ test("a quote's blank line, or an item inside the quote, ends its paragraph, so 
     ],
   );
 });
+
+test("a nested quote is one depth however far apart its markers stand, so a span across its lines is code", () => {
+  const words = [
+    ">    > `before",
+    "> > [@a](luke://file/a.ts) `after",
+    "",
+    "[@b](luke://file/b.ts)",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
+  );
+});
