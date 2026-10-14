@@ -15,9 +15,7 @@ import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
 import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
-import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
-import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
-import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image.js";
+import { type CoderHost, coderHost } from "../server/hosted/coder-host/host.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
 import {
@@ -32,7 +30,7 @@ import {
   RUN_ON_MAC_TOOL,
   runOnMacTool,
 } from "../server/hosted/mac-command.js";
-import { showPageRejected } from "../server/hosted/page-tool.js";
+import { type PageSandboxDoor, showPageRejected } from "../server/hosted/page-tool.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -159,27 +157,12 @@ export function editPlanNotes(
   );
 }
 
-/** One call of the agent's inbox tools run under its session, for the tool, which runs here rather than at an edge of its own. */
-export function runInboxTool(
-  auth: SessionAuth,
-  sessionId: string,
-  call: InboxCall,
-): Promise<InboxToolResult> {
-  return runWeb(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
-      return yield* host.inbox(admitted.success, call);
-    }),
-  );
-}
-
 /** One `show_page` call run under the agent's session, its path read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function runShowPageTool(
   auth: SessionAuth,
   sessionId: string,
   input: UnparsedWireValue,
-  sandbox: InboxSandboxDoor,
+  sandbox: PageSandboxDoor,
 ): Promise<WireRecord> {
   return runWeb(
     Effect.gen(function* () {

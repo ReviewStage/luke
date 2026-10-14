@@ -14,7 +14,6 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
-import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
 
 const SECRET = "cron-secret-1";
@@ -123,16 +122,13 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   });
 });
 
-test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
+test("the session is told never to ask for a credential or a secret, whatever it was handed", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(
       coderInstructions("Acme/Relay", brief, false).includes(
-        "Never ask for a credential or a secret in a form",
+        "Never ask for a credential or a secret",
       ),
       brief,
     );
   }
-  assert.ok(
-    INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
-  );
 });

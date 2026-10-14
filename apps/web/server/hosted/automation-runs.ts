@@ -163,7 +163,7 @@ function automationTask(automation: Automation, run: AutomationRun): string {
   return [
     automation.action.prompt,
     "---",
-    `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post to the inbox only what needs the developer.`,
+    `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and say in your final message only what needs the developer.`,
     ...githubEventLines(run),
   ].join("\n\n");
 }

@@ -43,12 +43,15 @@ import { logStoreFailure } from "./store-failure.js";
 /** A sandbox as the tool reads a page from it: one file read as a stream of bytes, or nothing where there is no file. */
 type PageSandbox = Pick<SandboxSession, "readFile">;
 
+/** The door to the session's sandbox, opened on first use: eve's `ctx.getSandbox()`, or a test's double. */
+export type PageSandboxDoor = () => Promise<PageSandbox>;
+
 /** Where a call's page is written: the account and plan the service bound, and, for an agent with one, its sandbox, opened on first use, and the checkout a relative path is read from. */
 export interface PageToolBinding {
   readonly userId: string;
   readonly planId: string;
   readonly sandbox?: {
-    readonly door: () => Promise<PageSandbox>;
+    readonly door: PageSandboxDoor;
     readonly checkout: string;
   };
 }

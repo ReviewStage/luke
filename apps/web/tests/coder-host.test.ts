@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import {
@@ -29,6 +30,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
+  type WireRecord,
 } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
@@ -37,7 +39,11 @@ import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import type { ProviderKeys } from "../server/hosted/coder-host/model";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
-import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+import {
+  CODER_TOOL,
+  CODER_TOOL_SET,
+  RETIRED_CODER_TOOL,
+} from "../server/hosted/coder-host/tool-set";
 import { CURSOR_START, transcriptPast } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { stampedEveEvent } from "./support/eve-events";
@@ -200,10 +206,25 @@ const composedPrompt = (host: CoderHost, ...composed: Parameters<CoderHost["prom
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
 
-/** One coding turn as eve emits it: the plan received, a shell call answered, a thought, words, and the end given. */
+/** A tool call of a coding turn, by the name eve ran it under, with what it was handed and what it answered. */
+interface TurnCall {
+  readonly toolName: string;
+  readonly input: WireRecord;
+  readonly output: WireRecord;
+}
+
+/** The shell call a coding turn makes unless a test names another. */
+const SHELL_CALL: TurnCall = {
+  toolName: CODER_TOOL.BASH,
+  input: { command: "cat AGENTS.md" },
+  output: { status: "completed", exitCode: 0, stdout: "# Agent guide\n", stderr: "" },
+};
+
+/** One coding turn as eve emits it: the plan received, a tool call answered (the shell's unless given), a thought, words, and the end given. */
 function codingTurn(
   turnId: string,
   end: "turn.completed" | "turn.failed" | "turn.cancelled",
+  call: TurnCall = SHELL_CALL,
 ): MessageStreamEvent[] {
   const sequence = 0;
   const ended: MessageStreamEvent =
@@ -227,8 +248,8 @@ function codingTurn(
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: CODER_TOOL.BASH,
-            input: { command: "cat AGENTS.md" },
+            toolName: call.toolName,
+            input: call.input,
           },
         ],
       },
@@ -243,8 +264,8 @@ function codingTurn(
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: CODER_TOOL.BASH,
-          output: { status: "completed", exitCode: 0, stdout: "# Agent guide\n", stderr: "" },
+          toolName: call.toolName,
+          output: call.output,
         },
       },
     }),
@@ -304,7 +325,51 @@ const turnRow = (id: string) =>
       rows[0] === undefined ? undefined : Schema.decodeUnknownSync(TurnRowSchema)(rows[0]),
   );
 
+/** The inbox's tools, which coding agents were offered once and a transcript written then still names. */
+const INBOX_TOOL_NAMES = [
+  RETIRED_CODER_TOOL.POST_TO_INBOX,
+  RETIRED_CODER_TOOL.CLOSE_INBOX_ITEM,
+  RETIRED_CODER_TOOL.READ_INBOX,
+];
+
+it("a coding agent is offered no inbox tool: the tools eve mounts are its authored files, and none is the inbox's", () => {
+  const authored: readonly string[] = readdirSync(new URL("../coder/tools/", import.meta.url))
+    .map((file) => file.replace(/\.ts$/, ""))
+    .sort();
+  for (const name of INBOX_TOOL_NAMES) assert.ok(!authored.includes(name), name);
+  assert.deepEqual(authored, [...Object.values(CODER_TOOL)].sort());
+});
+
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a transcript written while agents had the inbox still reads: a turn that called post_to_inbox lands, and its call reads back as a tool part",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const posted: TurnCall = {
+          toolName: RETIRED_CODER_TOOL.POST_TO_INBOX,
+          input: { key: "copy", title: "Which headline?" },
+          output: { ok: true, items: [] },
+        };
+        for (const event of codingTurn("turn_0", "turn.completed", posted)) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, { hash: prompt.hash });
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const call = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(call);
+        assert.equal(call.type, `tool-${RETIRED_CODER_TOOL.POST_TO_INBOX}`);
+        assert.deepEqual(call.input, posted.input);
+      }),
+  );
+
   it.effect(
     "a conversation that is no agent's is refused a model, an agent, and a prompt alike",
     () =>

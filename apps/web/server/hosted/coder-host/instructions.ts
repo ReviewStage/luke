@@ -6,7 +6,6 @@ import {
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { INTEGRATION_NAMES_SAID } from "../integrations.js";
 import { CODER } from "./bounds.js";
-import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -44,8 +43,6 @@ const BRIEF_WORDS = {
     whole: "implements the plan whole",
     none: "the plan could not be implemented",
     describe: "name the plan in its description",
-    /** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
     updating: `
 
 ## Updating the plan
@@ -59,8 +56,7 @@ const BRIEF_WORDS = {
     whole: "does the task whole",
     none: "the task could not be done",
     describe: "say in its description what the task asked",
-    /** An agent handed a task never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
-    decided: "",
+    /** An agent handed a task never sees the plan, so it is told of no way to update it. */
     updating: "",
   },
 } as const satisfies Record<
@@ -71,7 +67,6 @@ const BRIEF_WORDS = {
     whole: string;
     none: string;
     describe: string;
-    decided: string;
     updating: string;
   }
 >;
@@ -118,11 +113,9 @@ Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page it found
 
 A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.
 
-## The developer's inbox
+## What needs the developer
 
-What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or something only they can do by hand, such as changing a repository setting on GitHub or adding a secret. One item per thing you need, each under a key of your own, with a title, the context as blocks (short Markdown, a link to the page a task is done on, the exact lines of your repository a decision is about, at a commit already on GitHub, and an image where a picture says it best, such as a screenshot of a UI you rendered, by its path in your sandbox), and the response you ask for: a choice, an approval, text, a task, a form of typed fields where you need several values at once, or none for something they should only know. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a task the developer does by hand, where they put it. Decide small things yourself.
-
-Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.
+Decide small things yourself. What you should not decide alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or what only the developer can do by hand, such as changing a repository setting on GitHub or adding a secret, you say plainly in your message, once, and carry on with whatever does not depend on it. Never ask for a credential or a secret: adding one is a task the developer does by hand, where it belongs.
 
 ## Pages
 

@@ -9,7 +9,7 @@ import { runShowPageTool } from "../host.js";
  *
  * The planning model's tool too, one implementation for both
  * (`server/hosted/page-tool.ts`). The call reaches the store through the
- * host's door (`../host.ts`), as `post_to_inbox` does, and a page named by
+ * host's door (`../host.ts`), as `edit_plan` does, and a page named by
  * its path is read from the session's sandbox through the same door eve
  * hands every file tool, opened on first use, so a page sent inline opens
  * none.

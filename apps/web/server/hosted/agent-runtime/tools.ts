@@ -58,9 +58,10 @@ const TOOL_ROLES = {
   [AGENT_TOOL.DELEGATE]: [PLANNER, CODER],
   [AGENT_TOOL.EDIT_PLAN]: [CODER],
   [AGENT_TOOL.WRITE_TODOS]: [CODER],
-  [AGENT_TOOL.POST_TO_INBOX]: [CODER],
-  [AGENT_TOOL.CLOSE_INBOX_ITEM]: [CODER],
-  [AGENT_TOOL.READ_INBOX]: [CODER],
+  // Retired: no role is offered the inbox's tools now, but a transcript written before names them.
+  [AGENT_TOOL.POST_TO_INBOX]: [],
+  [AGENT_TOOL.CLOSE_INBOX_ITEM]: [],
+  [AGENT_TOOL.READ_INBOX]: [],
   [AGENT_TOOL.LOAD_SKILL]: [PLANNER, CODER],
   [AGENT_TOOL.SHOW_PAGE]: [PLANNER, CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };

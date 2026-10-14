@@ -16,8 +16,7 @@ import { connectionToolEntries } from "../connection-tools.js";
  * search, the hosted public search and page read the planning model has
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
- * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`), the load of one of its
+ * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
@@ -46,22 +45,23 @@ export const CODER_TOOL = {
   DELEGATE: AGENT_TOOL.DELEGATE,
   EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
-  POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
-  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
-  READ_INBOX: AGENT_TOOL.READ_INBOX,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
 } as const;
 
 /**
- * eve's provider-run web reads, which coding agents ran before they had the
- * hosted pair: no agent is offered them now, but a transcript written then
- * names them, and reads back under the same set.
+ * The tools coding agents ran once and are offered no longer: eve's
+ * provider-run web reads, from before they had the hosted pair, and the
+ * developer's inbox, which went with the inbox itself. A transcript written
+ * then names them, and reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
+  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
+  READ_INBOX: AGENT_TOOL.READ_INBOX,
 } as const;
 
 /**
