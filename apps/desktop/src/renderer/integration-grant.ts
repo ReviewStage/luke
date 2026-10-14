@@ -53,7 +53,7 @@ export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationG
   const begin = useCallback(
     async (provider: IntegrationProvider): Promise<GrantOutcome> => {
       if (grantedBySignIn(provider)) {
-        connect();
+        if (!(await connect())) return GRANT_OUTCOME.NOT_OPENED;
         signInBegun(provider);
         return GRANT_OUTCOME.BEGUN;
       }

@@ -8,7 +8,7 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INTEGRATION_NAME } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
@@ -23,7 +23,7 @@ import {
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { imageFiles } from "../feedback-images";
-import { useIntegrationGrant } from "../integration-grant";
+import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
@@ -193,6 +193,18 @@ export function AgentComposer({
   const showsStop = empty && stoppable && !composer.sending;
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
+  // A reconnect that could not begin says so in the note, as Settings' row does.
+  const [reconnectFailed, setReconnectFailed] = useState<IntegrationProvider | undefined>(
+    undefined,
+  );
+  const reconnect = (provider: IntegrationProvider) => {
+    setReconnectFailed(undefined);
+    void grant.begin(provider).then((outcome) => {
+      if (outcome === GRANT_OUTCOME.NOT_OPENED || outcome === GRANT_OUTCOME.REFUSED) {
+        setReconnectFailed(provider);
+      }
+    });
+  };
   const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
   const words =
     composer.closed ?? refusal ?? (composer.note === undefined ? model?.note : undefined);
@@ -204,7 +216,10 @@ export function AgentComposer({
           ? undefined
           : {
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
-              text: `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
+              text:
+                reconnectFailed === lapsed
+                  ? `${INTEGRATION_NAME[lapsed]}'s sign-in expired, and Luke could not start reconnecting it. Try again in a moment.`
+                  : `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
               provider: lapsed,
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
@@ -412,7 +427,7 @@ export function AgentComposer({
           failure={note}
           className="agent-note agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
-          onRemedy={lapsed === undefined ? undefined : () => void grant.begin(lapsed)}
+          onRemedy={lapsed === undefined ? undefined : () => reconnect(lapsed)}
         />
       ) : null}
     </div>

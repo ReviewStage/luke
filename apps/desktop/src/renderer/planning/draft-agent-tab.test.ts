@@ -36,6 +36,10 @@ import type { AgentDraft } from "./use-coding-agents";
 
 /** Where the account's Slack connection stands at the service; every other provider but GitHub is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
+/** Whether the next Connect the bridge is asked for is refused, as a service that does not answer refuses it. */
+let refuseConnect = false;
+/** Whether the browser opens the account's GitHub connect page. */
+let githubOpens = true;
 /** Where GitHub stands for the account, unavailable unless a test offers it. */
 let github: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 
@@ -61,6 +65,8 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   sent = [];
+  refuseConnect = false;
+  githubOpens = true;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
   Object.defineProperty(window, "sidecar", {
@@ -81,7 +87,11 @@ beforeEach(() => {
           });
         }
         if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } });
+          return Promise.resolve(
+            refuseConnect
+              ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
+              : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
+          );
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
       },
@@ -102,7 +112,11 @@ async function settle(): Promise<void> {
 }
 
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
-function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
+function mount(
+  answers: (Failure | undefined)[],
+  draft: AgentDraft = DRAFT,
+  linked: GitHubConnection = { connected: false, login: null },
+) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
@@ -134,6 +148,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
                 connection,
                 connect: () => {
                   github.connects += 1;
+                  return Promise.resolve(githubOpens);
                 },
               },
             },
@@ -142,7 +157,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
         ),
       ),
     );
-  draw({ connected: false, login: null });
+  draw(linked);
   // A press is named by its words; the mark before them carries a title of its own.
   const button = (words: string) =>
     [...container.querySelectorAll("button")].find((each) =>
@@ -220,6 +235,30 @@ test("a GitHub connect withdrawn leaves the refusal with its press, and a connec
   assert.deepEqual(tab.starts, [DRAFT.task]);
 });
 
+test("a GitHub already linked whose authorization lapsed sends nothing on the window's return until GitHub is read again", async () => {
+  const tab = mount([SIGN_IN_REFUSAL, undefined], DRAFT, { connected: true, login: "dean" });
+  await tab.send();
+
+  await tab.press("Connect GitHub");
+  await windowBack();
+  assert.deepEqual(tab.starts, [DRAFT.task], "the connection held on return is not a landing");
+  assert.ok(tab.button("Waiting for browser…"), "the press still waits");
+
+  await tab.connected();
+  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+});
+
+test("a GitHub connect page that could not be opened ends the wait at once", async () => {
+  githubOpens = false;
+  const tab = mount([SIGN_IN_REFUSAL]);
+  await tab.send();
+
+  await tab.press("Connect GitHub");
+
+  assert.equal(tab.button("Waiting for browser…"), undefined);
+  assert.ok(tab.button("Connect GitHub"), "the press is offered again");
+});
+
 test("a refusal a GitHub connect does not mend offers Retry, and no Connect GitHub", async () => {
   const tab = mount([startFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), undefined]);
   await tab.send();
@@ -247,6 +286,18 @@ test("a server the agent has on whose sign-in expired is offered to reconnect un
   const off = mount([], { ...DRAFT, disabledServers: [INTEGRATION_PROVIDER.SLACK] });
   await settle();
   assert.equal(off.note(), undefined);
+});
+
+test("a reconnect that could not begin says so under the box, and Reconnect is offered again", async () => {
+  slack = INTEGRATION_STATUS.EXPIRED;
+  refuseConnect = true;
+  const tab = mount([]);
+  await settle();
+
+  await tab.press("Reconnect Slack");
+
+  assert.match(tab.note() ?? "", /could not start reconnecting it/u);
+  assert.ok(tab.button("Reconnect Slack"));
 });
 
 test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {

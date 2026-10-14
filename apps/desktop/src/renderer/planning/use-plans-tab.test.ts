@@ -841,7 +841,9 @@ test("Settings' GitHub row is the connection main's view holds, its Connect and 
     { [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined) },
   );
 
-  act(() => tab.control().onConnectAccountGitHub());
+  act(() => {
+    void tab.control().onConnectAccountGitHub();
+  });
   act(() => tab.control().onDisconnectAccountGitHub());
   await settle();
 

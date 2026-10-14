@@ -18,12 +18,13 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 /** The account's GitHub as the window last read it, and the press that connects it in the browser. */
 export interface GitHubConnectControl {
   readonly connection: GitHubConnection | undefined;
-  readonly connect: () => void;
+  /** Opens the connect page in the browser; answers whether it opened, a refusal saying why on its own. */
+  readonly connect: () => Promise<boolean>;
 }
 
 const GitHubConnectContext = createContext<GitHubConnectControl>({
   connection: undefined,
-  connect: () => undefined,
+  connect: () => Promise.resolve(false),
 });
 
 /** Hands the window's GitHub connection and its connect to everything under it. */
@@ -43,33 +44,47 @@ export interface GitHubConnectPress {
   readonly cancel: () => void;
 }
 
-/** One connect begun from a surface: whether the window has come back from the browser since. */
-interface Attempt {
-  readonly returned: boolean;
-}
+/**
+ * One connect begun from a surface: away in the browser, or back with the
+ * connection the window held at the moment it came back, which a read since
+ * then replaces.
+ */
+type Attempt =
+  | { readonly back: false }
+  | { readonly back: true; readonly heldOnReturn: GitHubConnection | undefined };
 
 /**
- * A connect begun in place, waiting while the browser has it. Note that the
- * landing is read only once the window has come back, because a GitHub
- * already connected whose authorization lapsed reads connected before the
- * browser trip as after it; the window's return is what re-reads it.
- * Cancel, or the surface going away, ends the wait and lands nothing.
+ * A connect begun in place, waiting while the browser has it. Note that a
+ * landing is read only from a connection read after the window came back,
+ * never from the one it held on its return, because a GitHub already linked
+ * whose authorization lapsed reads connected before the browser trip as
+ * after it; coming back without finishing keeps the wait, and the next
+ * return reads again. A page that could not be opened ends the wait at once.
+ * Cancel, or the surface going away, ends it and lands nothing.
  */
 export function useGitHubConnect(onConnected: () => void): GitHubConnectPress {
   const { connection, connect } = useGitHubConnection();
   const [attempt, setAttempt] = useState<Attempt | undefined>(undefined);
   const landed = useRef(onConnected);
   landed.current = onConnected;
+  const held = useRef(connection);
+  held.current = connection;
+  // Note that each press is one attempt, so a page that failed to open for
+  // an attempt since withdrawn cannot end a later one's wait.
+  const pressed = useRef(0);
+  useEffect(() => () => void ++pressed.current, []);
 
   useEffect(() => {
-    if (attempt === undefined || attempt.returned) return;
-    const back = () => setAttempt({ returned: true });
+    if (attempt === undefined) return;
+    const back = () => setAttempt({ back: true, heldOnReturn: held.current });
     window.addEventListener("focus", back);
     return () => window.removeEventListener("focus", back);
   }, [attempt]);
 
   useEffect(() => {
-    if (attempt?.returned !== true || connection?.connected !== true) return;
+    if (attempt?.back !== true || connection === attempt.heldOnReturn) return;
+    if (connection?.connected !== true) return;
+    pressed.current += 1;
     setAttempt(undefined);
     landed.current();
   }, [attempt, connection]);
@@ -77,9 +92,15 @@ export function useGitHubConnect(onConnected: () => void): GitHubConnectPress {
   return {
     waiting: attempt !== undefined,
     begin: () => {
-      setAttempt({ returned: false });
-      connect();
+      const mine = ++pressed.current;
+      setAttempt({ back: false });
+      void connect().then((opened) => {
+        if (!opened && pressed.current === mine) setAttempt(undefined);
+      });
     },
-    cancel: () => setAttempt(undefined),
+    cancel: () => {
+      pressed.current += 1;
+      setAttempt(undefined);
+    },
   };
 }

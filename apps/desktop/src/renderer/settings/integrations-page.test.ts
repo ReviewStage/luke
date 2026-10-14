@@ -108,6 +108,7 @@ async function mount(): Promise<HTMLElement> {
               connection: { connected: githubConnected, login: null },
               connect: () => {
                 githubConnects += 1;
+                return Promise.resolve(true);
               },
             },
           },
