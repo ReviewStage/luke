@@ -4,8 +4,8 @@ import {
   productSessionCountBucket,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import type { FeedbackResult, FeedbackSubmission } from "@sidecar/feedback";
-import { feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
+import type { FeedbackResult, FeedbackSubmission } from "@sidecar/features/feedback";
+import { feedbackDeliveryFromEnvironment } from "@sidecar/features/feedback";
 import { type RunMode, sentryReportingEnabled } from "@sidecar/host";
 import { Effect } from "effect";
 import type { DesktopConfig } from "./desktop-config";

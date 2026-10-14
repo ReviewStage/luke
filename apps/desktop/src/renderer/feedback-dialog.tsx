@@ -30,7 +30,7 @@ import {
   type FeedbackImage,
   type FeedbackKind,
   type FeedbackSubmission,
-} from "@sidecar/feedback";
+} from "@sidecar/features/feedback";
 import { ImageIcon, RemoveIcon } from "@sidecar/panel";
 import { Duration } from "effect";
 import { useEffect, useId, useRef, useState } from "react";

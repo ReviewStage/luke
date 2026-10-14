@@ -6,7 +6,7 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
-import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@sidecar/feedback";
+import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@sidecar/features/feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

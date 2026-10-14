@@ -53,6 +53,11 @@ import {
   providerKeysAnswerViewSchema,
 } from "@sidecar/features/coding-agent-view";
 import {
+  type FeedbackResult,
+  type FeedbackSubmission,
+  feedbackSubmission,
+} from "@sidecar/features/feedback";
+import {
   type IntegrationConnectView,
   type IntegrationStatusesView,
   type IntegrationStatusView,
@@ -124,11 +129,6 @@ import {
   workspaceMemberSchema,
   workspaceSchema,
 } from "@sidecar/features/workspace-wire";
-import {
-  type FeedbackResult,
-  type FeedbackSubmission,
-  feedbackSubmission,
-} from "@sidecar/feedback";
 import {
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,

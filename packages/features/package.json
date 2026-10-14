@@ -36,7 +36,8 @@
     "./repository-reach-wire": "./src/repository-reach-wire.js",
     "./transcript-wire": "./src/transcript-wire.js",
     "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
-    "./workspace-wire": "./src/workspace-wire.js"
+    "./workspace-wire": "./src/workspace-wire.js",
+    "./feedback": "./src/feedback/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
