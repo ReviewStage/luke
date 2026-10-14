@@ -55,7 +55,14 @@ export function copiedLines(code: PlanCode): string {
   return kept.map((tokens) => tokens.map((token) => token.text).join("")).join("\n");
 }
 
-/** The call a code was shown on: the latest to start at or before it, or none where no call started before it. */
+/**
+ * The call a code was shown on: the latest to start at or before it, or
+ * none where no call started before it, or where that call's record says
+ * it had ended before the turn that showed the code began. Note that the
+ * ended call does not take it, because the call closes on its end line
+ * (`call-card.tsx`), and code drawn above that line would read as shown
+ * before the call ended.
+ */
 function callOf(
   showing: PlanCodeShowing,
   calls: readonly CodeFeedCallSource[],
@@ -65,7 +72,8 @@ function callOf(
     if (callStart(call) > showing.shownAt) continue;
     if (found === undefined || callStart(call) >= callStart(found)) found = call;
   }
-  return found;
+  const endedAt = found?.record?.endedAt;
+  return endedAt !== undefined && endedAt < showing.shownAt ? undefined : found;
 }
 
 /**

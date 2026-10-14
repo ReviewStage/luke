@@ -128,3 +128,31 @@ test("the Code tab begins and ends each call as the Call tab does: the same divi
   assert.ok(card, "the Code tab's closing line hangs the call's card");
   assert.equal(card, cardOf(callLine));
 });
+
+test("code a turn showed after a call ended stands after that call's closing line, under its own turn's divider, and not inside the call", () => {
+  const after: PlanCodeShowing = {
+    ...shownOn(ENDED_CALL, "show-after"),
+    shownAt: ENDED_START + 15 * MINUTE_MS,
+  };
+  const codeTab = mounted(
+    createElement(CodePane, {
+      shown: [shownOn(ENDED_CALL, "show-during"), after],
+      calls: [ENDED_CALL],
+      onOpenFile: () => undefined,
+    }),
+  );
+  const order = [...codeTab.querySelectorAll("[data-checkpoint], [data-call-ended], .code-card")];
+  const at = (selector: string) => {
+    const element = codeTab.querySelector(selector);
+    return element === null ? -1 : order.indexOf(element);
+  };
+  const during = at('[data-call-id="show-during"]');
+  const closing = at("[data-call-ended]");
+  const later = at('[data-call-id="show-after"]');
+  assert.ok(during < closing && closing < later, "the call closes before the later code");
+  assert.equal(
+    order[later - 1]?.matches("[data-checkpoint]"),
+    true,
+    "the later code has a divider of its own",
+  );
+});
