@@ -286,6 +286,25 @@ test("round-trips an encrypted account without exposing either token in snapshot
   assert.equal(settings.includes(TEST_ACCOUNT.refreshToken), false);
 });
 
+test("the Mac's session rides sealed beside the OAuth tokens, and reads back with them", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const withSession = {
+    ...TEST_ACCOUNT,
+    sessionToken: "session-token-secret.signature",
+  } as const satisfies StoredAccount;
+  await storeIn(directory).setAccount(withSession);
+
+  const reopened = storeIn(directory);
+  const contents = await readSettingsFile(directory);
+
+  assert.deepEqual(await reopened.readAccount(), withSession);
+  assert.equal(contents.includes(withSession.sessionToken), false);
+  assert.equal(JSON.stringify(await reopened.snapshot()).includes(withSession.sessionToken), false);
+  // A sign-in that stores no session leaves none behind from the last.
+  await reopened.setAccount(TEST_ACCOUNT);
+  assert.deepEqual(await storeIn(directory).readAccount(), TEST_ACCOUNT);
+});
+
 test("a stored account that signed in with Google still loads", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const signedInWithGoogle = {
