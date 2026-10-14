@@ -40,7 +40,7 @@ export const SIGN_IN = {
 } as const;
 
 /** Why a sign-in failed, as the service's read named it. */
-export type SignInFailure = Omit<IntegrationSignInFailure, "provider">;
+type SignInFailure = Omit<IntegrationSignInFailure, "provider">;
 
 export type SignIn =
   | {
