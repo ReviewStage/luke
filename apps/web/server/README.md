@@ -181,7 +181,22 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
 App's "Email addresses: read" among them, which is what answers the email
-read Luke requires for its account snapshot.
+read Luke requires for its account snapshot, and what Better Auth's GitHub
+provider reads to link the account at all.
+
+Accounts link (`accountLinking` in `ACCOUNT_TOKEN_STORAGE`,
+[Better Auth: account linking](https://www.better-auth.com/docs/concepts/users-accounts#account-linking)).
+A sign-in through a provider that verified the same email address as an
+existing account joins that account, Better Auth's default, and no provider
+is trusted beyond that (`trustedProviders` stays unset; the docs warn it
+risks account takeover). A signed-in account may also link GitHub to itself
+through Better Auth's own `/link-social`, whatever email address GitHub holds
+(`allowDifferentEmails`), which is how an account made with Google comes to
+hold the GitHub its workspaces and repositories need; `/link-social`,
+`/unlink-account`, and `/list-accounts` stay open, since none of them answers
+a token. A user revoking the App's authorization on GitHub deletes that
+GitHub user's account row (`github_app_authorization` under "The Luke GitHub
+App" below).
 
 ## The Luke GitHub App
 
@@ -327,7 +342,18 @@ answered and ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
-its plans stay reachable, and nothing is deleted. `tests/github-webhook-app.test.ts`
+its plans stay reachable, and nothing is deleted. A `github_app_authorization`
+delivery, which GitHub also sends every App unsubscribed
+([GitHub: github_app_authorization](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)),
+with action `revoked` clears the sealed tokens, which no longer reach
+anything, from the `account` rows of provider `github` whose `accountId` is
+the delivery's `sender.id`, and keeps the rows: a read on the user's token
+then asks for a new sign-in, and that sign-in finds the same Luke account
+through the kept row even where GitHub's address has changed since, and
+writes fresh tokens onto it. Every other way the account signs in is kept.
+That is a write to Better Auth's own table, since a webhook carries no
+session and Better Auth documents no server call that clears another user's
+provider tokens. `tests/github-webhook-app.test.ts`
 holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and

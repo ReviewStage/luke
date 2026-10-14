@@ -228,7 +228,7 @@ export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
 
 /** Why a user token could not be had, every case of which the user mends by signing in with GitHub again. */
 export const SIGN_IN_REQUIRED = {
-  /** The user has no GitHub account row: they signed in with Google alone. */
+  /** The user holds no GitHub authorization: they signed in with Google alone, or revoked the App's and has not signed in with GitHub since. */
   NO_GITHUB_ACCOUNT: "no-github-account",
   /** The row holds the OAuth App's token from before the GitHub App, which reaches no installation and cannot be refreshed. */
   BEFORE_THE_APP: "before-the-app",
@@ -510,6 +510,37 @@ const writeSealedTokens = SqlSchema.void({
     ),
 });
 
+/**
+ * Clears the tokens on every GitHub row of the GitHub user given, whichever
+ * Luke account holds it, at the instant given, and keeps the row. Note that
+ * Luke writes Better Auth's own `account` table here, because a webhook
+ * carries no session and Better Auth documents no server call that clears a
+ * provider account's tokens for a user who is not the one asking
+ * (https://www.better-auth.com/docs/concepts/users-accounts). The row is kept
+ * because it is the one link from the GitHub user to the Luke account that
+ * survives GitHub's address changing: Better Auth finds a signing-in user by
+ * this row first and by address second.
+ */
+const clearGithubTokensOf = SqlSchema.void({
+  Request: Schema.Struct({ githubUserId: Schema.String, updatedAt: Schema.Date }),
+  execute: ({ githubUserId, updatedAt }) =>
+    Database.use((db) =>
+      db
+        .update(account)
+        .set({
+          accessToken: null,
+          refreshToken: null,
+          idToken: null,
+          accessTokenExpiresAt: null,
+          refreshTokenExpiresAt: null,
+          updatedAt,
+        })
+        .where(
+          and(eq(account.providerId, GITHUB_PROVIDER_ID), eq(account.accountId, githubUserId)),
+        ),
+    ),
+});
+
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
@@ -557,6 +588,24 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
 /** A blank name is one the account never set. */
 function userOf(record: UserRecord): GitHubUser {
   return { id: record.id, login: record.login, name: text(record.name ?? undefined) };
+}
+
+/**
+ * Clears a GitHub user's authorization of the App, as GitHub's
+ * `github_app_authorization` delivery reports it revoked
+ * (https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization):
+ * the sealed tokens that no longer reach anything go, and the account row
+ * stays without them, so every read on the user's token asks for a new
+ * sign-in. The Luke account keeps every way it signs in; the next GitHub
+ * sign-in finds it through the kept row, whatever address GitHub then holds,
+ * and writes fresh tokens onto it.
+ */
+export function clearRevokedAuthorization(
+  githubUserId: number,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    clearGithubTokensOf({ githubUserId: String(githubUserId), updatedAt: new Date(now) }),
+  );
 }
 
 /**
@@ -805,9 +854,14 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
   GitHubUnavailable | GitHubSignInRequired | StoreFailure,
   HttpClient.HttpClient | DatabaseServices
 > {
+  // A row without an access token is one whose authorization was revoked: the
+  // user holds no GitHub authorization until a new sign-in writes one.
+  if (row.accessToken === null) {
+    return yield* new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.NO_GITHUB_ACCOUNT });
+  }
   // A row without a refresh token is the OAuth App's from before the GitHub
   // App: its token reaches no installation, and only a new sign-in replaces it.
-  if (row.accessToken === null || row.refreshToken === null || row.accessTokenExpiresAt === null) {
+  if (row.refreshToken === null || row.accessTokenExpiresAt === null) {
     return yield* new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.BEFORE_THE_APP });
   }
   const now = yield* Clock.currentTimeMillis;
