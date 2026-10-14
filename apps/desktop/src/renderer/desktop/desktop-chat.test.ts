@@ -300,3 +300,73 @@ test("an approval is answered by its press, and a reply typed under an opened th
     ],
   );
 });
+
+test("a form's answer stands under its card field by field, and the reply in its thread says the same", async () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) =>
+        message.seq === 51 && message.ask !== undefined
+          ? {
+              ...message,
+              ask: {
+                ...message.ask,
+                title: "Where do the seats go?",
+                response: {
+                  type: CHAT_ASK.FORM,
+                  fields: [
+                    { type: "text", label: "Region", required: true },
+                    { type: "number", label: "Seats" },
+                  ],
+                },
+              },
+            }
+          : message,
+      ),
+    },
+  }));
+  const card = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
+    (each) => each.querySelector(".chat-ask-title")?.textContent === "Where do the seats go?",
+  );
+  assert.ok(card, "the form's card stands open");
+  const [region, seats] = [...card.querySelectorAll<HTMLInputElement>("input")];
+  assert.ok(region && seats);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(region, "US");
+    region.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => {
+    setValue?.call(seats, "12");
+    seats.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => card.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  const settled = page.querySelector('.chat-message[data-seq="51"] .chat-ask-settled');
+  assert.deepEqual(
+    [...(settled?.querySelectorAll(".chat-ask-values li") ?? [])].map((row) => row.textContent),
+    ["Region: US", "Seats: 12"],
+  );
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="51"] .chat-thread-toggle')
+      ?.click(),
+  );
+  assert.match(words(page).join("\n"), /↳ Filled in the form\.\s*Region: US\s*Seats: 12/u);
+});
+
+test("an Enter that confirms what an input method composed leaves the mention list's word as typed", () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInto(box, "@age");
+  act(() =>
+    box.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
+    ),
+  );
+  assert.equal(box.value, "@age");
+  assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
+});

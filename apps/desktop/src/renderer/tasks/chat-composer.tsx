@@ -192,8 +192,10 @@ export function ChatComposer({
         return;
       }
       const row = rows[at];
+      // Note that an Enter that confirms what an input method composed is the method's, never a pick.
       if (
         row !== undefined &&
+        !event.nativeEvent.isComposing &&
         ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")
       ) {
         event.preventDefault();

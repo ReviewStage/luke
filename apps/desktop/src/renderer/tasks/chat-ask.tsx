@@ -5,6 +5,7 @@ import {
   type ChatMessage,
   type ChatReadResponse,
   type ChatReplyKind,
+  fieldValueWords,
   knownResponse,
   replyWords,
 } from "@luke/features/chat-wire";
@@ -40,7 +41,8 @@ function asInboxResponse(response: ChatReadResponse): InboxReadResponse | undefi
  * card the developer posted waits, and says so; a card whose poster need
  * not hear back says answering tells nobody. Once answered, the options
  * stand with the pick marked and the answer said under them, who gave it
- * and how; once its poster resolved it, why. An answer refused keeps the
+ * and how, a form's fields each with what was filled in; once its poster
+ * resolved it, why. An answer refused keeps the
  * card as it was and says why under it. A response this build does not
  * know is drawn as a line naming a newer Luke, answered nowhere.
  */
@@ -135,14 +137,27 @@ function Settled({
   }
   if (ask.answer === undefined) return null;
   const by = ask.answeredBy === undefined ? undefined : nameOf(ask.answeredBy);
+  const values = ask.answer.values ?? [];
   return (
-    <p className="chat-ask-settled" data-settled="answered">
-      {by === undefined ? "" : `${by}: `}
-      {replyWords(ask.answer)}
-      {ask.answer.note === undefined ? null : (
-        <span className="chat-ask-settled-note"> {ask.answer.note}</span>
+    <div className="chat-ask-settled" data-settled="answered">
+      <p className="m-0">
+        {by === undefined ? "" : `${by}: `}
+        {replyWords(ask.answer)}
+        {ask.answer.note === undefined ? null : (
+          <span className="chat-ask-settled-note"> {ask.answer.note}</span>
+        )}
+      </p>
+      {/* A form's answer is what was filled in, so each field stands under the line, in the form's order. */}
+      {values.length === 0 ? null : (
+        <ul className="chat-ask-values">
+          {values.map(({ label, value }) => (
+            <li key={label}>
+              {label}: <span className="chat-ask-settled-note">{fieldValueWords(value)}</span>
+            </li>
+          ))}
+        </ul>
       )}
-    </p>
+    </div>
   );
 }
 

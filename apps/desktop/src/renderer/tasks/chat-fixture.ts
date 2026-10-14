@@ -7,6 +7,7 @@ import {
   type ChatAnswer,
   type ChatChannel,
   type ChatMessage,
+  formValueLines,
   GENERAL_CHANNEL,
   MEMBER_KIND,
   mentionedHandles,
@@ -464,8 +465,12 @@ export function stagedAnswer(read: FixtureChat, answered: ChatAskAnswer, at: num
     return { refused: STAGED_REFUSAL.STALE };
   }
   const { reply } = answered;
-  const text =
-    reply.note === undefined ? replyWords(reply) : `${replyWords(reply)}\n\n${reply.note}`;
+  // The reply in the thread says what the card says: the answer, a form's fields, and the note.
+  const text = [
+    replyWords(reply),
+    ...(reply.values === undefined ? [] : [formValueLines(reply.values)]),
+    ...(reply.note === undefined ? [] : [reply.note]),
+  ].join("\n\n");
   const answer = withMessage(
     chat,
     at,
