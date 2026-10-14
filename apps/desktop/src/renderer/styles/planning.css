@@ -393,38 +393,47 @@ button.plan-unit-byline:focus-visible {
   font-size: 11.5px;
 }
 
-/* The file's type icon leads its path, at the size the file tree's rows draw it. */
-.code-card-header > svg:first-child {
+/* A file named in place (file-ref.tsx): its type's icon at the size the
+   file tree's rows draw it, its path, and its lines, drawn as the words
+   alone where it is the button that opens the file. */
+.file-ref {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--control-gap);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+}
+
+.file-ref > svg {
   width: 14px;
   height: 14px;
   flex: none;
 }
 
 /* The path is cut from its left, so the file's own name stays in sight;
-   the `bdi` inside keeps the path itself reading left to right. On a card
-   it is also the button that opens the file, drawn as the words alone. */
-.code-card-path {
+   the `bdi` inside keeps the path itself reading left to right. */
+.file-ref-path {
   min-width: 0;
-  padding: 0;
   overflow: hidden;
-  border: 0;
-  background: none;
-  color: var(--text-primary);
   direction: rtl;
-  font: inherit;
   font-family: var(--font-mono);
-  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-button.code-card-path:hover {
+button.file-ref:hover .file-ref-path {
   text-decoration: underline;
 }
 
-.code-card-range {
+.file-ref-lines {
   flex: 0 0 auto;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* A card's copy and its file's opening keep to the header's right, a step
@@ -1027,7 +1036,7 @@ button.code-card-path:hover {
 }
 
 /* Luke's note reads as the step's words, so the path above it steps back. */
-.code-card:has(> .code-card-note) .code-card-path {
+.code-card:has(> .code-card-note) .file-ref {
   color: var(--text-secondary);
 }
 

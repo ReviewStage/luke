@@ -129,3 +129,38 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   assert.deepEqual(second.control().tab, { changes: AGENT });
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
 });
+
+test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, and one Luke never showed opens in a tab the plan draws", () => {
+  const shown = "src/invites/accept.ts";
+  const found = "src/invites/expire.ts";
+  let control: SidePanelControl | undefined;
+  function Probe() {
+    control = useSidePanel(undefined, usedPlan(PLAN), [], [], [shown], [], []);
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Probe)));
+  const now = () => {
+    assert.ok(control);
+    return control;
+  };
+  act(() => now().onOpenFile({ path: shown, startLine: 3, endLine: 5 }));
+  act(() => now().onChoose(SIDE_PANEL_TAB.CODE));
+
+  act(() => now().onOpenFile({ path: shown }));
+  assert.deepEqual(now().tab, { file: shown });
+  assert.deepEqual(
+    now().files.map(({ path, range }) => ({ path, range })),
+    [{ path: shown, range: { startLine: 3, endLine: 5 } }],
+    "the tab keeps the lines it had lit",
+  );
+
+  act(() => now().onOpenFile({ path: found }));
+  assert.deepEqual(now().tab, { file: found });
+  assert.deepEqual(
+    now().files.map(({ path }) => path),
+    [shown, found],
+  );
+});

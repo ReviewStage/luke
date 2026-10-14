@@ -1,5 +1,4 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
@@ -8,6 +7,7 @@ import { agentCardReading } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
 import { agentTabLabel } from "../planning/coding-agent-model";
+import { FileCard, newestFileNote } from "../planning/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "../planning/inbox-model";
 import { sameTab, TAB_WORDS } from "../planning/tab-strip-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
@@ -312,25 +312,6 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 }
 
 /**
- * A file row's card, in a tab card's look, as a File tab's hint says its
- * path: the file's whole path, and under it Luke's note on the newest lines
- * of it he showed with one, where any has.
- */
-function FileCard({ path, note }: { path: string; note: string | undefined }): React.JSX.Element {
-  return (
-    <HoverCard data-tab-card="">
-      <CardHead name={path} />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
-    </HoverCard>
-  );
-}
-
-/** Luke's note on the newest lines of the file he showed with one, if any. */
-function newestNote(shown: readonly PlanCodeShowing[], path: string): string | undefined {
-  return shown.findLast(({ code }) => code.ref.path === path && code.note !== undefined)?.code.note;
-}
-
-/**
  * The card each row hangs, the one its tab hangs where it has one: an
  * agent's its tab's card, read from what its tab last held; a subagent's
  * its tab's card, from the session the plan's work holds; a file's its path
@@ -383,7 +364,7 @@ function withCards(
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
     if (path === undefined) return entry;
-    return { ...entry, card: <FileCard path={path} note={newestNote(shown, path)} /> };
+    return { ...entry, card: <FileCard path={path} note={newestFileNote(shown, path)} /> };
   });
 }
 

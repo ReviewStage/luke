@@ -470,9 +470,12 @@ export interface SidePanelControl {
   onRenamePins: (planId: string, labels: ReadonlyMap<string, string>) => void;
   /**
    * Shows the panel on the file's tab, opening one at the strip's end where
-   * none stands, its lit lines the reference's; with `commit`, as an inbox
-   * item's code or a snippet Luke read from his checkout opens it, the file
-   * as it stood at that commit, drawn on the open plan.
+   * none stands: the window's one door for a file named in place
+   * (`file-ref.tsx`). A reference naming lines lights them; with `commit`,
+   * as an inbox item's code or a snippet Luke read from his checkout opens
+   * it, the file as it stood at that commit, drawn on the open plan. One
+   * naming the file alone, as ⌘K finds it, leaves a tab it has as it stands
+   * and opens a new one on the whole file, drawn on the open plan.
    */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
   /**
@@ -786,6 +789,26 @@ function withOpenFileChosen(
       };
   const chosen = withTabLast(withChosenViewed(drawnHere, tab, drawn), tab, drawn);
   return { ...withTab(chosen, tab, planId), open: true };
+}
+
+/**
+ * The state with a file shown whole, as a press naming the file and no lines
+ * asks, ⌘K's or a File tab's tree's with ⌘ held: the tab it has, chosen as
+ * it stands, or a new one at the strip's end, viewed after the tab it was
+ * chosen from, and browsed to on the plan named, so the plan draws it
+ * though Luke never showed it.
+ */
+function withFileShown(
+  held: HeldState,
+  path: string,
+  drawn: DrawnTabs,
+  planId: string | undefined,
+): HeldState {
+  const open = held.files.find((each) => each.path === path);
+  if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
+  const tab: SidePanelTab = { file: path };
+  const placed = withTabLast(withChosenViewed(held, tab, drawn), tab, drawn);
+  return withFileBrowsed(placed, planId, undefined, path);
 }
 
 /** What a File tab's history holds of the file it shows. */
@@ -1413,6 +1436,9 @@ export function useSidePanel(
   const onOpenFile = useCallback(
     (ref: CodeRef, commit?: string) =>
       update((held) => {
+        if (ref.startLine === undefined && commit === undefined) {
+          return withFileShown(held, ref.path, drawn, planId);
+        }
         const tab: SidePanelTab = { file: ref.path };
         return withFileOpened(
           withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
@@ -1423,19 +1449,16 @@ export function useSidePanel(
     [update, drawn, planId],
   );
   // Note that a file with a tab of its own is chosen there, because a file
-  // stands in one tab at most, and one opened in a tab of its own is viewed
-  // after the tab it was chosen from, as a snippet's file is. A tab another
-  // plan browsed to moves to this one, since this plan does not draw it.
+  // stands in one tab at most (`withFileShown`).
   const onBrowseFile = useCallback(
     (from: string, path: string, newTab: boolean) =>
       update((held) => {
-        const open = held.files.find((each) => each.path === path);
-        if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
-        const tab: SidePanelTab = { file: path };
         const standing = newTab ? undefined : held.files.find((each) => each.path === from);
-        const viewed = withChosenViewed(held, tab, drawn);
-        const placed = standing === undefined ? withTabLast(viewed, tab, drawn) : viewed;
-        return withFileBrowsed(placed, planId, standing, path);
+        if (standing === undefined || held.files.some((each) => each.path === path)) {
+          return withFileShown(held, path, drawn, planId);
+        }
+        const viewed = withChosenViewed(held, { file: path }, drawn);
+        return withFileBrowsed(viewed, planId, standing, path);
       }),
     [update, drawn, planId],
   );

@@ -4,9 +4,8 @@ import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
 import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
-import { fileName } from "./code-pane-model";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
-import { FileTypeIcon } from "./file-type-icon";
+import { fileLook } from "./file-ref";
 import { changesLabelOf, TAB_WORDS } from "./tab-strip-model";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
@@ -157,8 +156,9 @@ export function tabLook(subject: TabSubject): KindLook {
           subject.agentName === undefined ? TAB_WORDS.CHANGES : changesLabelOf(subject.agentName),
       };
     case TAB_KIND.FILE: {
-      const name = fileName(subject.path);
-      return { icon: <FileTypeIcon name={name} />, label: name };
+      // A file's tab is named as every place names a file (`file-ref.tsx`).
+      const { icon, label } = fileLook(subject.path);
+      return { icon, label };
     }
     case TAB_KIND.PAGE:
       return { icon: <AppWindowIcon />, label: subject.title };

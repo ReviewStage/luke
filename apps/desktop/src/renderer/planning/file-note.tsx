@@ -1,7 +1,7 @@
 import { ChevronDownIcon, WingFace } from "@sidecar/panel";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
-import { rangeLabel } from "./code-pane-model";
+import { lineRangeText } from "./code-pane-model";
 import type { FileNote } from "./file-tab-model";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
@@ -49,7 +49,7 @@ function FileNoteCard({
   onFold: (folded: boolean) => void;
   onShow: () => void;
 }): React.JSX.Element {
-  const lines = rangeLabel(note) ?? "";
+  const lines = lineRangeText(note) ?? "";
   // Note that the age moves on with the minute, because a tab left open draws nothing else anew.
   const now = useMinute();
   return (

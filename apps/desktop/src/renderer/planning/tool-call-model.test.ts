@@ -306,7 +306,7 @@ test("a post to the inbox is a row naming its item, its blocks and options as th
   );
   assert.deepEqual(view.input, {
     kind: TOOL_BLOCK.TEXT,
-    text: "Both work.\nThe PR: https://github.com/acme/relay/pull/7\nsrc/queue.ts:12-20 at 0123456\nImage: The queue dashboard (shots/queue.png)\n- Postgres (recommended) -- One database.\n- Redis",
+    text: "Both work.\nThe PR: https://github.com/acme/relay/pull/7\nsrc/queue.ts, Lines 12–20 at 0123456\nImage: The queue dashboard (shots/queue.png)\n- Postgres (recommended) -- One database.\n- Redis",
   });
   assert.equal(view.output, undefined);
 
@@ -385,7 +385,10 @@ test("the planning model's own calls draw from their parts as a coding agent's d
     input: { path: "src/invites.ts", startLine: 12, endLine: 30 },
     output: undefined,
   });
-  assert.deepEqual([shown.kind, shown.subject], [CALL_KIND.SHOW_CODE, "src/invites.ts:12-30"]);
+  assert.deepEqual(
+    [shown.kind, shown.subject],
+    [CALL_KIND.SHOW_CODE, "src/invites.ts, Lines 12–30"],
+  );
   const asked = toolCallView({
     tool: "queue_question",
     input: { question: "Who can invite?", recommendation: "Admins." },

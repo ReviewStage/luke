@@ -8,7 +8,7 @@ import {
 } from "./transcript-model";
 
 /**
- * code-pane-model.ts -- what the Code tab's feed says, apart from drawing it: which call each code was shown on, its heading's range, the lines lit, and what its copy carries.
+ * code-pane-model.ts -- what the Code tab's feed says, apart from drawing it: which call each code was shown on, how a range of lines is said, the lines lit, and what its copy carries.
  */
 
 /** The calls the feed groups its code under, as the Call tab draws them. */
@@ -33,12 +33,29 @@ export interface CodeFeedCall {
   readonly record: CallRecord | undefined;
 }
 
-/** The lines pointed at, as a card's heading reads them: "Lines 40–58", "Line 7", or nothing for a whole file. */
-export function rangeLabel(ref: Pick<CodeRef, "startLine" | "endLine">): string | undefined {
+/** A reference as a place names it, read from a call's input or a stored note, its lines absent for a whole file. */
+export interface NamedLines {
+  readonly path: string;
+  readonly startLine?: number | undefined;
+  readonly endLine?: number | undefined;
+}
+
+/**
+ * The lines a reference points at, as every place naming them says them, a
+ * code card's head, a File tab's note, a `show_code` row, and an inbox
+ * item's code alike: "Lines 40–58", "Line 7", or nothing for a whole file.
+ */
+export function lineRangeText(ref: Omit<NamedLines, "path">): string | undefined {
   if (ref.startLine === undefined || ref.endLine === undefined) return undefined;
   return ref.startLine === ref.endLine
     ? `Line ${ref.startLine}`
     : `Lines ${ref.startLine}–${ref.endLine}`;
+}
+
+/** A reference as words, where its path and its lines are said in one breath: "src/invite.ts, Lines 40–58", or the path alone for a whole file. */
+export function fileRefText(ref: NamedLines): string {
+  const lines = lineRangeText(ref);
+  return lines === undefined ? ref.path : `${ref.path}, ${lines}`;
 }
 
 /** Whether `line` of the file is one the reference points at. */
@@ -127,4 +144,9 @@ export function shownFiles(shown: readonly PlanCodeShowing[]): readonly ShownFil
 /** A file's name, the last part of its path, as its tab is labelled. */
 export function fileName(path: string): string {
   return path.split("/").at(-1) ?? path;
+}
+
+/** The folder a file stands in, its path short of its name, as a row says it after the name; none at the repository's root. */
+export function fileFolder(path: string): string | undefined {
+  return path.slice(0, -fileName(path).length - 1) || undefined;
 }
