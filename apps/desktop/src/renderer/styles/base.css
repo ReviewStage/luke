@@ -80,8 +80,12 @@
   --match-wash: rgba(255, 255, 255, 0.16);
   --input-fill: rgba(0, 0, 0, 0.4);
   --input-fill-focus: rgba(0, 0, 0, 0.55);
+  /* A switch that is on fills with the accent the primary button and the
+     focus ring draw in, as a Mac's own switches follow the system accent, and
+     not with a state's colour: on is a choice the developer made, not
+     something that finished. */
   --switch-track: var(--raised-strong);
-  --switch-on: color-mix(in srgb, var(--state-complete) 62%, transparent);
+  --switch-on: var(--message-sent);
   --switch-thumb: var(--text-primary);
   --switch-thumb-shadow: none;
   /* What dims the window behind a dialog, and the three depths of shadow
@@ -193,7 +197,7 @@
     --input-fill-focus: #fff;
     /* The system's own switch: a white thumb lifted off a grey track. */
     --switch-track: rgba(0, 0, 0, 0.14);
-    --switch-on: var(--state-complete);
+    --switch-on: var(--message-sent);
     --switch-thumb: #fff;
     --switch-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
     --scrim: rgba(0, 0, 0, 0.25);
