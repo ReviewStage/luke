@@ -14,6 +14,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { HarnessMark } from "../harness-marks";
 import {
   choiceModelId,
   choiceOn,
@@ -31,7 +32,6 @@ import {
   windowLabel,
   windowOf,
 } from "../planning/coding-agent-model";
-import { HarnessMark } from "../provider-marks";
 import { Segmented } from "../segmented";
 import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";

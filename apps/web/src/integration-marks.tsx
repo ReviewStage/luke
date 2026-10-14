@@ -8,7 +8,7 @@ import { useId } from "react";
  * from the press kit cited above it, never redrawn, in the colours its usage
  * rules allow. A mark the brand shows monochrome is drawn in `currentColor`,
  * so it reads in the ink of whatever card it stands on. The desktop's
- * `renderer/integration-marks.tsx` draws the same marks in its own React, as
+ * `renderer/provider-marks.tsx` draws the same marks in its own React, as
  * the account marks are drawn once per app; change both if a brand publishes
  * a new mark.
  */

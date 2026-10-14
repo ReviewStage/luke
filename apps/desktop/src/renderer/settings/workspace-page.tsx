@@ -1,3 +1,4 @@
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
@@ -14,6 +15,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { ProviderMark } from "../provider-marks";
 import { Segmented } from "../segmented";
 import { SETTINGS_SECTION } from "../settings-views";
 import { SpinnerRegion } from "../spinner";
@@ -424,6 +426,9 @@ function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.
   return (
     <>
       <MenuRow label="GitHub organization actions" actions={actions}>
+        <span className="settings-row-mark">
+          <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+        </span>
         <RowCopy
           name="GitHub organization"
           line={

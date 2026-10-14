@@ -58,7 +58,7 @@ import {
   ToolStateMark,
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
-import { HarnessMark } from "../provider-marks";
+import { HarnessMark } from "../harness-marks";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { providerOf } from "./coding-agent-model";

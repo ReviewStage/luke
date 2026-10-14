@@ -8,11 +8,11 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
-import { IntegrationMark } from "../integration-marks";
 import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
+import { ProviderMark } from "../provider-marks";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
@@ -428,7 +428,7 @@ function ServersPopover({
         onMouseDown={keepFieldFocus}
         onClick={() => opensTools(row) && open(row)}
       >
-        <IntegrationMark provider={row.provider} />
+        <ProviderMark provider={row.provider} />
         <span className="plan-compose-menu-name">{row.name}</span>
         {row.tools !== undefined ? (
           <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
@@ -473,7 +473,7 @@ function ServersPopover({
         onMouseDown={keepFieldFocus}
         onClick={() => open(row, query)}
       >
-        <IntegrationMark provider={row.provider} />
+        <ProviderMark provider={row.provider} />
         <span className="plan-compose-menu-name integration-tool-id">
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
         </span>
@@ -538,7 +538,7 @@ function ServersPopover({
               <ArrowLeftIcon />
             </button>
           </Tooltip>
-          <IntegrationMark provider={row.provider} />
+          <ProviderMark provider={row.provider} />
           <span className="agent-servers-page-title">{row.name}</span>
           <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
           <span className="agent-servers-end">

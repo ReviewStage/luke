@@ -7,7 +7,7 @@ import {
 import { WingFace } from "@sidecar/panel";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { useEffect, useId, useState } from "react";
-import { GitHubMark, GoogleMark } from "./account-marks";
+import { ProviderMark } from "./provider-marks";
 import { SpinnerRing } from "./spinner";
 
 /**
@@ -68,7 +68,6 @@ export function useSignInFaceCycle(still: boolean) {
 function ProviderButton({
   provider,
   name,
-  mark,
   primary,
   lastUsed,
   waiting,
@@ -77,7 +76,6 @@ function ProviderButton({
 }: {
   provider: AccountProvider;
   name: string;
-  mark: React.ReactNode;
   /** The filled one of the two. */
   primary: boolean;
   /** The way in this Mac took last. */
@@ -100,11 +98,11 @@ function ProviderButton({
         onClick={() => onBegin(provider)}
       >
         {waiting ? (
-          <span className="account-mark">
+          <span className="sign-in-provider-wait">
             <SpinnerRing />
           </span>
         ) : (
-          mark
+          <ProviderMark provider={provider} />
         )}
         {waiting ? "Waiting for browser…" : `Continue with ${name}`}
       </button>
@@ -162,7 +160,6 @@ export function SignInGate({
         <ProviderButton
           provider={ACCOUNT_PROVIDER.GOOGLE}
           name="Google"
-          mark={<GoogleMark />}
           primary={primary === ACCOUNT_PROVIDER.GOOGLE}
           lastUsed={lastUsed === ACCOUNT_PROVIDER.GOOGLE}
           waiting={waiting === ACCOUNT_PROVIDER.GOOGLE}
@@ -172,7 +169,6 @@ export function SignInGate({
         <ProviderButton
           provider={ACCOUNT_PROVIDER.GITHUB}
           name="GitHub"
-          mark={<GitHubMark />}
           primary={primary === ACCOUNT_PROVIDER.GITHUB}
           lastUsed={lastUsed === ACCOUNT_PROVIDER.GITHUB}
           waiting={waiting === ACCOUNT_PROVIDER.GITHUB}

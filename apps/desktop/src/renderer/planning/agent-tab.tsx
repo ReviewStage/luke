@@ -28,7 +28,7 @@ import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
-import { HarnessMark } from "../provider-marks";
+import { HarnessMark } from "../harness-marks";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";

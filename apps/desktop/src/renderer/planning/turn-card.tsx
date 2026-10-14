@@ -5,7 +5,7 @@ import {
   type TurnTokens,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import { HarnessMark } from "../provider-marks";
+import { HarnessMark } from "../harness-marks";
 import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { spanText } from "./plan-time";

@@ -1,6 +1,7 @@
-import { GitHubMark } from "./account-marks";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { FAILURE_REASON, type Failure, remedyLabel } from "./failure-remedy";
 import { useGitHubConnect } from "./github-connect";
+import { ProviderMark } from "./provider-marks";
 import { RetryButton } from "./retry-button";
 
 /**
@@ -40,7 +41,7 @@ export function FailureNote({
           disabled={waiting}
           onClick={github ? connect.begin : onRemedy}
         >
-          {github && !waiting ? <GitHubMark /> : null}
+          {github && !waiting ? <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} /> : null}
           {waiting ? "Waiting for browser…" : label}
         </button>
       )}

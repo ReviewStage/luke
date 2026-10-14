@@ -119,8 +119,9 @@
   transition: opacity var(--duration-hover) ease;
 }
 
-/* The provider's own mark, at the size its guidelines draw beside a label. */
-.account-mark {
+/* The provider's own mark, at the size its guidelines draw beside a label,
+   and the spinner that stands in its place while its sign-in is waited on. */
+.sign-in-provider :is(.provider-mark, .sign-in-provider-wait) {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;

@@ -1,3 +1,4 @@
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   ArchiveIcon,
@@ -13,11 +14,11 @@ import {
 import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-model";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
@@ -164,7 +165,7 @@ function planActionGroups(
   };
   const change: MenuAction = {
     label: "Change repository",
-    icon: <GitHubMark />,
+    icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => plans.onChangeRepository(planId),
   };
   const open: MenuAction = {

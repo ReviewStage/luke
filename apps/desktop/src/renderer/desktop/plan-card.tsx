@@ -1,12 +1,13 @@
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/hosted/plan-wire";
-import { GitHubMark } from "../account-marks";
 import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
 import { repositoryPageUrl } from "../planning/planning-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
+import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 
@@ -117,7 +118,11 @@ export function RepositoryDetail({
   return (
     <CardDetail
       glyph={
-        <RepositoryPicture repository={repository} pictures={pictures} fallback={<GitHubMark />} />
+        <RepositoryPicture
+          repository={repository}
+          pictures={pictures}
+          fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+        />
       }
       label={repository}
       onPress={() => onOpenGitHub(repositoryPageUrl(repository))}
