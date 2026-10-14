@@ -159,6 +159,7 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
+import { avatarStateSchema } from "./avatar";
 import type { UpdateSnapshot } from "./update";
 import { VOICE_COMMAND } from "./voice-view";
 import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./wire-guard";
@@ -353,6 +354,8 @@ export const ACT_KIND = {
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
+  /** The call window's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from that window alone. */
+  AVATAR_REPORT: "avatar.report",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
    * which creates the one session and answers the SDP; the hang-up it asks
@@ -1089,6 +1092,11 @@ export const ACT = {
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's plan forward on this system."),
+  [ACT_KIND.AVATAR_REPORT]: {
+    payload: actSchema(avatarStateSchema),
+    result: answersNothing,
+    refusal: "Could not report the video on this system.",
+  },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service

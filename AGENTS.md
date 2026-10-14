@@ -30,7 +30,10 @@ macOS check to wait for.
   tool's events as it printed; a trace, a counted event, and a fixture still never
   carry it where that can be avoided. And an integration's MCP tool calls and
   results, a credential its provider answers among them, may reach the
-  conversation, the model, an agent's transcript, and its traces.
+  conversation, the model, an agent's transcript, and its traces. And, approved
+  on 2026-10-13: the Keyframe session token for a call's own avatar may reach
+  the floating call window, which runs that session, and never the voice window,
+  a Gateway answer or event, app state, a counted event, a trace, or a fixture.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

@@ -4,13 +4,18 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@sidecar/host";
+import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
+import type { AvatarFeed } from "#shared/messages/avatar";
+import { CallAvatarRelay } from "./call-window-avatar";
 import {
   CALL_WINDOW_BOUNDS,
+  type CallWindowArea,
   type CallWindowPoint,
   type CallWindowSurface,
+  callWindowFrame,
   callWindowPosition,
 } from "./call-window-presence";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
@@ -41,9 +46,11 @@ function readPlacement(file: string): CallWindowPoint | undefined {
 
 /**
  * The one floating window that draws the standing call while no Luke window
- * has the keyboard. It loads the same renderer bundle as the panels from a
- * document of its own (`call.html`, which may reach no host), under the same
- * hardening, and mounts the call card by the role main answers it. It is
+ * has the keyboard, and Luke's avatar while it is up. It loads the same
+ * renderer bundle as the panels from a document of its own (`call.html`,
+ * whose one host is the LiveKit server Keyframe's grant names, for the
+ * avatar's session), under the same hardening, and mounts the call card by
+ * the role main answers it. It is the one window the grant is sent to. It is
  * transparent and frameless, so the card is the whole of what is seen; a non-activating
  * panel, so pressing a control leaves the developer's editor in front; and it
  * floats over every Space and full-screen app, out of Mission Control.
@@ -59,7 +66,16 @@ export class CallWindow implements CallWindowSurface {
   /** Whether the renderer has drawn its first frame, before which a show would flash an empty window. */
   #ready = false;
   #wanted = false;
+  /** Whether the frame is the video tile's rather than the card's. */
+  #video = false;
+  /** Where the card stands, which the tile grows from and the card returns to. */
+  #card: CallWindowPoint | undefined;
+  /** The frame this window last set, so the move it causes is not read as a drag. */
+  #set: CallWindowArea | undefined;
   #closedForGood = false;
+  readonly #avatar = new CallAvatarRelay(() =>
+    this.#ready ? this.current()?.webContents : undefined,
+  );
 
   constructor(options: CallWindowOptions) {
     this.#options = options;
@@ -77,8 +93,36 @@ export class CallWindow implements CallWindowSurface {
     this.current()?.hide();
   }
 
+  fitVideo(video: boolean): void {
+    this.#video = video;
+    const window = this.current();
+    if (window && this.#card) this.#refit(window, this.#card);
+  }
+
+  /** Keyframe's grant for the call's avatar, or nothing once its session is to close. */
+  showAvatarSession(grant: AvatarGrant | undefined): void {
+    this.#avatar.showAvatarSession(grant);
+  }
+
+  /** One message of Luke's voice feed, for the avatar to lip-sync. */
+  feedAvatar(feed: AvatarFeed): void {
+    this.#avatar.feedAvatar(feed);
+  }
+
+  /** The frame resized to what is drawn, from the card's place on the display it stands on. */
+  #refit(window: BrowserWindow, card: CallWindowPoint): void {
+    const cardFrame = {
+      ...card,
+      width: CALL_WINDOW_BOUNDS.WIDTH,
+      height: CALL_WINDOW_BOUNDS.HEIGHT,
+    };
+    const workArea = screen.getDisplayMatching(cardFrame).workArea;
+    this.#set = callWindowFrame({ card, video: this.#video, workArea });
+    window.setBounds(this.#set);
+  }
+
   #open(): BrowserWindow {
-    const { x, y } = callWindowPosition({
+    const card = callWindowPosition({
       saved: readPlacement(this.#options.placementPath),
       workAreas: screen.getAllDisplays().map((display) => display.workArea),
       primary: screen.getPrimaryDisplay().workArea,
@@ -86,8 +130,8 @@ export class CallWindow implements CallWindowSurface {
     const window = new BrowserWindow({
       title: "Luke call",
       show: false,
-      x,
-      y,
+      x: card.x,
+      y: card.y,
       width: CALL_WINDOW_BOUNDS.WIDTH,
       height: CALL_WINDOW_BOUNDS.HEIGHT,
       type: "panel",
@@ -116,6 +160,9 @@ export class CallWindow implements CallWindowSurface {
     });
     this.#window = window;
     this.#ready = false;
+    this.#card = card;
+    this.#set = undefined;
+    if (this.#video) this.#refit(window, card);
     window.setAlwaysOnTop(true, "floating");
     // Kept out of the Window menu's list, where a window nobody chose to open
     // would read as one of Luke's own.
@@ -130,6 +177,7 @@ export class CallWindow implements CallWindowSurface {
     window.once("ready-to-show", () => {
       if (window !== this.#window) return;
       this.#ready = true;
+      this.#avatar.pageDrew();
       if (this.#wanted) window.showInactive();
     });
     // The page is told the window is moving under the pointer, so a hover
@@ -138,9 +186,18 @@ export class CallWindow implements CallWindowSurface {
       if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
     window.on("moved", () => {
-      const [left, top] = window.getPosition();
+      // Note that a move this window made itself is not kept, because a tile
+      // pulled back onto the screen is not where the developer left the card.
+      const frame = window.getBounds();
+      const set = this.#set;
+      if (set && set.x === frame.x && set.y === frame.y) return;
+      // A drag is kept as the card's own corner whichever size is drawn,
+      // since the tile is anchored at the card's bottom-left.
+      const place = { x: frame.x, y: frame.y + frame.height - CALL_WINDOW_BOUNDS.HEIGHT };
+      this.#card = place;
+      this.#set = undefined;
       try {
-        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+        fs.writeFileSync(this.#options.placementPath, JSON.stringify(place));
       } catch {
         // Note that a place that cannot be kept is let go of, because the
         // card opening at its corner next time costs nothing, and a throw
