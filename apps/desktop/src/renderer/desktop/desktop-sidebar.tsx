@@ -560,7 +560,9 @@ interface FloatingSidebar {
  * The floating sidebar's doors: a press in a peek opens it, the pointer
  * leaving a peek puts it away, though not for the toggle standing over its
  * head, and Escape puts it away while no menu in it took the key first.
- * Opened from away, it takes the keyboard, which Escape gives back.
+ * Opened from away, it takes the keyboard, which Escape gives back. It goes
+ * with the sidebar, so a menu's way to Settings or a version history, or
+ * any other way off the plans, leaves it away for their return.
  */
 function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
   const ref = useRef<HTMLElement | null>(null);
@@ -582,6 +584,7 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
       held.querySelector<HTMLElement>(".sidebar-new-plan");
     first?.focus();
   }, [overlay]);
+  useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
   return {
     ref,
     inSight: !sidebar.collapsed || floating,

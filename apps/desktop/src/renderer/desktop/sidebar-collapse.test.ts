@@ -2,22 +2,22 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { UPDATE_STATUS } from "@luke/settings/update";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
-import { PANEL_TAB } from "../panel-tabs";
+import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import type { SettingsPanelProps } from "../settings/settings-panel";
-import { SETTINGS_VIEW } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
 import { useSidebarCollapse } from "./sidebar-collapse";
 
@@ -114,6 +114,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
   root = createRoot(container);
   function Window() {
     const sidebar = useSidebarCollapse(false);
+    const [tab, setTab] = useState<PanelTab>(PANEL_TAB.PLANS);
     return createElement(DesktopShell, {
       gates: {
         accountRequired: false,
@@ -121,8 +122,8 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
         onCancelSignIn: ignore,
         signInFace: { play: 0 },
       },
-      tab: PANEL_TAB.PLANS,
-      onTabChange: ignore,
+      tab,
+      onTabChange: setTab,
       plans: plansControl({ page: PLANS_PAGE.HOME, onGoHome }),
       history: {
         canGoBack: false,
@@ -288,4 +289,16 @@ test("the pointer at the window's left edge peeks the folded sidebar out, which 
   assert.equal(standing(page), "floating");
   act(() => toggle(page).click());
   assert.equal(standing(page), "pinned");
+});
+
+test("a floating sidebar left for Settings by its chord is away when the plans come back", () => {
+  const page = mount(1000);
+  act(() => toggle(page).click());
+  assert.equal(standing(page), "floating");
+  act(() => runAppCommand(APP_COMMAND.SETTINGS));
+  assert.equal(page.querySelector("aside.desktop-sidebar"), null, "Settings draws its own list");
+  const back = page.querySelector<HTMLButtonElement>("button.settings-pages-back");
+  assert.ok(back, "Settings has its way back");
+  act(() => back.click());
+  assert.equal(standing(page), "away");
 });
