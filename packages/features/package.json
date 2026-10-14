@@ -39,7 +39,9 @@
     "./workspace-wire": "./src/workspace-wire.js",
     "./feedback": "./src/feedback/index.js",
     "./analytics": "./src/analytics/index.js",
-    "./analytics/sender": "./src/analytics/sender.js"
+    "./analytics/sender": "./src/analytics/sender.js",
+    "./brain": "./src/brain/index.js",
+    "./brain/tool-set": "./src/brain/tool-set.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -50,6 +52,7 @@
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/wire": "workspace:*",
+    "ai": "catalog:",
     "diff": "9.0.0",
     "effect": "catalog:"
   },

@@ -197,7 +197,7 @@ export type BrainRunEventBody =
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
-      /** The code as `@sidecar/features`'s `ShownCode` spells it, restated here because this package cannot reach that one. */
+      /** The code as `plan-wire.ts`'s `ShownCode` spells it, restated from when the brain was a package that could not reach it. */
       readonly code: {
         readonly ref: {
           readonly path: string;

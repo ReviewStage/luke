@@ -1,4 +1,4 @@
-import type { BrainModelUsage, BrainRunUsage } from "@sidecar/brain";
+import type { BrainModelUsage, BrainRunUsage } from "@sidecar/features/brain";
 import {
   type MessageRole,
   type StoredMessageMetadata,

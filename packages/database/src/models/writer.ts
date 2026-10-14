@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { isWireUuid } from "@sidecar/features";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -11,8 +12,7 @@ import {
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
-} from "@sidecar/brain";
-import { isWireUuid } from "@sidecar/features";
+} from "@sidecar/features/brain";
 import type { CodingAgentAttachment } from "@sidecar/features/coding-agent-wire";
 import {
   type AssistantMessageMetadata,

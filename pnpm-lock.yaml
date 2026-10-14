@@ -309,9 +309,6 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../../packages/brain
       '@sidecar/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -482,28 +479,6 @@ importers:
         specifier: 0.74.0
         version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4))
 
-  packages/brain:
-    dependencies:
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      ai:
-        specifier: 'catalog:'
-        version: 7.0.135(zod@4.5.4)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
   packages/credentials:
     dependencies:
       '@effect/platform-node':
@@ -543,9 +518,6 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../brain
       '@sidecar/features':
         specifier: workspace:*
         version: link:../features
@@ -613,6 +585,9 @@ importers:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
       diff:
         specifier: 9.0.0
         version: 9.0.0
