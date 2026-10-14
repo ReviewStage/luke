@@ -69,6 +69,8 @@ function world(options: {
   readonly shellGone?: boolean;
   /** How many of the first mints GitHub refuses. */
   readonly tokensRefused?: number;
+  /** Whether GitHub never answers a mint. */
+  readonly tokensHang?: boolean;
 }) {
   let heldUntil = 0;
   let credentialAt: number | undefined;
@@ -107,6 +109,7 @@ function world(options: {
     sessionId: "wrun_1",
     repositoryToken: Effect.suspend(() => {
       asked.tokens += 1;
+      if (options.tokensHang === true) return Effect.never;
       return asked.tokens <= (options.tokensRefused ?? 0)
         ? Effect.fail("GitHub refused the mint")
         : Effect.succeed(Redacted.make("ghs_fixture"));
@@ -120,7 +123,7 @@ function world(options: {
       Effect.sync(() => {
         heldUntil = Math.max(heldUntil, until.getTime());
       }),
-    claimRenewal: (_conversation, now, renewedBefore) =>
+    claimRenewal: (_conversation, _session, now, renewedBefore) =>
       Effect.sync(() => {
         if (credentialAt !== undefined && credentialAt >= renewedBefore.getTime()) return false;
         credentialAt = now.getTime();
@@ -414,5 +417,23 @@ it.effect("a renewal GitHub refused gives its claim back, and the next check ren
     assert.deepEqual(afterRefusal, []);
     assert.equal(refusing.asked.released, 1);
     assert.deepEqual(refusing.asked.policies, [SANDBOX_SESSION]);
+  }),
+);
+
+it.effect("a renewal cut off by its connection closing gives its claim back", () =>
+  Effect.gen(function* () {
+    const pty = yield* scriptedSocket;
+    const device = yield* scriptedSocket;
+    const hanging = world({ pty, tokensHang: true });
+
+    const relay = yield* Effect.forkChild(
+      Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
+    );
+    yield* Effect.yieldNow;
+    const releasedWhileMinting = hanging.asked.released;
+    yield* Fiber.interrupt(relay);
+
+    assert.equal(releasedWhileMinting, 0);
+    assert.equal(hanging.asked.released, 1);
   }),
 );

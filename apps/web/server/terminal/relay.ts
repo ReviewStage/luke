@@ -107,8 +107,10 @@ export interface RelayDependencies {
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
+  /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (
     conversationId: string,
+    sandboxSessionId: string,
     now: Date,
     renewedBefore: Date,
   ) => Effect.Effect<boolean>;
@@ -149,7 +151,7 @@ function heldFrom(instant: Date): Date {
   return new Date(instant.getTime() + Duration.toMillis(reach));
 }
 
-/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule; a failure gives the claim back, is logged, and the next check tries again. */
+/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule; a renewal that failed or was cut off gives the claim back, and the next check tries again. */
 function renewCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -158,16 +160,19 @@ function renewCredential(
   return Effect.gen(function* () {
     const at = yield* now;
     const renewedBefore = new Date(at.getTime() - Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH));
-    if (!(yield* deps.claimRenewal(agent.conversationId, at, renewedBefore))) return;
+    const claimed = yield* deps.claimRenewal(
+      agent.conversationId,
+      sandboxSessionId,
+      at,
+      renewedBefore,
+    );
+    if (!claimed) return;
     yield* Effect.flatMap(agent.repositoryToken, (token) =>
       deps.sandbox.setGitHubToken(sandboxSessionId, token),
     ).pipe(
-      Effect.catch(() =>
-        Effect.andThen(
-          deps.releaseRenewal(agent.conversationId, at),
-          Effect.logWarning("a terminal's GitHub credential was not renewed"),
-        ),
-      ),
+      // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
+      Effect.onError(() => deps.releaseRenewal(agent.conversationId, at)),
+      Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
     );
   });
 }
