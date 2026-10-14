@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
-import { createPlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
+import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
@@ -62,6 +62,7 @@ import {
   sendText,
   startFakeOpenAi,
 } from "./support/voice-fakes";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The hosted exchange attached to the sessions route, over the real store on
@@ -183,7 +184,7 @@ const PLAN = {
 /** An account holding one plan, and the plan's conversation every call about it lands in. */
 async function account(): Promise<{ target: ConversationTarget; planId: string }> {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, PLAN));
+  const plan = await database.run(startPlan(userId, PLAN));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
   );
@@ -543,7 +544,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const session = await openSession(context, plan.id);
       assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
       const create = context.openAi.creates[0];
@@ -605,12 +606,12 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const first = await database.run(createPlan(context.target.userId, PLAN));
+      const first = await database.run(startPlan(context.target.userId, PLAN));
       const second = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+        startPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
       );
       const stranger = await database.createUser();
-      const foreign = await database.run(createPlan(stranger, PLAN));
+      const foreign = await database.run(startPlan(stranger, PLAN));
 
       const firstCall = await openSession(context, first.id);
       await speak(firstCall.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");

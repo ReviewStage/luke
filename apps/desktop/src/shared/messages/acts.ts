@@ -103,6 +103,7 @@ import {
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
+  planningRepositoriesParamsSchema,
   planningRevisionAnswerSchema,
   planningRevisionParamsSchema,
   planningRevisionsAnswerSchema,
@@ -115,7 +116,18 @@ import {
   planningStartRequestSchema,
   planningTreeAnswerSchema,
   planningTreeParamsSchema,
+  planningWorkspaceCreateParamsSchema,
+  planningWorkspaceLeaveParamsSchema,
+  planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMembersParamsSchema,
+  planningWorkspaceParamsSchema,
 } from "@sidecar/hosted/planning-view";
+import {
+  type Workspace,
+  type WorkspaceMember,
+  workspaceMemberSchema,
+  workspaceSchema,
+} from "@sidecar/hosted/workspace-wire";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
   APP_SETTING_SCHEMA,
@@ -207,6 +219,10 @@ export const ACT_KIND = {
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
   WEB_OPEN: "web.open",
+  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_CONNECT: "github.connect",
+  /** The page that disconnects the account's GitHub, opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_DISCONNECT: "github.disconnect",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -233,6 +249,24 @@ export const ACT_KIND = {
   PLANNING_RESTORE: "planning.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
   PLANNING_PAGE_SOURCE: "planning.pageSource",
+  /**
+   * The account's workspaces: one made under a name, answered as made, which
+   * the account owns; the service's invite page for one opened in the
+   * browser, where its owners and admins invite people; a GitHub
+   * organization connected to one, the Luke GitHub App's install address the
+   * service answers opened in the browser, or disconnected from it; one
+   * workspace's members read; one member removed, answered with the members
+   * who remain; and one workspace left. Every write reads the workspaces
+   * again, so they arrive on the document; a write the account's role does
+   * not allow is refused in words that say so.
+   */
+  WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_INVITE: "workspace.invite",
+  WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
+  WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
+  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
+  WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
+  WORKSPACE_LEAVE: "workspace.leave",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -410,6 +444,16 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 }
 
 /**
+ * What a workspace act whose role does not allow it is refused with, in place
+ * of its kind's own sentence: a member removing someone, an owner removed or
+ * leaving, or a personal workspace, which is managed and left by nobody.
+ */
+export const WORKSPACE_NOT_PERMITTED_REFUSAL =
+  "Your role in this workspace does not allow that." as const;
+
+const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
+
+/**
  * Whether a value reads under a schema at all, for a result the payload's own
  * row only checks admits. Every schema read here is a Gateway answer, so a key
  * a newer host added is dropped rather than refused: which keys a read tolerates
@@ -543,6 +587,9 @@ const press = (refusal: string): ActDeclaration<undefined, void> => ({
   refusal,
 });
 
+/** Connect GitHub and Disconnect, which open one page of the service's and are refused alike. */
+const GITHUB_PAGE_PRESS = press("Could not open GitHub's connection page on this system.");
+
 /**
  * Every act, one row per kind, and everything this build says about a kind in
  * that one row: the parser its payload has to pass, the guard its answer has
@@ -645,7 +692,7 @@ export const ACT = {
     refusal: "Could not archive that plan on this system.",
   },
   [ACT_KIND.PLANNING_REPOSITORIES]: {
-    payload: noPayload,
+    payload: actSchema(planningRepositoriesParamsSchema),
     result: wireResult<PlanningRepositoriesAnswer>(isReadable(planningRepositoriesAnswerSchema)),
     refusal: "Could not read your GitHub repositories on this system.",
   },
@@ -669,7 +716,44 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not open that link on this system.",
   },
+  [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
+  [ACT_KIND.GITHUB_DISCONNECT]: GITHUB_PAGE_PRESS,
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
+  [ACT_KIND.WORKSPACE_CREATE]: {
+    payload: actSchema(planningWorkspaceCreateParamsSchema),
+    result: wireResult<Workspace>(isReadable(workspaceSchema)),
+    refusal: "Could not make that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_INVITE]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open the invite page on this system.",
+  },
+  [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not connect GitHub to that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not disconnect GitHub from that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
+    payload: actSchema(planningWorkspaceMembersParamsSchema),
+    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
+    refusal: "Could not read that workspace's members on this system.",
+  },
+  [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
+    payload: actSchema(planningWorkspaceMemberRemoveParamsSchema),
+    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
+    refusal: "Could not remove that member on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LEAVE]: {
+    payload: actSchema(planningWorkspaceLeaveParamsSchema),
+    result: answersNothing,
+    refusal: "Could not leave that workspace on this system.",
+  },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     payload: actSchema(planningBoardSaveParamsSchema),
     result: answersNothing,

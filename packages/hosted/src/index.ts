@@ -15,6 +15,13 @@ export {
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
 export {
+  GITHUB_CONNECTION_CALL_FAILURE,
+  type GitHubConnectionCallFailure,
+  type GitHubConnectionCallResult,
+  HostedGitHubConnectionClient,
+  type HostedGitHubConnectionClientOptions,
+} from "./github-connection-client.js";
+export {
   GITHUB_INSTALL_LANDING,
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
@@ -22,6 +29,7 @@ export {
   githubInstallStatusFromWire,
 } from "./github-install-wire.js";
 export {
+  GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
   githubRepositoriesAnswerSchema,
@@ -115,3 +123,10 @@ export {
   type TurnEventKind,
   type TurnSlowStep,
 } from "./turn-events-wire.js";
+export {
+  HostedWorkspaceClient,
+  type HostedWorkspaceClientOptions,
+  WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
+  type WorkspaceCallResult,
+} from "./workspace-client.js";

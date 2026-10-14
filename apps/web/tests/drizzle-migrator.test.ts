@@ -24,7 +24,8 @@ import * as SqlClient from "effect/sql/SqlClient";
  * the branch lands. A database the old `effect/sql` runner migrated keeps its
  * history under the old file tags, and the runner copies it into Drizzle's
  * table once before the migrator reads it, so such a database re-runs
- * nothing; a tag it cannot place fails the run, naming the tag.
+ * nothing the old runner ran and applies only the migrations written after
+ * the move; a tag it cannot place fails the run, naming the tag.
  */
 
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
@@ -183,16 +184,18 @@ it.effect(
 );
 
 it.effect(
-  "a database the old runner migrated re-runs nothing, and holds the history Drizzle's migrator would have written",
+  "a database the old runner migrated re-runs nothing it ran, applies only what was written after the move, and holds the history Drizzle's migrator would have written",
   () =>
     Effect.gen(function* () {
       const fromScratch = yield* onFreshDatabase(Effect.andThen(runWebMigrations(), recorded));
+      const moved = new Set<string>(Object.values(EFFECT_MIGRATION_FOLDERS));
+      const writtenSince = (yield* folders).filter((folder) => !moved.has(folder));
       yield* onFreshDatabase(
         Effect.gen(function* () {
           yield* migrateAsTheOldRunner(yield* oldRunnerMigrations);
           assert.ok(!(yield* tableNamed(DRIZZLE_MIGRATIONS.SCHEMA, DRIZZLE_MIGRATIONS.TABLE)));
 
-          assert.deepEqual(yield* runWebMigrations(), []);
+          assert.deepEqual(yield* runWebMigrations(), writtenSince);
           assert.deepEqual(yield* recorded, fromScratch);
           assert.deepEqual(yield* runWebMigrations(), []);
         }),

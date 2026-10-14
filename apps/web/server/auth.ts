@@ -1,17 +1,23 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { jwt, lastLoginMethod, oAuthProxy } from "better-auth/plugins";
+import { jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
-import { authDeployment, authSecrets, type SocialClient } from "./auth-deployment.js";
+import {
+  type AuthSecrets,
+  authDeployment,
+  authSecrets,
+  type SocialClient,
+} from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
+  ORGANIZATION_OPTIONS,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 
@@ -48,6 +54,21 @@ function socialProvider(client: SocialClient) {
   };
 }
 
+/**
+ * The ways in, Google and GitHub, as the deployment's secrets register them.
+ * A function of the secrets rather than inline, so a test can stand the same
+ * providers up over a database of its own.
+ */
+export function socialProviders(registered: Pick<AuthSecrets, "google" | "github">) {
+  return {
+    google: { ...socialProvider(registered.google), scope: ["email", "profile"] },
+    // The Luke GitHub App's client: signing in is the user's authorization
+    // of the App, and the token it leaves on the account row is the App's
+    // expiring user token, refreshed by `github/github-app.ts`.
+    github: { ...socialProvider(registered.github), ...GITHUB_SIGN_IN },
+  };
+}
+
 export const auth = betterAuth({
   appName: "Luke",
   baseURL: deployment.baseURL,
@@ -67,13 +88,7 @@ export const auth = betterAuth({
     },
   },
   disabledPaths: [...DISABLED_AUTH_PATHS],
-  socialProviders: {
-    google: { ...socialProvider(secrets.google), scope: ["email", "profile"] },
-    // The Luke GitHub App's client: signing in is the user's authorization
-    // of the App, and the token it leaves on the account row is the App's
-    // expiring user token, refreshed by `github/github-app.ts`.
-    github: { ...socialProvider(secrets.github), ...GITHUB_SIGN_IN },
-  },
+  socialProviders: socialProviders(secrets),
   plugins: [
     // Better Auth's OAuth proxy as its docs configure it: a Preview signs in
     // through production's registered callback, and the provider plugin resumes
@@ -89,5 +104,7 @@ export const auth = betterAuth({
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
     }),
+    // A workspace is an organization: its members plan together.
+    organization(ORGANIZATION_OPTIONS),
   ],
 });

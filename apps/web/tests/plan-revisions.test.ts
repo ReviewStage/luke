@@ -8,7 +8,7 @@ import {
   PLAN_REVISION,
   type PlanWriter,
 } from "@sidecar/database/models/plan-revisions";
-import { createPlan, readPlan } from "@sidecar/database/models/plan-store";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
@@ -22,6 +22,7 @@ import {
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { added } from "./support/plan-contents";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A plan's history, through the plan's one write and the store's reads:
@@ -46,7 +47,7 @@ const openPlan = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 

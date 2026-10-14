@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { createPlan, savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
+import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
@@ -82,6 +82,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
+import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -284,6 +285,7 @@ const standing = (
         ),
       eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
+      workspaces: yield* fakeWorkspaceSeams,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -389,7 +391,7 @@ const openPlan = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* openGithubUser();
-    const plan = yield* createPlan(owner, {
+    const plan = yield* startPlan(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
@@ -830,7 +832,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, other, agent, ask, post, waiting } = yield* openInbox();
-        const second = yield* createPlan(owner, {
+        const second = yield* startPlan(owner, {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });

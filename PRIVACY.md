@@ -97,7 +97,9 @@ send one a message it writes for you (kept in that agent's transcript as
 yours), and start a new one; what it read and sent is kept with the plan's
 planning conversation. A fixture or evidence run keeps no conversation at all.
 
-**Feature plans.** When you start a named plan, our service stores under your
+**Feature plans.** When you start a named plan, our service stores it in a
+workspace: your personal workspace unless you start it in another workspace
+you are a member of, and the plan records which. It stores under your
 account its name and its one Markdown document, which begins as a copy of
 your plan template and is written by the planning call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an
@@ -362,7 +364,9 @@ own retention policy.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, the address of your profile picture, and which of the two you used.
-Signing in with GitHub authorizes the Luke GitHub App: its token reaches only
+An account made with Google can also link a GitHub account to itself, even
+one under a different email address; signing in with GitHub, or linking it,
+authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents
 and pull requests; reading its checks, commit statuses, and Actions runs with
@@ -372,7 +376,9 @@ token sealed under a server-only secret, read them only on our service, and
 never hand them to your Mac, a browser, or anyone else; they go when you
 delete your account, and you can revoke the App in GitHub's settings under
 Applications, where an account that signed in before the App may also hold
-an unused `repo` permission to revoke. Signing in with Google leaves us
+an unused `repo` permission to revoke. When you revoke it, GitHub tells us,
+and we delete that GitHub link and its tokens; your account keeps any other
+way you sign in. Signing in with Google leaves us
 Google's sign-in tokens, kept on our service and used for nothing after the
 sign-in. Installing the App stores nothing about you: which repositories it
 can see is read from GitHub when you choose one. We also keep the records
@@ -389,6 +395,20 @@ sign-in method, whether you are an administrator, when you joined and were
 last active, and your daily counts, on an admin page of our site that only an
 account we have marked as an administrator can open; nothing you type, say,
 or run appears on it.
+
+Every account also has a personal workspace on our service, a record named
+with your name and holding you as its owner; it goes when you delete your
+account. A workspace you create is a record
+named as you name it, holding you as its owner; every member of a workspace
+other than a personal one sees every other member's name, email address, and
+role in it, and an owner or admin of it can remove a member. When an owner or admin connects a GitHub organization to a workspace, the
+service keeps beside the workspace GitHub's ids for that installation and the
+account it is on, its login, whether it is a user or an organization, and
+whether the installation is active, suspended, or removed; to confirm the
+installation is one your GitHub account can see, it reads your installations
+on your own GitHub token once, and keeps nothing else of that read. While a
+connect is under way it keeps, for at most an hour, a one-way digest of the
+connect link's random code beside your account and the workspace.
 
 The service also keeps your conversation with Luke. Each turn he runs for you
 writes to our database your ask as given; his reply, the summaries of his

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createCodingAgent, readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -46,6 +46,7 @@ import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -180,7 +181,7 @@ async function planConversation(
   const owner = userId ?? (await database.createUser());
   const name = "Teammate invitations";
   const plan = await database.run(
-    createPlan(owner, repository === undefined ? { name } : { name, repository }),
+    startPlan(owner, repository === undefined ? { name } : { name, repository }),
   );
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(owner, plan.id)),
