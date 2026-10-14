@@ -32,12 +32,15 @@ import {
   workspaceCreateRequestSchema,
   workspaceGithubConnectAnswerSchema,
   workspaceGithubRequestSchema,
+  workspaceLeaveAnswerSchema,
+  workspaceLeaveRequestSchema,
+  workspaceMemberRemovalSchema,
   workspaceMembersAnswerSchema,
   workspacesAnswerSchema,
 } from "./workspace-wire.js";
 
 /**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, and a GitHub organization connected or disconnected.
+ * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. A list that did not come back is
@@ -51,7 +54,7 @@ import {
 export const WORKSPACE_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub takes an owner or admin, and a personal workspace's members are read by nobody. */
+  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub or removing a member takes an owner or admin, an owner neither leaves nor is removed, and a personal workspace's members are read, removed, and left by nobody. */
   NOT_PERMITTED: "not-permitted",
   /** The workspace is not one the account is a member of. */
   NOT_FOUND: "not-found",
@@ -155,6 +158,48 @@ export class HostedWorkspaceClient {
       { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${query}` },
       workspaceMembersAnswerSchema,
       (answer) => answer.members,
+    );
+  }
+
+  /** One member removed by an owner or admin, answering the members who remain; an id the service would refuse by shape never travels. */
+  removeMember(
+    workspaceId: string,
+    userId: string,
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceMemberRemovalSchema)({ workspaceId, userId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE,
+        body: JSON.stringify(admitted),
+      },
+      workspaceMembersAnswerSchema,
+      (answer) => answer.members,
+    );
+  }
+
+  /** The account leaves the workspace, answering the workspace left; an answer naming another workspace is no answer. */
+  leave(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceLeaveRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.map(
+      this.#answered(
+        {
+          method: HTTP_METHOD.POST,
+          path: HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
+          body: JSON.stringify(admitted),
+        },
+        workspaceLeaveAnswerSchema,
+        (answer) => answer.workspaceId,
+      ),
+      (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
     );
   }
 
