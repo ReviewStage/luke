@@ -3,6 +3,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
+import { ensureMember } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
   type CodingAgentPlace,
@@ -11,6 +12,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -28,6 +30,7 @@ import {
   hostedStoreOrArchived,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { logStoreFailure } from "../../http/store-failure.js";
 import {
   acceptedModelChoice,
   type ModelCatalog,
@@ -64,7 +67,10 @@ import { anthropicFastAccess } from "./account-keys.js";
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a plan's is.
  * An eve that did not take the opening leaves no agent behind, so the retry
- * under the same key starts afresh. An ask that named a choice makes it
+ * under the same key starts afresh. An agent started is minted as a member
+ * of its workspace's chat, `@agent-N` in the order agents were started,
+ * so it answers to its handle before it ever posts; a mint that fails is
+ * logged and left to the agent's first post or read. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
  * value. Who reaches eve is the caller's: the route holds the developer's
  * own bearer, and the voice brain's tool acts as the deployment for the
@@ -236,6 +242,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
+  yield* ensureMember(userId, landing.workspaceId, {
+    kind: MEMBER_KIND.AGENT,
+    agentId: agent.id,
+  }).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
   if (ask.choice !== undefined && ask.rememberChoice !== false) {
     yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }

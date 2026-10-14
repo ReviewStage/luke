@@ -3,8 +3,14 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
-import { type CoderHost, coderHost, type InboxCall } from "@luke/service/agents/coder-host/host";
+import {
+  type ChatCall,
+  type CoderHost,
+  coderHost,
+  type InboxCall,
+} from "@luke/service/agents/coder-host/host";
 import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
@@ -170,6 +176,21 @@ export function runInboxTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
       return yield* host.inbox(admitted.success, call);
+    }),
+  );
+}
+
+/** One call of the agent's chat tools run under its session, for the tool, which runs here rather than at an edge of its own. */
+export function runChatTool(
+  auth: SessionAuth,
+  sessionId: string,
+  call: ChatCall,
+): Promise<ChatToolResult> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return chatRejected(admitted.failure);
+      return yield* host.chat(admitted.success, call);
     }),
   );
 }

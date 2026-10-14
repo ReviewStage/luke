@@ -11,8 +11,10 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, startPlan } from "@luke/database/testing";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { planSections } from "@luke/features/plan-document";
@@ -101,6 +103,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
+      eveOrigin: () => undefined,
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
       titleModel: () => titleModel,
@@ -576,6 +579,25 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(!asked.includes("the invite table is mine"));
         const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
         assert.equal(titled.title, "Teammate invitations by email");
+      }),
+  );
+
+  it.effect(
+    "a planless agent reaches its chat through the host, its own channel its workspace's general one",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const db = yield* Database;
+        yield* db.update(codingAgent).set({ planId: null }).where(eq(codingAgent.id, agent.id));
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read, JSON.stringify(read));
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#general"],
+        );
       }),
   );
 });

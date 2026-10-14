@@ -10,6 +10,7 @@ import {
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -18,6 +19,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../plans/page-tool.js";
 import {
@@ -36,6 +38,7 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import {
@@ -48,6 +51,14 @@ import {
 import type { RepositorySandbox } from "../repository-shell.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import {
+  CHAT_TOOL_REFUSAL,
+  type ChatToolResult,
+  chatRejected,
+  postAsAgent,
+  readAsAgent,
+} from "./chat.js";
+import { HELD_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentRepositoryToken,
@@ -246,6 +257,14 @@ export interface CoderHost extends HostAdmission {
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
   /**
+   * Runs one of the agent's chat tools (`chat.ts`): a post, told through the
+   * deployment acting for the agent's starter on eve, or a read.
+   */
+  chat(
+    admitted: AdmittedConversation,
+    call: ChatCall,
+  ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp>;
+  /**
    * Runs one of the agent's public reads, the planning model's own
    * (`../public-research.ts`): a search or a page read, under the turn's
    * budget, the search on Luke's key and counted on the account's meter.
@@ -285,6 +304,16 @@ export type InboxCall =
       readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
       readonly input: UnparsedWireValue;
     };
+
+/** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, and how many posts its turn has made. */
+export type ChatCall =
+  | {
+      readonly tool: typeof CHAT_TOOL.POST;
+      readonly input: UnparsedWireValue;
+      readonly clientKey: string;
+      readonly postsInTurn: number;
+    }
+  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -562,6 +591,36 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
+      ),
+
+    chat: (admitted, call) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
+        const { id: agentId, planId } = found.success;
+        const reader = { userId: admitted.target.userId, agentId, planId };
+        if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
+        // A notice reaches the receiving agent's session as the deployment acting for that agent's
+        // starter, whose principal its turn runs under, as the planning model's message to an
+        // agent does: no bearer stands here.
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        if (secret === undefined || origin === undefined) {
+          return chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE);
+        }
+        const compose = yield* eveSessionsComposer;
+        const eveFor = (starter: string) =>
+          compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        return yield* postAsAgent(
+          { ...reader, telling },
+          call.input,
+          call.clientKey,
+          call.postsInTurn,
+        );
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
       ),
 
     showPage: (admitted, input, sandbox) =>
