@@ -1035,6 +1035,43 @@ test("a query naming the integration and a tool opens the row onto that tool", a
   assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
 });
 
+test("a tool held opens its page at the top, wherever the last one was scrolled", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+  openRow(page, "Vercel");
+  const body = () =>
+    page.querySelector<HTMLElement>(".integration-tool-detail-body") ?? assert.fail("no tool page");
+  body().scrollTop = 120;
+
+  act(() =>
+    (
+      [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find(
+        (button) => toolName(button) === "list_projects",
+      ) ?? assert.fail("list_projects has its row")
+    ).click(),
+  );
+
+  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
+  assert.equal(body().scrollTop, 0);
+});
+
+test("a search's words are marked on the held tool's page, where they landed past the row's one line", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    { name: "list_projects", description: "Lists projects.\n\nIncludes **archived** ones too." },
+  ]);
+  const page = await mount();
+  await searchFor(page, "archived");
+
+  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-description-whole mark.search-match")].map(
+      (mark) => mark.textContent,
+    ),
+    ["archived"],
+  );
+});
+
 test("a tool its server says nothing of has a page that says so", async () => {
   connectVercelAndLinear();
   listed.set(INTEGRATION_PROVIDER.VERCEL, [{ name: "whoami", description: "" }]);

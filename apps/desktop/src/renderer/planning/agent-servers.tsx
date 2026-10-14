@@ -640,6 +640,7 @@ function ServersPopover({
       <IntegrationToolDetail
         server={row.name}
         tool={shown}
+        tokens={pageTokens}
         backLabel={`Back to ${row.name} tools`}
         onBack={closeTool}
         onPressStart={keepFieldFocus}

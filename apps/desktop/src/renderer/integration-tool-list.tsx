@@ -31,7 +31,8 @@ import { Tooltip } from "./tooltip";
  * A tool's page is its head, the title and the name in the code face after
  * a back where its owner offers one, then every hint its server sent,
  * then what it does rendered as the markdown its server wrote, selectable,
- * then its parameters, those a call must give first, each its name, its
+ * the words a search landed on marked in it, then its parameters, those a
+ * call must give first, each its name, its
  * type, what it is, and the values it takes as chips, its default outlined.
  * A page whose server said nothing of its tool says so. The page's body is
  * its one scroller, which the owner may hand the focus to, so the arrows
@@ -231,6 +232,7 @@ function ParameterValues({
 export function IntegrationToolDetail({
   server,
   tool,
+  tokens,
   backLabel,
   onBack,
   onPressStart,
@@ -240,6 +242,8 @@ export function IntegrationToolDetail({
   /** The integration's name, which the hints and the badge's title say. */
   server: string;
   tool: IntegrationTool;
+  /** The words a search asks for, marked where they landed in what it does. */
+  tokens: readonly string[];
   /** What the back is named, where the owner offers one. */
   backLabel?: string;
   onBack?: () => void;
@@ -314,6 +318,7 @@ export function IntegrationToolDetail({
           <MarkdownMessage
             words={tool.description}
             className="integration-tool-description-whole"
+            found={tokens}
           />
         )}
         <Parameters tool={tool} />

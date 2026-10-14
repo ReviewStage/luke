@@ -101,18 +101,28 @@ export function toolTitle(tool: { readonly name: string; readonly title?: string
 /** Markdown's marks in a run of words: code ticks, emphasis, and a link's brackets. */
 const INLINE_MARKS = /`([^`]*)`|\*\*([^*]*)\*\*|\*([^*]*)\*|\[([^\]]*)\]\([^)]*\)/g;
 
+/** A line that opens a block a row does not read from: a heading, a table, a list item, a quote, or raw markup. */
+const STRUCTURE_LINE = /^(#|\||[-*+] |\d+[.)] |>|<)/;
+
 /**
  * What a row reads of a description: the first sentence of its first
- * paragraph of words, a heading, a fence, a list, or a table passed over,
- * markdown's marks taken off.
+ * paragraph of words, every heading, table, list, quote, and fenced block
+ * before it passed over line by line, so a heading standing right on top of
+ * its paragraph does not take the paragraph with it, and markdown's marks
+ * taken off.
  */
 export function toolSummary(description: string): string {
-  const paragraph =
-    description
-      .split(/\n\s*\n/)
-      .map((block) => block.trim())
-      .find((block) => block !== "" && !/^(#|```|\||[-*+] |\d+\. |<)/.test(block)) ?? "";
+  const paragraph: string[] = [];
+  let fenced = false;
+  for (const line of description.split(/\r?\n/).map((each) => each.trim())) {
+    const fence = line.startsWith("```");
+    const structure = fence || line === "" || STRUCTURE_LINE.test(line);
+    if (fence) fenced = !fenced;
+    if (paragraph.length > 0 && (structure || fenced)) break;
+    if (!structure && !fenced) paragraph.push(line);
+  }
   const plain = paragraph
+    .join(" ")
     .replace(
       INLINE_MARKS,
       (_mark, code, strong, emphasis, link) => code ?? strong ?? emphasis ?? link ?? "",

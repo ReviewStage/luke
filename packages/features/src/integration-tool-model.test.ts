@@ -101,6 +101,8 @@ test("a row reads the first sentence of a description's first paragraph of words
     ),
     "See the docs first!",
   );
+  assert.equal(toolSummary("## Usage\nReads projects. Then more."), "Reads projects.");
+  assert.equal(toolSummary("1) First step\n> A quote\nReads projects."), "Reads projects.");
   assert.equal(toolSummary("Lists projects"), "Lists projects");
   assert.equal(
     toolSummary("Version 2.1 of the API, then\nmore"),

@@ -636,7 +636,7 @@
    down while its tools show. The tools stand in a column of their own,
    which scrolls, and the page of the one it holds beside them, which
    scrolls apart; where the page is too narrow for both, the column stands
-   above the page. */
+   above the page, which still scrolls within its own bound. */
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;
@@ -699,9 +699,9 @@
 
 @container (max-width: 480px) {
   .integration-tools-split {
-    height: auto;
+    height: 560px;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 180px auto;
+    grid-template-rows: 180px minmax(0, 1fr);
   }
 
   .integration-tools-list {

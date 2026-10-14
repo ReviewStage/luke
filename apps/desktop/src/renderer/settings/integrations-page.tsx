@@ -342,8 +342,11 @@ function RowToolsPanel({
         </div>
         {current !== undefined ? (
           <IntegrationToolDetail
+            // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
+            key={current.name}
             server={name}
             tool={current}
+            tokens={tools.tokens}
             bodyRef={body}
             onBodyKeyDown={onBodyKey}
           />
