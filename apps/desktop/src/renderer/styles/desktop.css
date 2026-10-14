@@ -394,14 +394,17 @@ body,
 }
 
 .sidebar-new-plan:disabled,
+.sidebar-home:disabled,
 .sidebar-inbox:disabled {
   opacity: 0.45;
 }
 
-/* The Inbox row is the place shown while the window's Inbox stands, filled as
-   the open plan's row is. Its count of what waits on the developer stands at its end
-   in a group count's ink, and gives way to its chord while the row is hovered
+/* The Home row is the place shown while the home page stands, and the Inbox
+   row while the window's Inbox does, each filled as the open plan's row is.
+   The Inbox's count of what waits on the developer stands at its end in a
+   group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
+.sidebar-home[aria-current="page"],
 .sidebar-inbox[aria-current="page"] {
   background: var(--raised-strong);
 }
@@ -4888,8 +4891,200 @@ body:has(.app-stage[data-capture="true"])
    against its own fill rather than the card's. */
 .feedback-dialog .primary-button .shortcut,
 .new-plan-dialog .primary-button .shortcut,
-.desktop-empty .primary-button .shortcut {
+.home .primary-button .shortcut {
   --shortcut-ink: var(--on-accent-muted);
+}
+
+/* The home page (`desktop-home.tsx`): one column at a reading measure, a
+   little above the window's middle, its rows the sidebar's own, each with
+   its context, the plan or the repository, in the faint ink between its name
+   and its time. The column is the scroller, so a long Recent never pushes
+   the greeting off a short window for good. */
+.home {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.home-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-32) var(--page-inset) var(--space-48);
+}
+
+.home-column {
+  display: flex;
+  width: min(600px, 100%);
+  flex-direction: column;
+  gap: var(--space-32);
+  margin: clamp(0px, 7vh, 72px) auto 0; /* off-scale */
+}
+
+.home-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: 0 var(--row-inset);
+}
+
+.home-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.home-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--row-inset);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
+.home-section-count {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.home-row .sidebar-plan-line {
+  align-items: center;
+}
+
+.home-row .sidebar-plan-line,
+.inbox-row .sidebar-plan-line:has(.home-row-context) {
+  gap: var(--space-8);
+}
+
+.home-row .sidebar-plan-name,
+.inbox-row:has(.home-row-context) .sidebar-plan-name {
+  overflow: hidden;
+  flex: 0 1 auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-row-context {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A home row offers no Pin or Archive to give way to, so its time stays put
+   while the row is hovered or holds the keyboard, and its moment can be read. */
+.home-section .sidebar-plan-item:hover .sidebar-plan-time,
+.home-section .sidebar-plan-item:has(:focus-visible) .sidebar-plan-time {
+  visibility: visible;
+}
+
+.home-row .sidebar-plan-time {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+}
+
+.home-row-picture {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.home-row-picture svg {
+  width: 15px;
+  height: 15px;
+}
+
+.home-row-picture .repository-picture {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.home-more {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--space-8);
+  margin-top: var(--space-2);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.home-more svg {
+  width: 14px;
+  height: 14px;
+}
+
+.home-more:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+/* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
+.home-welcome {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  padding: var(--page-inset);
+  text-align: center;
+}
+
+.home-welcome-face {
+  display: flex;
+  width: 56px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+  border-radius: 14px;
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.home-welcome-face .luke-face {
+  width: 34px;
+  height: 34px;
+}
+
+.home-lede {
+  max-width: 380px;
+  margin: 0 0 var(--space-8);
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
 /* New plan (`new-plan-dialog.tsx`): the dialog's card, its one-line name in

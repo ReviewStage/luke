@@ -10,10 +10,13 @@ import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
-import { PANEL_TAB } from "../panel-tabs";
+import { runAppCommand } from "../app-commands";
+import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
+import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
@@ -97,7 +100,13 @@ afterEach(() => {
  * open over it or not, New plan opening its dialog and Cancel putting it
  * away as the tab does.
  */
-function mount(inboxOpen: boolean, restoring = false): HTMLElement {
+function mount(
+  inboxOpen: boolean,
+  restoring = false,
+  overrides: Partial<PlansControl> = {},
+  tab: PanelTab = PANEL_TAB.PLANS,
+  onTabChange: (tab: PanelTab) => void = ignore,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -111,8 +120,8 @@ function mount(inboxOpen: boolean, restoring = false): HTMLElement {
         onCancelSignIn: ignore,
         signInFace: { play: 0 },
       },
-      tab: PANEL_TAB.PLANS,
-      onTabChange: ignore,
+      tab,
+      onTabChange,
       plans: plansControl({
         page: PLANS_PAGE.HOME,
         restoring,
@@ -125,6 +134,7 @@ function mount(inboxOpen: boolean, restoring = false): HTMLElement {
         },
         onNewPlan: () => setAsked(true),
         newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
+        ...overrides,
       }),
       history: {
         canGoBack: false,
@@ -162,9 +172,9 @@ test("with the sidebar folded, New plan stands beside its toggle over the home p
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New plan"]);
 });
 
-test("the home page says no plan is open, and its New plan raises the dialog over the window, which Cancel puts away", () => {
+test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
   const page = mount(false);
-  const home = page.querySelector('section[aria-label="No plan open"]');
+  const home = page.querySelector('section[aria-label="Home"]');
   assert.ok(home, "the home page stands");
   const newPlan = [...home.querySelectorAll("button")].find((button) =>
     button.textContent?.startsWith("New plan"),
@@ -182,5 +192,33 @@ test("the home page says no plan is open, and its New plan raises the dialog ove
 
 test("while a launch reopens the plan last open, the column draws no home page to flash before it", () => {
   const page = mount(false, true);
-  assert.equal(page.querySelector('section[aria-label="No plan open"]'), null);
+  assert.equal(page.querySelector('section[aria-label="Home"]'), null);
+});
+
+/** The sidebar's Home row. */
+function homeRow(page: HTMLElement): HTMLButtonElement {
+  const row = page.querySelector<HTMLButtonElement>("button.sidebar-home");
+  assert.ok(row, "the Home row stands");
+  return row;
+}
+
+test("the sidebar's Home row is the place shown on the home page, and neither over the Inbox nor while a launch reopens a plan", () => {
+  assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
+  act(() => root?.unmount());
+  assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
+  act(() => root?.unmount());
+  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
+});
+
+test("Home, pressed or by its chord from Settings, brings the Plans tab forward on the home page", () => {
+  let home = 0;
+  const tabs: PanelTab[] = [];
+  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  act(() => runAppCommand(APP_COMMAND.HOME));
+  assert.deepEqual([home, tabs], [1, [PANEL_TAB.PLANS]]);
+  act(() => root?.unmount());
+
+  const plans = mount(false, false, { onGoHome: () => (home += 1) });
+  act(() => homeRow(plans).click());
+  assert.equal(home, 2);
 });

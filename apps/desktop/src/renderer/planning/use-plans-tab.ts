@@ -330,8 +330,10 @@ export interface PlansControl {
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
   };
-  /** Leaves the open plan for the home page, which ends its call. */
+  /** Leaves the open plan for the home page; a call on it stands, as opening another plan leaves one. */
   onLeavePlan: () => void;
+  /** Goes to the home page from wherever the tab stands: the open plan left, and the window's Inbox put away. */
+  onGoHome: () => void;
   /**
    * Renames a plan to a name already trimmed and changed, drawn under it at
    * once and under its old name again if the service refuses; answers
@@ -1551,6 +1553,9 @@ export function usePlansTab(input: {
       onClose: () => setNewPlanAsk(undefined),
     },
     onLeavePlan: leavePlan,
+    // Home is the page with no plan open, so where none is, only the Inbox
+    // standing over it is put away, and the host is asked nothing.
+    onGoHome: () => (boundFor === undefined ? setInboxView(undefined) : leavePlan()),
     onRenamePlan: renamePlan,
     onDraftName: draftName,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),

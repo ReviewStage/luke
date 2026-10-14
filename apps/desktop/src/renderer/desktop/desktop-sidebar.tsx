@@ -13,7 +13,7 @@ import {
   SearchIcon,
   UnpinIcon,
 } from "@sidecar/panel";
-import { InboxIcon } from "lucide-react";
+import { HouseIcon, InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -23,6 +23,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import {
+  PLANS_PAGE,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
@@ -479,6 +480,37 @@ function waitingItems(plans: PlansControl): number {
 }
 
 /**
+ * The home page's row, between Search and the Inbox and drawn as they are:
+ * the house, its name, and its chord at its end while the row is hovered or
+ * reached from the keyboard. A press goes to the home page from wherever the
+ * window stands, and the row is the place shown while the home page is.
+ */
+function SidebarHomeRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-home"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.HOME)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <HouseIcon />
+      Home
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * plan at its end, the sum of the counts the Inbox's rows show, muted in
@@ -528,8 +560,9 @@ function SidebarInboxRow({
  * opens the command palette, every plan of the workspace chosen, headed by
  * the workspace's switcher while an account is signed in
  * (`workspace-switcher.tsx`), and the account's
- * row, whose menu and gear lead to Settings and the rest. The Inbox's row
- * follows Search above the rule, counting what waits on the developer, and opens the
+ * row, whose menu and gear lead to Settings and the rest. Home's row and
+ * then the Inbox's follow Search above the rule: Home's goes to the home
+ * page, and the Inbox's counts what waits on the developer and opens the
  * window's Inbox. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
@@ -592,6 +625,13 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.inboxView.onOpen();
   };
+  const goHome = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.onGoHome();
+  };
+  // The home page is the place shown while no plan is open, the Inbox is not
+  // standing in its place, and no launch is still reopening a plan.
+  const atHome = onPlans && !inInbox && plans.page === PLANS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
@@ -704,6 +744,7 @@ export function DesktopSidebar({
           className="row-shortcut"
         />
       </button>
+      <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={goHome} />
       <SidebarInboxRow
         waiting={plans.signedIn ? waitingItems(plans) : 0}
         current={inInbox}

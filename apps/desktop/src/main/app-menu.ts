@@ -295,6 +295,7 @@ export function appMenuTemplate(
     {
       label: "Go",
       submenu: [
+        commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),

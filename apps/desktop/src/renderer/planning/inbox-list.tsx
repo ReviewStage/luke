@@ -106,18 +106,25 @@ function ItemGlyph({
   );
 }
 
-/** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the unread weight with a dot past its time. */
-function ItemRow({
+/**
+ * One item as a sidebar row: the agent's mark, the title, and how long ago it
+ * changed; one that needs the developer in the unread weight with a dot past
+ * its time. The home page's Needs you names the item's plan after its title,
+ * in `context`, since its rows stand under no plan's header.
+ */
+export function InboxItemRow({
   listed,
   chosen,
   now,
   models,
+  context,
   onChoose,
 }: {
   listed: InboxListed;
   chosen: boolean;
   now: number;
   models: readonly CatalogModel[] | undefined;
+  context?: string;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const { plan, item } = listed;
@@ -139,6 +146,7 @@ function ItemRow({
               <ItemGlyph plan={plan} agentId={item.agentId} models={models} />
             </span>
             <span className="sidebar-plan-name">{title}</span>
+            {context === undefined ? null : <span className="home-row-context">{context}</span>}
             <RelativeTime
               className="sidebar-plan-time"
               at={item.updatedAt}
@@ -315,7 +323,7 @@ export function InboxList({
     onResize,
   });
   const row = (listed: InboxListed) => (
-    <ItemRow
+    <InboxItemRow
       key={listed.item.id}
       listed={listed}
       chosen={listed.item.id === chosen}
