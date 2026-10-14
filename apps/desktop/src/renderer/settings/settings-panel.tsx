@@ -15,7 +15,7 @@ import type {
   UpdateControl,
 } from "./controls";
 import { GitHubSection, type GitHubSettingsControl } from "./github-section";
-import { IntegrationsSection } from "./integrations-page";
+import { type IntegrationsSearch, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
 import { WindowShortcutSections } from "./shortcuts-page";
@@ -117,7 +117,11 @@ export function SettingsPanel({
   shortcuts,
   workspace,
   github,
-}: SettingsPanelProps): React.JSX.Element {
+  integrationsSearch,
+}: SettingsPanelProps & {
+  /** Settings' one search, which the Integrations page reads its query from and hands its tools to. */
+  integrationsSearch?: IntegrationsSearch | undefined;
+}): React.JSX.Element {
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, microphone, account });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
@@ -146,7 +150,9 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
 
-      {view === SETTINGS_VIEW.INTEGRATIONS ? <IntegrationsSection signedIn={signedIn} /> : null}
+      {view === SETTINGS_VIEW.INTEGRATIONS ? (
+        <IntegrationsSection signedIn={signedIn} search={integrationsSearch} />
+      ) : null}
 
       {view === SETTINGS_VIEW.VOICE ? (
         <>

@@ -18,16 +18,14 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
-import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
-import type { IntegrationTool } from "../integration-health";
+import type { IntegrationTool, IntegrationToolIndex } from "../integration-health";
 import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "../integration-sign-in";
 import { OpenSettingsProvider } from "../open-settings";
 import { rendererRuntime } from "../renderer-runtime";
 import type { SettingsLink } from "../settings-views";
-import { IntegrationsSection } from "./integrations-page";
+import { type IntegrationsSearch, IntegrationsSection } from "./integrations-page";
 
 /**
  * Settings › Integrations over a bridge answering where every provider
@@ -153,7 +151,10 @@ async function settle(): Promise<void> {
  * atoms under `registry` where one is given, as the window's root provides
  * its own.
  */
-async function mount(registry?: AtomRegistry.AtomRegistry): Promise<HTMLElement> {
+async function mount(
+  registry?: AtomRegistry.AtomRegistry,
+  search?: IntegrationsSearch,
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -172,7 +173,7 @@ async function mount(registry?: AtomRegistry.AtomRegistry): Promise<HTMLElement>
           },
         },
       },
-      createElement(IntegrationsSection, { signedIn: true }),
+      createElement(IntegrationsSection, { signedIn: true, search }),
     ),
   );
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
@@ -499,100 +500,37 @@ function shownTools(page: HTMLElement) {
   ]);
 }
 
-/** The page's search field. */
-function searchField(page: HTMLElement): HTMLInputElement {
-  return (
-    page.querySelector<HTMLInputElement>('input[aria-label="Search integrations and tools"]') ??
-    assert.fail("the page has its search field")
-  );
-}
-
-/** Types `text` into the page's search, as a keystroke would land. */
-function search(page: HTMLElement, text: string): void {
-  act(() => {
-    const field = searchField(page);
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-/** A key pressed in the page's search. */
-function keyInSearch(page: HTMLElement, key: string): void {
-  act(() => {
-    searchField(page).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-  });
-}
-
-test("a connected integration opens in place onto its tools, alphabetical, each badged only as its server annotated it", async () => {
+test("while Settings' search holds a query, a row with tools it found opens onto just those, marked, and every row stays drawn", async () => {
   connectVercelAndLinear();
-  const page = await mount();
+  const handed: IntegrationToolIndex[] = [];
+  const page = await mount(undefined, { query: "deploy", onTools: (tools) => handed.push(tools) });
+
+  assert.equal(rowNames(page).length, 12);
+  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
+  assert.equal(page.querySelector(".integration-tools-found")?.textContent, "1 of 3 tools match");
+  assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
+  assert.deepEqual(
+    [...(handed.at(-1) ?? new Map()).entries()].map(([provider, tools]) => [
+      provider,
+      tools.length,
+    ]),
+    [
+      [INTEGRATION_PROVIDER.LINEAR, 1],
+      [INTEGRATION_PROVIDER.VERCEL, 3],
+    ],
+  );
+});
+
+test("a query that finds an integration by its own name opens nothing by itself, and opened, keeps every tool", async () => {
+  connectVercelAndLinear();
+  const page = await mount(undefined, { query: "vercel projects", onTools: () => undefined });
 
   assert.deepEqual(shownTools(page), []);
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
-        'button[aria-label="Show Vercel tools"]',
-      ) ?? assert.fail("Vercel's row opens onto its tools")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      assert.fail("Vercel's row opens onto its tools")
     ).click(),
   );
-
-  assert.deepEqual(shownTools(page), [
-    ["delete_project", "Destructive"],
-    ["get_deployment", undefined],
-    ["list_projects", "Read-only"],
-  ]);
-  assert.equal(rowNamed(page, "Granola").querySelector(".integration-tools-toggle"), null);
-});
-
-test("the search keeps integrations by name and by their tools, opening the latter onto just the tools it found", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-
-  search(page, "deploy");
-  assert.deepEqual(rowNames(page), ["Vercel"]);
-  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
-  assert.equal(page.querySelector(".integration-tools-found")?.textContent, "1 of 3 tools match");
-  assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
-
-  search(page, "lin");
-  assert.deepEqual(rowNames(page), ["Linear"]);
-  assert.deepEqual(shownTools(page), []);
-
-  search(page, "nothing like it");
-  assert.deepEqual(rowNames(page), []);
-  assert.equal(
-    page.querySelector(".settings-note")?.textContent,
-    "No integrations or tools match.",
-  );
-});
-
-test("Command-F lands in the page's search, the arrows move its highlight, and Return opens the highlighted row", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-
-  act(() => {
-    runAppCommand(APP_COMMAND.FIND);
-  });
-  assert.equal(document.activeElement, searchField(page));
-
-  search(page, "projects");
-  assert.equal(
-    page.querySelector('.menu-row[data-highlighted="true"] strong')?.textContent,
-    "Vercel",
-  );
-  keyInSearch(page, "Enter");
-  assert.deepEqual(shownTools(page), []);
-  keyInSearch(page, "Enter");
-  assert.deepEqual(shownTools(page), [["list_projects", "Read-only"]]);
-
-  search(page, "");
-  keyInSearch(page, "ArrowDown");
-  keyInSearch(page, "ArrowDown");
-  keyInSearch(page, "ArrowDown");
-  assert.equal(
-    page.querySelector('.menu-row[data-highlighted="true"] strong')?.textContent,
-    "Linear",
-  );
-  keyInSearch(page, "Enter");
-  assert.deepEqual(shownTools(page), [["list_issues", undefined]]);
+  assert.equal(shownTools(page).length, 3);
 });

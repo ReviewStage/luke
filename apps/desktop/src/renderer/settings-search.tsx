@@ -18,6 +18,7 @@ import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
+import type { IntegrationToolIndex } from "./integration-health";
 import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { settingsPageOf } from "./settings/pages";
@@ -58,20 +59,6 @@ import { commandKeyshortcuts } from "./tooltip";
 /** How the search field is found by the seek that lands Command-F's caret in it. */
 const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
-/** What a search field is: its id, which Command-F's seek finds it by, its name, and what it shows while empty. */
-export interface SearchFieldIdentity {
-  readonly id: string;
-  readonly label: string;
-  readonly placeholder: string;
-}
-
-/** The settings sidebar's own field. */
-const SETTINGS_SEARCH_FIELD: SearchFieldIdentity = {
-  id: SETTINGS_SEARCH_INPUT_ID,
-  label: "Search settings",
-  placeholder: "Search",
-};
-
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
   /**
@@ -93,9 +80,15 @@ export interface SettingsSearchEntry {
  * record the rows themselves are drawn from. The settings' own half is the
  * schema's — each entry says whether its row is drawn right now, judged from
  * this same record — so nothing here restates a condition a page branches on.
- * Beside it, the workspace the Workspace page shows, absent while it draws none.
+ * Beside it, the workspace the Workspace page shows, absent while it draws none,
+ * and the tools each connected integration's server listed, once the
+ * Integrations page has read them, so an integration is found by its tools'
+ * names and descriptions as well as by its own.
  */
-export type SettingsSearchInput = SettingsRowsInput & { workspace?: Workspace | undefined };
+export type SettingsSearchInput = SettingsRowsInput & {
+  workspace?: Workspace | undefined;
+  integrationTools?: IntegrationToolIndex | undefined;
+};
 
 /**
  * The page named the way a group's head says it: the names the sidebar's own
@@ -178,6 +171,10 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
               INTEGRATION_NAME[provider],
               INTEGRATION_WORDS,
               INTEGRATION_KEYWORDS[provider],
+              ...(input.integrationTools?.get(provider) ?? []).flatMap((tool) => [
+                tool.name,
+                tool.description,
+              ]),
             ],
           }
         : undefined,
@@ -427,28 +424,20 @@ export function landOnSettingsRow(id: string): () => void {
  * window: a held query is cleared first, and only an empty field lets go of
  * the caret — both stopped here, so neither press falls through and turns the
  * page or the tab behind the field. Return opens the first result, so a
- * query someone is sure of needs no pointer. A page that searches its own
- * rows draws the same field under its own name (Settings › Integrations):
- * Command-F lands in the field drawn last, so on that page it lands there,
- * and the arrows, where the page asks for them, move through its rows.
+ * query someone is sure of needs no pointer.
  */
 export function SettingsSearchField({
   query,
   onQueryChange,
   onSubmit,
-  onMove,
-  identity = SETTINGS_SEARCH_FIELD,
 }: {
   query: string;
   onQueryChange: (query: string) => void;
   /** Return pressed in the field: the first result is the answer. */
   onSubmit: () => void;
-  /** Down or Up pressed in the field, where its owner moves a highlight through what it found. */
-  onMove?: (step: 1 | -1) => void;
-  identity?: SearchFieldIdentity;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
-  useAppCommand(APP_COMMAND.FIND, () => focusSearchField(identity.id));
+  useAppCommand(APP_COMMAND.FIND, () => focusSearchField(SETTINGS_SEARCH_INPUT_ID));
   return (
     <search className="settings-search">
       {/* The label is the whole well, so a press on the magnifier or the
@@ -457,11 +446,11 @@ export function SettingsSearchField({
         <SearchIcon />
         <input
           ref={field}
-          id={identity.id}
+          id={SETTINGS_SEARCH_INPUT_ID}
           className="settings-search-input"
-          aria-label={identity.label}
+          aria-label="Search settings"
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FIND)}
-          placeholder={identity.placeholder}
+          placeholder="Search"
           autoComplete="off"
           spellCheck={false}
           value={query}
@@ -477,11 +466,6 @@ export function SettingsSearchField({
             // the window's own Escape would turn the page behind the field.
             if (event.key === "Escape") event.stopPropagation();
             if (event.nativeEvent.isComposing) return;
-            if (onMove !== undefined && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-              event.preventDefault();
-              onMove(event.key === "ArrowDown" ? 1 : -1);
-              return;
-            }
             if (event.key === "Enter") {
               onSubmit();
               return;

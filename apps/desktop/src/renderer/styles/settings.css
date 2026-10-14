@@ -612,20 +612,11 @@
   height: 12px;
 }
 
-/* Settings › Integrations: the page's own search field above its card, as
-   wide as the card, and a connected row's tools opened in place under it.
-   The row the arrows hold wears the window's highlight. The chevron that
-   opens a row, after its count, turns down while its tools show; the tools scroll inside
-   their own bound, past the row's mark, their run headings staying at the
-   bound's top on the card's own ground. */
-.integrations-search .settings-search {
-  margin-bottom: 0;
-}
-
-.settings-card > .menu-row[data-highlighted="true"] {
-  background: var(--raised-strong);
-}
-
+/* Settings › Integrations: a connected row's tools opened in place under
+   it. The chevron that opens a row, after its count, turns down while its
+   tools show; the tools scroll inside their own bound, past the row's
+   mark, their run headings staying at the bound's top on the card's own
+   ground. */
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;

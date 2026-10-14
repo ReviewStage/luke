@@ -8,7 +8,7 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { ChevronRightIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
@@ -17,6 +17,7 @@ import {
   type ConnectionHealth,
   connectionHealth,
   type IntegrationTool,
+  type IntegrationToolIndex,
   toolsCount,
 } from "../integration-health";
 import { IntegrationMark } from "../integration-marks";
@@ -27,7 +28,6 @@ import { useIntegrationTools } from "../integration-tools";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
-import { type SearchFieldIdentity, SettingsSearchField } from "../settings-search";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
@@ -62,20 +62,18 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * them, drawn as the MCP popover draws a server's page
  * (`../integration-tool-list.tsx`): run by name prefix where the names
  * clearly share them, else alphabetical, each badged only by its server's
- * own annotations. A search field heads the page, which Command-F lands in
- * while the page is open: it keeps the rows whose name holds every word,
- * and the rows with a tool whose name or description does, those opened
- * onto just the tools it found with the words marked. The arrows move a
- * highlight through the rows kept, Return opens or closes the highlighted
- * one, and Escape clears the search, then lets go of the caret.
+ * own annotations. Settings has one search, the sidebar's: the page hands
+ * the tools it read up to it, so a query finds an integration by its tools'
+ * names and descriptions too (`../settings-search.tsx`), and while a query
+ * stands, a row with a tool it found opens by itself onto just the tools it
+ * found, the words marked, the rest of the page drawn as ever.
  */
 
-/** The page's own search field, which Command-F lands in while the page is open. */
-const INTEGRATIONS_SEARCH: SearchFieldIdentity = {
-  id: "integrations-search-input",
-  label: "Search integrations and tools",
-  placeholder: "Search integrations and tools",
-};
+/** What the page shares with Settings' one search: the query standing in the sidebar, and where the tools it read go. */
+export interface IntegrationsSearch {
+  readonly query: string;
+  readonly onTools: (tools: IntegrationToolIndex) => void;
+}
 
 const PAGE_LINE = {
   CONNECTED: "Connected",
@@ -84,7 +82,6 @@ const PAGE_LINE = {
   READ_FAILED: "Your integrations could not be read.",
   NONE_OFFERED: "No integrations are available for this account.",
   NOT_OPENED: "Luke could not open your browser to sign in.",
-  NO_MATCH: "No integrations or tools match.",
 } as const;
 
 /** What a row's line looks like: connected with its dot, a problem in the attention tint, a wait with its ring, or plain. */
@@ -252,7 +249,6 @@ function IntegrationRow({
   health,
   statuses,
   tools,
-  highlighted,
 }: {
   provider: IntegrationProvider;
   /** Where the connection stands, or nothing while it has not been read; the row offers nothing until it has. */
@@ -261,8 +257,6 @@ function IntegrationRow({
   health: ConnectionHealth;
   statuses: IntegrationStatuses;
   tools: RowTools;
-  /** The row holds the page search's highlight. */
-  highlighted: boolean;
 }): React.JSX.Element {
   const panelId = useId();
   const { act } = useAct();
@@ -325,12 +319,7 @@ function IntegrationRow({
       : [];
   return (
     <>
-      <MenuRow
-        label={`${name} actions`}
-        actions={actions}
-        anchor={provider}
-        highlighted={highlighted}
-      >
+      <MenuRow label={`${name} actions`} actions={actions} anchor={provider}>
         <span className="settings-row-mark">
           <IntegrationMark provider={provider} />
         </span>
@@ -406,33 +395,30 @@ interface FoundRow {
   readonly provider: IntegrationProvider;
   readonly health: ConnectionHealth;
   readonly all: readonly IntegrationTool[];
-  /** Every tool where nothing is searched or the name matched, else those the search found. */
+  /** The tools the search found, else every one. */
   readonly shown: readonly IntegrationTool[];
   /** The search found some of its tools, so the row opens onto them by itself. */
   readonly toolsFound: boolean;
 }
 
 /**
- * The offered providers a search keeps, in the provider list's order: every
- * one where nothing is searched; else each whose name holds every word,
- * with all its tools, and each with a tool whose name or description does,
- * with just those.
+ * A provider's row as a query finds it: opened onto the tools it found where
+ * it found its tools alone, else onto every one. Note that a query that finds
+ * the integration by its own name finds the whole of it, every tool kept.
  */
-function foundRows(
-  offered: readonly IntegrationProvider[],
-  healthOf: (provider: IntegrationProvider) => ConnectionHealth,
+function foundRow(
+  provider: IntegrationProvider,
+  health: ConnectionHealth,
   tokens: readonly string[],
-): readonly FoundRow[] {
-  return offered.flatMap((provider) => {
-    const health = healthOf(provider);
-    const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
-    if (tokens.length === 0) return [{ provider, health, all, shown: all, toolsFound: false }];
-    const hits = all.filter((tool) => matchesTokens([tool.name, tool.description], tokens));
-    const named = matchesTokens([INTEGRATION_NAME[provider]], tokens);
-    if (!named && hits.length === 0) return [];
-    const toolsFound = hits.length > 0;
-    return [{ provider, health, all, shown: toolsFound ? hits : all, toolsFound }];
-  });
+): FoundRow {
+  const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
+  const named = tokens.length > 0 && matchesTokens([INTEGRATION_NAME[provider]], tokens);
+  const hits =
+    tokens.length === 0 || named
+      ? []
+      : all.filter((tool) => matchesTokens([tool.name, tool.description], tokens));
+  const toolsFound = hits.length > 0;
+  return { provider, health, all, shown: toolsFound ? hits : all, toolsFound };
 }
 
 /** A set with `provider` turned: taken out where it stood, put in where it did not. */
@@ -454,37 +440,51 @@ function turned(
  * search, and one turned during a search is turned against how the search
  * opened it, forgotten when the search changes.
  */
-function IntegrationRows(): React.JSX.Element {
+function IntegrationRows({
+  search,
+}: {
+  search: IntegrationsSearch | undefined;
+}): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const reads = useIntegrationTools(
     INTEGRATION_PROVIDER_LIST.filter(
       (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
     ),
   );
-  const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<ReadonlySet<IntegrationProvider>>(new Set());
-  const [turnedInSearch, setTurnedInSearch] = useState<ReadonlySet<IntegrationProvider>>(new Set());
-  const [highlight, setHighlight] = useState<number | undefined>(undefined);
+  const [turnedInSearch, setTurnedInSearch] = useState<{
+    readonly query: string;
+    readonly providers: ReadonlySet<IntegrationProvider>;
+  }>({ query: "", providers: new Set() });
+  const query = search?.query ?? "";
+  const onTools = search?.onTools;
+
+  // The tools each server answered with go up to Settings' search as they land.
+  useEffect(() => {
+    if (onTools === undefined) return;
+    const index = new Map<IntegrationProvider, readonly IntegrationTool[]>();
+    for (const provider of INTEGRATION_PROVIDER_LIST) {
+      const health = connectionHealth(provider, reads[provider]);
+      if (health.kind === CONNECTION_HEALTH.WORKING) index.set(provider, health.tools);
+    }
+    onTools(index);
+  }, [reads, onTools]);
+
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
   const offered = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => statuses.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
   );
   const tokens = searchTokens(query);
-  const rows = foundRows(
-    offered,
-    (provider) => connectionHealth(provider, reads[provider]),
-    tokens,
-  );
-  const at = highlight === undefined ? undefined : Math.min(highlight, rows.length - 1);
+  // A turn made under an older query is forgotten with it.
+  const turnedNow: ReadonlySet<IntegrationProvider> =
+    turnedInSearch.query === query ? turnedInSearch.providers : new Set();
   const expanded = (row: FoundRow) =>
-    tokens.length === 0
-      ? opened.has(row.provider)
-      : row.toolsFound !== turnedInSearch.has(row.provider);
+    tokens.length === 0 ? opened.has(row.provider) : row.toolsFound !== turnedNow.has(row.provider);
   const toggle = (provider: IntegrationProvider) =>
     tokens.length === 0
       ? setOpened((now) => turned(now, provider))
-      : setTurnedInSearch((now) => turned(now, provider));
+      : setTurnedInSearch({ query, providers: turned(turnedNow, provider) });
   return (
     <>
       {statuses.readFailed ? (
@@ -495,54 +495,43 @@ function IntegrationRows(): React.JSX.Element {
       {offered.length === 0 ? (
         <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p>
       ) : (
-        <>
-          <div className="integrations-search">
-            <SettingsSearchField
-              identity={INTEGRATIONS_SEARCH}
-              query={query}
-              onQueryChange={(next) => {
-                setQuery(next);
-                setTurnedInSearch(new Set());
-                setHighlight(searchTokens(next).length === 0 ? undefined : 0);
-              }}
-              onMove={(step) =>
-                setHighlight(Math.min(Math.max((at ?? -1) + step, 0), rows.length - 1))
-              }
-              onSubmit={() => {
-                const row = rows[at ?? 0];
-                if (row !== undefined && row.all.length > 0) toggle(row.provider);
-              }}
-            />
-          </div>
-          {rows.length === 0 ? (
-            <p className="settings-note">{PAGE_LINE.NO_MATCH}</p>
-          ) : (
-            <SettingsGroup>
-              {rows.map((row, index) => (
-                <IntegrationRow
-                  key={row.provider}
-                  provider={row.provider}
-                  status={statuses.statusOf(row.provider)}
-                  health={row.health}
-                  statuses={statuses}
-                  highlighted={index === at}
-                  tools={{
-                    shown: row.shown,
-                    all: row.all,
-                    expanded: expanded(row),
-                    onToggle: () => toggle(row.provider),
-                    tokens,
-                  }}
-                />
-              ))}
-            </SettingsGroup>
-          )}
-        </>
+        <SettingsGroup>
+          {offered.map((provider) => {
+            const row = foundRow(provider, connectionHealth(provider, reads[provider]), tokens);
+            return (
+              <IntegrationRow
+                key={provider}
+                provider={provider}
+                status={statuses.statusOf(provider)}
+                health={row.health}
+                statuses={statuses}
+                tools={{
+                  shown: row.shown,
+                  all: row.all,
+                  expanded: expanded(row),
+                  onToggle: () => toggle(provider),
+                  tokens,
+                }}
+              />
+            );
+          })}
+        </SettingsGroup>
       )}
     </>
   );
 }
 
-export function IntegrationsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
-  return signedIn ? <IntegrationRows /> : <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>;
+export function IntegrationsSection({
+  signedIn,
+  search,
+}: {
+  signedIn: boolean;
+  /** Settings' one search, where the page is drawn under it. */
+  search?: IntegrationsSearch | undefined;
+}): React.JSX.Element {
+  return signedIn ? (
+    <IntegrationRows search={search} />
+  ) : (
+    <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+  );
 }
