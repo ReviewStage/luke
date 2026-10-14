@@ -210,3 +210,17 @@ test("a stray backtick before a list pairs with nothing in the list, so the list
     [{ kind: MENTION_KIND.FILE, path: "a.ts" }],
   );
 });
+
+test("a code span across a quote's lines is code, the quote's lines being one block", () => {
+  const words = [
+    "> quoted `span",
+    "> [@a](luke://file/a.ts) still` code",
+    "",
+    "[@b](luke://file/b.ts)",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
+  );
+});

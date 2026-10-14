@@ -80,8 +80,11 @@ const DELETE_CODE = 0x7f;
 /** A slash, a backslash, or a dot still percent-encoded once a target is read, which a reader decoding again would turn into a step. */
 const ENCODED_STEP = /%(?:2[Ff]|5[Cc]|2[Ee])/u;
 
-/** A line that starts a block of its own, a heading, a quote, or a list's item, which ends any code span left open before it. */
-const BLOCK_START_LINE = /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/u;
+/** A line that starts a block of its own, a heading or a list's item, which ends any code span left open before it. */
+const BLOCK_START_LINE = /^ {0,3}(?:#{1,6}(?:\s|$)|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/u;
+
+/** A quoted line, which starts a block only where the line before it is no quoted line, since a quote's lines are one block. */
+const QUOTE_LINE = /^ {0,3}>/u;
 
 /** A line indented as code: four spaces, or a tab, before anything. */
 const INDENTED_LINE = /^(?: {4}|\t)/u;
@@ -227,10 +230,13 @@ function paragraphAt(text: string, at: number): TextStretch {
   let start = 0;
   let end = text.length;
   let lineStart = 0;
+  let quoted = false;
   for (const line of text.split("\n")) {
     const lineEnd = lineStart + line.length;
     const blank = line.trim() === "";
-    const opens = BLOCK_START_LINE.test(line);
+    const quote = QUOTE_LINE.test(line);
+    const opens = BLOCK_START_LINE.test(line) || (quote && !quoted);
+    quoted = quote;
     if (lineStart <= at) {
       if (blank) start = lineEnd + 1;
       else if (opens) start = lineStart;
