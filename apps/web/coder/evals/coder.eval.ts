@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import { defineEval } from "eve/evals";
 import {
+  ACTION_RESULT_STATUS,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -23,6 +24,7 @@ import {
 } from "../../server/core";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
+import { READ_PLAN_TOOL } from "../../server/hosted/coder-host/plan-read";
 import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
 import {
@@ -35,6 +37,8 @@ import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
   SCRIPTED_DELEGATED_REPLY,
+  SCRIPTED_READ_PLAN,
+  SCRIPTED_READ_PLAN_REPLY,
   SCRIPTED_SKILL_REPLY,
   SCRIPTED_SKILLS,
   SCRIPTED_TODOS,
@@ -55,7 +59,9 @@ import {
  * names, on that pair, and the worker's answer is read back. Handed
  * to-dos, it writes the list, which eve holds to the schema the model is
  * shown and the writer keeps as a tool part the agent's tab draws. Told
- * a skill's `/name`, it loads the skill the session was offered. The
+ * a skill's `/name`, it loads the skill the session was offered. Told to
+ * read its plan, it reads the plan whole as it stands in the store, which
+ * opens no sandbox, and says the plan's first line. The
  * eve server runs in this process with the database the environment names,
  * so the eval reads the rows back from the same Postgres. Where no database
  * is named the eval skips rather than pretending.
@@ -71,6 +77,11 @@ const PLAN_SNAPSHOT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by
 const REPOSITORY = "acme/relay";
 const DELEGATED_TASK = "Count the invitation routes";
 const TODO_WORDS = "Read the guide; Add the invitation route";
+
+/** What a plan read answers once taken: the plan as Markdown. */
+const readPlanAnswer = Schema.decodeUnknownOption(
+  Schema.Struct({ status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED), plan: Schema.String }),
+);
 
 /** How long the eval waits for a turn to settle, in polls of the interval below. */
 const SETTLE_POLLS = 120;
@@ -319,6 +330,32 @@ export default defineEval({
           (part) =>
             isTextUIPart(part) &&
             part.text === `${SCRIPTED_SKILL_REPLY} Write one line per change, newest first.`,
+        ),
+      );
+
+      // A plan read is a tool part of the agent's answer holding the plan
+      // as the store has it now, its name the title, answered at once.
+      const reading = await startAgent(run, plan.id);
+      const read = await openSession(reading.conversationId, `${SCRIPTED_READ_PLAN}whole`);
+      (await t.target.attachSession(read.sessionId)).succeeded();
+      const readingAnswer = (await readMessagesByConversationTyped(run, reading.conversationId)).at(
+        -1,
+      );
+      assert.ok(readingAnswer);
+      const planRead = readingAnswer.parts.find((part) => isToolUIPart(part));
+      assert.ok(planRead);
+      assert.equal(planRead.type, `tool-${READ_PLAN_TOOL.name}`);
+      assert.equal(planRead.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      const title = `# ${PLAN.name}`;
+      assert.ok(
+        Option.match(readPlanAnswer(planRead.output), {
+          onNone: () => false,
+          onSome: (output) => output.plan.startsWith(`${title}\n`),
+        }),
+      );
+      assert.ok(
+        readingAnswer.parts.some(
+          (part) => isTextUIPart(part) && part.text === `${SCRIPTED_READ_PLAN_REPLY} ${title}`,
         ),
       );
     } finally {

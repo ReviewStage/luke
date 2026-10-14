@@ -10,6 +10,7 @@ import { INTEGRATION_NAMES_SAID } from "../integrations.js";
 import { CODER, rolloutBranchPrefix } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { READ_PLAN_TOOL } from "./plan-read.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -64,6 +65,16 @@ function buildingSteps(words: { whole: string; none: string; describe: string })
 /** What an agent that writes code decides beside the work itself. */
 const PUBLISHING_AIM = ", and to decide whether the result is worth publishing as a pull request";
 
+/**
+ * How a rollout's worker, handed one pull request rather than the plan,
+ * reads the plan whole: before a note, since a correction quotes the saved
+ * text, and wherever the brief leaves it short, since the plan has moved
+ * on since the brief was cut.
+ */
+const PULL_REQUEST_UPDATING_WORDS = `${UPDATING_WORDS}
+
+Your brief is one pull request cut from the plan, not the plan. \`${READ_PLAN_TOOL.name}\` reads the whole plan as it stands now, which may have changed since your brief was cut: the developer plans on, and the other pull requests' workers take notes on it too. Read it before you take a note with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, since a correction quotes the saved text exactly; when you need why the plan chose what your brief asks; and when your pull request meets an interface another pull request of the rollout builds or uses. Read it rather than guess, and never build what it says belongs to another pull request.`;
+
 /** The words the instructions say of what the agent was handed, a plan, a task, one pull request of the plan's rollout, or the rollout's stacks, where they differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
@@ -104,7 +115,7 @@ const BRIEF_WORDS = {
       describe: "name the plan and the pull request's position in its rollout in its description",
     }),
     decided: DECIDED_WORDS,
-    updating: UPDATING_WORDS,
+    updating: PULL_REQUEST_UPDATING_WORDS,
   },
   [CODING_AGENT_BRIEF.STACK_KEEPER]: {
     job: "keep the stacks of the plan's rollout that the first message of this conversation lays out: you own the rollout's git structure, and its builders write its code",

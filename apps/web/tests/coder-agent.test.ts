@@ -157,6 +157,14 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
+test("a worker handed one pull request is told to read the whole plan, and one handed the plan or a task is not", () => {
+  const worker = coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PULL_REQUEST, false);
+  assert.ok(worker.includes("`read_plan` reads the whole plan as it stands now"));
+  assert.ok(worker.includes("Read it before you take a note with `edit_plan`"));
+  assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false).includes("read_plan"));
+  assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false).includes("read_plan"));
+});
+
 /** Every brief of an agent that writes code and cuts a branch of its own: all but the stack keeper's. */
 const BUILDING_BRIEFS = Object.values(CODING_AGENT_BRIEF).filter(
   (brief) => brief !== CODING_AGENT_BRIEF.STACK_KEEPER,

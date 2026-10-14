@@ -44,6 +44,7 @@ export const AGENT_TOOL = {
   // A coding agent's own, and the delegation every agent makes.
   DELEGATE: CODING_AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
+  READ_PLAN: "read_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
