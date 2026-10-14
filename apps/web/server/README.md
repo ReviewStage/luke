@@ -1182,8 +1182,9 @@ a connector without a `redirectUri` of its own replays, and is written under
 `umask 077`, and every registration file is deleted once its PATCH is in,
 as Neon's is, since nothing reads it again and Supabase's holds its secret.
 The backup a PATCH is taken against is written the same way, since a
-connector's read may carry its credentials too, and goes once the provider
-connects.
+connector's read may carry its credentials too, and is kept until the
+provider connects, the one way back if it does not
+(`rm ~/granola-before.json` after a sign-in succeeds).
 Granola's, for example:
 
 ```
@@ -1192,7 +1193,6 @@ jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,
 (umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/granola-before.json)   # the backup
 vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/granola-patch.json
 rm ~/granola-client.json ~/granola-patch.json
-rm ~/granola-before.json   # once it connects
 ```
 
 A sign-in can still fail once right after a connector changes, Granola's
