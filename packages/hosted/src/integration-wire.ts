@@ -143,14 +143,35 @@ export type IntegrationToolsProblemReason =
   (typeof INTEGRATION_TOOLS_PROBLEM)[keyof typeof INTEGRATION_TOOLS_PROBLEM];
 
 /**
+ * The hints an MCP server gives of what one of its tools does, the spec's
+ * `ToolAnnotations`: whether it only reads, whether a write it makes
+ * destroys, whether calling it again changes nothing more, and whether it
+ * reaches past the server's own world. Each stands only where the server
+ * sent it, so an absent hint is never read as its spec default.
+ */
+export const integrationToolAnnotationsSchema = EffectSchema.Struct({
+  readOnlyHint: EffectSchema.optionalKey(EffectSchema.Boolean),
+  destructiveHint: EffectSchema.optionalKey(EffectSchema.Boolean),
+  idempotentHint: EffectSchema.optionalKey(EffectSchema.Boolean),
+  openWorldHint: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema.Type;
+
+/**
  * The tools one provider's server offers the account's agents (GET): each
- * one's name and the first line of what it does, or why the server listed
- * none, with the server's own one-line message where it sent one.
+ * one's name, the first line of what it does, and the hints its server
+ * annotated it with where it sent any, or why the server listed none, with
+ * the server's own one-line message where it sent one.
  */
 export const integrationToolsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     tools: EffectSchema.Array(
-      EffectSchema.Struct({ name: EffectSchema.String, description: EffectSchema.String }),
+      EffectSchema.Struct({
+        name: EffectSchema.String,
+        description: EffectSchema.String,
+        annotations: EffectSchema.optionalKey(integrationToolAnnotationsSchema),
+      }),
     ),
   }),
   EffectSchema.Struct({
