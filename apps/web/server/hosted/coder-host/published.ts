@@ -76,6 +76,8 @@ function withChecks(
       url: found.url,
       state: found.state,
       checks,
+      base: found.baseRef,
+      mergedSha: found.mergeCommitSha,
       additions: found.additions,
       deletions: found.deletions,
       changedFiles: found.changedFiles,

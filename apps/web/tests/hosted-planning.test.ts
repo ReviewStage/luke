@@ -146,6 +146,9 @@ function pullRequest(
     url: `https://github.com/acme/relay/pull/${number}`,
     state,
     checks,
+    base: "main",
+    mergedSha:
+      state === PULL_REQUEST_STATE.MERGED ? `${number}f3c2ab0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f` : null,
     additions: 1,
     deletions: 0,
     changedFiles: 1,
@@ -704,7 +707,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
 });
 
 describe("the rollout's state as the planning model reads it", () => {
-  it("names each position's base, newest worker, and pull request, a closed one among them", () => {
+  it("names each position's base, newest worker, and pull request, a merged one with what it merged into and as, a closed one among them", () => {
     assert.deepEqual(
       rolloutStateOf(CHAIN, {
         builders: [
@@ -716,7 +719,7 @@ describe("the rollout's state as the planning model reads it", () => {
         keeper: CODING_AGENT_STATUS.RUNNING,
       }),
       [
-        '1. "Schema" · base: main · worker: finished · pull request: #415 merged',
+        '1. "Schema" · base: main · worker: finished · pull request: #415 merged into main as 415f3c2',
         '2. "Route" · base: 1 · worker: working · pull request: #416 closed',
         '3. "Accept flow" · base: 2 · worker: stopped · pull request: none',
         "Stack keeper: working",

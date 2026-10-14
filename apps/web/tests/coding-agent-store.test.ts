@@ -160,6 +160,8 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   url: "https://github.com/reviewstage/luke/pull/41",
   state: PULL_REQUEST_STATE.DRAFT,
   checks: CHECK_SUMMARY.PENDING,
+  base: "main",
+  mergedSha: null,
   additions: 120,
   deletions: 4,
   changedFiles: 3,

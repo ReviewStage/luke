@@ -2788,9 +2788,14 @@ sandbox as the cancelled turn ends, and anything the agent pushed stays.
 `GET /api/agents/{id}/pull-request` answers what the agent published
 (`coder-host/published.ts`): the repository, the branch it pushed, and the
 pull request from it with its state (`open`, `draft`, `merged`, `closed`),
-its checks as one word (`pending`, `passing`, `failing`, `none`), and its
+its checks as one word (`pending`, `passing`, `failing`, `none`), the
+branch it merges into (`base`), the commit it merged as (`mergedSha`, null
+until it merged, though GitHub names a test merge on an open one), and its
 additions, deletions, and changed files; null for a branch or a pull
-request it has not. The agent reaches GitHub through `git` and `gh` in its
+request it has not. A rollout's state reads a merged one as `#412 merged
+into main as 9f3c2ab` from the row alone. A pull request a row kept before
+the read carried its base was forgotten (migration `20261014181838_coding_agent_published_base`), since the next
+read writes it again whole. The agent reaches GitHub through `git` and `gh` in its
 shell alone, and the branch its sandbox stands on as a turn ends is the one
 its pull request is on, whatever it cut, switched, or deleted on the way:
 the service's hook (`coder/hooks/store.ts`) runs `git branch

@@ -40,6 +40,8 @@ function pullRequest(number: number, title: string): CodingAgentPullRequest {
     url: `https://github.com/acme/relay/pull/${number}`,
     state: PULL_REQUEST_STATE.OPEN,
     checks: CHECK_SUMMARY.PASSING,
+    base: "main",
+    mergedSha: null,
     additions: 210,
     deletions: 14,
     changedFiles: 6,
