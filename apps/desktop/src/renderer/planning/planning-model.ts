@@ -27,8 +27,8 @@ const RECENT_REPOSITORY_LIMIT = 5;
 
 /** Which of the Plans tab's pages shows. */
 export const PLANS_PAGE = {
-  /** The new plan's name and repository: the tab's home, whenever no plan is open. */
-  NEW: "new",
+  /** The tab's home, whenever no plan is open: a line saying so, and New plan. */
+  HOME: "home",
   /** The open plan's saved document and its microphone. */
   DOCUMENT: "document",
 } as const;
@@ -39,11 +39,11 @@ export type PlansPage = (typeof PLANS_PAGE)[keyof typeof PLANS_PAGE];
  * The page the tab shows. An open plan is the document page, in every panel
  * alike, because the plan open is the host's and not one panel's: it stands
  * until the developer leaves it, whatever tab or shape the panel is in.
- * With none open, the tab is the new-plan page: the plan list is the
- * sidebar's, so there is no empty page to stand between them.
+ * With none open, the tab is the home page, which offers New plan; the
+ * plan list is the sidebar's.
  */
 export function plansPage(view: PlanningView): PlansPage {
-  return view.activePlanId === undefined ? PLANS_PAGE.NEW : PLANS_PAGE.DOCUMENT;
+  return view.activePlanId === undefined ? PLANS_PAGE.HOME : PLANS_PAGE.DOCUMENT;
 }
 
 /** Which state the document region draws. */
@@ -113,7 +113,7 @@ export function repositoryOwnerPictureUrl(repository: string): string {
   return `https://github.com/${encodeURIComponent(owner)}.png?size=32`;
 }
 
-/** What the new-plan form says when the service answered no plan. */
+/** What the New plan dialog says when the service answered no plan. */
 const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
 /** What a call that named a repository says when the service refused it, by its reason. */

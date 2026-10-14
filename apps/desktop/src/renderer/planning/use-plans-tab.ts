@@ -128,10 +128,10 @@ import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
  * archive are the presses drawn before the host answers them: each shows at
  * once, and goes back if the service refuses it, a pin or an archive with a
  * quiet note on the plan's row. The open plan archived leaves for the
- * new-plan page once the service has kept the archive. The plan the host has open is the
+ * home page once the service has kept the archive. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
- * collapse; only Escape, another plan, New plan, archiving it, a delete, or a
- * sign-out leaves it. With none open, the tab is the new-plan page. The open plan's
+ * collapse; only Escape, another plan, a plan started, archiving it, a delete, or a
+ * sign-out leaves it. With none open, the tab is the home page. The open plan's
  * coding agents are the tab's too (`use-coding-agents.ts`): read when the
  * plan opens, started from the toolbar or the column's "+", and each drawn
  * on a tab of the plan's column beside the plan's own (`use-main-tabs.ts`),
@@ -191,7 +191,7 @@ export interface PlansControl {
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
    * until the host's open plan next moves, else the open one. Nothing is the
-   * new-plan page, asked for or standing.
+   * home page, asked for or standing.
    */
   boundFor: string | undefined;
   listFailed: boolean;
@@ -288,24 +288,21 @@ export interface PlansControl {
   onOpenOnGitHub: (planId: string) => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
-  /** Leaves any open plan for the new-plan page, and has that page focus its name field. */
+  /** Opens the New plan dialog over whatever stands open, which it leaves standing. */
   onNewPlan: () => void;
-  /** New plan with a repository already chosen in the page's composer: what a repository group's + asks. */
+  /** New plan with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewPlanIn: (repository: string) => void;
-  /** What the new-plan page offers and the two presses it makes. */
+  /** The New plan dialog: whether it stands, what its press chose, and the two presses it makes. */
   newPlan: {
-    /** Counts the presses of New plan, so the page focuses its name field on each. */
-    presses: number;
-    /**
-     * The repository the last press of New plan chose for the composer,
-     * where it chose one; each press hands a new one, so the same
-     * repository chosen twice is chosen again over what was picked between.
-     */
+    open: boolean;
+    /** The repository the press that opened the dialog chose, where it chose one. */
     preset: { readonly repository: string } | undefined;
-    /** Starts the plan on the repository given, or none, which opens it; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
     start: (name: string, repository: string | null) => Promise<string | undefined>;
+    /** Puts the dialog away with nothing started. */
+    onClose: () => void;
   };
-  /** Leaves the open plan for the new-plan page, which ends its call. */
+  /** Leaves the open plan for the home page, which ends its call. */
   onLeavePlan: () => void;
   /**
    * Renames a plan to a name already trimmed and changed, drawn under it at
@@ -321,7 +318,7 @@ export interface PlansControl {
   /**
    * Pins or unpins a plan, archives it or brings it back, drawn at once and
    * put back with a note if the service refuses. Archiving the open plan
-   * leaves it for the new-plan page, as deleting it does.
+   * leaves it for the home page, as deleting it does.
    */
   onMarkPlan: (planId: string, mark: PlanMark) => void;
   /**
@@ -334,12 +331,12 @@ export interface PlansControl {
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
   onPinRepository: (repository: string, pinned: boolean) => void;
-  /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
+  /** Deletes a plan, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
-   * plan back to the new-plan page.
+   * plan back to the home page.
    */
   back: () => boolean;
 }
@@ -374,7 +371,7 @@ interface PinChoice {
 }
 
 /**
- * A plan asked of the host, or the new-plan page as nothing, and the open
+ * A plan asked of the host, or the home page as nothing, and the open
  * plan it was asked over: the ask stands only while that plan is still the
  * open one, so the host's next move, whatever it is, answers it.
  */
@@ -468,8 +465,10 @@ export function usePlansTab(input: {
   const { act, tell } = input.acts;
   const copyWithToast = useCopyToast();
   const toast = useToast();
-  const [newPlanPresses, setNewPlanPresses] = useState(0);
-  const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
+  // The New plan dialog's ask, standing while the dialog does: the preset it was opened with, if any.
+  const [newPlanAsk, setNewPlanAsk] = useState<
+    { readonly preset: PlansControl["newPlan"]["preset"] } | undefined
+  >(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
   const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
@@ -1059,9 +1058,11 @@ export function usePlansTab(input: {
     onRestored: (undo) => sayRestored(toast, undo),
   });
 
-  // A started plan becomes the host's open one, which turns the page to it.
-  // A start opens its plan's call at once, except over a call standing about
-  // another plan, which main leaves for this question to end or keep.
+  // A started plan becomes the host's open one, which turns the page to it,
+  // so the dialog closes and the Inbox or a version history standing behind
+  // it gives way. A start opens its plan's call at once, except over a call
+  // standing about another plan, which main leaves for this question to end
+  // or keep.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       name,
@@ -1069,6 +1070,9 @@ export function usePlansTab(input: {
     }).then(
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
+        setNewPlanAsk(undefined);
+        setInboxView(undefined);
+        setHistoryFor(undefined);
         if (callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
@@ -1078,21 +1082,15 @@ export function usePlansTab(input: {
       (refused: Error) => refused.message,
     );
 
-  // A preset is for the visit it was pressed for: once a plan opens, a later
-  // visit to the new-plan page starts on the composer's own choice again.
-  useEffect(() => {
-    if (page === PLANS_PAGE.DOCUMENT) setNewPlanPreset(undefined);
-  }, [page]);
-
-  // Each press of New plan is counted, so the page focuses its name field
-  // again, and hands the repository it chose, if any, to the composer.
-  const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) => {
-    // The new-plan page stands under the Inbox too, so a press there leaves it.
-    setInboxView(undefined);
-    if (page === PLANS_PAGE.DOCUMENT) leavePlan();
-    setNewPlanPresses((presses) => presses + 1);
-    setNewPlanPreset(preset);
-  };
+  // New plan opens the dialog over whatever stands, an open plan and its
+  // call included, which stay until a plan is started. Note that a press
+  // while the dialog stands, as the menu bar's still can, leaves it as it is,
+  // because a fresh ask would keep the card's draft under another preset.
+  const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) =>
+    setNewPlanAsk((standing) => standing ?? { preset });
+  // The dialog is the Plans tab's, so Settings taking the window puts it
+  // away rather than leaving it to stand again on the way back.
+  if (!shown && newPlanAsk !== undefined) setNewPlanAsk(undefined);
 
   // A plan's version history opens over the plan, so another plan opens first.
   const openHistory = (opening: HistoryOpening) => {
@@ -1246,7 +1244,7 @@ export function usePlansTab(input: {
     for (const closed of reopenFor) reopenNow.current(closed);
   }, [reopenFor, planning.activePlanId, setReopenFor]);
 
-  // The new-plan page is the tab's home, so only an open plan steps back,
+  // The home page is where the tab rests, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
     if (page !== PLANS_PAGE.DOCUMENT) return false;
@@ -1406,9 +1404,10 @@ export function usePlansTab(input: {
     onNewPlan: () => newPlanWith(undefined),
     onNewPlanIn: (repository) => newPlanWith({ repository }),
     newPlan: {
-      presses: newPlanPresses,
-      preset: newPlanPreset,
+      open: newPlanAsk !== undefined,
+      preset: newPlanAsk?.preset,
       start: startPlan,
+      onClose: () => setNewPlanAsk(undefined),
     },
     onLeavePlan: leavePlan,
     onRenamePlan: renamePlan,

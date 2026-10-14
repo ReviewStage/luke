@@ -622,7 +622,7 @@ export function CommandPalette({
 
   // Note that what was chosen runs once the palette is gone and focus is
   // back where it was, because a command that moves focus (Delete's
-  // question, the new-plan field) would otherwise lose it to the palette's
+  // question, the New plan dialog's field) would otherwise lose it to the palette's
   // own going. The field takes focus as the palette opens, as the dialog
   // gives it, and also where it opens again while it is still leaving,
   // which the dialog, never having let it go, does not give it again.

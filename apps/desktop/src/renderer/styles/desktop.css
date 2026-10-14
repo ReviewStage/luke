@@ -50,7 +50,7 @@
   /* Between a column's groups: Luke, New plan, and the plans. */
   --section-gap: var(--space-16);
   /* A page's content from its column's edges: the document, the call bar
-     under it, the new-plan page, and a Settings page. */
+     under it, the home page, and a Settings page. */
   --page-inset: var(--space-40);
   /* Every menu and popover draws from one set: the --surface-popover ground
      inside a --hairline-strong edge, this corner and shadow, and its items
@@ -261,8 +261,8 @@ body,
 }
 
 /* Beside the traffic lights, centred on them, the sidebar toggle in the same
-   place whichever way the sidebar is and New plan after it while folded
-   anywhere but the new-plan page itself; and
+   place whichever way the sidebar is and New plan after it while folded;
+   and
    level with them at the window's other edge, as far in from it as these are
    from the lights, the side panel's toggle in the same place whichever way
    the panel is.
@@ -399,7 +399,7 @@ body,
 }
 
 /* The Inbox row is the place shown while the window's Inbox stands, filled as
-   the new-plan page's row is. Its count of what waits on the developer stands at its end
+   the open plan's row is. Its count of what waits on the developer stands at its end
    in a group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-inbox[aria-current="page"] {
@@ -524,8 +524,7 @@ body,
   background: var(--raised);
 }
 
-.sidebar-plan[aria-current="page"],
-.sidebar-new-plan[aria-current="page"] {
+.sidebar-plan[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -1837,7 +1836,7 @@ body,
   width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
 }
 
-/* Anywhere no call bar is drawn (Settings, the new-plan page, a panel
+/* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {
   bottom: var(--space-24);
@@ -1968,101 +1967,7 @@ body,
   opacity: 0.7;
 }
 
-/* The new-plan page -------------------------------------------------------- */
-
-/* The window's home, drawn as the plan's document is about to be: the page
-   is a `.desktop-document`, so its column, measure, and type are the plan's,
-   and the name is the plan's title field. What stands here is what a plan's
-   page has no need of: the repository's labelled line, the Create plan row,
-   and the template's sections under them. Only those sections are faint;
-   the title, the property, and the button are drawn at full strength. */
-.new-plan > * + * {
-  margin-top: var(--space-16);
-}
-
-.new-plan-name {
-  display: block;
-  width: 100%;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  background: none;
-  color: inherit;
-  font-family: inherit;
-  letter-spacing: inherit;
-  line-height: 1.25;
-  field-sizing: content;
-  resize: none;
-}
-
-.new-plan-name::placeholder {
-  color: var(--text-tertiary);
-}
-
-.new-plan-property,
-.new-plan-actions {
-  display: flex;
-  min-height: var(--control-height);
-  align-items: center;
-  gap: var(--space-12);
-}
-
-.new-plan-property-label {
-  width: 88px;
-  flex: none;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-/* The chosen repository is the property's value, so it reads in the
-   value's colour rather than the composer chip's muted one. */
-.new-plan-property .plan-compose-chip {
-  color: var(--text-primary);
-}
-
-.new-plan-actions .primary-button .shortcut {
-  --shortcut-ink: var(--on-accent-muted);
-}
-
-/* Note that Create plan is never dimmed, because the page's one act would
-   read as the whole page faded: with no name yet it stands as a neutral
-   button that plainly cannot be pressed, and while the plan is being
-   created it keeps its accent beside the spinner. */
-.new-plan-actions .primary-button:disabled {
-  opacity: 1;
-}
-
-.new-plan-actions .primary-button:disabled:not([aria-busy="true"]) {
-  background: var(--raised-strong);
-  color: var(--text-tertiary);
-  cursor: default;
-}
-
-.new-plan-actions .primary-button:disabled:not([aria-busy="true"]) .shortcut {
-  --shortcut-ink: var(--text-tertiary);
-}
-
-.new-plan-note {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-/* The sections the plan will start as, a step back from the developer's own
-   words and fading out down the page, since none of them are written yet. */
-.new-plan > .new-plan-template {
-  margin-top: var(--space-24);
-  padding-top: var(--space-24);
-  border-top: 1px solid var(--hairline);
-  opacity: 0.4;
-  mask-image: linear-gradient(to bottom, #000 30%, transparent);
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.new-plan-template > * + * {
-  margin-top: 1.5em;
-}
+/* The repository chip ------------------------------------------------------ */
 
 .repository-chip {
   position: relative;
@@ -3262,7 +3167,7 @@ body:has(.app-stage[data-capture="true"])
 /* Onboarding ----------------------------------------------------------------- */
 
 /* The sign-in's whole window: the plain ground under a drag strip, the column
-   sitting a little above the middle the way the new-plan page's does. */
+   sitting a little above the middle. */
 .desktop-onboarding {
   display: flex;
   height: 100%;
@@ -4865,9 +4770,41 @@ body:has(.app-stage[data-capture="true"])
   margin-right: auto;
 }
 
-/* Send's chord, muted against its own fill rather than the card's. */
-.feedback-dialog .primary-button .shortcut {
+/* Send's chord, and Create plan's and the home page's New plan's, muted
+   against its own fill rather than the card's. */
+.feedback-dialog .primary-button .shortcut,
+.new-plan-dialog .primary-button .shortcut,
+.desktop-empty .primary-button .shortcut {
   --shortcut-ink: var(--on-accent-muted);
+}
+
+/* New plan (`new-plan-dialog.tsx`): the dialog's card, its one-line name in
+   the feedback note's well, and its foot led by the repository chip with
+   the answers at its end. */
+.new-plan-dialog {
+  width: min(460px, 100%);
+  gap: var(--space-12);
+}
+
+.new-plan-dialog-name {
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.new-plan-dialog-name::placeholder {
+  color: var(--text-tertiary);
+}
+
+.confirm-dialog-actions > .repository-chip {
+  margin-right: auto;
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in

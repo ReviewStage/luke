@@ -256,7 +256,7 @@ export function App(): React.JSX.Element {
     [changeTab],
   );
   // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another plan, the new-plan page, Settings, or the plan itself
+  // on screen: another plan, the home page, Settings, or the plan itself
   // under its version history, the Inbox, or a side panel filling the window.
   const focused = useWindowFocused();
   const planShown = callBarPlanId({
@@ -385,13 +385,13 @@ export function App(): React.JSX.Element {
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a plan's version history, or the Inbox, back to wherever it was
       // opened from, then a side panel filling the window back beside its
-      // plan, then an open plan back to the new-plan page. A menu and the
+      // plan, then an open plan back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
-      // An open plan unwinds to the new-plan page, which leaves it and ends
+      // An open plan unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
     };
