@@ -101,12 +101,17 @@ export interface SignInLine {
   readonly problem: boolean;
 }
 
+/** What a row says while the browser has a provider's sign-in. */
+export function waitingLine(provider: IntegrationProvider): string {
+  return `Waiting for ${INTEGRATION_NAME[provider]} in your browser…`;
+}
+
 /** The line a row draws for a sign-in. */
 export function signInLine(provider: IntegrationProvider, signIn: SignIn): SignInLine {
   const name = INTEGRATION_NAME[provider];
   switch (signIn.kind) {
     case SIGN_IN.WAITING:
-      return { text: `Waiting for ${name} in your browser…`, problem: false };
+      return { text: waitingLine(provider), problem: false };
     case SIGN_IN.FAILED:
       return {
         text: `Couldn't connect to ${name}: the sign-in came back without access.`,

@@ -269,7 +269,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and stands pending", async () => {
+test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and waits on the browser with no Cancel", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -286,7 +286,13 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
 
   assert.equal(githubConnects, 1);
   assert.deepEqual(links, [], "nothing leaves the page");
-  assert.match(page.textContent ?? "", /Finish signing in to GitHub in your browser\./u);
+  assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u);
+  assert.equal(
+    buttonNamed("Cancel"),
+    undefined,
+    "GitHub's connect has nothing at the service to cancel",
+  );
+  assert.ok(buttonNamed("Connect GitHub"), "a second press opens the page again");
 });
 
 test("GitHub connected stands connected with no Disconnect, whose way out is Settings › Connected accounts", async () => {
