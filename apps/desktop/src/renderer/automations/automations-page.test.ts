@@ -5,10 +5,15 @@ import { automationCreateParamsSchema } from "@sidecar/hosted/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
+  type AutomationRunSummary,
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@sidecar/hosted/automation-wire";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
@@ -58,8 +63,11 @@ const SCHEDULED: AutomationSummary = {
 let asked: { readonly kind: string; readonly payload: WireBoundaryInput }[] = [];
 let root: Root | undefined;
 
-/** The host as a script: the list it holds, each write kept in it and answered with the automation it made or changed. */
-function script(automations: readonly AutomationSummary[]) {
+/** The host as a script: the list it holds and its runs, each write kept in it and answered with the automation it made or changed. */
+function script(
+  automations: readonly AutomationSummary[],
+  runs: readonly AutomationRunSummary[] = [],
+) {
   let held = automations;
   const kept = (automation: AutomationSummary) => {
     held = [automation, ...held.filter((each) => each.id !== automation.id)];
@@ -88,7 +96,7 @@ function script(automations: readonly AutomationSummary[]) {
                   "https://luke.test/api/automations/40000000-0000-4000-8000-000000000002/webhook",
               });
             case ACT_KIND.AUTOMATIONS_RUNS:
-              return { runs: [] };
+              return { runs };
             default:
               return undefined;
           }
@@ -121,19 +129,26 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page mounted over the scripted host, the list read; narrowed to a plan where one is named, its widening recorded. */
-async function mount(narrowed?: {
-  readonly plan: string;
-  readonly widened: string[];
-}): Promise<HTMLElement> {
+/** The page mounted over the scripted host, the list read; narrowed to a plan where one is named, its widening recorded, and on one automation where one is chosen, each agent it opens recorded. */
+async function mount(
+  narrowed?: {
+    readonly plan: string;
+    readonly widened: string[];
+  },
+  chosen?: {
+    readonly id: string;
+    readonly opened: { readonly planId: string; readonly agentId: string }[];
+  },
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   const plans = plansControl({
     plans: [PLAN],
+    onShowAgent: (planId, agentId) => chosen?.opened.push({ planId, agentId }),
     automationsView: {
       open: true,
-      chosen: undefined,
+      chosen: chosen?.id,
       plan: narrowed?.plan,
       onOpen: (plan) => narrowed?.widened.push(plan ?? "every plan"),
       onClose: () => undefined,
@@ -277,4 +292,45 @@ test("opened from a plan, it lists that plan's automations under a chip that wid
   assert.equal(chip?.textContent, PLAN.name);
   await act(async () => chip?.click());
   assert.deepEqual(widened, ["every plan"]);
+});
+
+test("an automation's runs read as a list: one with an agent opens the agent's tab, one that started none says why", async () => {
+  const agentId = "30000000-0000-4000-8000-000000000001";
+  script(
+    [SCHEDULED],
+    [
+      {
+        id: "20000000-0000-4000-8000-000000000001",
+        firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+        status: AUTOMATION_RUN_STATUS.STARTED,
+        reason: null,
+        agent: {
+          id: agentId,
+          title: "Fix the flaky invoice test",
+          status: CODING_AGENT_STATUS.RUNNING,
+        },
+        firedAt: 0,
+        settledAt: 0,
+      },
+      {
+        id: "20000000-0000-4000-8000-000000000002",
+        firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+        status: AUTOMATION_RUN_STATUS.SKIPPED,
+        reason: AUTOMATION_RUN_REASON.CONCURRENCY,
+        agent: null,
+        firedAt: 0,
+        settledAt: 0,
+      },
+    ],
+  );
+  const opened: { readonly planId: string; readonly agentId: string }[] = [];
+  const page = await mount(undefined, { id: SCHEDULED.id, opened });
+
+  const rows = [...page.querySelectorAll<HTMLElement>(".automation-list-row")];
+  assert.equal(rows.length, 2);
+  assert.match(rows[1]?.textContent ?? "", /An earlier run's agent was still at work\./u);
+  assert.equal(rows[1]?.tagName, "DIV", "a run that started no agent has nothing to open");
+  await act(async () => rows[0]?.click());
+
+  assert.deepEqual(opened, [{ planId: PLAN.id, agentId }]);
 });

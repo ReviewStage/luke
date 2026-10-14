@@ -15,10 +15,8 @@ import { GLYPH_STATE } from "../state-glyph";
 import {
   firingText,
   nextRunText,
-  RUN_TONE,
   reasonText,
   runGlyphState,
-  runState,
   triggerText,
 } from "./automation-words";
 
@@ -26,7 +24,7 @@ import {
  * How the Automations page says a trigger and a run: a schedule the picker
  * writes in words with its zone's city, any other cron as written, a GitHub
  * trigger with its filters, and a run's state read from its agent once it
- * started one, on its pill and on the glyph a list row wears.
+ * started one, on the glyph its row wears.
  */
 
 const schedule = (cron: string, timezone = "America/New_York") => ({
@@ -96,24 +94,7 @@ describe("an automation's words", () => {
     expect(firingText({ kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 })).toBe("Scheduled run");
   });
 
-  it("reads a run's pill from its agent once it started one, and from the run where it did not", () => {
-    const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
-      id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
-      title: null,
-      status,
-    });
-    expect(runState(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) }))).toEqual({
-      word: "Running",
-      tone: RUN_TONE.WORKING,
-    });
-    expect(runState(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })).tone).toBe(
-      RUN_TONE.COMPLETE,
-    );
-    expect(
-      runState(
-        run({ status: AUTOMATION_RUN_STATUS.SKIPPED, reason: AUTOMATION_RUN_REASON.DAILY_CAP }),
-      ),
-    ).toEqual({ word: "Skipped", tone: RUN_TONE.ATTENTION });
+  it("says why a run did not start in a sentence, and nothing for one that did", () => {
     expect(reasonText(AUTOMATION_RUN_REASON.GITHUB_SIGN_IN)).toBe(
       "Sign in with GitHub again, then turn it back on.",
     );

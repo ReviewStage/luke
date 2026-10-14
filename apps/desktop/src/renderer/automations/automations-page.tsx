@@ -1,8 +1,10 @@
 import {
+  AUTOMATION_FIRING,
   AUTOMATION_PAUSE,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   AUTOMATION_WEBHOOK,
+  type AutomationFiring,
   type AutomationRunSummary,
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
@@ -11,16 +13,12 @@ import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   ChevronRightIcon,
-  CircleAlertIcon,
-  CircleCheckIcon,
-  CircleDashedIcon,
   ClockIcon,
   CopyIcon,
   PencilIcon,
   PlayIcon,
   PlusIcon,
   RefreshCwIcon,
-  SkipForwardIcon,
   Trash2Icon,
   WebhookIcon,
   XIcon,
@@ -36,8 +34,8 @@ import { RetryButton } from "../retry-button";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
+import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { WorkingMark } from "../working-mark";
 import {
   type AutomationDraft,
   AutomationEditor,
@@ -51,11 +49,8 @@ import {
 import {
   firingText,
   nextRunText,
-  RUN_TONE,
-  type RunTone,
   reasonText,
   runGlyphState,
-  runState,
   triggerText,
 } from "./automation-words";
 import { type AutomationWrite, useAutomationRuns, useAutomations } from "./use-automations";
@@ -145,18 +140,6 @@ function TriggerGlyph({ trigger }: { trigger: AutomationSummary["trigger"] }): R
   }
 }
 
-/** A run's state as a pill, its agent's working mark while it runs. */
-function RunPill({ run, now }: { run: AutomationRunSummary; now?: number }): React.JSX.Element {
-  const state = runState(run);
-  return (
-    <span className="automation-pill" data-tone={state.tone} title={momentText(run.firedAt)}>
-      {state.tone === RUN_TONE.WORKING ? <WorkingMark /> : null}
-      {state.word}
-      {now === undefined ? null : ` · ${sinceText(run.firedAt, now)}`}
-    </span>
-  );
-}
-
 /** The switch that turns an automation on or off. */
 function AutomationSwitch({
   automation,
@@ -166,19 +149,14 @@ function AutomationSwitch({
   onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={automation.enabled}
-      aria-label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
-      className="switch"
-      onClick={(event) => {
+    <Switch
+      checked={automation.enabled}
+      label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={(enabled, event) => {
         event.stopPropagation();
-        onToggle(!automation.enabled);
+        onToggle(enabled);
       }}
-    >
-      <span className="switch-thumb" />
-    </button>
+    />
   );
 }
 
@@ -262,131 +240,78 @@ function EmptyAutomations({
   );
 }
 
-/** A run's glyph, by the tone of its state. */
-function RunGlyph({ tone }: { tone: RunTone }): React.JSX.Element {
-  switch (tone) {
-    case RUN_TONE.WORKING:
-      return <WorkingMark />;
-    case RUN_TONE.COMPLETE:
-      return <CircleCheckIcon />;
-    case RUN_TONE.DANGER:
-      return <CircleAlertIcon />;
-    case RUN_TONE.ATTENTION:
-      return <SkipForwardIcon />;
-    case RUN_TONE.QUIET:
-      return <CircleDashedIcon />;
+/** What fired a run, as a glyph: its trigger's, or Run now's play. */
+function FiringGlyph({ firing }: { firing: AutomationFiring }): React.JSX.Element {
+  switch (firing.kind) {
+    case AUTOMATION_FIRING.SCHEDULE:
+      return <ClockIcon />;
+    case AUTOMATION_FIRING.GITHUB:
+      return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;
+    case AUTOMATION_FIRING.WEBHOOK:
+      return <WebhookIcon />;
+    default:
+      return <PlayIcon />;
   }
 }
 
-/** One run's row, opening under itself to what fired it, when, how it went, and its agent. */
+/**
+ * One run as a row: what fired it on its glyph, wearing where its agent
+ * stands, the agent's title over what fired it, or what fired it over why
+ * it never started, then how long ago and a failure's mark. A run with an
+ * agent opens the agent's tab; one without has nothing more to say.
+ */
 function RunRow({
   run,
   now,
-  open,
-  onToggle,
   onOpenAgent,
 }: {
   run: AutomationRunSummary;
   now: number;
-  open: boolean;
-  onToggle: () => void;
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const reason = reasonText(run.reason);
-  const { firing } = run;
-  return (
+  const state = runGlyphState(run);
+  const fired = firingText(run.firing);
+  const waiting = run.status === AUTOMATION_RUN_STATUS.QUEUED ? "Waiting to start" : undefined;
+  const title = run.agent?.title ?? fired;
+  const line = run.agent?.title == null ? (reasonText(run.reason) ?? waiting) : fired;
+  const body = (
     <>
-      <button type="button" className="automation-run" aria-expanded={open} onClick={onToggle}>
-        <span className="automation-run-glyph" data-tone={runState(run).tone} aria-hidden="true">
-          <RunGlyph tone={runState(run).tone} />
-        </span>
-        <span className="settings-copy">
-          <strong>{firingText(firing)}</strong>
-          <small>
-            {reason ??
-              run.agent?.title ??
-              (run.status === AUTOMATION_RUN_STATUS.QUEUED ? "Waiting to start" : "")}
-          </small>
-        </span>
-        <RunPill run={run} />
-        <span className="automation-run-time" title={momentText(run.firedAt)}>
-          {sinceText(run.firedAt, now)}
-        </span>
-        <ChevronRightIcon className="settings-chevron" aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className="automation-run-detail">
-          <dl className="automation-run-facts">
-            <dt>Fired</dt>
-            <dd>{momentText(run.firedAt)}</dd>
-            {run.settledAt === null ? null : (
-              <>
-                <dt>{run.status === AUTOMATION_RUN_STATUS.STARTED ? "Started" : "Settled"}</dt>
-                <dd>{momentText(run.settledAt)}</dd>
-              </>
-            )}
-            {"url" in firing && firing.url !== undefined ? (
-              <>
-                <dt>Event</dt>
-                <dd className="automation-run-link">{firing.url}</dd>
-              </>
-            ) : null}
-            {reason === undefined ? null : (
-              <>
-                <dt>Why</dt>
-                <dd>{reason}</dd>
-              </>
-            )}
-          </dl>
-          {run.agent === null ? null : (
-            <div className="automation-run-actions">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => run.agent && onOpenAgent(run.agent.id)}
-              >
-                Open agent tab
-              </button>
-            </div>
-          )}
-        </div>
-      ) : null}
+      <StateGlyph glyph={<FiringGlyph firing={run.firing} />} state={state} />
+      <span className="automation-list-copy">
+        <span className="automation-list-name">{title}</span>
+        {line === undefined ? null : <span className="automation-list-detail">{line}</span>}
+      </span>
+      <span className="automation-list-when" title={momentText(run.firedAt)}>
+        {sinceText(run.firedAt, now)}
+      </span>
+      {stateEndMark(state, true)}
     </>
+  );
+  const agent = run.agent;
+  if (agent === null) return <div className="automation-list-row">{body}</div>;
+  return (
+    <button type="button" className="automation-list-row" onClick={() => onOpenAgent(agent.id)}>
+      {body}
+    </button>
   );
 }
 
-/** How the automation is set up, one row a part. */
+/** How the automation is set up, past what its head says: its task, its webhook's address, and its limits in a line under them. */
 function SetupCard({ automation }: { automation: AutomationSummary }): React.JSX.Element {
   const { guards } = automation;
   return (
     <section className="settings-group">
-      <h2 className="settings-group-title">Setup</h2>
-      <div className="settings-card automation-facts">
-        <div className="settings-row">
-          <span className="automation-fact-label">When</span>
-          <span className="automation-fact">
-            {triggerText(automation.trigger)}
-            {automation.webhookUrl === undefined ? null : (
-              <small className="automation-run-link">{automation.webhookUrl}</small>
-            )}
-          </span>
-        </div>
-        <div className="settings-row">
-          <span className="automation-fact-label">Plan</span>
-          <span className="automation-fact">{automation.planName}</span>
-        </div>
-        <div className="settings-row">
-          <span className="automation-fact-label">Task</span>
-          <p className="automation-fact automation-prompt">{automation.action.prompt}</p>
-        </div>
-        <div className="settings-row">
-          <span className="automation-fact-label">Limits</span>
-          <span className="automation-fact">
-            {guards.maxConcurrentRuns} at a time · up to {guards.dailyRunCap} runs a day
-            <small>A run past either limit is skipped, not queued.</small>
-          </span>
-        </div>
+      <h2 className="settings-group-title">Task</h2>
+      <div className="settings-card">
+        <p className="settings-row automation-prompt">{automation.action.prompt}</p>
+        {automation.webhookUrl === undefined ? null : (
+          <p className="settings-row automation-run-link">{automation.webhookUrl}</p>
+        )}
       </div>
+      <p className="settings-note automation-limits">
+        {guards.maxConcurrentRuns} at a time, up to {guards.dailyRunCap} runs a day. A run past
+        either limit is skipped, not queued.
+      </p>
     </section>
   );
 }
@@ -404,7 +329,6 @@ function AutomationDetail({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const [opened, setOpened] = useState<string | undefined>(undefined);
   const read = runs.read;
   return (
     <>
@@ -412,31 +336,25 @@ function AutomationDetail({
         <span className="automation-head-copy">
           <h1 className="settings-page-title">{automation.name}</h1>
           <span className="automation-head-line">
-            <TriggerGlyph trigger={automation.trigger} />
-            {triggerText(automation.trigger)}
-            <span className="automation-dot" />
-            {automation.planName}
+            {triggerText(automation.trigger)} · {automation.planName}
           </span>
         </span>
-        <span className="settings-actions">
-          <span className="automation-next">{automation.enabled ? "On" : "Off"}</span>
-          <AutomationSwitch automation={automation} onToggle={onToggle} />
-        </span>
+        <AutomationSwitch automation={automation} onToggle={onToggle} />
       </header>
-      {automation.pausedReason === AUTOMATION_PAUSE.FAILURES ? (
-        <section className="document-banner automation-paused" aria-label="Paused">
-          <div className="document-banner-words">
-            <p className="document-banner-title">Paused after 3 failed starts</p>
-            <p className="document-banner-detail">
-              Luke stopped firing it. Fix what its last run says, then turn it back on.
-            </p>
-          </div>
-          <button type="button" className="primary-button" onClick={() => onToggle(true)}>
-            Turn on
-          </button>
-        </section>
-      ) : null}
       <div className="settings">
+        {automation.pausedReason === AUTOMATION_PAUSE.FAILURES ? (
+          <section className="document-banner automation-paused" aria-label="Paused">
+            <div className="document-banner-words">
+              <p className="document-banner-title">Paused after 3 failed starts</p>
+              <p className="document-banner-detail">
+                Luke stopped firing it. Fix what its last run says, then turn it back on.
+              </p>
+            </div>
+            <button type="button" className="primary-button" onClick={() => onToggle(true)}>
+              Turn on
+            </button>
+          </section>
+        ) : null}
         <section className="settings-group">
           <h2 className="settings-group-title">Runs</h2>
           <div className="settings-card">
@@ -456,14 +374,7 @@ function AutomationDetail({
             ) : null}
             {read !== undefined && "runs" in read
               ? read.runs.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    now={now}
-                    open={opened === run.id}
-                    onToggle={() => setOpened((held) => (held === run.id ? undefined : run.id))}
-                    onOpenAgent={onOpenAgent}
-                  />
+                  <RunRow key={run.id} run={run} now={now} onOpenAgent={onOpenAgent} />
                 ))
               : null}
           </div>

@@ -16,7 +16,7 @@ import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph";
 
 /**
- * automation-words.ts -- how the Automations page says an automation and its runs: a trigger in a line, a run's state as a pill, why one did not start.
+ * automation-words.ts -- how the Automations page says an automation and its runs: a trigger in a line, a run's state on its glyph, when one runs next, why one did not start.
  *
  * Every sentence here is the page's alone and reads nothing but the wire's
  * own values, so the list, the detail, and the editor's preview say a
@@ -25,23 +25,6 @@ import { GLYPH_STATE, type GlyphState } from "../state-glyph";
  * day of the week, or every hour) and as its cron otherwise, with its zone
  * named by its city.
  */
-
-/** How a run's pill is coloured. */
-export const RUN_TONE = {
-  WORKING: "working",
-  COMPLETE: "complete",
-  ATTENTION: "attention",
-  DANGER: "danger",
-  QUIET: "quiet",
-} as const;
-
-export type RunTone = (typeof RUN_TONE)[keyof typeof RUN_TONE];
-
-/** A run's state as its pill says it: a word and a tone. */
-export interface RunState {
-  readonly word: string;
-  readonly tone: RunTone;
-}
 
 /** The days of the week as cron numbers them. */
 const WEEKDAY_NAMES = [
@@ -168,33 +151,6 @@ export function firingText(firing: AutomationFiring): string {
       const subject = GITHUB_FIRING_WORDS[firing.event](number, on);
       return firing.title === undefined ? subject : `${subject}: ${firing.title}`;
     }
-  }
-}
-
-/** A run's state for its pill: the firing's own where it started nothing, and its agent's where it did. */
-export function runState(run: AutomationRunSummary): RunState {
-  switch (run.status) {
-    case AUTOMATION_RUN_STATUS.QUEUED:
-      return { word: "Queued", tone: RUN_TONE.QUIET };
-    case AUTOMATION_RUN_STATUS.SKIPPED:
-      return { word: "Skipped", tone: RUN_TONE.ATTENTION };
-    case AUTOMATION_RUN_STATUS.FAILED:
-      return { word: "Failed", tone: RUN_TONE.DANGER };
-    case AUTOMATION_RUN_STATUS.STARTED:
-      break;
-  }
-  switch (run.agent?.status) {
-    case CODING_AGENT_STATUS.STARTING:
-    case CODING_AGENT_STATUS.RUNNING:
-      return { word: "Running", tone: RUN_TONE.WORKING };
-    case CODING_AGENT_STATUS.COMPLETED:
-      return { word: "Completed", tone: RUN_TONE.COMPLETE };
-    case CODING_AGENT_STATUS.FAILED:
-      return { word: "Agent failed", tone: RUN_TONE.DANGER };
-    case CODING_AGENT_STATUS.CANCELLED:
-      return { word: "Cancelled", tone: RUN_TONE.QUIET };
-    case undefined:
-      return { word: "Started", tone: RUN_TONE.QUIET };
   }
 }
 
