@@ -37,6 +37,12 @@ export interface PlanEditorProps {
   readonly mentions?: PlanEditorMentions | undefined;
 }
 
+/** The composer's mentions, as the box picks and draws them. */
+interface ComposerMentions {
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
+}
+
 /** A mention the plan's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
 export interface MentionNode {
   readonly name: string;
@@ -110,6 +116,8 @@ export interface ComposerEditorProps {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   /** Draws a chip into the element its node stands as; answers what takes the drawing down. */
   readonly drawChip: (element: HTMLElement, chip: ComposerChip) => () => void;
+  /** What the box's mentions are picked and drawn with: an `@` word reported as `/` words are, and each mention drawn into its node's element; none where the box takes no mentions. */
+  readonly mentions?: ComposerMentions | undefined;
 }
 
 /** The caret as it stood when marked, carried through every change since, and the words put in there. */
@@ -133,6 +141,8 @@ export interface ComposerEditorHandle {
   readonly mark: () => ComposerMark;
   /** The `/` word the caret ends written as the skill named, a space after it. */
   readonly chooseSkill: (name: string) => void;
+  /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
+  readonly chooseMention: (mention: MentionNode) => void;
   /** The skills a `/name` names: each such word is drawn as a chip from now on. */
   readonly setSkills: (skills: ReadonlySet<string>) => void;
   /** Whether the words take a change: off while a message is held, read-only while a dictation stands, which keeps the caret. */

@@ -7,6 +7,7 @@ import type {
   ComposerEditorHandle,
   ComposerInput,
   ComposerTrigger,
+  MentionNode,
   PlanEditorModule,
 } from "../plan-editor/contract";
 
@@ -42,11 +43,17 @@ function typingElsewhere(): boolean {
   );
 }
 
-/** A chip the editor asked to be drawn: the element its node stands as, what it is, and the key its drawing goes under. */
+/** A chip the editor asked to be drawn: the element its node stands as, what it is, a skill or a mention, and the key its drawing goes under. */
 interface DrawnChip {
   readonly element: HTMLElement;
-  readonly chip: ComposerChip;
+  readonly chip: ComposerChip | { readonly mention: MentionNode };
   readonly key: number;
+}
+
+/** What the box's mentions are picked and drawn with: the `@` word's report, and each mention's look. */
+export interface ComposerFieldMentions {
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly chip: (mention: MentionNode) => ReactNode;
 }
 
 export function ComposerField({
@@ -67,6 +74,7 @@ export function ComposerField({
   onPasteFiles,
   onTrigger,
   chip,
+  mentions,
   children,
 }: {
   /** The editor bundle; nothing until it has loaded, while the field stands inert. */
@@ -89,6 +97,8 @@ export function ComposerField({
   onPasteFiles: (files: readonly File[]) => boolean;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
   chip: (chip: ComposerChip) => ReactNode;
+  /** What the box's mentions are picked and drawn with; none where the box takes no mentions, read as it mounts. */
+  mentions?: ComposerFieldMentions | undefined;
   /** What stands over the field, a list it opened. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -98,9 +108,25 @@ export function ComposerField({
   // The last words the editor handed back, which a draft from outside is told against.
   const emitted = useRef(draft);
   const drawn = useRef(0);
-  const latest = useRef({ draft, setDraft, skills, onKey, onEnter, onPasteFiles, onTrigger });
-  latest.current = { draft, setDraft, skills, onKey, onEnter, onPasteFiles, onTrigger };
+  const latest = useRef({
+    draft,
+    setDraft,
+    skills,
+    onKey,
+    onEnter,
+    onPasteFiles,
+    onTrigger,
+    mentions,
+  });
+  latest.current = { draft, setDraft, skills, onKey, onEnter, onPasteFiles, onTrigger, mentions };
 
+  /** A chip the editor asked for, drawn into its node's element until the node goes. */
+  const draw = (element: HTMLElement, drawnChip: DrawnChip["chip"]) => {
+    drawn.current += 1;
+    const key = drawn.current;
+    setChips((was) => [...was, { element, chip: drawnChip, key }]);
+    return () => setChips((was) => was.filter((each) => each.key !== key));
+  };
   useLayoutEffect(() => {
     if (module === undefined || host.current === null) return;
     const now = latest.current;
@@ -120,12 +146,14 @@ export function ComposerField({
       onEnter: () => latest.current.onEnter(),
       onPasteFiles: (files) => latest.current.onPasteFiles(files),
       onTrigger: (trigger) => latest.current.onTrigger(trigger),
-      drawChip: (element, drawnChip) => {
-        drawn.current += 1;
-        const key = drawn.current;
-        setChips((was) => [...was, { element, chip: drawnChip, key }]);
-        return () => setChips((was) => was.filter((each) => each.key !== key));
-      },
+      drawChip: (element, drawnChip) => draw(element, drawnChip),
+      mentions:
+        now.mentions === undefined
+          ? undefined
+          : {
+              onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
+              drawMention: (element, mention) => draw(element, { mention }),
+            },
     });
     editor.current = mounted;
     return () => {
@@ -154,7 +182,15 @@ export function ComposerField({
         </span>
       ) : null}
       {module === undefined ? <div className={fieldClass} aria-busy="true" /> : <div ref={host} />}
-      {chips.map((each) => createPortal(chip(each.chip), each.element, each.key))}
+      {chips.map((each) =>
+        createPortal(
+          "mention" in each.chip
+            ? (mentions?.chip(each.chip.mention) ?? `@${each.chip.mention.name}`)
+            : chip(each.chip),
+          each.element,
+          each.key,
+        ),
+      )}
       {children}
     </div>
   );

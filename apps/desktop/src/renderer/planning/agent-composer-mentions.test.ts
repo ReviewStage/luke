@@ -1,0 +1,207 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import type { CodingAgentAgentAnswer } from "@sidecar/hosted/coding-agent-view";
+import { MENTION_KIND, type Mention, mentionMarkdown } from "@sidecar/hosted/mention-link";
+import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
+import { act, createElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import {
+  composerEditor,
+  installEditorBundle,
+  installEditorLayout,
+  pressInComposer,
+  QUIET_COMPOSER,
+  typeInComposer,
+} from "#testing/composer";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { AgentComposer } from "./agent-composer";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import type { SkillSource } from "./skill-picker";
+import { TranscriptWords } from "./transcript-blocks";
+import { type MessageSender, useAgentComposer } from "./use-agent-composer";
+
+/**
+ * `@` in an agent's message box and its transcript, on a plan's page and
+ * off it, over the real editor bundle: the word typed opens the list of the
+ * plan's sections and the repository's files, the row chosen is written
+ * into the message as its link and drawn in the box as its chip, the link
+ * is what is sent, and a sent message's mention is drawn as the chip that
+ * opens it. Off a plan's page an `@` is a letter and a mention is words.
+ * Synthetic plan and repository.
+ */
+
+const PLAN_ID = "pl_1";
+
+const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
+
+const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading: "Rollout" };
+
+const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
+
+const ignore = () => undefined;
+
+const roots: Root[] = [];
+
+// Set before any box renders, since the box reads the editor bundle once per window.
+installEditorBundle();
+
+beforeEach(() => {
+  installScrollIntoView();
+  installEditorLayout();
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PLANNING_TREE
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: {
+                  folder: {
+                    path: "",
+                    repository: "acme/relay",
+                    branch: "main",
+                    entries: [{ name: "apps/web/rollout-store.ts", kind: PLAN_TREE_ENTRY.FILE }],
+                    truncated: false,
+                  },
+                },
+              }
+            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+        ),
+      recordSurfaceEvent: ignore,
+    },
+  });
+});
+
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+});
+
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** What a plan's page hands its places, every mention a chip was asked to open kept. */
+function planPage(opened: Mention[]): PlanMentionsValue {
+  return {
+    planId: PLAN_ID,
+    planName: "Invitations",
+    text: () => PLAN_TEXT,
+    doors: {
+      planId: PLAN_ID,
+      headings: new Set(["Goal", "Rollout"]),
+      onOpenPlan: (mention) => opened.push(mention),
+      onOpenFile: undefined,
+    },
+  };
+}
+
+/** The box on the composer's own control, its sends answered by `sender`. */
+function Box({ sender }: { sender: MessageSender }): ReactNode {
+  const composer = useAgentComposer({
+    agentId: "agent-1",
+    planId: PLAN_ID,
+    messages: [],
+    send: sender,
+    onStatus: ignore,
+  });
+  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: noSkills });
+}
+
+/** The node drawn on a plan's page, or off any page where none is given. */
+function drawn(node: ReactNode, page: PlanMentionsValue | undefined) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      page === undefined ? node : createElement(PlanMentions, { value: page, children: node }),
+    ),
+  );
+  return container;
+}
+
+/** The box drawn, every message it sends written down. */
+async function box(page: PlanMentionsValue | undefined) {
+  const sent: string[] = [];
+  const sender: MessageSender = (_agentId, text) => {
+    sent.push(text);
+    return new Promise<CodingAgentAgentAnswer>(ignore);
+  };
+  const container = drawn(createElement(Box, { sender }), page);
+  await settle();
+  return { container, sent };
+}
+
+/** The rows the list draws, by name. */
+function listed(container: HTMLElement): string[] {
+  return [...container.querySelectorAll(".mention-menu .plan-compose-menu-name")].map(
+    (name) => name.textContent ?? "",
+  );
+}
+
+test("an @ typed in the box on a plan's page offers the plan's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
+  const { container, sent } = await box(planPage([]));
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+  const offered = listed(container);
+  pressInComposer(container, "ArrowDown");
+  pressInComposer(container, "Enter");
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["rollout-store.ts", "Rollout"]);
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Rollout"],
+  );
+  assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout")}`]);
+});
+
+test("off a plan's page an @ in the box opens nothing and is sent as the letter it is", async () => {
+  const { container, sent } = await box(undefined);
+
+  typeInComposer(container, "Mail @roll");
+  await settle();
+  const menu = container.querySelector(".mention-menu");
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.equal(menu, null);
+  assert.deepEqual(sent, ["Mail @roll"]);
+});
+
+test("a sent message's mention is drawn on a plan's page as the chip that opens what it names", () => {
+  const opened: Mention[] = [];
+  const container = drawn(
+    createElement(TranscriptWords, { text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout")}.` }),
+    planPage(opened),
+  );
+
+  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  assert.ok(chip, "the mention is a chip");
+  act(() => chip.click());
+
+  assert.equal(chip.textContent, "Rollout");
+  assert.deepEqual(opened, [ROLLOUT]);
+});
+
+test("off a plan's page a sent message's mention is drawn as its words, not a chip", () => {
+  const container = drawn(
+    createElement(TranscriptWords, { text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout")}.` }),
+    undefined,
+  );
+
+  assert.equal(container.querySelector(".mention-chip"), null);
+  assert.equal(container.textContent, "Follow @Rollout.");
+});

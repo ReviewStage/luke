@@ -8,6 +8,7 @@ import {
 import { DocumentIcon } from "@sidecar/panel";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
+import type { MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { fileName } from "./code-pane-model";
 import { FileCard } from "./file-ref";
@@ -189,4 +190,17 @@ export function MentionChip({
       )}
     </Tooltip>
   );
+}
+
+/** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none. */
+export function MentionNodeChip({
+  mention,
+  doors,
+}: {
+  mention: MentionNode;
+  doors: MentionDoors;
+}): React.JSX.Element {
+  const named = decodeMention(mention.target);
+  if (named === undefined) return <>{`@${mention.name}`}</>;
+  return <MentionChip mention={named} name={mention.name} doors={doors} />;
 }

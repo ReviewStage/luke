@@ -3,6 +3,7 @@ import {
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
 } from "@sidecar/hosted/coding-agent-wire";
+import { decodeMention, isMentionLabel, mentionName } from "@sidecar/hosted/mention-link";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   AppWindowIcon,
@@ -37,7 +38,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
-import type { Components } from "streamdown";
+import { type Components, defaultRemarkPlugins, type ExtraProps } from "streamdown";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
@@ -60,7 +61,9 @@ import {
 import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { MentionChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
+import { usePlanMentions } from "./plan-mentions";
 import { SubagentMark } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -137,6 +140,72 @@ function TranscriptLink({
   );
 }
 
+/** The element a mention's link is drawn as, and the one attribute that carries its target to the chip. */
+const MENTION_ELEMENT = {
+  TAG: "luke-mention",
+  TARGET: "to",
+} as const;
+
+/** The mention's element, let through the drawing's sanitizer with its target. */
+const MENTION_TAGS = { [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET] };
+
+/** A node of the words, as markdown reads them or as they are drawn, as much of one as its words are told by. */
+interface WordsNode {
+  readonly type: string;
+  readonly value?: string;
+  readonly children?: readonly WordsNode[];
+}
+
+/** A node of the words as markdown reads them, which a mention's link is marked on. */
+interface MarkdownNode extends WordsNode {
+  readonly url?: string;
+  readonly children?: readonly MarkdownNode[];
+  data?: { hName?: string; hProperties?: Record<string, string> };
+}
+
+/** The words under a node, however they are formatted. */
+function wordsOf(node: WordsNode): string {
+  if (node.type === "text") return node.value ?? "";
+  return (node.children ?? []).map((child) => wordsOf(child)).join("");
+}
+
+/**
+ * Marks every mention in the words, a link whose label starts with `@` and
+ * whose target names a mention, to be drawn as its own element. Note that
+ * the mark is made on the markdown, before it is drawn, because the
+ * drawing's sanitizer keeps no address on a link but the web's, so a
+ * mention's target would never reach a link of ours.
+ */
+function markMentions(node: MarkdownNode): void {
+  if (node.type === "link" && node.url !== undefined && isMentionLabel(wordsOf(node))) {
+    if (decodeMention(node.url) !== undefined) {
+      node.data = {
+        hName: MENTION_ELEMENT.TAG,
+        hProperties: { [MENTION_ELEMENT.TARGET]: node.url },
+      };
+    }
+    return;
+  }
+  for (const child of node.children ?? []) markMentions(child);
+}
+
+/** The markdown steps a transcript is read with: the library's own, then the mark on its mentions. */
+const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markMentions];
+
+/**
+ * A mention in a transcript's words: on a plan's page, the chip that opens
+ * what it names (`mention-chip.tsx`); off one, a link as any other is.
+ */
+function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
+  const mentions = usePlanMentions();
+  const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
+  const mention = decodeMention(target);
+  if (node === undefined || mention === undefined || mentions === undefined) {
+    return <TranscriptLink href={target}>{children}</TranscriptLink>;
+  }
+  return <MentionChip mention={mention} name={mentionName(wordsOf(node))} doors={mentions.doors} />;
+}
+
 /**
  * How a transcript's markdown is drawn: at the panel's scale, its code and
  * tables as `transcript-markdown.tsx` draws them, its links as
@@ -148,6 +217,7 @@ const TRANSCRIPT_COMPONENTS: Components = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   a: ({ href, children }) => <TranscriptLink href={href}>{children}</TranscriptLink>,
+  [MENTION_ELEMENT.TAG]: MentionElement,
   img: () => null,
 };
 
@@ -176,7 +246,12 @@ export function TranscriptWords({
   if (element === undefined) {
     return (
       <TranscriptMarkdownSource markdown={text}>
-        <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
+        <MessageResponse
+          mode="static"
+          components={TRANSCRIPT_COMPONENTS}
+          remarkPlugins={TRANSCRIPT_REMARK_PLUGINS}
+          allowedTags={MENTION_TAGS}
+        >
           {text}
         </MessageResponse>
       </TranscriptMarkdownSource>
@@ -188,7 +263,8 @@ export function TranscriptWords({
       <MessageResponse
         mode="static"
         components={{ ...TRANSCRIPT_COMPONENTS, ...element.components }}
-        allowedTags={{ [element.tag]: [...element.attributes] }}
+        remarkPlugins={TRANSCRIPT_REMARK_PLUGINS}
+        allowedTags={{ ...MENTION_TAGS, [element.tag]: [...element.attributes] }}
         literalTagContent={[element.tag]}
       >
         {element.markdown}

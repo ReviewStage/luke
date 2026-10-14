@@ -17,7 +17,15 @@ import {
   type ComposerInput,
   type ComposerMark,
   type ComposerTrigger,
+  type MentionNode,
 } from "./contract";
+import {
+  MENTION_NODE,
+  type MentionToken,
+  mentionLink,
+  mentionNode,
+  mentionTokens,
+} from "./mention-node";
 
 /**
  * composer-editor.ts -- an agent's message box on TipTap: plain words, a line break, and a chosen skill as a chip, read out as the one string the message is.
@@ -81,6 +89,9 @@ interface TextRun {
 function inlineText(node: PmNode): string {
   if (node.isText) return node.text ?? "";
   if (node.type.name === SKILL_NODE) return skillWord(String(node.attrs.name));
+  if (node.type.name === MENTION_NODE) {
+    return mentionLink({ name: String(node.attrs.name), target: String(node.attrs.target) });
+  }
   return node.type.name === HARD_BREAK_NODE ? NEWLINE : "";
 }
 
@@ -137,9 +148,37 @@ function offsetAt(doc: PmNode, pos: number): number {
   return textBetween(doc, 0, pos).length;
 }
 
-/** The document the words stand for: a paragraph per line, each `/name` of a known skill its chip. */
+/** A chip written in plain words: where it stands, and the node it becomes. */
+interface ChipToken {
+  readonly start: number;
+  readonly end: number;
+  readonly node: (schema: Schema) => PmNode;
+}
+
+/** Every chip the words spell, in order: each `/name` of a known skill, and each mention written as its link, none overlapping another. */
+function chipTokens(text: string, skills: ReadonlySet<string>): readonly ChipToken[] {
+  const mentions = mentionTokens(text).map(
+    (token: MentionToken): ChipToken => ({
+      start: token.start,
+      end: token.end,
+      node: (schema) => schema.node(MENTION_NODE, { ...token.mention }),
+    }),
+  );
+  // Note that a `/name` inside a mention's link is the link's words, never a chip of its own.
+  const skilled = skillTokens(text, skills)
+    .filter((range) => !mentions.some((each) => range.start < each.end && range.end > each.start))
+    .map(
+      (range): ChipToken => ({
+        ...range,
+        node: (schema) => schema.node(SKILL_NODE, { name: text.slice(range.start + 1, range.end) }),
+      }),
+    );
+  return [...mentions, ...skilled].sort((first, second) => first.start - second.start);
+}
+
+/** The document the words stand for: a paragraph per line, each `/name` of a known skill and each mention its chip. */
 function documentOf(schema: Schema, text: string, skills: ReadonlySet<string>): PmNode {
-  const tokens = skillTokens(text, skills);
+  const tokens = chipTokens(text, skills);
   const paragraphs: PmNode[] = [];
   let lineStart = 0;
   for (const line of text.split(NEWLINE)) {
@@ -148,7 +187,7 @@ function documentOf(schema: Schema, text: string, skills: ReadonlySet<string>): 
     let at = lineStart;
     for (const token of tokens.filter((each) => each.start >= lineStart && each.end <= lineEnd)) {
       if (token.start > at) children.push(schema.text(text.slice(at, token.start)));
-      children.push(schema.node(SKILL_NODE, { name: text.slice(token.start + 1, token.end) }));
+      children.push(token.node(schema));
       at = token.end;
     }
     if (lineEnd > at) children.push(schema.text(text.slice(at, lineEnd)));
@@ -198,7 +237,7 @@ function removedChip(view: EditorView, key: string): boolean {
   if (!selection.empty || (key !== "Backspace" && key !== "Delete")) return false;
   const back = key === "Backspace";
   const beside = back ? selection.$from.nodeBefore : selection.$from.nodeAfter;
-  if (beside?.type.name !== SKILL_NODE) return false;
+  if (beside?.type.name !== SKILL_NODE && beside?.type.name !== MENTION_NODE) return false;
   const from = back ? selection.from - 1 : selection.from;
   view.dispatch(view.state.tr.delete(from, from + 1).scrollIntoView());
   return true;
@@ -226,6 +265,22 @@ function slashWord(text: string, caret: number): TriggerWord | undefined {
   let end = caret;
   while (end < text.length && NAME_CHARACTER.test(text[end] ?? "")) end += 1;
   return { ...mention, end };
+}
+
+/** The `@` word the caret ends: `@` at the start of a word, then up to four words with no bracket, parenthesis, or `@` in them. */
+const AT_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,3})?)$/u;
+
+/** A character of an `@` word, which a pick replaces through to the word's end. */
+const AT_WORD_CHARACTER = /[^\s@[\]()]/u;
+
+/** The `@` word the caret ends, as far as it is typed, through to the word's end. */
+function atWord(text: string, caret: number): TriggerWord | undefined {
+  const match = AT_WORD.exec(text.slice(0, caret));
+  if (match === null) return undefined;
+  const query = match[2] ?? "";
+  let end = caret;
+  while (end < text.length && AT_WORD_CHARACTER.test(text[end] ?? "")) end += 1;
+  return { start: caret - query.length - 1, query, end };
 }
 
 /**
@@ -317,6 +372,7 @@ function skillNode(drawChip: ComposerEditorProps["drawChip"], known: (name: stri
 function composerExtensions(
   drawChip: ComposerEditorProps["drawChip"],
   known: (name: string) => boolean,
+  drawMention: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     blockquote: false,
@@ -337,7 +393,7 @@ function composerExtensions(
     underline: false,
     trailingNode: false,
   });
-  return [kit, skillNode(drawChip, known)];
+  return [kit, skillNode(drawChip, known), mentionNode(drawMention)];
 }
 
 /** What a mounted box keeps between its events: the skills it chips, whether it takes words, the last words and word it reported, and its marks. */
@@ -347,21 +403,27 @@ interface ComposerState {
   emitted: string;
   reported: ComposerTrigger | undefined;
   trigger: ReturnType<typeof triggerAt>;
+  mentionReported: ComposerTrigger | undefined;
+  mentionTrigger: ReturnType<typeof triggerAt>;
   /** Each mark's place, carried through every change the document takes. */
   readonly marks: Map<symbol, number>;
 }
 
-/** The `/` word the caret ends found again, and reported where it changed. */
-function reported(
-  view: EditorView,
-  state: ComposerState,
-  onTrigger: ComposerEditorProps["onTrigger"],
-): void {
+/** The `/` word and the `@` word the caret ends found again, and each reported where it changed. */
+function reported(view: EditorView, state: ComposerState, props: ComposerEditorProps): void {
   state.trigger = triggerAt(view, slashWord);
   const next = state.trigger?.trigger;
-  if (sameTrigger(next, state.reported)) return;
-  state.reported = next;
-  onTrigger(next);
+  if (!sameTrigger(next, state.reported)) {
+    state.reported = next;
+    props.onTrigger(next);
+  }
+  const { mentions } = props;
+  if (mentions === undefined) return;
+  state.mentionTrigger = triggerAt(view, atWord);
+  const mention = state.mentionTrigger?.trigger;
+  if (sameTrigger(mention, state.mentionReported)) return;
+  state.mentionReported = mention;
+  mentions.onTrigger(mention);
 }
 
 /**
@@ -385,7 +447,7 @@ function guardPlugin(state: ComposerState, props: ComposerEditorProps): Plugin {
       if (transactions.some((tr) => tr.getMeta(CHIPPED_META) === true)) return undefined;
       return chipped(now, state.skills, true);
     },
-    view: () => ({ update: (view) => reported(view, state, props.onTrigger) }),
+    view: () => ({ update: (view) => reported(view, state, props) }),
   });
 }
 
@@ -437,16 +499,16 @@ function composerProps(state: ComposerState, props: ComposerEditorProps): Editor
         return true;
       },
       blur: (view) => {
-        reported(view, state, props.onTrigger);
+        reported(view, state, props);
         return false;
       },
       focus: (view) => {
-        reported(view, state, props.onTrigger);
+        reported(view, state, props);
         return false;
       },
       // The words scrolling under a list move the slash it stands over, with no change to the state.
       scroll: (view) => {
-        reported(view, state, props.onTrigger);
+        reported(view, state, props);
         return false;
       },
     },
@@ -523,6 +585,23 @@ function choseSkill(editor: Editor, state: ComposerState, name: string): void {
   );
 }
 
+/** The `@` word the caret ends written as the mention chosen, a space after it unless one follows, the caret after the space. */
+function choseMention(editor: Editor, state: ComposerState, mention: MentionNode): void {
+  const word = state.mentionTrigger;
+  if (word === undefined) return;
+  const { doc, schema } = editor.state;
+  const spaced = doc.textBetween(word.to, Math.min(word.to + 1, doc.content.size)) === SPACE;
+  const chip = schema.node(MENTION_NODE, { name: mention.name, target: mention.target });
+  const tr = editor.state.tr.replaceWith(
+    word.from,
+    word.to,
+    spaced ? [chip] : [chip, schema.text(SPACE)],
+  );
+  editor.view.dispatch(
+    tr.setSelection(TextSelection.create(tr.doc, word.from + 2)).scrollIntoView(),
+  );
+}
+
 /** A mark of the caret where it stands, carried through every change until its words land or it is let go. */
 function marked(editor: Editor, state: ComposerState, maxLength: number): ComposerMark {
   const mark = Symbol("mark");
@@ -562,13 +641,19 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     emitted: props.text,
     reported: undefined,
     trigger: undefined,
+    mentionReported: undefined,
+    mentionTrigger: undefined,
     marks: new Map(),
   };
   const guard = guardPlugin(state, props);
   const editor = new Editor({
     element: host,
     extensions: [
-      ...composerExtensions(props.drawChip, (name) => state.skills.has(name)),
+      ...composerExtensions(
+        props.drawChip,
+        (name) => state.skills.has(name),
+        props.mentions?.drawMention,
+      ),
       Extension.create({ name: "composerGuard", addProseMirrorPlugins: () => [guard] }),
     ],
     editorProps: composerProps(state, props),
@@ -587,6 +672,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     replace: (text) => laidIn(editor, state, text),
     mark: () => marked(editor, state, props.maxLength),
     chooseSkill: (name) => choseSkill(editor, state, name),
+    chooseMention: (mention) => choseMention(editor, state, mention),
     setSkills: (skills) => {
       state.skills = skills;
       const tr = chipped(editor.state, skills, true);
