@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef } from "react";
  * opens no plan behind the sign-in gate: its select is refused and the
  * link would be gone. So a link handed while the gate stands is held, the
  * latest one only, and opened the moment the gate gives way; one handed
- * after opens at once.
+ * after opens at once, and supersedes any still held.
  */
 
 /** Opens a link's plan now, or once the gate gives way where it stands. */
@@ -28,7 +28,12 @@ export function useLinkOpener(
     latestOpen.current(waiting);
   }, [gated]);
   return useCallback((mention: PlanMention) => {
-    if (latestGated.current) held.current = mention;
-    else latestOpen.current(mention);
+    if (latestGated.current) {
+      held.current = mention;
+      return;
+    }
+    // Note that a link opened at once supersedes one still held, because the gate's giving way opens the held one only once its effect runs.
+    held.current = undefined;
+    latestOpen.current(mention);
   }, []);
 }
