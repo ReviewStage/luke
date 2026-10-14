@@ -1,3 +1,4 @@
+import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/brand";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import {
   ACCOUNT_PROVIDER,
@@ -5,7 +6,6 @@ import {
   type AccountProvider,
 } from "@sidecar/credentials/snapshot";
 import { WingFace } from "@sidecar/panel";
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { useEffect, useId, useState } from "react";
 import { ProviderMark } from "./provider-marks";
 import { SpinnerRing } from "./spinner";

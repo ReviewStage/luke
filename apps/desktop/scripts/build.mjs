@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
+import { BRAND_ASSETS_DIRECTORY } from "@sidecar/brand/assets-directory";
 import { build } from "esbuild";
 import { signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
@@ -11,7 +12,7 @@ import { tailwindPlugin } from "./tailwind.mjs";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const outputRoot = path.join(appRoot, "dist");
-const brandRoot = path.resolve(appRoot, "../../design/brand");
+const brandRoot = BRAND_ASSETS_DIRECTORY;
 const appVersion = JSON.parse(
   await fs.readFile(path.join(appRoot, "package.json"), "utf8"),
 ).version;

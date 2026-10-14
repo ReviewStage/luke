@@ -18,4 +18,4 @@ const packageAssets = packageAssetPaths({ appRoot });
 
 resetBuilderReleaseArtifactDirectory(repoRoot);
 preparePackageAssets({ repoRoot, paths: packageAssets });
-prepareElectronBuilderDmgAssets({ repoRoot, paths: packageAssets });
+prepareElectronBuilderDmgAssets({ paths: packageAssets });

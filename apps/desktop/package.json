@@ -52,7 +52,7 @@
     "@sidecar/panel": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/settings": "workspace:*",
-    "@sidecar/surface": "workspace:*",
+    "@sidecar/brand": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "@tailwindcss/node": "4.3.3",

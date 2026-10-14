@@ -1,4 +1,4 @@
-import { FACE_ART } from "@sidecar/surface";
+import { FACE_ART } from "@sidecar/brand";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;

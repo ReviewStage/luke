@@ -34,7 +34,7 @@
  */
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { MOTION_DURATION_MS } from "@sidecar/surface";
+import { MOTION_DURATION_MS } from "@sidecar/brand";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";

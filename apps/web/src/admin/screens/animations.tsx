@@ -1,4 +1,4 @@
-import type { FaceMotion } from "@sidecar/surface";
+import type { FaceMotion } from "@sidecar/brand";
 import { useEffect, useRef } from "react";
 import {
   ANIMATION_ROSTER,
@@ -14,17 +14,20 @@ import { PageHeader, type ViewerAccount } from "../chrome/page-header";
 /**
  * The committed motion SVGs, inlined into the bundle at build time. The glob
  * reaches outside the app the way the changelog's `CHANGELOG.md?raw` does:
- * `design/brand/motion/` is the artwork's one committed home, and a copy kept
+ * `packages/brand/assets/motion/` is the artwork's one committed home, and a copy kept
  * here would drift from what `generate-brand-assets.mjs --check` guards. The
  * pattern is resolved against this file, and a glob that matches nothing is an
  * empty set rather than a failed build — so a moved file draws every motion as
  * a missing asset and says nothing about why.
  */
-const MOTION_ASSET_SOURCES = import.meta.glob<string>("../../../../../design/brand/motion/*.svg", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-});
+const MOTION_ASSET_SOURCES = import.meta.glob<string>(
+  "../../../../../packages/brand/assets/motion/*.svg",
+  {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  },
+);
 
 const MOTION_ASSETS = indexAnimationAssets(MOTION_ASSET_SOURCES);
 

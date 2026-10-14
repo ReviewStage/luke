@@ -40,7 +40,7 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import { MOTION_DELAY_MS } from "@sidecar/surface";
+import { MOTION_DELAY_MS } from "@sidecar/brand";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {

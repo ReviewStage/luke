@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="design/brand/luke-wordmark-dark.svg">
-    <img src="design/brand/luke-wordmark-light.svg" alt="Luke" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="packages/brand/assets/luke-wordmark-dark.svg">
+    <img src="packages/brand/assets/luke-wordmark-light.svg" alt="Luke" width="360">
   </picture>
 </p>
 
