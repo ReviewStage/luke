@@ -15,7 +15,7 @@ import { type Cause, Effect } from "effect";
  */
 
 /** What a workspace is created with: its name and slug, the account that will own it, and the metadata the plugin stores as JSON text. */
-interface WorkspaceCreation {
+export interface WorkspaceCreation {
   readonly name: string;
   readonly slug: string;
   readonly userId: string;

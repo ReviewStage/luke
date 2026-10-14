@@ -48,6 +48,8 @@ const DECLARED_TABLES = [
   "coding_agent",
   "coding_agent_delegation",
   "conversations",
+  "github_install_intent",
+  "github_installation",
   "hosted_usage",
   "inbox_attachment",
   "inbox_item",

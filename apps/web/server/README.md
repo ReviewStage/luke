@@ -280,17 +280,32 @@ browser to `https://github.com/apps/<slug>/installations/new`, where the
 developer installs the App on an account or organization and chooses its
 repositories. The App's registered Setup URL, with "Redirect on update", is
 `https://tryluke.dev/api/github/installed`: GitHub lands the browser there
-with `installation_id` and `setup_action`, the route confirms the
-installation through `installation(id)`, and sends the browser on to
+with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
-(`@sidecar/hosted`): `installed`, `updated`, `requested` (a member asked an
-organization's owner, so there is no installation yet), `not-found`, or
-`unavailable`. The page draws a fixed card per status and interpolates
-nothing the address brought it; the desktop's repository chip picks the
-installation up by reading the account's repositories again when the window
-next takes focus (`apps/desktop/src/renderer/planning/repository-chip.tsx`).
-Nothing is stored at install time: which installations a user can reach is
-read from GitHub on the user's own token when a repository is chosen.
+(`@sidecar/hosted`). Without a `state`, the route confirms the installation
+through `installation(id)` as the App and links nothing: `installed`,
+`updated`, `requested` (a member asked an organization's owner, so there is
+no installation yet), `not-found`, or `unavailable`.
+
+With a `state`, the install began as a workspace's connect, and the route
+never trusts `installation_id` alone: GitHub's guidance is that anyone can
+put any id on the Setup URL, so the installation must be confirmed as
+associated with the user who installed it
+([About the setup URL](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)).
+It spends the intent (deleted with `RETURNING`, so it links once; unknown,
+spent, or expired is `expired`), requires the intent's account to still be
+an owner or admin of the workspace (`expired` otherwise), and reads
+`GET /user/installations` on that account's own GitHub token
+(`GitHubApp.userInstallations`): an installation it does not reach is
+`not-found`, and an account with no readable token is
+`github-sign-in-required`. Only then is the installation linked to the
+workspace (`connected`); one already linked to another workspace, or another
+installation on the same GitHub account, is `already-connected`.
+
+The page draws a fixed card per status and interpolates nothing the address
+brought it; the desktop's repository chip picks the installation up by
+reading the account's repositories again when the window next takes focus
+(`apps/desktop/src/renderer/planning/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`server/github-webhook-app.ts`),
 which keeps what a coding agent published current on the agent's row
@@ -308,8 +323,12 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on its owner's own token
 through `agentPublished`, as the agent's tab reads it, which writes the row.
 A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. `tests/github-webhook-app.test.ts` holds it over a
-scripted GitHub and PGlite.
+answered and ignored. An `installation` delivery, which GitHub sends every
+App unsubscribed, moves the status of its workspace's `github_installation`
+row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
+`GET /api/workspaces` then carries that workspace's `github.active` as false,
+its plans stay reachable, and nothing is deleted. `tests/github-webhook-app.test.ts`
+holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
@@ -1258,6 +1277,40 @@ deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
+
+`server/workspaces-app.ts` answers the account's workspaces
+(`packages/hosted/src/workspace-wire.ts`). Membership has nothing to do with
+GitHub: a teammate joins a workspace by invitation, and a workspace's
+repositories come from at most one Luke GitHub App installation an owner or
+admin connects to it. Every request resolves the bearer first and ensures the
+account's personal workspace.
+
+- `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
+  is a member of, personal first and the rest by name, each
+  `{ id, name, personal, role, github: { login, active } | null }`. It asks
+  GitHub nothing.
+- `POST /api/workspaces { name }` creates a workspace through the plugin's
+  server-only `auth.api.createOrganization` (`body.userId`, no session
+  headers; [docs](https://www.better-auth.com/docs/plugins/organization#create-an-organization)),
+  so the caller is its owner, and answers `{ workspace }` (201). The slug is
+  spelled from the name and never takes a personal one; a slug the plugin
+  refuses as taken is never adopted (`createLinkedOrganization`), and the
+  workspace takes it with a random suffix.
+- `POST /api/workspaces/github/connect { workspaceId }`, for an owner or admin,
+  writes a `github_install_intent` row (the SHA-256 of a random state, the
+  account, the workspace, an hour's expiry) and answers `{ url }`: the App's
+  install address with that `state`. A member is `not-permitted` (403); a
+  workspace the account is not in is `not-found`.
+- `POST /api/workspaces/github/disconnect { workspaceId }`, for an owner or
+  admin, deletes the workspace's `github_installation` row and answers
+  `{ workspace }`.
+
+A `github_installation` row (`packages/database/src/schemas/github-installation.ts`)
+ties one workspace to one installation, keyed on GitHub's installation id and
+account id (both unique), with the account's login and kind and the
+installation's status, which the installation webhook keeps. The Setup URL
+links it (below, under the install group). `tests/workspaces-app.test.ts` holds
+all of it over the plugin on PGlite and a scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's

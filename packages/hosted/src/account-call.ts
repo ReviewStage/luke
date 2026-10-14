@@ -85,7 +85,7 @@ export function callAnswered(answer: CallAnswer): answer is CallResponse {
 }
 
 /** One request, as the build fixes it: nothing here is composed from what a service answered. */
-interface CallRequest {
+export interface CallRequest {
   method: HttpMethod;
   /** The path under the call's own base address. */
   path: string;
