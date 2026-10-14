@@ -930,8 +930,8 @@ connector is a plain OAuth connector over it, with Neon's two scopes
 (Neon's consent page still asks whether to allow writes):
 
 ```
-curl -s https://mcp.neon.tech/api/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"client_secret_post","scope":"read write"}' > ~/neon-client.json
-# ~/neon.json, from its client_id and client_secret:
+(umask 077; curl -s https://mcp.neon.tech/api/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"client_secret_post","scope":"read write"}' > ~/neon-client.json)
+# ~/neon.json, from its client_id and client_secret, written under the same umask:
 # {"serverUrl":"https://mcp.neon.tech","clientId":"…","clientSecret":"…","tokenEndpointAuthMethod":"client_secret_post","pkceRequired":true,"userAuthorization":{"enabled":true,"scopes":["read","write"]},"refreshTokens":{"enabled":true}}
 vercel connect create mcp.neon.tech --name neon --connector-type oauth --data @"$HOME/neon.json" --json
 rm ~/neon-client.json ~/neon.json
