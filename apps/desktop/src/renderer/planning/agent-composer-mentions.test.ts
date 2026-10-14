@@ -106,6 +106,10 @@ beforeEach(() => {
                       { name: "list_issues", description: "List the team's issues." },
                       { name: "get_issue", description: "Read one issue." },
                       { name: "list/issues", description: "A name no mention can carry." },
+                      {
+                        name: "list\ud800",
+                        description: "A name that is no string of characters.",
+                      },
                     ],
                   },
                 }

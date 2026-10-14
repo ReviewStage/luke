@@ -229,6 +229,11 @@ export type PlanMention = Extract<Mention, { readonly planId: string }>;
 /** A mention of an MCP server or one of its tools. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
 
+/** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
+export function isMentionableTool(name: string): boolean {
+  return TOOL_NAME.test(name);
+}
+
 /** A file's lines a mention names, at the commit they were read at. */
 export type MentionLines = typeof linesSchema.Type;
 
