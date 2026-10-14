@@ -164,6 +164,28 @@ const deleteLapsed = SqlSchema.void({
     ),
 });
 
+const claimCredential = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    now: Schema.Date,
+    renewedBefore: Schema.Date,
+  }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ conversationId, now, renewedBefore }) =>
+    Database.use((db) =>
+      db
+        .update(sandboxTerminalLease)
+        .set({ credentialAt: now })
+        .where(
+          and(
+            eq(sandboxTerminalLease.conversationId, conversationId),
+            sql`(${sandboxTerminalLease.credentialAt} is null or ${sandboxTerminalLease.credentialAt} < ${renewedBefore})`,
+          ),
+        )
+        .returning({ conversationId: sandboxTerminalLease.conversationId }),
+    ),
+});
+
 /** Holds the conversation's sandbox until the instant given, or later where the lease already reaches further. */
 export function holdSandbox(conversationId: string, heldUntil: Date): LeaseEffect<void> {
   return upsertLease({ conversationId, heldUntil });
@@ -199,4 +221,45 @@ export function claimLapsedLease(
 /** Lets go of a lease whose sandbox the sweep stopped, while it is still lapsed; one the developer took up again during the stop stands. */
 export function releaseLapsedLease(conversationId: string, lapsedBefore: Date): LeaseEffect<void> {
   return deleteLapsed({ conversationId, lapsedBefore });
+}
+
+const unclaimCredential = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, claimedAt: Schema.Date }),
+  execute: ({ conversationId, claimedAt }) =>
+    Database.use((db) =>
+      db
+        .update(sandboxTerminalLease)
+        .set({ credentialAt: null })
+        .where(
+          and(
+            eq(sandboxTerminalLease.conversationId, conversationId),
+            eq(sandboxTerminalLease.credentialAt, claimedAt),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Claims the renewal of the GitHub token at the sandbox's firewall, answering
+ * whether this caller is to renew it now: once per lease when it was never
+ * renewed or last renewed before the instant given, so two windows on one
+ * sandbox mint one token between them.
+ */
+export function claimCredentialRenewal(
+  conversationId: string,
+  now: Date,
+  renewedBefore: Date,
+): LeaseEffect<boolean> {
+  return Effect.map(
+    claimCredential({ conversationId, now, renewedBefore }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** Gives back a renewal this caller claimed at the instant given and could not finish, so the next check claims it again; a later claim stands. */
+export function releaseCredentialRenewal(
+  conversationId: string,
+  claimedAt: Date,
+): LeaseEffect<void> {
+  return unclaimCredential({ conversationId, claimedAt });
 }

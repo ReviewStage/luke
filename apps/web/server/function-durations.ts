@@ -1,10 +1,11 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
+import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the voice function carries the platform's longest generally
- * available duration.
+ * may run, so the WebSocket functions, the voice sessions and the terminal
+ * relay, carry the platform's longest generally available duration.
  */
 const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
 
@@ -60,7 +61,11 @@ const GROUPS: readonly GroupDefinition[] = [
   },
 ];
 
-const STANDALONE_ROUTES: readonly string[] = Object.values(VOICE_SERVICE_PATH).map(routeKeyOf);
+/** The WebSocket services, each a function of its own: the voice sessions and the terminal relay. */
+const STANDALONE_ROUTES: readonly string[] = [
+  ...Object.values(VOICE_SERVICE_PATH),
+  TERMINAL_RELAY.PATH,
+].map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:

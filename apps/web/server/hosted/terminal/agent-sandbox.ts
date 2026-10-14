@@ -18,16 +18,25 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
-import { Context, Effect, Layer, Result } from "effect";
+import { Context, Effect, Layer, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
+  type InteractiveShell,
   type ListedSandbox,
   SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
-import { killTerminal, listTerminals, renameTerminal, startTerminal, terminalsOf } from "./tmux.js";
+import {
+  holdsTerminal,
+  killTerminal,
+  listTerminals,
+  renameTerminal,
+  startTerminal,
+  TMUX_EXIT,
+  terminalsOf,
+} from "./tmux.js";
 
 /** Vercel's sandbox states, read as the tab reads them. */
 const STATE_OF_STATUS = new Map<string, SandboxState>([
@@ -52,6 +61,19 @@ export type ShellRefusal =
 
 type ShellEffect<A> = Effect.Effect<Result.Result<A, ShellRefusal>, SandboxUnavailable>;
 
+/** What an attach finds: a running sandbox's PTY, minted for one connection, where the sandbox stands instead, or no such shell in it. */
+type SandboxAttach =
+  | {
+      readonly state: typeof SANDBOX_STATE.RUNNING;
+      readonly sandboxSessionId: string;
+      readonly shell: InteractiveShell;
+    }
+  | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING }
+  | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly gone: true };
+
+/** The hosts the GitHub token is set on at the firewall, as eve's own `authenticateGitHub` sets it for the agent. */
+const GITHUB_HOSTS = ["github.com", "api.github.com"] as const;
+
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
@@ -67,6 +89,20 @@ export interface AgentSandboxService {
   readonly kill: (sessionId: string, terminalId: string) => ShellEffect<void>;
   /** The agent's sandbox resumed from its snapshot, answering where it stands after; one never opened stays starting. */
   readonly resume: (sessionId: string) => Effect.Effect<SandboxState, SandboxUnavailable>;
+  /** A connection to the running sandbox's PTY, or where the sandbox stands; a stopped sandbox is never woken here. */
+  readonly attach: (
+    sessionId: string,
+    terminalId: string,
+  ) => Effect.Effect<SandboxAttach, SandboxUnavailable>;
+  /**
+   * A fresh GitHub token set at the running sandbox session's firewall, on
+   * the same hosts and in the same shape eve sets the agent's, so the shell
+   * reaches GitHub as the agent does and never holds the token's bytes.
+   */
+  readonly setGitHubToken: (
+    sandboxSessionId: string,
+    token: Redacted.Redacted,
+  ) => Effect.Effect<void, SandboxUnavailable>;
 }
 
 export class AgentSandbox extends Context.Service<AgentSandbox, AgentSandboxService>()(
@@ -137,6 +173,33 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
       ),
     rename: (sessionId, terminalId, title) => onShell(sessionId, renameTerminal(terminalId, title)),
     kill: (sessionId, terminalId) => onShell(sessionId, killTerminal(terminalId)),
+    attach: (sessionId, terminalId) =>
+      Effect.gen(function* () {
+        const { state, running } = yield* standing(sessionId);
+        if (running === undefined) {
+          return {
+            state:
+              state === SANDBOX_STATE.STARTING ? SANDBOX_STATE.STARTING : SANDBOX_STATE.STOPPED,
+          };
+        }
+        // A shell that is not there was ended elsewhere, or never started: no PTY is minted for it.
+        const held = yield* api.run(running, holdsTerminal(terminalId));
+        if (held.exitCode === TMUX_EXIT.NO_SESSION) {
+          return { state: SANDBOX_STATE.RUNNING, gone: true } as const;
+        }
+        // A tmux that could not be installed or asked is an outage the tab may retry, never a shell gone.
+        if (held.exitCode !== 0) return yield* Effect.fail(new SandboxUnavailable({}));
+        // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
+        const shell = yield* api.openInteractive(running);
+        return { state: SANDBOX_STATE.RUNNING, sandboxSessionId: running, shell };
+      }),
+    setGitHubToken: (sandboxSessionId, token) => {
+      const authorization = `Basic ${Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64")}`;
+      const transform = [{ transform: [{ headers: { authorization } }] }];
+      return api.updateNetworkPolicy(sandboxSessionId, {
+        allow: { "*": [], ...Object.fromEntries(GITHUB_HOSTS.map((host) => [host, transform])) },
+      });
+    },
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);

@@ -762,7 +762,19 @@ only when you press Send.
   searches the web as described above. The sandbox stops when a turn ends or
   you stop it, and its checkout, with the agent's changes, stays in a snapshot
   on the terms under "How the planning model reads your repository". Nothing
-  of the sandbox reaches the screen recording.
+  of the sandbox reaches the screen recording. A Terminal tab opens a shell in
+  the agent's sandbox, beside its checkout, and reaches it through our
+  service: what you type and what the shell prints pass through the service
+  on their way and are not stored, logged, or counted there or on your Mac.
+  Your shells, and what they printed, stay in the sandbox until it stops, and
+  no shell history is written to a file; anything you write into the
+  sandbox's files the agent can read on its next turn. While you are typing in
+  a terminal the sandbox does not stop at a turn's end; it stops about seven
+  minutes after you last typed, unless a turn is running, and a stopped
+  sandbox comes back only when you resume it. While a terminal is connected,
+  the agent's GitHub access at the sandbox's firewall is kept fresh, so what
+  you run there reaches GitHub as the agent does, never holding the token
+  itself.
 - Anthropic, for titles. As a coding agent's turn completes, until it has a
   title and for its first three turns at most, our service asks a small Claude
   model, on our key whatever key the agent runs on, for a short title, sending
