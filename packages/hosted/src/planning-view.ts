@@ -37,7 +37,7 @@ import {
   shownCodeSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
-import { WORKSPACE_CALL_FAILURE } from "./workspace-client.js";
+import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import {
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,

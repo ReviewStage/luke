@@ -3,7 +3,8 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HOSTED_API_ERROR } from "./service-wire.js";
-import { HostedWorkspaceClient, WORKSPACE_CALL_FAILURE } from "./workspace-client.js";
+import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
+import { HostedWorkspaceClient } from "./workspace-client.js";
 import { WORKSPACE_ROLE } from "./workspace-wire.js";
 
 const PERSONAL = {
