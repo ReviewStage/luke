@@ -20,7 +20,6 @@ export default defineConfig({
         "integration-connected": resolveEntry("./integration-connected.html"),
         admin: resolveEntry("./admin.html"),
         "connect-github": resolveEntry("./connect-github.html"),
-        invite: resolveEntry("./invite.html"),
         "accept-invitation": resolveEntry("./accept-invitation.html"),
         "desktop-session": resolveEntry("./desktop-session.html"),
       },
