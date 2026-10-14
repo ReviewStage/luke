@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "a23fb95f-c9a7-4104-b842-ccabc28915bb",
-  "prevIds": ["be23e0a1-2505-471b-ae06-5ee9a749edf2"],
+  "id": "1ee1c0df-bb41-4ca1-a725-17c11c3e7de4",
+  "prevIds": ["aa619c26-eb88-4577-b9f8-4577b11f3bae"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -223,6 +223,12 @@
     {
       "isRlsEnabled": false,
       "name": "repository_pin",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "sandbox_terminal_lease",
       "entityType": "tables",
       "schema": "public"
     },
@@ -3908,6 +3914,19 @@
       "table": "integration_connection"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "connect_verifier",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
@@ -4803,6 +4822,45 @@
       "entityType": "columns",
       "schema": "public",
       "table": "repository_pin"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tried_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
     },
     {
       "type": "text",
@@ -6924,6 +6982,34 @@
           "opclass": null
         },
         {
+          "value": "held_until",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sandbox_terminal_lease_next",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "tried_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
           "value": "queued_at",
           "isExpression": false,
           "asc": true,
@@ -8020,6 +8106,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "sandbox_terminal_lease_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -8497,6 +8596,14 @@
       "name": "account_preference_pkey",
       "schema": "public",
       "table": "account_preference",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["conversation_id"],
+      "nameExplicit": false,
+      "name": "sandbox_terminal_lease_pkey",
+      "schema": "public",
+      "table": "sandbox_terminal_lease",
       "entityType": "pks"
     },
     {
