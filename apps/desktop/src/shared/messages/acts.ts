@@ -82,6 +82,7 @@ import {
   codeLinesSchema,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
+  type PlanningMessageAnswer,
   type PlanningPageSourceAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -96,6 +97,8 @@ import {
   planningEditParamsSchema,
   planningFileAnswerSchema,
   planningFileParamsSchema,
+  planningMessageAnswerSchema,
+  planningMessageParamsSchema,
   planningMessagesParamsSchema,
   planningPageParamsSchema,
   planningPageSourceAnswerSchema,
@@ -222,6 +225,8 @@ export const ACT_KIND = {
   PLANNING_SET_REPOSITORY: "planning.setRepository",
   /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   PLANNING_EDIT: "planning.edit",
+  /** A developer's typed line to Luke on a plan, under the panel's own key for it; answers the ask Luke took it as, or why it was not taken. */
+  PLANNING_MESSAGE: "planning.message",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
@@ -724,6 +729,11 @@ export const ACT = {
     payload: actSchema(planningEditParamsSchema),
     result: wireResult<PlanningEditAnswer>(isReadable(planningEditAnswerSchema)),
     refusal: "Could not save that edit on this system.",
+  },
+  [ACT_KIND.PLANNING_MESSAGE]: {
+    payload: actSchema(planningMessageParamsSchema),
+    result: wireResult<PlanningMessageAnswer>(isReadable(planningMessageAnswerSchema)),
+    refusal: "Could not send that to Luke on this system.",
   },
   [ACT_KIND.GITHUB_OPEN]: {
     payload: record({ url: githubAddress }),
