@@ -7,12 +7,8 @@ import {
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import { LIVE_DEFAULTS } from "@sidecar/live";
-import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import { Effect, Exit, Result, Scope } from "effect";
-import { onTestFinished, test } from "vitest";
 import {
+  LIVE_DEFAULTS,
   LIVE_DELEGATION_TARGET,
   LIVE_TRANSPORT_TYPE,
   LIVE_VOICE,
@@ -22,7 +18,11 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
   sessionInstructions,
-} from "../server/live";
+} from "@sidecar/live";
+import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Exit, Result, Scope } from "effect";
+import { onTestFinished, test } from "vitest";
 import type { LogEntry } from "../server/voice/log";
 import {
   listening,

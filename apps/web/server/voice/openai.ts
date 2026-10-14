@@ -1,3 +1,12 @@
+import {
+  LIVE_SESSION_OUTCOME,
+  LIVE_SESSIONS_PATH,
+  type LiveCreateAnswer,
+  type LiveSessionConfig,
+  liveAttachPath,
+  liveCreateAnswerSchema,
+  liveCreateRequest,
+} from "@sidecar/live";
 import { readEither } from "@sidecar/wire/effect";
 import { Data, Effect, type Layer, Result, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -11,15 +20,6 @@ import {
   HTTP_METHOD,
   withoutTrailingSlash,
 } from "../core.js";
-import {
-  LIVE_SESSION_OUTCOME,
-  LIVE_SESSIONS_PATH,
-  type LiveCreateAnswer,
-  type LiveSessionConfig,
-  liveAttachPath,
-  liveCreateAnswerSchema,
-  liveCreateRequest,
-} from "../live.js";
 import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 /**

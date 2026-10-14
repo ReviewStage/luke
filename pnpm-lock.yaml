@@ -460,12 +460,48 @@ importers:
 
   apps/web/coder:
     dependencies:
+      '@sidecar/database':
+        specifier: workspace:*
+        version: link:../../../packages/database
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../../../packages/hosted
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../../../packages/wire
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
       eve:
         specifier: 0.74.0
         version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4))
 
   apps/web/eve:
     dependencies:
+      '@sidecar/database':
+        specifier: workspace:*
+        version: link:../../../packages/database
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../../../packages/hosted
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../../../packages/wire
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
       eve:
         specifier: 0.74.0
         version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4))

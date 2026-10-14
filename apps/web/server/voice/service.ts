@@ -4,6 +4,14 @@ import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import {
+  commentaryAppend,
+  greetingCue,
+  instructionsAppend,
+  LIVE_CLIENT_EVENT,
+  type LiveClientEvent,
+  planningOpeningInstruction,
+} from "@sidecar/live";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -19,14 +27,6 @@ import {
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
-import {
-  commentaryAppend,
-  greetingCue,
-  instructionsAppend,
-  LIVE_CLIENT_EVENT,
-  type LiveClientEvent,
-  planningOpeningInstruction,
-} from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { isVoicePath } from "./frames.js";
 import {

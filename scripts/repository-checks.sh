@@ -131,20 +131,35 @@ fi
 # without declaring resolves in a developer's hoisted tree, typechecks, and
 # fails the deploy's bundle step, or, for the Vite client, ships a bundle that
 # happened to resolve through another package's link. Declare what is named.
-web_manifest="$SIDECAR_REPO_ROOT/apps/web/package.json"
-declared_web_packages=$(grep -oE '"@sidecar/[a-z-]+": "workspace:\*"' "$web_manifest" |
-    sed -E 's#"@sidecar/([a-z-]+)".*#\1#' | sort -u)
-named_web_packages=$(grep -rhoE --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
-    '(from|import) "@sidecar/[a-z-]+(/[a-z-]+)?"' \
-    "$SIDECAR_REPO_ROOT/apps/web/server" "$SIDECAR_REPO_ROOT/apps/web/src" "$SIDECAR_REPO_ROOT/apps/web/scripts" |
-    sed -E 's#.*"@sidecar/([a-z-]+).*"#\1#' | sort -u)
-undeclared_web_packages=""
-while IFS= read -r named_name; do
-    [[ -z "$named_name" ]] && continue
-    if ! grep -qx "$named_name" <<<"$declared_web_packages"; then
-        undeclared_web_packages+="$named_name"$'\n'
+# The two eve services under apps/web are workspaces of their own, each a
+# Vercel service root installed from its own manifest, so each is held to what
+# it declares on the same terms.
+undeclared_packages() {
+    local manifest=$1
+    shift
+    local declared named named_name undeclared=""
+    declared=$(grep -oE '"@sidecar/[a-z-]+": "workspace:\*"' "$manifest" |
+        sed -E 's#"@sidecar/([a-z-]+)".*#\1#' | sort -u)
+    named=$(grep -rhoE --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
+        '(from|import) "@sidecar/[a-z-]+(/[a-z-]+)*"' "$@" |
+        sed -E 's#.*"@sidecar/([a-z-]+).*"#\1#' | sort -u || true)
+    while IFS= read -r named_name; do
+        [[ -z "$named_name" ]] && continue
+        if ! grep -qx "$named_name" <<<"$declared"; then
+            undeclared+="$named_name"$'\n'
+        fi
+    done <<<"$named"
+    printf '%s' "$undeclared"
+}
+undeclared_web_packages=$(undeclared_packages "$SIDECAR_REPO_ROOT/apps/web/package.json" \
+    "$SIDECAR_REPO_ROOT/apps/web/server" "$SIDECAR_REPO_ROOT/apps/web/src" "$SIDECAR_REPO_ROOT/apps/web/scripts")
+for service in eve coder; do
+    undeclared_service_packages=$(undeclared_packages "$SIDECAR_REPO_ROOT/apps/web/$service/package.json" \
+        "$SIDECAR_REPO_ROOT/apps/web/$service")
+    if [[ -n "$undeclared_service_packages" ]]; then
+        undeclared_web_packages+="apps/web/$service: $undeclared_service_packages"
     fi
-done <<<"$named_web_packages"
+done
 if [[ -n "$undeclared_web_packages" ]]; then
     printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @sidecar specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
         "$undeclared_web_packages" >&2

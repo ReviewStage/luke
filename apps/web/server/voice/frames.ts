@@ -1,10 +1,10 @@
+import { decodeLivePayload, LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
 import {
   isWireString,
   type UnparsedWireValue,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "../core.js";
-import { decodeLivePayload, LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "../live.js";
 
 /**
  * Which frames cross the service in which direction. The service is a pipe,

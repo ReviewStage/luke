@@ -5,6 +5,7 @@ import type {
   VoiceSessionRecord,
 } from "@sidecar/database/models/voice-session-record";
 import { VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
+import { LIVE_SERVER_EVENT } from "@sidecar/live";
 import {
   closeGracefully,
   type LiveSideband,
@@ -12,7 +13,6 @@ import {
   type SidebandCloseResult,
 } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
-import { LIVE_SERVER_EVENT } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";
 import type { LiveUpstream } from "./openai.js";
