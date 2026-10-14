@@ -9,6 +9,7 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
 } from "@sidecar/hosted/automation-wire";
+import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
@@ -29,7 +30,8 @@ import { createPlan } from "../plan-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
- * on a plan the account reaches, read and changed by that account alone,
+ * on a plan the account reaches, read and changed by that account alone
+ * while it still reaches the plan,
  * one run per firing however often it is claimed, and a run settled once.
  *
  * Synthetic accounts, workspaces, and plans throughout.
@@ -109,12 +111,11 @@ it.layer(getTestDB())("the automation store", (it) => {
         const paused = Option.getOrThrow(
           yield* updateAutomation(owner, made.id, {
             enabled: false,
-            nextRunAt: null,
             trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
           }),
         );
         assert.equal(paused.enabled, false);
-        assert.equal(paused.nextRunAt, null);
+        assert.equal(paused.nextRunAt, null, "a trigger that is no schedule keeps no due instant");
         assert.deepEqual(paused.trigger, { kind: AUTOMATION_TRIGGER.WEBHOOK });
         assert.equal(paused.name, made.name, "a field the change leaves out stands");
 
@@ -169,6 +170,32 @@ it.layer(getTestDB())("the automation store", (it) => {
           0,
           "a run fired before the instant is not counted",
         );
+      }),
+  );
+
+  it.effect(
+    "an account that leaves the plan's workspace no longer reads, changes, or deletes its automations there, nor their runs",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, nightly(yield* openPlan(owner))),
+        );
+        yield* recordAutomationRun(made, {
+          dedupeKey: "manual-1",
+          firing: { kind: AUTOMATION_FIRING.MANUAL },
+          firedAt: new Date(),
+        });
+        yield* Database.use((db) => db.delete(member).where(eq(member.userId, owner)));
+
+        assert.deepEqual(yield* listAutomations(owner), []);
+        assert.deepEqual(yield* readAutomation(owner, made.id), Option.none());
+        assert.deepEqual(
+          yield* updateAutomation(owner, made.id, { enabled: false }),
+          Option.none(),
+        );
+        assert.equal(yield* deleteAutomation(owner, made.id), false);
+        assert.deepEqual(yield* listAutomationRuns(owner, made.id), []);
       }),
   );
 });

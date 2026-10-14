@@ -1,5 +1,6 @@
 import {
   AUTOMATION_RUN_STATUS,
+  AUTOMATION_TRIGGER,
   type AutomationAction,
   type AutomationFiring,
   type AutomationGuards,
@@ -15,25 +16,27 @@ import {
   automationRunStatusSchema,
   automationTriggerSchema,
 } from "@sidecar/hosted/automation-wire";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect } from "./plan-store.js";
-import { reachablePlan } from "./workspace-store.js";
+import { planReachableBy, reachablePlan } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
  *
  * Every statement an account makes names it beside the automation, so no
- * account reads or changes another's. An automation is made only on a plan
- * the account reaches, a member of the plan's workspace, as every plan
- * statement is gated (`workspace-store.ts`); whether the account still
- * reaches it when a run fires is the run's own check, made on the one path
- * a Start takes. The trigger, the action, and the guards are decoded through
+ * account reads or changes another's, and gates on the account still
+ * reaching the automation's plan, a member of the plan's workspace, as every
+ * plan statement is gated (`workspace-store.ts`): an account that leaves the
+ * workspace leaves its automations there with it, unread and unchanged,
+ * and their runs fail on the same check when they fire. A trigger is kept
+ * with only the columns it uses: a schedule's due instant and a webhook's
+ * secret hash are cleared whenever the trigger is no longer of their kind. The trigger, the action, and the guards are decoded through
  * the wire's own schemas on every read. A run is recorded under its firing's
  * dedupe key, so a firing claimed twice answers nothing the second time,
  * and settled once, from queued to started, skipped, or failed. When a
@@ -90,7 +93,11 @@ export interface NewAutomation {
   readonly webhookSecretHash: string | null;
 }
 
-/** What a change names: any of the fields, at once; a field left out stands as it was. */
+/**
+ * What a change names: any of the fields, at once; a field left out stands
+ * as it was, but for a new trigger, which clears the columns its kind does
+ * not use and takes the due instant and the secret hash the change names.
+ */
 export interface AutomationChanges {
   readonly name?: string;
   readonly enabled?: boolean;
@@ -147,6 +154,33 @@ export type AutomationRunOutcome =
 
 const AutomationKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
+/** The condition that the account owns the automation a statement reads and still reaches its plan. */
+function ownedAndReachable(userId: string, id?: string): SQL | undefined {
+  return and(
+    id === undefined ? undefined : eq(automation.id, id),
+    eq(automation.userId, userId),
+    inArray(
+      automation.planId,
+      queryBuilder.select({ id: plan.id }).from(plan).where(planReachableBy(userId)),
+    ),
+  );
+}
+
+/** The columns only one kind of trigger uses, cleared under any other kind. */
+function triggerColumns(
+  trigger: AutomationTrigger,
+  nextRunAt: Date | null | undefined,
+  webhookSecretHash: string | null | undefined,
+) {
+  return {
+    triggerKind: trigger.kind,
+    trigger,
+    nextRunAt: trigger.kind === AUTOMATION_TRIGGER.SCHEDULE ? (nextRunAt ?? null) : null,
+    webhookSecretHash:
+      trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? (webhookSecretHash ?? null) : null,
+  };
+}
+
 const findReachablePlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -178,12 +212,9 @@ const insertAutomation = SqlSchema.findAll({
           planId: row.planId,
           name: row.name,
           enabled: true,
-          triggerKind: row.trigger.kind,
-          trigger: row.trigger,
+          ...triggerColumns(row.trigger, row.nextRunAt, row.webhookSecretHash),
           action: row.action,
           guards: row.guards,
-          nextRunAt: row.nextRunAt,
-          webhookSecretHash: row.webhookSecretHash,
           createdAt: row.now,
           updatedAt: row.now,
         })
@@ -202,7 +233,7 @@ const findAutomations = SqlSchema.findAll({
         .innerJoin(plan, eq(plan.id, automation.planId))
         .where(
           and(
-            eq(automation.userId, userId),
+            ownedAndReachable(userId),
             planId === null ? undefined : eq(automation.planId, planId),
           ),
         )
@@ -219,7 +250,7 @@ const findAutomation = SqlSchema.findOneOption({
         .select(AUTOMATION_COLUMNS)
         .from(automation)
         .innerJoin(plan, eq(plan.id, automation.planId))
-        .where(and(eq(automation.id, id), eq(automation.userId, userId))),
+        .where(ownedAndReachable(userId, id)),
     ),
 });
 
@@ -237,16 +268,20 @@ const writeAutomation = SqlSchema.findAll({
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, now, trigger, ...changes }) =>
+  execute: ({ userId, id, now, trigger, nextRunAt, webhookSecretHash, ...changes }) =>
     Database.use((db) =>
       db
         .update(automation)
         .set({
           ...changes,
-          ...(trigger === undefined ? undefined : { trigger, triggerKind: trigger.kind }),
+          ...(nextRunAt === undefined ? undefined : { nextRunAt }),
+          ...(webhookSecretHash === undefined ? undefined : { webhookSecretHash }),
+          ...(trigger === undefined
+            ? undefined
+            : triggerColumns(trigger, nextRunAt, webhookSecretHash)),
           updatedAt: now,
         })
-        .where(and(eq(automation.id, id), eq(automation.userId, userId)))
+        .where(ownedAndReachable(userId, id))
         .returning({ id: automation.id }),
     ),
 });
@@ -256,10 +291,7 @@ const removeAutomation = SqlSchema.findAll({
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, id }) =>
     Database.use((db) =>
-      db
-        .delete(automation)
-        .where(and(eq(automation.id, id), eq(automation.userId, userId)))
-        .returning({ id: automation.id }),
+      db.delete(automation).where(ownedAndReachable(userId, id)).returning({ id: automation.id }),
     ),
 });
 
@@ -311,7 +343,15 @@ const findRuns = SqlSchema.findAll({
       db
         .select(RUN_COLUMNS)
         .from(automationRun)
-        .where(and(eq(automationRun.automationId, automationId), eq(automationRun.userId, userId)))
+        .where(
+          inArray(
+            automationRun.automationId,
+            queryBuilder
+              .select({ id: automation.id })
+              .from(automation)
+              .where(ownedAndReachable(userId, automationId)),
+          ),
+        )
         .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
         .limit(limit),
     ),
