@@ -5549,6 +5549,20 @@ button.automation-run:hover {
   margin: 0;
 }
 
+.chat-byline-action {
+  margin-left: auto;
+  opacity: 0;
+}
+
+.chat-message:hover .chat-byline-action,
+.chat-byline-action:focus-within {
+  opacity: 1;
+}
+
+.chat-byline-action .chat-thread-toggle {
+  padding: 0;
+}
+
 .chat-author {
   font-weight: 600;
 }
@@ -5663,6 +5677,127 @@ button.automation-run:hover {
   color: var(--voice-luke);
   font-size: 13px;
   font-weight: 500;
+}
+
+/* The composer at a place's foot, at the stream's reading measure: the box,
+   and under it a bar of what it takes with the round send at its end. */
+.chat-composer {
+  position: relative;
+  width: calc(100% - 2 * var(--column-inset));
+  max-width: 900px;
+  margin: var(--space-12) auto var(--space-16);
+}
+
+.chat-thread .chat-composer {
+  width: 100%;
+  margin: var(--space-6) 0 0;
+}
+
+.chat-composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.chat-composer[data-compact="true"] .chat-composer-box {
+  padding: var(--space-6) 10px;
+  border-radius: 10px;
+}
+
+.chat-composer-field,
+.chat-ask-note-field {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+  outline: none;
+}
+
+.chat-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.chat-composer[data-compact="true"] .chat-composer-bar {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+}
+
+.chat-send {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.chat-send:not(:disabled) {
+  background: var(--message-sent);
+  color: white;
+}
+
+.chat-send svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chat-composer-note {
+  margin: var(--space-6) 0 0;
+}
+
+/* The list an `@` or `#` opens stands over the box at its left. */
+.chat-mention-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-4));
+  left: 0;
+  width: 320px;
+  z-index: 10;
+}
+
+/* An open ask's note line, the round send at its end where the note is what is sent. */
+.chat-ask-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-4) 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--desktop-sidebar);
+}
+
+.chat-ask-presses {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.chat-ask-quiet,
+.chat-ask-settled {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-ask-settled-note {
+  color: var(--text-primary);
 }
 
 .chat-empty {

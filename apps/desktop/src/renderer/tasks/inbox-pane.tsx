@@ -484,7 +484,7 @@ function OptionHead({
 }
 
 /** A choice's options, each pressed to pick it, the one the agent recommends wearing its badge; several stay pressed where the choice allows. */
-function ChoiceOptions({
+export function ChoiceOptions({
   choice,
   draft,
   disabled,
@@ -598,7 +598,7 @@ function FormField({
 }
 
 /** A form's fields, in the agent's order. */
-function FormFields({
+export function FormFields({
   form,
   draft,
   disabled,

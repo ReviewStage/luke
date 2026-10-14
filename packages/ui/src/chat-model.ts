@@ -1,13 +1,17 @@
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
   type ChatMember,
   type ChatMessage,
+  type ChatReply,
   MEMBER_KIND,
+  type postChatInputSchema,
 } from "@luke/features/chat-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
+import type { ChatTarget } from "./chat-mention.js";
 
 /**
  * chat-model.ts -- what the window's Chat draws of a workspace's chat: the rail of places, each channel's unread count, a channel's messages with their threads, and For you.
@@ -24,6 +28,11 @@ import type { TaskAgentLine } from "@luke/features/task-wire";
  * someone else posted, the oldest first, since the longest kept waiting is
  * answered first, then each direct message and mention of the reader not
  * yet read, the oldest first.
+ *
+ * What the window sends is a post, in the shape an agent's `post_chat`
+ * takes, to the place shown or into a thread, or an answer to an ask at
+ * the revision the developer read. The composer offers every member who
+ * has not left by `@handle` and every channel standing by `#name`.
  */
 
 /** The places the window's Chat shows: For you, or one channel. */
@@ -50,6 +59,16 @@ export const FOR_YOU_REASON = {
 } as const;
 
 type ForYouReason = (typeof FOR_YOU_REASON)[keyof typeof FOR_YOU_REASON];
+
+/** A post the window sends: the words, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `postChatInputSchema`). */
+export type ChatPost = typeof postChatInputSchema.Type;
+
+/** An answer the window sends to an ask: the message carrying it, the revision the developer read, and the answer. */
+export interface ChatAskAnswer {
+  readonly seq: number;
+  readonly revision: number;
+  readonly reply: ChatReply;
+}
 
 /** What Luke is called wherever a plan's planner speaks. */
 const PLANNER_NAME = "Luke";
@@ -230,4 +249,38 @@ export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
 export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | undefined {
   if (place.kind !== CHAT_PLACE.CHANNEL) return undefined;
   return chat.channels.find((channel) => channel.id === place.channelId);
+}
+
+/** Where a post to the channel goes, as `post_chat`'s `to` names it: `#name`, or a DM's `@handle`. */
+export function postTarget(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+  const label = channelLabel(chat, names, channel);
+  return channel.kind === CHANNEL_KIND.DM
+    ? `${CHAT_TARGET_SIGIL.MEMBER}${label}`
+    : `${CHAT_TARGET_SIGIL.CHANNEL}${label}`;
+}
+
+/** What the composer offers to name: every member who has not left but the reader, and every channel standing that is not a DM. */
+export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTarget[] {
+  const members = chat.members
+    .filter((member) => !member.left && member.id !== chat.self)
+    .map((member): ChatTarget => {
+      const who = chatWho(chat, names, member.id);
+      const detail = member.kind === MEMBER_KIND.HUMAN ? undefined : who.name;
+      return { sigil: CHAT_TARGET_SIGIL.MEMBER, name: member.handle, detail };
+    });
+  const channels = chat.channels
+    .filter((channel) => !channel.archived && channel.kind !== CHANNEL_KIND.DM)
+    .map(
+      (channel): ChatTarget => ({
+        sigil: CHAT_TARGET_SIGIL.CHANNEL,
+        name: channelLabel(chat, names, channel),
+        detail: channel.planId === undefined ? undefined : names.plans.get(channel.planId),
+      }),
+    );
+  // Note that every plan's planner answers to `@luke`, so a handle is offered once.
+  const offered = [...members, ...channels];
+  return offered.filter(
+    (target, at) =>
+      offered.findIndex((each) => each.sigil === target.sigil && each.name === target.name) === at,
+  );
 }

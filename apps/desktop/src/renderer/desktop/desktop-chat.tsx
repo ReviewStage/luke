@@ -168,7 +168,15 @@ export function DesktopChat({
           )}
         </div>
       </nav>
-      <ChatPane chat={chat} names={names} place={view.place} now={now} openLink={openLink} />
+      <ChatPane
+        chat={chat}
+        names={names}
+        place={view.place}
+        now={now}
+        openLink={openLink}
+        onPost={view.onPost}
+        onAnswer={view.onAnswer}
+      />
     </div>
   );
 }

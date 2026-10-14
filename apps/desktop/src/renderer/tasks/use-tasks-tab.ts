@@ -27,7 +27,7 @@ import {
 } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { callCard } from "@luke/ui/call-card-model";
-import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
+import { type ChatAskAnswer, type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
 import {
   isAgentTab,
   isChangesTab,
@@ -108,7 +108,7 @@ import {
   useConfirmDialog,
 } from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
-import type { FixtureChat } from "./chat-fixture";
+import type { FixtureChat, Staged } from "./chat-fixture";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -337,7 +337,17 @@ interface ChatViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
+  /** Posts a message as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
 }
+
+/** The fixture's staging, as a fixture run imports it. */
+type ChatStager = typeof import("./chat-fixture");
+
+/** What a post or an answer says where no chat is read to send it to. */
+const NO_CHAT_SERVICE = "Chat is not available yet.";
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
@@ -930,22 +940,35 @@ export function useTasksTab(input: {
   /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
   const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
   /**
-   * The chat a fixture run stages, stamped once at the moment it lands.
-   * Note that its module is imported only by a fixture run, because its
+   * The chat a fixture run stages, stamped once at the moment it lands,
+   * which its own posts and answers land in, and the module that stages it.
+   * Note that the module is imported only by a fixture run, because its
    * synthetic chat must never ship in the bundle every launch parses.
    */
   const [chat, setChat] = useState<FixtureChat | undefined>(undefined);
+  const [stager, setStager] = useState<ChatStager | undefined>(undefined);
   const { fixtureMode } = input.run;
   useEffect(() => {
     if (!fixtureMode) return;
     let live = true;
     import("./chat-fixture").then((loaded) => {
-      if (live) setChat(loaded.fixtureChat({ fixtureMode }, Date.now()));
+      if (!live) return;
+      setStager(loaded);
+      setChat(loaded.fixtureChat({ fixtureMode }, Date.now()));
     });
     return () => {
       live = false;
     };
   }, [fixtureMode]);
+  const stage = (
+    staged: (held: FixtureChat, staging: ChatStager) => Staged,
+  ): Promise<string | undefined> => {
+    if (chat === undefined || stager === undefined) return Promise.resolve(NO_CHAT_SERVICE);
+    const landed = staged(chat, stager);
+    if ("refused" in landed) return Promise.resolve(landed.refused);
+    setChat(landed.chat);
+    return Promise.resolve(undefined);
+  };
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly taskId: string; readonly ref: CodeRef; readonly commit: string } | undefined
@@ -2553,6 +2576,9 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
         ),
+      onPost: (post) => stage((held, staging) => staging.stagedPost(held, post, Date.now())),
+      onAnswer: (answer) =>
+        stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
     },
     // An agent's page stands over the plan's place as the Inbox does, so a version history there gives way.
     agentView: {
