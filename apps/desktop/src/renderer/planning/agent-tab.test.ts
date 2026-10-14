@@ -5,7 +5,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

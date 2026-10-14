@@ -10,12 +10,12 @@
  * inside it, so the list cannot show both.
  */
 
-import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { ACT_KIND } from "#shared/messages/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { ago, daysAgo, hoursAgo } from "./clock";

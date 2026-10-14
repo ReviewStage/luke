@@ -3,8 +3,8 @@ import {
   type CodingAgentBrief,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/coding-agent-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";

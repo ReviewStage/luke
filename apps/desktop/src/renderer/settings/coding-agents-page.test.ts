@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

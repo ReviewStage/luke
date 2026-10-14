@@ -2,13 +2,13 @@ import {
   PLAN_EDIT_REFUSAL,
   type PlanEditRequest,
   type PlanEditValue,
-} from "@sidecar/hosted/plan-edit";
-import { PLAN_BOUNDS } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-edit";
+import { PLAN_BOUNDS } from "@sidecar/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   type PlanningEditAnswer,
   type PlanningEditFailure,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { Schema } from "effect";
 
 /**
@@ -18,7 +18,7 @@ import { Schema } from "effect";
  * text as the plan holds it, which is the edit's base: what the developer's
  * words were written from. Each save sends that base and the words, and the
  * service lays the change over whatever Luke wrote meanwhile
- * (`@sidecar/hosted/plan-edit`). Each save that lands moves the base to what
+ * (`@sidecar/features/plan-edit`). Each save that lands moves the base to what
  * was saved, so the next save is a change from the developer's own last
  * words. One save is out at a time; words typed while it is out are saved
  * once it answers. A conflict holds the editor open with the developer's

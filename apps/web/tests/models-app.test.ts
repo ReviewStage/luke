@@ -4,13 +4,13 @@ import { Database } from "@sidecar/database/core/query";
 import { saveProviderKey } from "@sidecar/database/models/provider-key-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { HOSTED_API_ERROR } from "@sidecar/hosted";
-import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { HOSTED_API_ERROR } from "@sidecar/features";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
   PROVIDER_KEY_PROVIDER,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { Effect, Layer, Logger, Option } from "effect";
 import { HttpRouter } from "effect/http";

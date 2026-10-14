@@ -7,7 +7,7 @@ import {
 import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

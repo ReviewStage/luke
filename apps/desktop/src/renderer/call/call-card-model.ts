@@ -7,7 +7,7 @@
  * the bar can never disagree about the call they draw.
  */
 
-import type { PlanningView } from "@sidecar/hosted/planning-view";
+import type { PlanningView } from "@sidecar/features/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
 import { type CallStatus, standingCallStatus } from "../planning/planning-model";

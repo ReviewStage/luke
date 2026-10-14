@@ -2,7 +2,7 @@ import { UI_PART_STATE, UI_PART_TYPE } from "@sidecar/brain";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   type DataUIPart,
   type FileUIPart,

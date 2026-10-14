@@ -2,7 +2,7 @@ import {
   MAC_COMMAND_BOUNDS,
   type MacCommand,
   type MacCommandResult,
-} from "@sidecar/hosted/mac-command-wire";
+} from "@sidecar/features/mac-command-wire";
 import { Duration, Effect, Fiber, Option, Ref, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 

@@ -1,8 +1,8 @@
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
-} from "@sidecar/hosted/integration-view";
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-view";
+import type { IntegrationProvider } from "@sidecar/features/integration-wire";
 import { useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";

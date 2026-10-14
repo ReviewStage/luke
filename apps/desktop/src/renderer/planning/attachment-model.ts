@@ -1,4 +1,4 @@
-import { base64Bytes } from "@sidecar/hosted/coding-agent-wire";
+import { base64Bytes } from "@sidecar/features/coding-agent-wire";
 
 /**
  * attachment-model.ts -- one file on a message as its chip and its viewer read it: its bytes from its `data:` URL, its size in words, and how it is shown.

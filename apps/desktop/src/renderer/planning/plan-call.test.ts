@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
+import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
+import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
+import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { TURN_ORIGIN } from "@sidecar/wire";
 import { act, createElement } from "react";

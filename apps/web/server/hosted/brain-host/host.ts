@@ -6,7 +6,7 @@ import { hostTurnId } from "@sidecar/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
 import { readPlanOfConversation } from "@sidecar/database/models/plan-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
+import { EMPTY_BOARD } from "@sidecar/features/board-wire";
 import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

@@ -1,11 +1,4 @@
 import { isDeepStrictEqual } from "node:util";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  invalid,
-} from "@sidecar/gateway";
 import type {
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
@@ -15,22 +8,25 @@ import type {
   PlanDraftFrame,
   PlanMarks,
   WorkspaceCallResult,
-} from "@sidecar/hosted";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
-import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+} from "@sidecar/features";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
+import {
+  DRAW_ON_BOARD_TOOL_NAME,
+  LOOK_AT_BOARD_TOOL_NAME,
+} from "@sidecar/features/board-vocabulary";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
   type CodingAgentMessagesAnswerView,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   applyMessagesPage,
   CODING_AGENT_STATUS,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
-} from "@sidecar/hosted/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
-import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
+import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -84,8 +80,15 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-} from "@sidecar/hosted/planning-view";
-import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
+} from "@sidecar/features/planning-view";
+import { EMPTY_TRANSCRIPT } from "@sidecar/features/transcript-wire";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@sidecar/gateway";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {

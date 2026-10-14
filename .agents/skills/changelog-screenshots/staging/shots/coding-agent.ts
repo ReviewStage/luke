@@ -17,9 +17,9 @@ import type {
   CodingAgentMessagesAnswerView,
   CodingAgentModelsAnswer,
   CodingAgentPullRequestAnswerView,
-} from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-view";
+import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { ACT_KIND } from "#shared/messages/acts";
 import { ago } from "./clock";

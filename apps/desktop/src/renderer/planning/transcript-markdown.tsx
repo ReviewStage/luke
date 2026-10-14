@@ -1,4 +1,4 @@
-import type { CodeLines } from "@sidecar/hosted/planning-view";
+import type { CodeLines } from "@sidecar/features/planning-view";
 import {
   type ComponentProps,
   createContext,

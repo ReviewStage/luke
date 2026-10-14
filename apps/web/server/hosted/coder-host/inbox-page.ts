@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { AccountInboxAnswer } from "@sidecar/hosted/account-inbox-wire";
-import type { InboxAnswer } from "@sidecar/hosted/inbox-wire";
+import type { AccountInboxAnswer } from "@sidecar/features/account-inbox-wire";
+import type { InboxAnswer } from "@sidecar/features/inbox-wire";
 import { Clock, type Duration, Effect, Schedule } from "effect";
 import {
   accountInboxPlans,

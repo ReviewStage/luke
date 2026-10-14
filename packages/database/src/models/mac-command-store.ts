@@ -2,7 +2,7 @@ import {
   type MacCommand,
   type MacCommandResult,
   macCommandResultSchema,
-} from "@sidecar/hosted/mac-command-wire";
+} from "@sidecar/features/mac-command-wire";
 import { and, asc, eq, gte, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

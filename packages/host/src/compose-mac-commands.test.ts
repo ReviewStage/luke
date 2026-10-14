@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { MacCommand } from "@sidecar/hosted/mac-command-wire";
+import type { MacCommand } from "@sidecar/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Ref } from "effect";
 import { TestClock } from "effect/testing";
 import { composeMacCommands, type MacCommandClient } from "./compose-mac-commands.js";

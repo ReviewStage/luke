@@ -4,7 +4,7 @@ import {
   type Plan,
   type PlanSectionEdit,
   type PlanSummary,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useEffect, useState } from "react";

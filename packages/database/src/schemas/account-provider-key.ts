@@ -2,7 +2,7 @@ import type {
   FastAccess,
   ProviderKeyProvider,
   ProviderKeyStatus,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

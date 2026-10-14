@@ -1,4 +1,4 @@
-import { DICTATION_AUDIO_TYPE } from "@sidecar/hosted/dictation-wire";
+import { DICTATION_AUDIO_TYPE } from "@sidecar/features/dictation-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";

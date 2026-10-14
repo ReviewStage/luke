@@ -1,4 +1,4 @@
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {

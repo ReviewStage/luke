@@ -13,7 +13,7 @@
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 import {
   CONNECT_SIGN_IN_RESULT,

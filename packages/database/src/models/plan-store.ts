@@ -1,13 +1,13 @@
-import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/hosted/plan-template";
+import type { PlanSectionWriter } from "@sidecar/features/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
+import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/features/plan-template";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

@@ -3,7 +3,7 @@ import {
   type Workspace as WireWorkspace,
   WORKSPACE_ROLE,
   type WorkspaceRole,
-} from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/workspace-wire";
 import { and, asc, eq, exists, type SQL, type SQLWrapper } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

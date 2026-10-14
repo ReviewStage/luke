@@ -8,9 +8,9 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/hosted/inbox-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/inbox-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
 import { test } from "vitest";
 import {
   CODE_READ,

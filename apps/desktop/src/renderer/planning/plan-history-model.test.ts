@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@sidecar/features/plan-wire";
 import { test } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";

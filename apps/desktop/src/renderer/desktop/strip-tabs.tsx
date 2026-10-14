@@ -1,4 +1,4 @@
-import type { CodingAgentStatus, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentStatus, CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
 import { CloseIcon, CopyIcon, PencilIcon, PinIcon, PlusIcon, UnpinIcon } from "@sidecar/panel";
 import { ListXIcon, ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";

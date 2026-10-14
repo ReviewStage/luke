@@ -1,11 +1,4 @@
 import {
-  carried,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  type GatewayShutdownSteps,
-  NODE_CAPABILITY_STATUS,
-} from "@sidecar/gateway";
-import {
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -16,7 +9,14 @@ import {
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
+import {
+  carried,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  type GatewayShutdownSteps,
+  NODE_CAPABILITY_STATUS,
+} from "@sidecar/gateway";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";

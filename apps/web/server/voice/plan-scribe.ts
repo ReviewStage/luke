@@ -7,13 +7,13 @@ import {
   planNotesSchema,
   readNotes,
   textNotesInProgress,
-} from "@sidecar/hosted/plan-template";
+} from "@sidecar/features/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
   type PlanDocument,
   type PlanSectionEdit,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,

@@ -5,8 +5,8 @@ import {
   receivedPartsOf,
 } from "@sidecar/database/models/attached-file-parts";
 import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
-import { MENTION_KIND, mentionMarkdown } from "@sidecar/hosted/mention-link";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { MENTION_KIND, mentionMarkdown } from "@sidecar/features/mention-link";
+import type { Plan } from "@sidecar/features/plan-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "../server/hosted/attached-files";
 import { MENTIONED_BOUNDS, mentionedContext } from "../server/hosted/mentioned-context";

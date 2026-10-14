@@ -6,7 +6,7 @@ import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
+import { PLAN_HEADING } from "@sidecar/features/plan-template";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,

@@ -18,7 +18,7 @@ import { integrationConnection } from "@sidecar/database/schemas/integration";
 import {
   type IntegrationProvider,
   integrationProviderSchema,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

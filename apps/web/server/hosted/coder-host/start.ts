@@ -9,11 +9,11 @@ import {
   discardCodingAgent,
 } from "@sidecar/database/models/coding-agent-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
-import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
-import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import type { CodingAgentAttachment } from "@sidecar/features/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
+import { planMarkdown } from "@sidecar/features/plan-markdown";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

@@ -6,8 +6,8 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";

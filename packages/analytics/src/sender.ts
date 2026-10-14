@@ -6,7 +6,7 @@ import {
   CALL_FAULT,
   callAnswered,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
 import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";

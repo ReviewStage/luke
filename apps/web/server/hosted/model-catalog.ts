@@ -1,12 +1,12 @@
-import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
 import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@sidecar/hosted/models-wire";
-import { FAST_ACCESS, type FastAccess } from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/models-wire";
+import { FAST_ACCESS, type FastAccess } from "@sidecar/features/provider-key-wire";
 import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -107,7 +107,7 @@ export interface PricedTokens {
 }
 
 /**
- * One model as the service offers it: the wire's model (`@sidecar/hosted/models-wire`),
+ * One model as the service offers it: the wire's model (`@sidecar/features/models-wire`),
  * which `/api/models` answers and a Start is checked against, and beside it
  * what the catalog lists and the wire does not carry: the model's whole
  * context window, which a session on a model with one window is told, and

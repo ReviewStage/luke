@@ -14,7 +14,7 @@ import {
   type ProviderKeyProvider,
   type ProviderKeysAnswer,
   providerKeysAnswerSchema,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";

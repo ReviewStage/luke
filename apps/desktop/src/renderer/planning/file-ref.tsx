@@ -1,5 +1,5 @@
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
+import type { CodeRef } from "@sidecar/features/plan-wire";
+import type { PlanCodeShowing } from "@sidecar/features/planning-view";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "./code-pane-model";

@@ -1,4 +1,4 @@
-import type { MacCommandResult } from "@sidecar/hosted/mac-command-wire";
+import type { MacCommandResult } from "@sidecar/features/mac-command-wire";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

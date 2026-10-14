@@ -1,4 +1,4 @@
-# `@sidecar/hosted`
+# `@sidecar/features`
 
 The desktop-to-service wire boundary: the hosted service paths, one wire module
 per domain, and the clients that speak them.

@@ -9,18 +9,18 @@ import {
 } from "@sidecar/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-store";
 import { member, organization, user } from "@sidecar/database/schemas/auth";
-import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/features";
 import {
   workspaceInvitationAnswerSchema,
   workspaceInvitationsAnswerSchema,
-} from "@sidecar/hosted/workspace-invitation-wire";
+} from "@sidecar/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   workspaceAnswerSchema,
   workspaceGithubConnectAnswerSchema,
   workspacesAnswerSchema,
-} from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/workspace-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";

@@ -1,4 +1,4 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -7,9 +7,9 @@ import {
   type CodingAgentSubagentStanding,
   TURN_ENDING,
   type TurnRecord,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { PLAN_WORK_STATE, type PlanWorkState } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
+import { PLAN_WORK_STATE, type PlanWorkState } from "@sidecar/features/planning-view";
 import {
   isRecord,
   isWireString,

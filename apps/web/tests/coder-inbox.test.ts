@@ -5,7 +5,12 @@ import { Database } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
+import {
+  INBOX_BLOCK,
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+} from "@sidecar/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

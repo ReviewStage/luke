@@ -1,9 +1,9 @@
-import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@sidecar/features/agent-tools";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
   codingAgentTodosInputSchema,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_FIELD,
@@ -11,10 +11,10 @@ import {
   type InboxPost,
   type InboxPostBlock,
   inboxPostInputSchema,
-} from "@sidecar/hosted/inbox-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import type { PlanNote } from "@sidecar/hosted/plan-template";
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/inbox-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
+import type { PlanNote } from "@sidecar/features/plan-template";
+import type { CodeRef } from "@sidecar/features/plan-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";

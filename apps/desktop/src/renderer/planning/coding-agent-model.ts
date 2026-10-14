@@ -1,8 +1,8 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
@@ -21,19 +21,19 @@ import {
   type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@sidecar/hosted/coding-agent-wire";
-import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
+} from "@sidecar/features/coding-agent-wire";
+import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/models-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/hosted/repository-reach-wire";
+} from "@sidecar/features/repository-reach-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
@@ -383,7 +383,7 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 
 /**
  * A model as a tab or a menu names it, shared with the main process's
- * notifications so one model is never named two ways (`@sidecar/hosted/model-label`).
+ * notifications so one model is never named two ways (`@sidecar/features/model-label`).
  */
 export { modelLabel };
 

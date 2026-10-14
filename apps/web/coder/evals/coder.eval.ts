@@ -5,7 +5,7 @@ import { type CodingAgent, createCodingAgent } from "@sidecar/database/models/co
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
-import { CODING_AGENT_TODO_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_TODO_STATUS } from "@sidecar/features/coding-agent-wire";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";

@@ -10,7 +10,7 @@ import {
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
-} from "@sidecar/hosted/automation-wire";
+} from "@sidecar/features/automation-wire";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";

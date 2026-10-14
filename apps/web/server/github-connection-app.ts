@@ -4,11 +4,11 @@ import {
   githubConnection,
   openGitHubConnectIntent,
 } from "@sidecar/database/models/github-connection-store";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { HOSTED_SERVICE_PATH } from "@sidecar/features";
 import {
   GITHUB_CONNECT_PAGE,
   githubConnectClaimRequestSchema,
-} from "@sidecar/hosted/github-connection-wire";
+} from "@sidecar/features/github-connection-wire";
 import { HTTP_METHOD } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";

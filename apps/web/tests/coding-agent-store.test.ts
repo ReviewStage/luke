@@ -25,7 +25,7 @@ import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { joinWorkspace, startPlan } from "./support/workspaces";

@@ -7,7 +7,7 @@ import {
   type SealOwner,
   sealProviderKey,
 } from "@sidecar/database/models/provider-key-seal";
-import { PROVIDER_KEY_PROVIDER } from "@sidecar/hosted/provider-key-wire";
+import { PROVIDER_KEY_PROVIDER } from "@sidecar/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 import { test } from "vitest";
 

@@ -1,6 +1,9 @@
-import type { GitHubRepository } from "@sidecar/hosted";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
+import type { GitHubRepository } from "@sidecar/features";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+import {
+  PLAN_CALL_FAILURE,
+  type PlanningRepositoriesAnswer,
+} from "@sidecar/features/planning-view";
 import { GearIcon } from "@sidecar/panel";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";

@@ -9,7 +9,7 @@ import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import type { FileUIPart, UserContent } from "ai";
 import type { MessageReceivedPart } from "eve/client";
 

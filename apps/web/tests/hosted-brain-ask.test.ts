@@ -16,7 +16,7 @@ import {
 import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { ASK_ORIGIN } from "@sidecar/hosted";
+import { ASK_ORIGIN } from "@sidecar/features";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema } from "effect";

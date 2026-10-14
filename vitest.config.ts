@@ -14,7 +14,7 @@ export default defineConfig({
       "packages/gateway",
       "packages/settings",
       "packages/voice",
-      "packages/hosted",
+      "packages/features",
       "packages/credentials",
       "packages/analytics",
       "packages/database",

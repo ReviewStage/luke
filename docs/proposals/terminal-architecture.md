@@ -369,9 +369,9 @@ one chain, since they touch `side-panel.tsx`, `use-side-panel.ts` and
 The renderer reaches terminals through acts, which carry ids, sizes and
 names, never bytes, and through one `MessagePort` per attached shell, which
 carries only bytes and connection state. Field names follow the service's
-wire (`@sidecar/hosted/terminal-wire`): a shell is `id` and `title`.
+wire (`@sidecar/features/terminal-wire`): a shell is `id` and `title`.
 
-### Vocabulary (`@sidecar/hosted/terminal-wire`)
+### Vocabulary (`@sidecar/features/terminal-wire`)
 
 - `SANDBOX_STATE`: `running` | `stopped` | `starting`.
   - `starting` covers an agent that hasn't opened its sandbox yet (its

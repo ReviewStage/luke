@@ -12,19 +12,19 @@ import {
 } from "@sidecar/credentials/snapshot";
 import { AgentTraceWriter, agentTraceDirectory } from "@sidecar/devtrace";
 import {
+  AccountRefreshFailed,
+  type AccountSessionToken,
+  type AccountToken,
+  hostedVoiceServiceOrigin,
+  VOICE_SERVICE_ORIGIN_VARIABLE,
+} from "@sidecar/features";
+import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import {
-  AccountRefreshFailed,
-  type AccountSessionToken,
-  type AccountToken,
-  hostedVoiceServiceOrigin,
-  VOICE_SERVICE_ORIGIN_VARIABLE,
-} from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";

@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

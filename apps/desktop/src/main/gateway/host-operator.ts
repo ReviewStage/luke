@@ -1,21 +1,7 @@
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  gatewayEventReader,
-  type VoiceCreateLiveSessionResult,
-  type VoiceEndLiveSessionParams,
-  type VoiceLiveSessionChanged,
-  type VoiceReportLiveTransportParams,
-  voiceCreateLiveSessionResultSchema,
-  voiceLiveSessionChangedSchema,
-  voiceStopSpeakingResultSchema,
-} from "@sidecar/gateway";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -70,7 +56,7 @@ import {
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationConnectView,
@@ -82,8 +68,8 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@sidecar/hosted/integration-view";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/integration-view";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -151,7 +137,21 @@ import {
   planningWorkspaceInvitationsAnswerSchema,
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
+import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  gatewayEventReader,
+  type VoiceCreateLiveSessionResult,
+  type VoiceEndLiveSessionParams,
+  type VoiceLiveSessionChanged,
+  type VoiceReportLiveTransportParams,
+  voiceCreateLiveSessionResultSchema,
+  voiceLiveSessionChangedSchema,
+  voiceStopSpeakingResultSchema,
+} from "@sidecar/gateway";
 import type { LiveDiagnostics } from "@sidecar/live";
 import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";

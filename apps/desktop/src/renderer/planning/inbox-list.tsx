@@ -1,6 +1,6 @@
-import { INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import { INBOX_STATUS } from "@sidecar/features/inbox-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";

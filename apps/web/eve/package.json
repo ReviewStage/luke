@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@sidecar/database": "workspace:*",
-    "@sidecar/hosted": "workspace:*",
+    "@sidecar/features": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "ai": "catalog:",
     "drizzle-orm": "catalog:",

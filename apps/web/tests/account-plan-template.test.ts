@@ -20,14 +20,14 @@ import {
   type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
   MODEL_PROVIDER,
-} from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateAnswer,
   type PlanTemplateRevisionsAnswer,
   planTemplateAnswerSchema,
   planTemplateRevisionsAnswerSchema,
-} from "@sidecar/hosted/plan-document-template";
+} from "@sidecar/features/plan-document-template";
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";

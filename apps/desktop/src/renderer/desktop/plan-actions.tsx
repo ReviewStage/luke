@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import {
   ArchiveIcon,
   CopyIcon,

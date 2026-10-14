@@ -23,7 +23,7 @@ import {
   automationTargetKindSchema,
   automationTriggerSchema,
   type GitHubTriggerEvent,
-} from "@sidecar/hosted/automation-wire";
+} from "@sidecar/features/automation-wire";
 import {
   and,
   asc,

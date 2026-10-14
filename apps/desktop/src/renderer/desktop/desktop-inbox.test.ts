@@ -5,8 +5,8 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
-} from "@sidecar/hosted/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-view";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_FIELD,
@@ -15,8 +15,8 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/hosted/inbox-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/inbox-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";

@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { highlightSnippet } from "@sidecar/host";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { PLAN_FILE_REFUSAL } from "@sidecar/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -11,8 +10,9 @@ import {
   type PlanningGitHubPageAnswer,
   type PlanningStartAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
-} from "@sidecar/hosted/planning-view";
-import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/planning-view";
+import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
+import { highlightSnippet } from "@sidecar/host";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import {

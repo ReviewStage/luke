@@ -34,10 +34,10 @@ export {
   userMetadataOf,
 } from "@sidecar/brain";
 export { wireValidatedTool } from "@sidecar/brain/tool-set";
-export * from "@sidecar/hosted";
+export * from "@sidecar/features";
 // The planning vocabulary stands behind doors of its own, which the barrel
 // above re-exports nothing of.
-export * from "@sidecar/hosted/plan-wire";
+export * from "@sidecar/features/plan-wire";
 export * from "@sidecar/runtime/vocabulary";
 export * from "@sidecar/session";
 export * from "@sidecar/session/ui-messages";

@@ -1,6 +1,6 @@
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import type { InboxItem } from "@sidecar/hosted/inbox-wire";
-import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import type { InboxItem } from "@sidecar/features/inbox-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { AppInboxWaitingItem } from "#shared/messages/app-state";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";

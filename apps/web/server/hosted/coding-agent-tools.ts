@@ -14,9 +14,9 @@ import {
   type CodingAgentFailure,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
-} from "@sidecar/hosted/coding-agent-wire";
-import { modelLabel } from "@sidecar/hosted/model-label";
-import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { modelLabel } from "@sidecar/features/model-label";
+import { type ModelChoice, modelChoiceSchema } from "@sidecar/features/models-wire";
 import { describeWire } from "@sidecar/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";

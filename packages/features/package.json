@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/hosted",
+  "name": "@sidecar/features",
   "version": "0.13.0",
   "private": true,
   "type": "module",

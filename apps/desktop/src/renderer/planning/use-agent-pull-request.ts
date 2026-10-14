@@ -1,11 +1,11 @@
-import type { CodingAgentPullRequestAnswerView } from "@sidecar/hosted/coding-agent-view";
+import type { CodingAgentPullRequestAnswerView } from "@sidecar/features/coding-agent-view";
 import type {
   CodingAgentMessage,
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
   CodingAgentStatus,
   CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model";
 

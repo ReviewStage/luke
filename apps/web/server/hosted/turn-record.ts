@@ -18,8 +18,8 @@ import {
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "@sidecar/hosted/coding-agent-wire";
-import { catalogIdOf } from "@sidecar/hosted/model-label";
+} from "@sidecar/features/coding-agent-wire";
+import { catalogIdOf } from "@sidecar/features/model-label";
 import { Option, Schema } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
 

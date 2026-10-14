@@ -53,7 +53,7 @@ import { account } from "@sidecar/database/schemas/auth";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/hosted/repository-reach-wire";
+} from "@sidecar/features/repository-reach-wire";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";

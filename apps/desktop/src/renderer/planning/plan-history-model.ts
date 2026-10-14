@@ -1,7 +1,7 @@
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelProvider } from "@sidecar/hosted/models-wire";
-import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
-import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
+import type { ModelProvider } from "@sidecar/features/models-wire";
+import { type PlanSection, planSections } from "@sidecar/features/plan-document";
+import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/features/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";

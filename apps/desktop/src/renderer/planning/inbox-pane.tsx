@@ -15,9 +15,9 @@ import {
   type InboxReplyKind,
   knownBlock,
   knownResponse,
-} from "@sidecar/hosted/inbox-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import type { CodeRef, PlanSummary } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/inbox-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
+import type { CodeRef, PlanSummary } from "@sidecar/features/plan-wire";
 import { ChevronRightIcon } from "@sidecar/panel";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

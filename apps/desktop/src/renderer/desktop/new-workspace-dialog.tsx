@@ -1,4 +1,4 @@
-import { WORKSPACE_BOUNDS } from "@sidecar/hosted/workspace-wire";
+import { WORKSPACE_BOUNDS } from "@sidecar/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useRef, useState } from "react";
 import {

@@ -6,7 +6,7 @@ import { askRecord } from "@sidecar/database/models/asks";
 import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/features";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,

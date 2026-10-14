@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    name: "hosted",
+    name: "features",
     include: ["src/**/*.test.ts"],
   },
 });

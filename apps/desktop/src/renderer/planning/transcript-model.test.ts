@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { PLANNING_READ } from "@sidecar/hosted/planning-view";
+import { PLANNING_READ } from "@sidecar/features/planning-view";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/hosted/transcript-wire";
+} from "@sidecar/features/transcript-wire";
 import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { test } from "vitest";
 import {

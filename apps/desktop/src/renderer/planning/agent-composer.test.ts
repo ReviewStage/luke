@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/hosted/coding-agent-view";
-import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
+} from "@sidecar/features/coding-agent-view";
+import { REPOSITORY_UNREACHED } from "@sidecar/features/repository-reach-wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

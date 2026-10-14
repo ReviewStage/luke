@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { parseKeyRing, sealProviderKey } from "@sidecar/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import {
   FAST_ACCESS,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { jsonResponse } from "@sidecar/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";

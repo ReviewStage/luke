@@ -1,4 +1,4 @@
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import type { CodeRef } from "@sidecar/features/plan-wire";
 import { BoardIcon, CallIcon, CodeIcon } from "@sidecar/panel";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";

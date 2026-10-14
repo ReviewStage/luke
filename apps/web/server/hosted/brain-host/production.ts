@@ -1,7 +1,7 @@
 import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
 import { spendHostedMeter } from "@sidecar/database/models/quota";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";

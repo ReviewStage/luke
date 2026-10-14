@@ -1,4 +1,4 @@
-import type { PlanShownCode } from "@sidecar/hosted/planning-view";
+import type { PlanShownCode } from "@sidecar/features/planning-view";
 import type { Effect } from "effect";
 
 /**

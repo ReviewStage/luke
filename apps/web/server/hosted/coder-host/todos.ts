@@ -1,7 +1,7 @@
 import {
   CODING_AGENT_TODOS_TOOL,
   codingAgentTodosInputSchema,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 
 /**
  * todos.ts -- the coding agent's to-do list: one tool that writes it whole.

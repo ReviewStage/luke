@@ -30,7 +30,7 @@ index 4c61e18c..3739de98 100644
 --- a/apps/desktop/src/renderer/planning/plan-body.tsx
 +++ b/apps/desktop/src/renderer/planning/plan-body.tsx
 @@ -1,6 +1,8 @@
- import type { Plan, PlanAssumption } from "@sidecar/hosted/plan-wire";
+ import type { Plan, PlanAssumption } from "@sidecar/features/plan-wire";
  import { useEffect, useRef, useState } from "react";
  import { MarkdownMessage } from "../markdown-message";
 +// Throwaway: the changelog shot freezes the notetaker mid-line.
@@ -136,9 +136,9 @@ index 00000000..9c62841b
 +++ b/apps/desktop/src/renderer/shots/plan-a-feature.ts
 @@ -0,0 +1,298 @@
 +import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-+import { EMPTY_PLAN_UPDATE, type FullPlanUpdate, planBody } from "@sidecar/hosted/plan-template";
-+import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
-+import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
++import { EMPTY_PLAN_UPDATE, type FullPlanUpdate, planBody } from "@sidecar/features/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
 +import { LIVE_STATUS } from "@sidecar/live";
 +import { type AppStateSnapshot, RUN_PROFILE } from "#shared/messages/app-state";
 +import { MICROPHONE_STATUS } from "#shared/messages/audio";

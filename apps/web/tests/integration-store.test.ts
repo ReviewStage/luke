@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@sidecar/database/testing";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
 import { Effect, Layer, Redacted } from "effect";
 import {
   beginIntegrationSignIn,

@@ -1,13 +1,13 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
-} from "@sidecar/hosted/workspace-invitation-wire";
+} from "@sidecar/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/workspace-wire";
 import { TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { ExternalLinkIcon, UserMinusIcon, XIcon } from "lucide-react";

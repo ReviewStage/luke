@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
+import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";

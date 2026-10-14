@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
 import { ArchiveIcon, UnarchiveIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useRef, useState } from "react";

@@ -4,15 +4,15 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";

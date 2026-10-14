@@ -24,8 +24,8 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationGuards,
   GITHUB_TRIGGER_EVENT,
-} from "@sidecar/hosted/automation-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/automation-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";

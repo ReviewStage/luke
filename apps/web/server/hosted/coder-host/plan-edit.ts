@@ -4,8 +4,8 @@ import {
   type PlanNote,
   planNotesSchema,
   readNotes,
-} from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-template";
+import { PLAN_ACTOR } from "@sidecar/features/plan-wire";
 import { Effect } from "effect";
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
 import {

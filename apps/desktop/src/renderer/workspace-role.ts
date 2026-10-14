@@ -1,4 +1,4 @@
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/hosted/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
 
 /**
  * workspace-role.ts -- what the account's role in a workspace lets it do, read where the panel decides what to offer.

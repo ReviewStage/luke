@@ -3,16 +3,16 @@ import type {
   StoredMessageRecord,
   StoredTurnRecord,
 } from "@sidecar/database/models/message-reads";
-import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import { TURN_ENDING, type TurnRecord } from "@sidecar/hosted/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
+import { TURN_ENDING, type TurnRecord } from "@sidecar/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_STATE,
   type PlanWorkState,
   type PlanWorkTurn,
   type PlanWorkWorker,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
 import { Schema } from "effect";
 import {

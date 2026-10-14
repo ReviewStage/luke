@@ -22,7 +22,7 @@ import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 
 export interface IntegrationDefinition {
   /**

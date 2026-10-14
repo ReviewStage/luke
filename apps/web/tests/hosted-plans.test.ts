@@ -15,10 +15,10 @@ import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { getTestDB } from "@sidecar/database/testing";
-import { planSections } from "@sidecar/hosted/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import { PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
-import type { PlanDocument } from "@sidecar/hosted/plan-wire";
+import { planSections } from "@sidecar/features/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
+import { PLAN_HEADING, type PlanNote } from "@sidecar/features/plan-template";
+import type { PlanDocument } from "@sidecar/features/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {

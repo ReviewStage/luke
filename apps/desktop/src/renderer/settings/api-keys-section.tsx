@@ -6,7 +6,7 @@ import {
   type ProviderKeyRejection,
   type ProviderKeyStatus,
   type ProviderKeySummary,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { PencilIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";

@@ -1,7 +1,7 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
-import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/features/board-vocabulary";
+import type { Board, DrawingElement } from "@sidecar/features/board-wire";
+import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
 import {
   type CodeToken,
   PLAN_WORK_STATE,
@@ -11,13 +11,13 @@ import {
   type PlanningRepositoriesAnswer,
   type PlanningView,
   type PlanWorkTurn,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/hosted/transcript-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/transcript-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { RUN_PROFILE } from "#shared/messages/app-state";

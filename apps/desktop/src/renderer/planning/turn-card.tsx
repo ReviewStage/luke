@@ -3,8 +3,8 @@ import {
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
 import { HarnessMark } from "../harness-marks";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { providerOf } from "./coding-agent-model";

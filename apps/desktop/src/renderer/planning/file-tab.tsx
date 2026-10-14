@@ -1,5 +1,5 @@
-import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanFileRequest } from "@sidecar/features/plan-wire";
+import type { PlanCode, PlanningFileAnswer } from "@sidecar/features/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFindOpen } from "../find-in-tab";
 import { READ_FAILURE_PLACE, ReadFailure, type ReadFailurePlace } from "../read-failure";

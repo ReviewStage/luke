@@ -1,5 +1,5 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import type { IntegrationStatusView } from "@sidecar/hosted/integration-view";
+import type { IntegrationStatusView } from "@sidecar/features/integration-view";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -8,7 +8,7 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";

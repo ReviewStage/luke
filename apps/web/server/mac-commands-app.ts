@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import { settleMacCommand } from "@sidecar/database/models/mac-command-store";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
-import { macCommandSettleRequestSchema } from "@sidecar/hosted/mac-command-wire";
+import { HOSTED_SERVICE_PATH } from "@sidecar/features";
+import { macCommandSettleRequestSchema } from "@sidecar/features/mac-command-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";

@@ -21,7 +21,7 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import type { Tool } from "ai";

@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";

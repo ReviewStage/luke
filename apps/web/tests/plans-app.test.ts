@@ -15,15 +15,15 @@ import {
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
 } from "@sidecar/database/voice-vocabulary";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
-import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
+import { boardAnswerSchema } from "@sidecar/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
-} from "@sidecar/hosted/coding-agent-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
-import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
+} from "@sidecar/features/coding-agent-wire";
+import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
+import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/features/plan-edit";
+import { PLAN_HEADING } from "@sidecar/features/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
@@ -34,17 +34,17 @@ import {
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
-} from "@sidecar/hosted/plan-wire";
-import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/plan-wire";
+import { planWorkAnswerSchema } from "@sidecar/features/planning-view";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/hosted/repository-reach-wire";
+} from "@sidecar/features/repository-reach-wire";
 import {
   planTranscriptAnswerSchema,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/hosted/transcript-wire";
+} from "@sidecar/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";

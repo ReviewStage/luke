@@ -16,8 +16,8 @@ import {
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
-import { wireUuidSchema } from "@sidecar/hosted";
-import { nextScheduledRun, readSchedule } from "@sidecar/hosted/automation-schedule";
+import { wireUuidSchema } from "@sidecar/features";
+import { nextScheduledRun, readSchedule } from "@sidecar/features/automation-schedule";
 import {
   AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
@@ -35,7 +35,7 @@ import {
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationRunRequestSchema,
-} from "@sidecar/hosted/automation-wire";
+} from "@sidecar/features/automation-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";

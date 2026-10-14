@@ -17,8 +17,8 @@ import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
-import { HOSTED_API_ERROR } from "@sidecar/hosted";
-import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
+import { HOSTED_API_ERROR } from "@sidecar/features";
+import { accountInboxAnswerSchema } from "@sidecar/features/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -27,7 +27,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_IMAGE_TYPE,
@@ -36,10 +36,10 @@ import {
   type InboxImageBlock,
   type InboxPost,
   inboxAnswerSchema,
-} from "@sidecar/hosted/inbox-wire";
-import { MENTION_KIND, mentionMarkdown } from "@sidecar/hosted/mention-link";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
+} from "@sidecar/features/inbox-wire";
+import { MENTION_KIND, mentionMarkdown } from "@sidecar/features/mention-link";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
+import { REPOSITORY_UNREACHED } from "@sidecar/features/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {

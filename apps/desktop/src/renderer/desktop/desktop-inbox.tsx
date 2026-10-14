@@ -1,5 +1,5 @@
-import type { CodingAgentInboxParams } from "@sidecar/hosted/coding-agent-view";
-import type { InboxItem } from "@sidecar/hosted/inbox-wire";
+import type { CodingAgentInboxParams } from "@sidecar/features/coding-agent-view";
+import type { InboxItem } from "@sidecar/features/inbox-wire";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

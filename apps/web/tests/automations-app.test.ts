@@ -12,8 +12,8 @@ import {
   automationRunsPath,
   HOSTED_API_ERROR,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/hosted";
-import { SCHEDULE_PRESET } from "@sidecar/hosted/automation-schedule";
+} from "@sidecar/features";
+import { SCHEDULE_PRESET } from "@sidecar/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
@@ -28,9 +28,9 @@ import {
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
-} from "@sidecar/hosted/automation-wire";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/automation-wire";
+import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";

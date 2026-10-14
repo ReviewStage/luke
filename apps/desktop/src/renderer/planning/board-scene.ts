@@ -1,5 +1,5 @@
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
-import { type BoardElement, boardElementSchema } from "@sidecar/hosted/board-wire";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
+import { type BoardElement, boardElementSchema } from "@sidecar/features/board-wire";
 import { Schema } from "effect";
 
 /**

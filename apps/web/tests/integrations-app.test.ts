@@ -4,14 +4,14 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@sidecar/features";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_PROVIDER,
   INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
   integrationLandingPath,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import type { WorkspaceInvitation } from "@sidecar/hosted/workspace-invitation-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+import type { WorkspaceInvitation } from "@sidecar/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/workspace-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";

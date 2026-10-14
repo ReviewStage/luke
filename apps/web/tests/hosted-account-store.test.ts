@@ -12,7 +12,7 @@ import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace"
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
 import { count, eq, getColumnTable, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";

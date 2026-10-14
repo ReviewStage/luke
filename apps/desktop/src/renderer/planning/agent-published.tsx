@@ -2,7 +2,7 @@ import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { CopyIcon } from "@sidecar/panel";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";

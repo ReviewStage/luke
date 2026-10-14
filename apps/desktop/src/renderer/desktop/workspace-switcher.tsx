@@ -1,4 +1,4 @@
-import type { Workspace } from "@sidecar/hosted/workspace-wire";
+import type { Workspace } from "@sidecar/features/workspace-wire";
 import { ChevronDownIcon, GearIcon, PlusIcon } from "@sidecar/panel";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";

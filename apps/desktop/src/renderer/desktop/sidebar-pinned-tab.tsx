@@ -1,5 +1,5 @@
-import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanAgentLine, PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { CodingAgentPullRequest } from "@sidecar/features/coding-agent-wire";
+import type { PlanAgentLine, PlanSummary } from "@sidecar/features/plan-wire";
 import { CopyIcon, DocumentIcon, UnpinIcon } from "@sidecar/panel";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

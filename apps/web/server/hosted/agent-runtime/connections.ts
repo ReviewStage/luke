@@ -13,7 +13,7 @@
  * an authenticated dynamic connection.
  */
 
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import type { IntegrationProvider } from "@sidecar/features/integration-wire";
 import {
   defineDynamic,
   defineMcpClientConnection,

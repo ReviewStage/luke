@@ -1,5 +1,11 @@
 import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@sidecar/analytics";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
+import type {
+  PlanActivityFrame,
+  PlanCodeFrame,
+  PlanDraftFrame,
+  PlanWorkFrame,
+} from "@sidecar/features";
 import {
   carried,
   GATEWAY_EVENT,
@@ -12,12 +18,6 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import type {
-  PlanActivityFrame,
-  PlanCodeFrame,
-  PlanDraftFrame,
-  PlanWorkFrame,
-} from "@sidecar/hosted";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";

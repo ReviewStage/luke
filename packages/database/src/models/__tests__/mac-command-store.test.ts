@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { MacCommandResult } from "@sidecar/hosted/mac-command-wire";
+import type { MacCommandResult } from "@sidecar/features/mac-command-wire";
 import { Clock, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

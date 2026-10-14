@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@sidecar/hosted/coding-agent-view";
+import type { CodingAgentInboxAnswerView } from "@sidecar/features/coding-agent-view";
 import {
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/hosted/inbox-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/inbox-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -12,7 +12,7 @@
  */
 
 import type { DatabaseServices } from "@sidecar/database/core/query";
-import { INTEGRATION_STATUS, type IntegrationStatus } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_STATUS, type IntegrationStatus } from "@sidecar/features/integration-wire";
 import { Clock, Effect, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {

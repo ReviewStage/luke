@@ -1,6 +1,6 @@
+import type { CodeRef } from "@sidecar/features/plan-wire";
+import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@sidecar/features/planning-view";
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
 import {
   chunkForAppend,
   commentaryAppend,

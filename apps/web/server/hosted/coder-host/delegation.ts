@@ -2,8 +2,8 @@ import type { DatabaseServices, QueryError } from "@sidecar/database/core/query"
 import { writeDelegation } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { codingAgentDelegationInputSchema } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { codingAgentDelegationInputSchema } from "@sidecar/features/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { openChildConversation } from "../brain-host/conversation.js";

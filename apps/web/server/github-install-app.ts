@@ -45,7 +45,7 @@ import {
   type GitHubInstallStatus,
   githubInstallLandingPath,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
 import { generateRandomString } from "better-auth/crypto";
 import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";

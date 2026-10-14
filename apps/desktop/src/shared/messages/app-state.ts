@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { PlanningView } from "@sidecar/hosted/planning-view";
+import type { PlanningView } from "@sidecar/features/planning-view";
 import type { AppSettings } from "@sidecar/settings/wire";
 import {
   isRecord,

@@ -51,7 +51,7 @@
     "@sidecar/gateway": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/host": "workspace:*",
-    "@sidecar/hosted": "workspace:*",
+    "@sidecar/features": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/runtime": "workspace:*",

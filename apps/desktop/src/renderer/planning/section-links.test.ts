@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, type Mention, mentionMarkdown } from "@sidecar/hosted/mention-link";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { MENTION_KIND, type Mention, mentionMarkdown } from "@sidecar/features/mention-link";
+import type { Plan } from "@sidecar/features/plan-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

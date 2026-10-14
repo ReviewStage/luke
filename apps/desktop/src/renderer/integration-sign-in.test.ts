@@ -3,7 +3,7 @@ import {
   INTEGRATION_PROVIDER,
   INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { test } from "vitest";
 import { SIGN_IN, signInAfterRead, signInBegun, signInLine } from "./integration-sign-in";
 

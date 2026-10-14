@@ -3,7 +3,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentContext,
   type ContextWindow,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import type { OfferedModel } from "../model-catalog.js";
 import { CODER } from "./bounds.js";
 

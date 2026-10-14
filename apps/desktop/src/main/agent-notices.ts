@@ -2,22 +2,22 @@ import type {
   AccountInboxAnswer,
   AccountInboxEntry,
   AccountInboxPlan,
-} from "@sidecar/hosted/account-inbox-wire";
+} from "@sidecar/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPullRequestAnswerView,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
-import { modelLabel } from "@sidecar/hosted/model-label";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@sidecar/features/inbox-wire";
+import { modelLabel } from "@sidecar/features/model-label";
+import type { CatalogModel } from "@sidecar/features/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-state";

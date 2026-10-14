@@ -1,4 +1,7 @@
-import type { CodingAgentAttachment, CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import type {
+  CodingAgentAttachment,
+  CodingAgentMessage,
+} from "@sidecar/features/coding-agent-wire";
 import { RemoveIcon } from "@sidecar/panel";
 import { isRecord, isWireString } from "@sidecar/wire";
 import { type ReactNode, useState } from "react";

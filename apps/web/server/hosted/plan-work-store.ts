@@ -15,7 +15,7 @@ import {
   PLAN_WORK_BOUNDS,
   type PlanShownCode,
   type PlanWorkAnswer,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { Effect, Option } from "effect";
 import { isStoredToolPart, storedToolName } from "../core.js";
 import {

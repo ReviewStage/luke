@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { PlanShownCode } from "@sidecar/hosted/planning-view";
+import type { PlanShownCode } from "@sidecar/features/planning-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DELEGATION_TARGET,

@@ -1,5 +1,5 @@
-import type { CodingAgentInboxParams } from "@sidecar/hosted/coding-agent-view";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { CodingAgentInboxParams } from "@sidecar/features/coding-agent-view";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import { FolderIcon, SearchIcon, WingFace } from "@sidecar/panel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

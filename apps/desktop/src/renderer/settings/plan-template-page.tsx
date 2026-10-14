@@ -1,11 +1,11 @@
-import type { PlanTemplateAnswerView } from "@sidecar/hosted/coding-agent-view";
+import type { PlanTemplateAnswerView } from "@sidecar/features/coding-agent-view";
 import {
   PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
-} from "@sidecar/hosted/plan-document-template";
-import { PLAN_EDIT_REFUSAL } from "@sidecar/hosted/plan-edit";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/plan-document-template";
+import { PLAN_EDIT_REFUSAL } from "@sidecar/features/plan-edit";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/features/plan-wire";
+import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/features/planning-view";
 import { ResetIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";

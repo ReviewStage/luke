@@ -1,6 +1,6 @@
 import { useAtom } from "@effect/atom-react";
-import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
-import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanEditRequest } from "@sidecar/features/plan-edit";
+import type { PlanningEditAnswer } from "@sidecar/features/planning-view";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";

@@ -3,7 +3,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_DELEGATE_TOOL,
   type CodingAgentBrief,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { INTEGRATION_NAMES_SAID } from "../integrations.js";
 import { CODER } from "./bounds.js";

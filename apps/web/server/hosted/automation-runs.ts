@@ -28,8 +28,8 @@ import {
   type AutomationRunReason,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
-} from "@sidecar/hosted/automation-wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/automation-wire";
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

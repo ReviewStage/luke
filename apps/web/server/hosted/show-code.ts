@@ -8,7 +8,7 @@ import {
   SHOWN_CODE_BOUNDS,
   type ShownCode,
   shownCodeSchema,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { describeWire } from "@sidecar/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
 import {

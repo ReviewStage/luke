@@ -314,9 +314,9 @@ index 000000000..809dfbe9c
 +  CodingAgentMessagesAnswerView,
 +  CodingAgentModelsAnswer,
 +  CodingAgentPullRequestAnswerView,
-+} from "@sidecar/hosted/coding-agent-view";
-+import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-+import type { CatalogModel } from "@sidecar/hosted/models-wire";
++} from "@sidecar/features/coding-agent-view";
++import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
++import type { CatalogModel } from "@sidecar/features/models-wire";
 +import type { WireRecord, WireValue } from "@sidecar/wire";
 +import { ACT_KIND } from "#shared/messages/acts";
 +import { ago } from "./clock";
@@ -855,9 +855,9 @@ index 000000000..aa42467d3
 + * (`clock.ts`), so nothing reads "Dec 31, 1969".
 + */
 +
-+import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
-+import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
-+import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
++import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/features/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
 +import { ago, daysAgo, hoursAgo } from "./clock";
 +
 +/** The ids the shots share, so the plan, its agents, and their edits agree with one another. */
@@ -1126,7 +1126,7 @@ index 000000000..8acfec6a1
 + * every shot module and every hook can import it without a cycle.
 + */
 +
-+import type { PlanningView } from "@sidecar/hosted/planning-view";
++import type { PlanningView } from "@sidecar/features/planning-view";
 +import type { ActKind, ActPayload, ActResultFor } from "#shared/messages/acts";
 +import type { SidebarCollapse } from "../desktop/sidebar-collapse";
 +import type { PlansControl } from "../planning/use-plans-tab";

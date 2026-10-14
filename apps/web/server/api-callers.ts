@@ -29,7 +29,7 @@ const PACKAGE_SOURCE_DIRECTORY = "src";
 const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist"]);
 
 /** The one module clients import their paths from; its exports are evaluated as well as read. */
-export const PATHS_MODULE = posix.join("packages", "hosted", "src", "service-paths.ts");
+export const PATHS_MODULE = posix.join("packages", "features", "src", "service-paths.ts");
 
 const SOURCE_KIND = {
   TYPESCRIPT: "typescript",

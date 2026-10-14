@@ -6,8 +6,8 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   TURN_ENDING,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/coding-agent-wire";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
 import { LIVE_CLOSE_REASON } from "@sidecar/live";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -7,14 +7,14 @@ import {
   strandedAutomationRuns,
 } from "@sidecar/database/models/automation-store";
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
-import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@sidecar/hosted/automation-schedule";
+import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@sidecar/features/automation-schedule";
 import {
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationRunStatus,
   type AutomationTrigger,
-} from "@sidecar/hosted/automation-wire";
+} from "@sidecar/features/automation-wire";
 import { Effect } from "effect";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 import type { StartServices } from "./coder-host/start.js";

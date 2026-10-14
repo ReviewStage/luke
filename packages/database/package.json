@@ -83,7 +83,7 @@
   "dependencies": {
     "@effect/sql-pg": "catalog:",
     "@sidecar/brain": "workspace:*",
-    "@sidecar/hosted": "workspace:*",
+    "@sidecar/features": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",

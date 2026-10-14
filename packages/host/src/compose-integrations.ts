@@ -1,5 +1,4 @@
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@sidecar/gateway";
-import type { HostedIntegrationsClient } from "@sidecar/hosted";
+import type { HostedIntegrationsClient } from "@sidecar/features";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationConnectView,
@@ -7,8 +6,9 @@ import {
   type IntegrationStatusView,
   type IntegrationToolsView,
   integrationProviderParamsSchema,
-} from "@sidecar/hosted/integration-view";
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-view";
+import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@sidecar/gateway";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Scope } from "effect";

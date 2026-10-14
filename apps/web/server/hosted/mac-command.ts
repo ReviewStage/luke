@@ -15,7 +15,7 @@ import {
   type MacCommand,
   type MacCommandResult,
   macCommandSchema,
-} from "@sidecar/hosted/mac-command-wire";
+} from "@sidecar/features/mac-command-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";

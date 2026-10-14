@@ -1,5 +1,5 @@
 import { hostTurnId } from "@sidecar/database/models/ids";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";

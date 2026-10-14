@@ -6,7 +6,7 @@
  * worth asserting without one.
  */
 
-import { DESKTOP_SESSION_CLIENT_ID } from "@sidecar/hosted/desktop-session-wire";
+import { DESKTOP_SESSION_CLIENT_ID } from "@sidecar/features/desktop-session-wire";
 
 /**
  * What a GitHub sign-in asks for. It is the Luke GitHub App's user

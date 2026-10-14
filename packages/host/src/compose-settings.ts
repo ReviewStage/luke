@@ -5,6 +5,7 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { ProductEventSender } from "@sidecar/analytics/sender";
+import type { AccountRefreshFailed } from "@sidecar/features";
 import {
   carried,
   GATEWAY_EVENT,
@@ -12,7 +13,6 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import type { AccountRefreshFailed } from "@sidecar/hosted";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import {
   ACCOUNT_PREFERENCE_FIELDS,

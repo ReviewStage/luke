@@ -5,8 +5,8 @@ import {
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
-} from "@sidecar/hosted";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features";
+import type { Plan } from "@sidecar/features/plan-wire";
 import {
   LIVE_DEFAULTS,
   LIVE_DELEGATION_TARGET,

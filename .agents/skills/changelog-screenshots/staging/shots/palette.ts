@@ -14,7 +14,7 @@ import {
   PLAN_WORK_STATE,
   PLAN_WORK_TOOL,
   type PlanningTreeAnswer,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { ACT_KIND } from "#shared/messages/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { ago } from "./clock";

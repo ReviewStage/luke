@@ -6,7 +6,7 @@ import {
   type PageWrite,
   pageHtmlSchema,
   pageTitleSchema,
-} from "@sidecar/hosted/page-wire";
+} from "@sidecar/features/page-wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
