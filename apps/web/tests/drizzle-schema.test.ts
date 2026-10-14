@@ -71,6 +71,21 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
   "uuid",
 ]);
 
+/**
+ * Tables the database still carries that no module declares, each waiting on
+ * the migration that drops it. Drizzle names every declared column in an
+ * insert, and a deployment migrates while the one before it still serves, so
+ * a table leaves its module one deployment before it leaves the database
+ * (`apps/web/server/README.md`). An entry goes in the same PR as its drop,
+ * which the last test below holds by failing on an entry the database no
+ * longer carries.
+ */
+const PENDING_DROP_TABLES: ReadonlySet<string> = new Set([
+  // The Inbox went; its items and their pictures wait on their drop.
+  "inbox_attachment",
+  "inbox_item",
+]);
+
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";
 
@@ -196,6 +211,36 @@ const MIGRATED = await migratedTables();
 
 /** The names both sides know, which is where a column or a key can be compared at all. */
 const SHARED_TABLES = [...DECLARED.keys()].filter((name) => MIGRATED.has(name)).sort();
+
+/** What the left side holds and the right side does not, in order. */
+function surplus(
+  left: Iterable<string>,
+  right: ReadonlyMap<string, unknown> | ReadonlySet<string>,
+): ReadonlyArray<string> {
+  return [...left].filter((name) => !right.has(name)).sort();
+}
+
+test("the schema modules and the migrated database hold the same tables, bar those waiting on their drop", () => {
+  assert.deepEqual(
+    {
+      declaredAndNotMigrated: surplus(DECLARED.keys(), MIGRATED),
+      migratedAndNotDeclared: surplus(MIGRATED.keys(), DECLARED).filter(
+        (name) => !PENDING_DROP_TABLES.has(name),
+      ),
+    },
+    { declaredAndNotMigrated: [], migratedAndNotDeclared: [] },
+  );
+});
+
+test("every table waiting on its drop is still in the migrated database, and declared by no module", () => {
+  assert.deepEqual(
+    {
+      dropped: surplus(PENDING_DROP_TABLES, MIGRATED),
+      declared: [...PENDING_DROP_TABLES].filter((name) => DECLARED.has(name)).sort(),
+    },
+    { dropped: [], declared: [] },
+  );
+});
 
 test("every declared column carries the type and the nullability the migrated database gives it", () => {
   const drift: string[] = [];

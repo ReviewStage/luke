@@ -39,6 +39,10 @@ afterAll(() => database.close());
 
 /** Every table the migrations declare, by its Postgres name, better-auth's own alongside Luke's. */
 const DECLARED_TABLES = [
+  // Declared by no module now, and standing until the migration that drops them
+  // (`drizzle-schema.test.ts`'s `PENDING_DROP_TABLES`).
+  "inbox_attachment",
+  "inbox_item",
   "account",
   "account_plan_template_revision",
   "account_preference",
@@ -54,8 +58,6 @@ const DECLARED_TABLES = [
   "github_install_intent",
   "github_installation",
   "hosted_usage",
-  "inbox_attachment",
-  "inbox_item",
   "integration_connection",
   "invitation",
   "jwks",

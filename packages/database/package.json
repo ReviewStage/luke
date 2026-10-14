@@ -51,8 +51,6 @@
     "./schemas/github-connect-intent": "./src/schemas/github-connect-intent.js",
     "./schemas/github-install-intent": "./src/schemas/github-install-intent.js",
     "./schemas/github-installation": "./src/schemas/github-installation.js",
-    "./schemas/inbox": "./src/schemas/inbox.js",
-    "./schemas/inbox-attachment": "./src/schemas/inbox-attachment.js",
     "./schemas/integration": "./src/schemas/integration.js",
     "./schemas/mac-command": "./src/schemas/mac-command.js",
     "./schemas/personal-workspace": "./src/schemas/personal-workspace.js",

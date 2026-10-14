@@ -35,6 +35,9 @@ out of the SQL file it writes (its snapshot already records the column gone),
 and lists the column in the drift check's `PENDING_DROP`. The second, once the
 first is live, runs `pnpm db:generate --custom --name=<table>_drop_<column>`,
 writes `DROP COLUMN IF EXISTS` into the file it gets, and deletes the entry.
+A table goes the same way, its module deleted and its name listed in the
+drift check's `PENDING_DROP_TABLES` until the second writes `DROP TABLE IF
+EXISTS`.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. No lock of its own: Drizzle's
@@ -1473,8 +1476,8 @@ the plan's repository for the Mac's File tab (`server/hosted/plan-file.ts`),
 at most 500 lines a window. No sandbox stands outside a planning turn, so it
 reads GitHub's contents API at the head of the default branch, not the
 session's checkout, or with `ref=` at that commit, a whole 40-character
-lowercase SHA and nothing a branch or a path could spell, as an inbox item's
-code block pins its lines, on a token `repositoryReadToken` mints for that one
+lowercase SHA and nothing a branch or a path could spell, so that a reference
+pinned to its lines never moves, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check the checkout
 makes. The token is used for the one read and enters no answer, log line,
 or trace. What is shown is decided by the rule `show_code` is held to
@@ -2916,8 +2919,7 @@ starts one agent, and a named model does not become the account's default.
 A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and three failed starts in a row pause the
 automation (`paused_reason` `failures`, `next_run_at` cleared). The agent's
-questions reach the Inbox and its end the finished-agent notification as
-any agent's do.
+end reaches the finished-agent notification as any agent's does.
 
 The guards are read, and the run claimed, under the automation's row lock
 (`withAutomationLocked`), so two acts on one automation's runs, a sweep and

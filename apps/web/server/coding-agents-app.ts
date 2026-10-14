@@ -32,21 +32,15 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
-import {
-  INBOX_BOUNDS,
-  INBOX_CURSOR_START,
-  INBOX_STATUS,
-  type InboxItem,
-  type InboxReply,
-  inboxAnswerMessage,
-  inboxAnswerRequestSchema,
-  inboxCursorSchema,
-  inboxReplyRefusal,
-} from "@sidecar/hosted/inbox-wire";
 import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
-import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
 import {
   isRecord,
   isWireString,
@@ -57,7 +51,6 @@ import {
 import type { GitHubApp } from "./github/github-app.js";
 import { githubReadOrRefusal } from "./github/github-refusal.js";
 import { pullRequestFiles } from "./github/pull-requests.js";
-import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   agentPullRequestReach,
   type PublishedCache,
@@ -98,15 +91,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import {
-  answerInboxItem,
-  readInboxAttachment,
-  readInboxItem,
-  type StoredInboxItem,
-  withdrawInboxAnswer,
-} from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
-import { logStoreFailure } from "./hosted/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -196,30 +181,11 @@ const AGENTS_PATH = {
   CHANGES: "/api/agents/changes",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
-  /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
-  INBOX_OF_PLAN: "/api/plans/inbox",
-  /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
-  INBOX_ITEM: "/api/inbox/item",
-  /** GET reads what waits on the developer across the account's plans past `after`. */
-  INBOX: "/api/inbox",
-  /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
-  INBOX_ATTACHMENT: "/api/inbox/attachment",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
-const QUERY = { ID: "id", AFTER: "after", CALL: "call", ATTACHMENT: "attachment" } as const;
-
-/**
- * The headers an attachment's bytes are served under beside their type: the
- * browser is told not to sniff them for another type, since the type is
- * what the service sniffed them to be as they were kept, and nothing on the
- * way may keep a copy, since the bytes are one account's.
- */
-const ATTACHMENT_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "cache-control": "private, no-store",
-} as const;
+const QUERY = { ID: "id", AFTER: "after", CALL: "call" } as const;
 
 /** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
 const MAXIMUM_ATTACHMENTS_BODY_BYTES =
@@ -229,15 +195,6 @@ const MAXIMUM_ATTACHMENTS_BODY_BYTES =
 /** A Start names a key, a choice, and a task with its files at most: the task's bound at JSON's widest escape, the files, and room for the rest. */
 const MAXIMUM_START_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
-
-/** An answer is a note and a few short fields: the note's bound at JSON's widest escape, and room for the rest. */
-const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
-  6 *
-    (INBOX_BOUNDS.MAX_NOTE_CHARS +
-      INBOX_BOUNDS.MAX_FIELDS *
-        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
-      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
-  2_048;
 
 /** A change names a model, an effort, and a window, a title, or an archive, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
@@ -287,9 +244,6 @@ const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The one id the path named under `id`. */
 const idOf = (request: Request) => uuidOf(request, QUERY.ID);
-
-/** The one attachment the path named under `attachment`. */
-const attachmentIdOf = (request: Request) => uuidOf(request, QUERY.ATTACHMENT);
 
 /** The delegation call the path named under `query`, or not found for one that is no call id. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -727,175 +681,7 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   });
 });
 
-/** The inbox cursor the request reads past, or the start where it names none; refused where it names something else. */
-const inboxCursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const after = readEither(inboxCursorSchema)(
-    unparsedWire(new URL(request.url).searchParams.get(QUERY.AFTER) ?? INBOX_CURSOR_START),
-  );
-  if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return after.success;
-});
-
-/** GET reads the plan's inbox past the cursor: every item its agents posted, held open while nothing changed. */
-const planInboxEndpoint = /* @__PURE__ */ Effect.fn("web/planInboxEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const after = yield* inboxCursorOf(request);
-  const planId = yield* idOf(request);
-  const userId = yield* resolvedUserId(seams, request);
-  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
-  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const page = yield* hostedStoreOrUnavailable(planInboxPast(userId, planId, after));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
-});
-
-/** GET reads what waits on the developer across the account's plans past the cursor: every open item, held open while nothing changed. */
-const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const after = yield* inboxCursorOf(request);
-  const userId = yield* resolvedUserId(seams, request);
-  const page = yield* hostedStoreOrUnavailable(accountInboxPast(userId, after));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
-});
-
-/**
- * GET serves one attachment of an inbox item, an image block's picture, as
- * its bytes under the media type the service sniffed them to be as they
- * were kept, to the item's account alone: an attachment of another
- * account's, or of another item's, is not found, as an item is.
- */
-const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const itemId = yield* idOf(request);
-  const attachmentId = yield* attachmentIdOf(request);
-  const userId = yield* resolvedUserId(seams, request);
-  const found = yield* hostedStoreOrUnavailable(readInboxAttachment(userId, itemId, attachmentId));
-  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return HttpServerResponse.uint8Array(found.value.bytes, {
-    status: HOSTED_HTTP_STATUS.OK,
-    contentType: found.value.contentType,
-    headers: ATTACHMENT_HEADERS,
-  });
-});
-
-/** An item as an answer comes back with it, and whether the answer was taken. */
-function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.HttpServerResponse {
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
-}
-
-/** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
-function retiredRefusal(refusal: HostedRefusal): boolean {
-  return refusal.error === HOSTED_REFUSAL.AGENT_RETIRED.error;
-}
-
-/**
- * POST answers one item of a plan of the account's workspaces, whichever
- * member started its agent. An answer naming a
- * revision the agent has since moved on from, or an item no longer open,
- * is answered with the item as it stands and not taken. Otherwise the
- * answer is taken first, at the revision it names, and only then, where
- * the item asks to be heard back, handed to the agent as one of the
- * developer's messages under the answer's own key through the one steer
- * path (`coder-host/steer.ts`), so an answer the item no longer takes
- * never reaches the agent. A hand-off that fails, is interrupted, or dies
- * takes the answer back, so an item never reads answered while the agent
- * was not told; and an answer sent again under the key it was taken by is
- * handed off again, which the steer's own key makes reach the agent once,
- * so a hand-off cut short by the function's own end is finished by the
- * retry rather than reported done. An agent whose session has ended for
- * good can hear nothing again, so its item keeps the answer rather than
- * waiting on the developer for ever.
- */
-const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const itemId = yield* idOf(request);
-  const userId = yield* resolvedUserId(seams, request);
-  const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
-  if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_ANSWER_BODY_BYTES);
-  const asked = readEither(inboxAnswerRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { revision, clientKey, ...reply } = asked.success;
-  const taken = yield* takenAnswer(userId, stored.value, { revision, clientKey, reply });
-  if (taken === undefined) {
-    // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
-    const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
-    if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
-  }
-  if (!taken.needsReply || taken.answer === undefined) return inboxAnswered(taken, true);
-  const answer = taken.answer;
-  const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
-    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(taken, answer),
-      clientKey,
-    });
-  });
-  yield* handedOver.pipe(
-    Effect.catchIf(retiredRefusal, () => Effect.void),
-    Effect.onError(() =>
-      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
-      ),
-    ),
-  );
-  return inboxAnswered(taken, true);
-});
-
-/**
- * The item with the answer standing on it under the request's key: taken
- * now where the item is open at the revision named and takes the answer,
- * or as an earlier send under the same key took it; nothing where it was
- * not taken. Refused where the answer does not fit the item.
- */
-const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  stored: StoredInboxItem,
-  asked: { readonly revision: number; readonly clientKey: string; readonly reply: InboxReply },
-): Effect.fn.Return<InboxItem | undefined, HostedRefusal, DatabaseServices> {
-  const { item, answerKey } = stored;
-  if (answerKey === asked.clientKey) return item;
-  if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;
-  if (inboxReplyRefusal(item, asked.reply) !== undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const answered = yield* hostedStoreOrUnavailable(
-    answerInboxItem(userId, item.id, asked.revision, asked.reply, asked.clientKey),
-  );
-  return Option.getOrUndefined(answered);
-});
-
-/** The group: the ten paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the seven paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
@@ -927,22 +713,6 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.SUBAGENT_MESSAGES,
           hostedRefusing(subagentMessagesEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_OF_PLAN,
-          hostedRefusing(planInboxEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_ITEM,
-          hostedRefusing(inboxAnswerEndpoint(seams, writer)),
-        ),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_ATTACHMENT,
-          hostedRefusing(inboxAttachmentEndpoint(seams)),
         ),
         hostedNotFoundRoute,
       ),

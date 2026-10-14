@@ -7,7 +7,6 @@ import {
   settleJsonSchemaGoldenSet,
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
-import * as accountInboxWire from "./account-inbox-wire.js";
 import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
@@ -41,11 +40,6 @@ import * as workspaceWire from "./workspace-wire.js";
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
 const EFFECT_MODULE_SCHEMAS = {
-  "account-inbox-wire": {
-    accountInboxEntrySchema: accountInboxWire.accountInboxEntrySchema,
-    accountInboxPlanSchema: accountInboxWire.accountInboxPlanSchema,
-    accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,
@@ -80,29 +74,7 @@ const EFFECT_MODULE_SCHEMAS = {
     storedObjectSchema: codingAgentWire.storedObjectSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "inbox-wire": {
-    inboxKeySchema: inboxWire.inboxKeySchema,
-    inboxImageTypeSchema: inboxWire.inboxImageTypeSchema,
-    inboxBlockSchema: inboxWire.inboxBlockSchema,
-    inboxBlocksSchema: inboxWire.inboxBlocksSchema,
-    inboxPostBlockSchema: inboxWire.inboxPostBlockSchema,
-    inboxPostBlocksSchema: inboxWire.inboxPostBlocksSchema,
-    inboxOptionSchema: inboxWire.inboxOptionSchema,
-    inboxFieldSchema: inboxWire.inboxFieldSchema,
-    inboxResponseSchema: inboxWire.inboxResponseSchema,
     inboxPostInputSchema: inboxWire.inboxPostInputSchema,
-    inboxCloseInputSchema: inboxWire.inboxCloseInputSchema,
-    inboxReadInputSchema: inboxWire.inboxReadInputSchema,
-    inboxFieldValueSchema: inboxWire.inboxFieldValueSchema,
-    inboxFormValueSchema: inboxWire.inboxFormValueSchema,
-    inboxFormValuesSchema: inboxWire.inboxFormValuesSchema,
-    inboxReplySchema: inboxWire.inboxReplySchema,
-    inboxReadBlockSchema: inboxWire.inboxReadBlockSchema,
-    inboxReadResponseSchema: inboxWire.inboxReadResponseSchema,
-    inboxItemSchema: inboxWire.inboxItemSchema,
-    inboxCursorSchema: inboxWire.inboxCursorSchema,
-    inboxAnswerSchema: inboxWire.inboxAnswerSchema,
-    inboxAnswerRequestSchema: inboxWire.inboxAnswerRequestSchema,
-    inboxAnsweredSchema: inboxWire.inboxAnsweredSchema,
   } satisfies RecordedEffectJsonSchemas<typeof inboxWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,

@@ -7,17 +7,12 @@ import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
-import {
-  openPlanConversation,
-  savePlanText,
-  updatePlan,
-} from "@sidecar/database/models/plan-store";
+import { openPlanConversation, savePlanText } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
-import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -27,22 +22,12 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
 } from "@sidecar/hosted/coding-agent-wire";
-import {
-  INBOX_BLOCK,
-  INBOX_IMAGE_TYPE,
-  INBOX_REPLY,
-  INBOX_RESPONSE,
-  type InboxImageBlock,
-  type InboxPost,
-  inboxAnswerSchema,
-} from "@sidecar/hosted/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
   Clock,
-  DateTime,
   Duration,
   Effect,
   Fiber,
@@ -87,7 +72,6 @@ import {
   linkInstallation,
 } from "../server/hosted/github-installations";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
 import {
@@ -1061,180 +1045,27 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 });
 
-/** An agent started on the plan, with its conversation as the writer targets it. */
-const startedAgent = (
-  owner: string,
-  planId: string,
-  ask: (request: Request) => Effect.Effect<Answer>,
-) =>
-  Effect.gen(function* () {
-    const agent = readAnswer(
-      codingAgentAnswerSchema,
-      HOSTED_HTTP_STATUS.CREATED,
-      yield* ask(startAs(owner, planId, { idempotencyKey: randomUUID() })),
-    ).agent;
-    const stored = yield* readCodingAgent(owner, agent.id);
-    assert.ok(Option.isSome(stored));
-    return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
-  });
-
 function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {
   return request(PLAN_AGENTS, bearer, { method: "POST", id: planId, body });
 }
 
-const PLAN_INBOX = "/api/plans/inbox";
-const INBOX_ITEM = "/api/inbox/item";
-const ACCOUNT_INBOX = "/api/inbox";
-const INBOX_ATTACHMENT = "/api/inbox/attachment";
-
-/** The first bytes of a PNG, as a screenshot's file starts. */
-const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
-
-it.layer(getTestDB())("the developer's inbox", (it) => {
-  /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
-  const openInbox = (eve = fakeEve()) =>
-    Effect.gen(function* () {
-      const opened = yield* openPlan({ eve });
-      const { agent, target } = yield* startedAgent(opened.owner, opened.plan.id, opened.ask);
-      const sessionId = eve.opened[0]?.sessionId ?? "";
-      assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
-      const owned = { userId: opened.owner, planId: opened.plan.id, agentId: agent.id };
-      /** An item posted for the agent, as its tool will post one, with the pictures its image blocks name read. */
-      const post = (value: InboxPost, images?: readonly InboxImage[]) =>
-        postInboxItem(owned, value, images);
-      /** The plan's inbox as the owner reads it past the cursor. */
-      const read = (after?: string) =>
-        Effect.map(
-          opened.ask(
-            request(PLAN_INBOX, opened.owner, {
-              id: opened.plan.id,
-              ...(after === undefined ? undefined : { after }),
-            }),
-          ),
-          (answered) => readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
-        );
-      /** The owner's answer to an item, as the route answers it. */
-      const answer = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
-        opened.ask(request(INBOX_ITEM, bearer, { method: "POST", id: itemId, body }));
-      /** What waits across the account, as the bearer reads it past the cursor. */
-      const waiting = (after?: string, bearer = opened.owner) =>
-        Effect.map(
-          opened.ask(request(ACCOUNT_INBOX, bearer, after === undefined ? undefined : { after })),
-          (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
-        );
-      return { ...opened, agent, target, post, read, answer, waiting };
-    });
-
-  const QUESTION = {
-    key: "invite-copy",
-    title: "What should the invitation email say?",
-    response: { type: INBOX_RESPONSE.TEXT },
-  } as const;
-
+it.layer(getTestDB())("the developer's inbox, gone", (it) => {
   it.effect(
-    "the account's inbox answers every open item across its plans with the agent that posted it, and leaves out settled items, an archived plan's, and another account's",
+    "the inbox's paths are served no more: a plan's inbox, an item's answer, the account's inbox, and an item's picture each answer not found, even to the plan's owner",
     () =>
       Effect.gen(function* () {
-        const { owner, other, agent, ask, post, waiting } = yield* openInbox();
-        const second = yield* startPlan(owner, {
-          name: "Billing export",
-          repository: RELAY_FULL_NAME,
-        });
-        yield* savePlanText(owner, second.id, SAVED);
-        const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
-        const onSecond = (value: InboxPost) =>
-          postInboxItem({ userId: owner, planId: second.id, agentId: secondAgent.id }, value);
-        yield* post(QUESTION);
-        const settled = yield* post({ ...QUESTION, key: "settled", title: "Settled already" });
-        assert.ok(Result.isSuccess(settled));
-        yield* answerInboxItem(
-          owner,
-          settled.success.id,
-          settled.success.revision,
-          { reply: INBOX_REPLY.ANSWERED, note: "Done." },
-          randomUUID(),
-        );
-        yield* onSecond({ ...QUESTION, key: "export-format", title: "CSV or JSON?" });
-
-        const all = yield* waiting();
+        const { owner, plan, ask } = yield* openPlan();
+        const id = randomUUID();
+        const gone = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(yield* ask(request("/api/plans/inbox", owner, { id: plan.id })), gone);
         assert.deepEqual(
-          all.items.map((item) => [item.title, item.planId, item.agentId, item.agentModel]).sort(),
-          [
-            [QUESTION.title, agent.planId, agent.id, agent.model],
-            ["CSV or JSON?", second.id, secondAgent.id, secondAgent.model],
-          ].sort(),
+          yield* ask(request("/api/inbox/item", owner, { method: "POST", id, body: {} })),
+          gone,
         );
-        assert.ok(all.items.every((item) => item.agentTitle === null));
-
-        yield* updatePlan(owner, second.id, { archived: true });
+        assert.deepEqual(yield* ask(request("/api/inbox", owner)), gone);
         assert.deepEqual(
-          (yield* waiting()).items.map((item) => item.title),
-          [QUESTION.title],
-        );
-        assert.deepEqual((yield* waiting(undefined, other)).items, []);
-        assert.deepEqual(
-          yield* ask(request(ACCOUNT_INBOX, undefined)),
-          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
-        );
-      }),
-  );
-
-  it.effect(
-    "an item's attachment is served as its bytes under the type the service kept, not to be sniffed and not to be cached, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, fetch, ask, post, read } = yield* openInbox();
-        yield* post(
-          {
-            key: "landing",
-            title: "Does the landing page read right?",
-            blocks: [
-              { type: INBOX_BLOCK.IMAGE, path: "shots/landing.png", alt: "The landing page" },
-            ],
-            response: { type: INBOX_RESPONSE.APPROVAL },
-          },
-          [{ contentType: INBOX_IMAGE_TYPE.PNG, bytes: PNG }],
-        );
-        const item = (yield* read()).items.find((each) => each.key === "landing");
-        const block = item?.blocks.find(
-          (each): each is InboxImageBlock => each.type === INBOX_BLOCK.IMAGE,
-        );
-        assert.ok(item && block);
-        const at = (bearer: string | undefined, id = item.id, attachment = block.attachmentId) =>
-          request(INBOX_ATTACHMENT, bearer, { id, attachment });
-
-        const served = yield* fetch(at(owner));
-        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
-        assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
-        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
-        assert.equal(served.headers.get("cache-control"), "private, no-store");
-        assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
-
-        assert.deepEqual(
-          yield* ask(at(other)),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-        );
-        assert.deepEqual(
-          yield* ask(at(undefined)),
-          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
-        );
-        assert.deepEqual(
-          yield* ask(at(owner, randomUUID())),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-        );
-        assert.deepEqual(
-          yield* ask(at(owner, item.id, "landing.png")),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-        );
-        assert.deepEqual(
-          yield* ask(
-            request(INBOX_ATTACHMENT, owner, {
-              method: "POST",
-              id: item.id,
-              attachment: block.attachmentId,
-            }),
-          ),
-          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+          yield* ask(request("/api/inbox/attachment", owner, { id, attachment: randomUUID() })),
+          gone,
         );
       }),
   );

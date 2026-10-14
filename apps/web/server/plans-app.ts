@@ -134,7 +134,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * showed, read back from the plan's conversation
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
  * file of the plan's repository for the File tab, read from GitHub as it
- * stands now, or at the commit an inbox item's code reference pins, through
+ * stands now, or at a commit a code reference pins, through
  * the App, under the rule `show_code` is held to (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
  * the tree beside that tab, listed where and as the file is read
  * (`hosted/plan-tree.ts`); `/api/plans/{id}/skills` is the skills a

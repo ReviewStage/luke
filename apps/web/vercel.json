@@ -73,10 +73,6 @@
           "dest": "/api/default.js?route=plans/agents&id=$1"
         },
         {
-          "src": "/api/plans/([^/]+)/inbox",
-          "dest": "/api/default.js?route=plans/inbox&id=$1"
-        },
-        {
           "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
           "dest": "/api/default.js?route=plans/restore&id=$1&seq=$2"
         },
@@ -131,14 +127,6 @@
         {
           "src": "/api/agents/([^/]+)",
           "dest": "/api/default.js?route=agents/agent&id=$1"
-        },
-        {
-          "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
-          "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
-        },
-        {
-          "src": "/api/inbox/([^/]+)",
-          "dest": "/api/default.js?route=inbox/item&id=$1"
         },
         {
           "src": "/api/automations/([^/]+)/runs",
@@ -247,10 +235,6 @@
         {
           "src": "/api/github/webhook",
           "dest": "/api/default.js?route=github/webhook"
-        },
-        {
-          "src": "/api/inbox",
-          "dest": "/api/default.js?route=inbox"
         },
         {
           "src": "/api/mac-commands",

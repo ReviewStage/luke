@@ -19,12 +19,11 @@ in sandboxes of their own (see "Who we send it to"), and the transcripts it
 shows, a coding agent's and the planning conversation's, are read from our
 service. The planning model reads a plan's repository in a sandbox on our
 service. No part of Luke's judgment runs on this Mac, so no transcript,
-working memory, or inbox of his is held here on disk, and in memory only the
-tabs described next. On disk, under its application data, Luke keeps only
-the layout of its window: which plans' tabs are open and which are pinned,
-each pin with its label (a coding agent's title or a file's path), which
-inbox items you have seen, and which groups you folded and how you sorted
-the Inbox. None of it is sent anywhere.
+or working memory of his is held here on disk, and in memory only the tabs
+described next. On disk, under its application data, Luke keeps only the
+layout of its window: which plans' tabs are open and which are pinned, each
+pin with its label (a coding agent's title or a file's path), and which
+groups you folded. None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Luke's planning model, the workers it
 hands work to, every coding agent, and the workers a coding agent hands work
@@ -120,7 +119,8 @@ conversation described below. Luke on your Mac remembers, for each plan, only
 the time of its newest save when you last had it open, to show which sections
 changed since.
 
-Deleting a plan removes it at once with its history, its inbox, and the
+Deleting a plan removes it at once with its history, any inbox items an
+earlier version kept for it, and the
 record of each coding agent started on it with the plan copy or task that
 agent was handed, and marks the plan's conversation and each agent's
 transcript deleted, removed thirty days later. Before it deletes anything, it
@@ -147,32 +147,21 @@ service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
-**A plan's inbox.** When a coding agent on a plan needs a decision from you,
-or something only you can do such as changing a GitHub setting, it posts an
-item to the plan's inbox on our service: a title, context in Markdown, links,
-references to lines of its repository (a path, the lines, and the commit,
-never the lines themselves), and how it asks to be answered, with any options
-or form fields. An item may carry a picture the agent took in its sandbox,
-such as a screenshot of a page it rendered, with the agent's description of
-up to 300 characters: our service reads the file from the sandbox, keeps the
-image, up to 1.5 MB, in our database beside the item, and serves it only to
-Luke signed in as you. Items and their pictures are stored under your account
-and readable by our own operators, like the agent's transcript. The agent can
-change or withdraw an item, and our service keeps each as it last stood; a
-picture goes when the item stops naming it. Your answer, and any note, is
-stored with the item and, where the agent asked to hear back, handed to it as
-one of your messages, kept in its transcript. While you are signed in, Luke
-on your Mac keeps a read open to our service for every item waiting on you,
-each in brief (its plan, agent, and title), and for every plan holding an item,
-to count them in its sidebar and on its Dock icon. Opening the Inbox reads
-each of those plans' items whole, the ones you settled included, with what
-each offered and the answer you picked; Luke holds them in memory only, never
-on disk. While its window is behind, a Mac notification names a new item by
-its plan, agent, and title, and a coding agent's ended turn by its plan, the
-agent's title, and whether it finished or failed, or its branch's pull request
-number, unless you turn these off in Settings › Coding agents; macOS shows and
-keeps them as it does any app's. Deleting the plan, or your account, deletes
-its items.
+**The inbox earlier versions kept.** Earlier versions of Luke gave a plan an
+inbox, where a coding agent posted what it needed of you: a title, context in
+Markdown, links, references to lines of its repository, how it asked to be
+answered, sometimes a picture from its sandbox, and your answer. Luke has no
+inbox now: no agent posts to one, nothing on your Mac reads one, and our
+service serves none. The items and pictures earlier versions stored under your
+account stay in our database, read by nothing and readable by our own
+operators, until a coming update deletes them all; until then, deleting the
+plan, or your account, deletes its items.
+
+**Notifications.** While its window is behind, a Mac notification names a
+coding agent's ended turn by its plan, the agent's title, and whether it
+finished or failed, or its branch's pull request number, unless you turn
+these off in Settings › Coding agents; macOS shows and keeps them as it does
+any app's.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, or to the task you start one with, by picking them with +,
@@ -278,9 +267,6 @@ that megabyte, lines uncut) and a download is written where you save it. The
 File tab's tree lists the repository's folders and file names the same way,
 through our service, which does not store them, and Luke holds them in memory
 only; a `.env` file's name may be listed, though the file is never read.
-An inbox item's line reference is read the same way, at the
-commit the agent named, for the lines on the item and the File tab it opens;
-nothing of the file is stored.
 
 **A coding agent's changes.** A coding agent's Changes tab shows its pull
 request's changed files. Each time the tab opens, our service reads them from
@@ -602,7 +588,7 @@ whole: the feedback form, since a screenshot you attach could carry another
 app's words; a plan's title while you edit it, its document while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
-are viewing; an Inbox item's body and pictures; each coding agent's and
+are viewing; each coding agent's and
 worker's tab, with its Changes tab, message box, menus of skills and MCP
 servers, and the files you attach there; code drawn in a transcript; the API
 keys and Plan template pages of Settings; and the cards that open over a row
@@ -864,7 +850,8 @@ reports by Sentry.
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts, preferences, and plan template with its history, your pinned
   repositories, your plans with their history, whiteboards, pages, coding
-  agents, and inbox items and pictures, the conversation with its attached
+  agents, any inbox items and pictures an earlier version kept, the
+  conversation with its attached
   files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier

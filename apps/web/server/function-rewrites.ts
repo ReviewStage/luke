@@ -67,7 +67,6 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
   { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
   {
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
     route: "plans/restore",
@@ -102,12 +101,6 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
   { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
-  {
-    src: "/api/inbox/([^/]+)/attachments/([^/]+)",
-    route: "inbox/attachment",
-    query: "id=$1&attachment=$2",
-  },
-  { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
   { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1" },
   { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1" },
   { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1" },

@@ -8,8 +8,6 @@ export * from "./favorite.js";
 export * from "./github-connect-intent.js";
 export * from "./github-install-intent.js";
 export * from "./github-installation.js";
-export * from "./inbox.js";
-export * from "./inbox-attachment.js";
 export * from "./integration.js";
 export * from "./mac-command.js";
 export * from "./personal-workspace.js";

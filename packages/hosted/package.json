@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./account-inbox-wire": "./src/account-inbox-wire.js",
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
     "./board-text": "./src/board-text.js",

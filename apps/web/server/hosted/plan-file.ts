@@ -50,7 +50,7 @@ import {
  * from, whose clone is the default branch as it stood when the session first
  * read the repository: the window is the file as it is now, and a file gone
  * since reads as missing, naming the branch GitHub found nothing on. A read
- * that names a commit, as an inbox item's code reference does so that the
+ * that names a commit, as a pinned code reference does so that the
  * lines it points at never move, is read at that commit instead, through the
  * same reach, and names the commit where it would name the branch.
  */
