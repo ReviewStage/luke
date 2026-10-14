@@ -2973,7 +2973,8 @@ what stands behind it. A paused automation answers `200 { queued: 0 }`, so
 a sender does not retry; otherwise the call is `202 { queued }`, the run
 recorded under the caller's `Idempotency-Key` where it sends one, with its
 body, at most 64 KiB, kept on the run's `payload` for the agent, which is
-handed it fenced as the caller's own text. The sweep starts the agent.
+handed it fenced as the caller's own text, its angle brackets spelled as
+entities so it cannot close the fence. The sweep starts the agent.
 `POST /api/automations/{id}/webhook-secret` mints the secret again under
 the account bearer and answers it once; the one before stops admitting
 calls. `tests/automation-webhook-app.test.ts` holds both.
