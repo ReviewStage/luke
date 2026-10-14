@@ -16,8 +16,8 @@ import {
  * for every agent. Its row names how many tools the server offers once they
  * have been read, and that count opens the list of them. A server not
  * connected, or whose sign-in expired, offers Settings › Integrations, the one
- * place a server is connected; one this deployment does not offer is a dimmed row
- * with nothing to press. No row says where it stands in words: the switch,
+ * place a server is connected; one this deployment does not offer the account is
+ * not drawn at all, as the agent is never handed it. No row says where it stands in words: the switch,
  * the count, and the button are what say it. A read of the connections that
  * failed is the one error, offered as a way to read again.
  */
@@ -84,7 +84,11 @@ export function serverRows(input: {
   readFailed: boolean;
   disabled: readonly IntegrationProvider[];
 }): readonly ServerRow[] {
-  return INTEGRATION_PROVIDER_LIST.map((provider) => ({
+  // A server this deployment does not offer the account is not drawn, as the agent is never handed it.
+  const offered = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => input.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
+  );
+  return offered.map((provider) => ({
     provider,
     name: INTEGRATION_NAME[provider],
     kind: kindOf(input.statusOf(provider), input.readFailed),
