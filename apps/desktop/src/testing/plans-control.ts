@@ -173,6 +173,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       files: [],
       changes: [],
       pages: [],
+      terminals: [],
       strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,

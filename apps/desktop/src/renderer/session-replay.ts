@@ -26,10 +26,11 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * pictures of the person's screen, a plan's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
- * version history, Inbox, and coding agents' tabs, among others. The whiteboard is
- * the one surface that draws its words on a canvas, which the text masking
- * cannot reach, so its block is its only line, and canvas recording is held
- * off by name rather than by the library's default.
+ * version history, Inbox, and coding agents' tabs and their Terminal tabs,
+ * among others. The whiteboard and a Terminal tab are the surfaces that draw
+ * their words on a canvas, which the text masking cannot reach, so their
+ * block is their only line, and canvas recording is held off by name rather
+ * than by the library's default.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
  * masking and those blocks are the whole of what decides it.

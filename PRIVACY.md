@@ -629,12 +629,12 @@ app's words; a plan's title while you edit it, its document while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
-worker's tab, with its Changes tab, message box, menus of skills and MCP
-servers, and the files you attach there; code drawn in a transcript; the API
-keys and Plan template pages of Settings; and the cards that open over a row
-on hover. The whiteboard draws its words as pixels, which the masking cannot
-reach, so leaving it out is its only line, and recording what a canvas draws
-is switched off. A mention drawn as a chip carries what it names, such as a
+worker's tab, with its Changes tab, its Terminal tab, message box, menus of
+skills and MCP servers, and the files you attach there; code drawn in a
+transcript; the API keys and Plan template pages of Settings; and the cards
+that open over a row on hover. The whiteboard and a Terminal tab's shell draw
+their words as pixels, which the masking cannot reach, so leaving them out is
+their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked.

@@ -1,6 +1,6 @@
 import type { CodingAgentMessage, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
+import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { agentParts, agentStillWriting, isDelegation } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { useMinute } from "./plan-time";
@@ -180,12 +180,18 @@ export function heldLatest(
   return !agentStillWriting(held.status) && !now.writing ? held.messages : undefined;
 }
 
-/** The card: the name, its model under it, and its corner, then the latest step where the tab holds one current. */
+/**
+ * The card: the name, its model under it, and its corner, then the latest
+ * step where the tab holds one current, and under a rule what a tab of the
+ * agent's other than its own adds, as its Terminal tab says whose sandbox it
+ * is in.
+ */
 export function AgentTabCard({
   name,
   untitled = false,
   models,
   read,
+  foot,
 }: {
   name: string;
   /** Whether the name is a subagent's task standing in until it has a title. */
@@ -194,6 +200,8 @@ export function AgentTabCard({
   models: readonly CatalogModel[];
   /** What the card says, read from what the tab holds as the card is hung. */
   read: () => CardReading;
+  /** One line under a rule, said by a tab of the agent's other than its own. */
+  foot?: string | undefined;
 }): React.JSX.Element {
   const { corner, choice, transcript } = read();
   return (
@@ -205,6 +213,12 @@ export function AgentTabCard({
         corner={corner.kind === CARD_CORNER.NONE ? undefined : <Corner corner={corner} />}
       />
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
+      {foot === undefined ? null : (
+        <>
+          <CardRule />
+          <CardNote>{foot}</CardNote>
+        </>
+      )}
     </HoverCard>
   );
 }
