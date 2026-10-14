@@ -123,6 +123,22 @@
                 "earlier"
               ]
             },
+            "by": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
+            },
             "label": {
               "type": "string",
               "minLength": 1,
@@ -160,6 +176,22 @@
                   "agent",
                   "earlier"
                 ]
+              },
+              "by": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "name"
+                ],
+                "additionalProperties": false
               },
               "label": {
                 "type": "string",

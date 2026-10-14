@@ -223,6 +223,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planPullRequestLineSchema: planWire.planPullRequestLineSchema,
     planAgentsSummarySchema: planWire.planAgentsSummarySchema,
     planSummarySchema: planWire.planSummarySchema,
+    planEditorSchema: planWire.planEditorSchema,
     planLastEditSchema: planWire.planLastEditSchema,
     planSectionEditSchema: planWire.planSectionEditSchema,
     planSchema: planWire.planSchema,

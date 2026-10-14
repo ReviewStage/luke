@@ -323,9 +323,24 @@ export const PLAN_ACTOR = {
 
 export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
 
+/**
+ * The member a revision names: the developer whose edit or restore it is, or
+ * the one whose call the notetaker wrote it on, by their account's id and the
+ * name it holds now, a member who has since left the workspace among them.
+ * The window calls the member You only where the id is its own account's.
+ */
+export const planEditorSchema = EffectSchema.Struct({
+  userId: EffectSchema.String,
+  name: EffectSchema.String,
+});
+
+export type PlanEditor = typeof planEditorSchema.Type;
+
 /** The newest revision of a plan, as its "Edited by" line reads it. */
 export const planLastEditSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
+  by: EffectSchema.optionalKey(planEditorSchema),
   /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
   /** Epoch milliseconds of the revision's latest save. */

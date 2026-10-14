@@ -23,6 +23,13 @@ export type AccountSnapshot =
   | { status: typeof ACCOUNT_STATUS.SIGNING_IN }
   | {
       status: typeof ACCOUNT_STATUS.SIGNED_IN;
+      /**
+       * The account's own id, the service's `sub` (`client.ts`'s
+       * `AccountIdentity`), which is how the window tells the signed-in
+       * member's work from a teammate's. Absent for an identity stored
+       * without one, where the window names nobody You.
+       */
+      id?: string;
       email: string;
       name?: string;
       /**

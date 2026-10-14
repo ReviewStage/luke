@@ -191,6 +191,8 @@ export interface PlansControl {
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
+  /** The signed-in account's id, whose own edits a plan names "you"; none while signed out, for a fixture, or an identity stored without one. */
+  me: string | undefined;
   /** Every plan of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, the inbox, and the history find a plan in. */
   plans: PlanningView["plans"];
   /** Every archived plan of every workspace, newest archived first. */
@@ -484,6 +486,8 @@ export function usePlansTab(input: {
   signedIn: boolean;
   /** The signed-in account's email, which the plan last open is kept under; none while signed out. */
   account: string | undefined;
+  /** The signed-in account's id, whose own work the window names as theirs; none while signed out. */
+  accountId?: string | undefined;
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   /** Whether the tab is on screen: the panel open, on this tab. */
@@ -1412,6 +1416,7 @@ export function usePlansTab(input: {
     restoring,
     shown,
     signedIn,
+    me: fixture === undefined ? input.accountId : undefined,
     plans: [...sidebar.pinned, ...sidebar.rest],
     archived: sidebar.archived,
     listed: {

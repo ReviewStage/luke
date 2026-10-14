@@ -133,6 +133,7 @@ export function TemplateVersionHistory({
     agents: [],
     summary: templateRevisionSummary,
     onShowSource: undefined,
+    own: true,
   };
   return (
     <DesktopVersionHistory

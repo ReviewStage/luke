@@ -1,6 +1,7 @@
 import type { PlanActor } from "@sidecar/features/plan-wire";
 import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
 
@@ -17,7 +18,7 @@ import { plan } from "./plan.js";
  * first later save found, under `earlier`. The developer restoring an
  * earlier revision writes a revision of its own naming the one it brought
  * back, which nothing joins. Rows go with their plan, and outlive the coding
- * agent that wrote them unnamed.
+ * agent that wrote them unnamed, and the member's account unnamed too.
  */
 export const planRevision = pgTable(
   "plan_revision",
@@ -28,6 +29,13 @@ export const planRevision = pgTable(
     /** The revision's number within its plan, from one. */
     seq: integer("seq").notNull(),
     actor: text("actor").$type<PlanActor>().notNull(),
+    /**
+     * The member who wrote it: the developer whose edit or restore it is, or
+     * the one whose call the notetaker wrote it on. Null for a coding agent's,
+     * for one written before writers were kept, and once the member's account
+     * is gone, which reads as nobody the service can name.
+     */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** The coding agent that wrote it; null for any other writer, and once the agent's row is gone. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     /** The call the notetaker wrote it on, as `voice_sessions.live_session_id` names it; null for any other writer. */

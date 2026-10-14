@@ -201,6 +201,7 @@ function savedUnderLock<T extends TextTaken, F>(
       yield* recordRevision({
         planId: binding.planId,
         writer,
+        userId: binding.userId,
         before,
         after,
         changes: taken.changes,

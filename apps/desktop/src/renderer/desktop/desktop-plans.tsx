@@ -522,6 +522,7 @@ function PlanDocument({
                   key={String(archived)}
                   plan={plan}
                   live={plans.live}
+                  reader={{ id: plans.me, own: false }}
                   onShowHistory={(save) => plans.history.onOpen(plan.id, save)}
                   {...(archived
                     ? {}
