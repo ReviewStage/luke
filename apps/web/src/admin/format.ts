@@ -1,5 +1,5 @@
+import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@luke/features/sign-in-provider";
 import type { AdminTrend } from "../../server/admin/admin-metrics";
-import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "../sign-in-provider";
 
 const numberFormat = new Intl.NumberFormat("en-US");
 

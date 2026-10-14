@@ -1,9 +1,9 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
+import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { captureSiteEvent, identifySiteVisitor, SITE_EVENT, startSiteAnalytics } from "./analytics";
-import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";
 

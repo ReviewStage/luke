@@ -1,27 +1,27 @@
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
-  GITHUB_CONNECT_CLAIM,
-  GITHUB_CONNECT_PAGE,
-  type GitHubConnectClaim,
-  githubConnectClaimAnswerSchema,
-} from "@luke/features/github-connection-wire";
-import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
-import { createAuthClient } from "better-auth/react";
-import { Option, Schema } from "effect";
-import { StrictMode, useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
-import {
   CONNECT_STEP,
   type ConnectStep,
   connectStepFromSearch,
   failedLinkAddress,
   LINK_FAILED,
   linkErrorWords,
-} from "./connect-github-step";
+} from "@luke/features/connect-github-step";
+import {
+  GITHUB_CONNECT_CLAIM,
+  GITHUB_CONNECT_PAGE,
+  type GitHubConnectClaim,
+  githubConnectClaimAnswerSchema,
+} from "@luke/features/github-connection-wire";
+import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
+import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
+import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { createAuthClient } from "better-auth/react";
+import { Option, Schema } from "effect";
+import { StrictMode, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { ConnectionGraphic } from "./connection-graphic";
 import { SignInChoices } from "./sign-in-choices";
-import { SOCIAL_PROVIDER } from "./sign-in-provider";
 import "./styles.css";
 
 /**

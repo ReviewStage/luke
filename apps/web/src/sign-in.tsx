@@ -1,17 +1,17 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { ProviderMark } from "@luke/ui";
-import { createAuthClient } from "better-auth/react";
-import { StrictMode, useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
-import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
-import { ConnectionGraphic } from "./connection-graphic";
-import { LukeMark } from "./SiteChrome";
 import {
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
   socialProviderFromState,
-} from "./sign-in-provider";
+} from "@luke/features/sign-in-provider";
+import { ProviderMark } from "@luke/ui";
+import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { createAuthClient } from "better-auth/react";
+import { StrictMode, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
+import { ConnectionGraphic } from "./connection-graphic";
+import { LukeMark } from "./SiteChrome";
 import "./styles.css";
 
 // The provider client forwards the authorization server's signed `oauth_query`

@@ -8,10 +8,10 @@ import {
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
 import { ProviderMark } from "@luke/ui";
+import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";

@@ -1,5 +1,5 @@
+import { accountLabel } from "@luke/ui/account-initials";
 import { useState } from "react";
-import { accountLabel } from "../../account-initials";
 import { AccountAvatar } from "../chrome/page-header";
 import { formatDayTick, formatNumber } from "../format";
 import { ACCOUNTS_SORT } from "../prefs";

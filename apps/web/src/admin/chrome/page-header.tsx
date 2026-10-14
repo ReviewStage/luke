@@ -1,5 +1,5 @@
+import { accountInitials, accountLabel } from "@luke/ui/account-initials";
 import { useEffect, useRef, useState } from "react";
-import { accountInitials, accountLabel } from "../../account-initials";
 import { Skeleton } from "../skeleton";
 
 /** The signed-in account the header names; read from the session, shown as-is. */
