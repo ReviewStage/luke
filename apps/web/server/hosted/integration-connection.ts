@@ -29,14 +29,14 @@
  * Disconnect takes effect from the next step, whatever the SDK cached.
  */
 
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   INTEGRATION_NAME,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
-import { causeKind } from "@sidecar/runtime/effect";
+} from "@luke/features/integration-wire";
+import { causeKind } from "@luke/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";

@@ -1463,9 +1463,7 @@ put(join(APP_RENDERER, "styles", "generated", "face-motion.css"), faceMotionCss(
 
 if (!CHECK_ONLY) {
   process.stdout.write(`${written.length} SVGs written to packages/brand/assets/\n`);
-  process.stdout.write(
-    "face-art.ts written to @sidecar/brand and face-motion.css to the renderer\n",
-  );
+  process.stdout.write("face-art.ts written to @luke/brand and face-motion.css to the renderer\n");
 } else if (stale.length > 0) {
   process.stderr.write(
     `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +

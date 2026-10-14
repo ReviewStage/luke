@@ -13,7 +13,7 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import { HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
+import { HTTP_METHOD, withoutTrailingSlash } from "@luke/wire";
 import { Data, Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";

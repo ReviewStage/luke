@@ -1,5 +1,5 @@
-import { recordVoiceSeconds, spendHostedMeter } from "@sidecar/database/models/quota";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { recordVoiceSeconds, spendHostedMeter } from "@luke/database/models/quota";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { Effect, Redacted } from "effect";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";

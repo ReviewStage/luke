@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
-import * as schema from "@sidecar/database/schemas";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
+import * as schema from "@luke/database/schemas";
 import { getColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";

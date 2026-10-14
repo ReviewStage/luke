@@ -1,8 +1,8 @@
-import { recordTurnFastRefused } from "@sidecar/database/models/coding-agent-store";
-import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
-import { spendHostedMeter } from "@sidecar/database/models/quota";
-import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
-import { failureKind } from "@sidecar/runtime/effect";
+import { recordTurnFastRefused } from "@luke/database/models/coding-agent-store";
+import type { PlanStoreEffect } from "@luke/database/models/plan-store";
+import { spendHostedMeter } from "@luke/database/models/quota";
+import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
+import { failureKind } from "@luke/runtime/effect";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";

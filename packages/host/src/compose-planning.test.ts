@@ -6,21 +6,21 @@ import {
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
-} from "@sidecar/features";
-import type { Board } from "@sidecar/features/board-wire";
+} from "@luke/features";
+import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
-} from "@sidecar/features/coding-agent-wire";
-import type { GitHubConnection } from "@sidecar/features/github-connection-wire";
-import type { PageLine, PageVersion } from "@sidecar/features/page-wire";
-import type { PlanEditAnswer } from "@sidecar/features/plan-edit";
+} from "@luke/features/coding-agent-wire";
+import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { PageLine, PageVersion } from "@luke/features/page-wire";
+import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
   PLAN_ACTOR,
   type Plan,
@@ -32,7 +32,7 @@ import {
   type PlanSummary,
   type PlanTreeAnswer,
   type RepositoryPin,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -42,22 +42,22 @@ import {
   type PlanWorkAnswer,
   planningViewSchema,
   type RepositoryCallFailure,
-} from "@sidecar/features/planning-view";
-import type { PlanTranscript } from "@sidecar/features/transcript-wire";
-import type { WorkspaceInvitation } from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/planning-view";
+import type { PlanTranscript } from "@luke/features/transcript-wire";
+import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@sidecar/features/workspace-wire";
+} from "@luke/features/workspace-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethod,
-} from "@sidecar/gateway";
-import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/gateway";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Deferred, Duration, Effect, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {

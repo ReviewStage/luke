@@ -22,15 +22,15 @@
  * store failure's message may name a statement.
  */
 
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { readCodingAgentOfConversation } from "@sidecar/database/models/coding-agent-store";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
-import { causeKind } from "@sidecar/runtime/effect";
+} from "@luke/features/integration-wire";
+import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { GitHubApp } from "../../github/github-app.js";

@@ -1,14 +1,14 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import type {
   AccountPreferencesRow,
   AccountPreferencesWrite,
   AccountSeamEffect,
-} from "@sidecar/database/models/account-store";
-import type { PlanStoreFailure } from "@sidecar/database/models/plan-store";
-import type { StandingSession } from "@sidecar/database/models/recorded-session";
-import { contextWindowSchema } from "@sidecar/features/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
+} from "@luke/database/models/account-store";
+import type { PlanStoreFailure } from "@luke/database/models/plan-store";
+import type { StandingSession } from "@luke/database/models/recorded-session";
+import { contextWindowSchema } from "@luke/features/coding-agent-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
@@ -16,13 +16,13 @@ import {
   type PlanTemplateRevisionAnswer,
   type PlanTemplateRevisionsAnswer,
   planTemplateWriteRequestSchema,
-} from "@sidecar/features/plan-document-template";
-import { planRevisionSeqSchema } from "@sidecar/features/plan-wire";
-import type { FastAccess } from "@sidecar/features/provider-key-wire";
-import { failureKind } from "@sidecar/runtime/effect";
-import { accountPreferencesFromWire } from "@sidecar/settings";
-import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/plan-document-template";
+import { planRevisionSeqSchema } from "@luke/features/plan-wire";
+import type { FastAccess } from "@luke/features/provider-key-wire";
+import { failureKind } from "@luke/runtime/effect";
+import { accountPreferencesFromWire } from "@luke/settings";
+import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,

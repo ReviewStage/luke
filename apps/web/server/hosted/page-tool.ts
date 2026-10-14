@@ -1,13 +1,13 @@
 import { posix } from "node:path";
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { writePage } from "@sidecar/database/models/plan-pages";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { writePage } from "@luke/database/models/plan-pages";
 import {
   PAGE_BOUNDS,
   type PageWrite,
   pageHtmlSchema,
   pageTitleSchema,
-} from "@sidecar/features/page-wire";
-import { describeWire, readEither } from "@sidecar/wire/effect";
+} from "@luke/features/page-wire";
+import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import {

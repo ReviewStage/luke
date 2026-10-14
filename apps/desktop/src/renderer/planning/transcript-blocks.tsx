@@ -2,9 +2,9 @@ import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
-} from "@sidecar/features/coding-agent-wire";
-import { decodeMention, isMentionLabel, mentionName } from "@sidecar/features/mention-link";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
+} from "@luke/features/coding-agent-wire";
+import { decodeMention, isMentionLabel, mentionName } from "@luke/features/mention-link";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
   AppWindowIcon,
   BookOpenIcon,

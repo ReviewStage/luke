@@ -42,7 +42,7 @@ if [[ -n "$engines_drift" ]]; then
 fi
 
 # The packages below the runtime (live, features, voice) open
-# `@sidecar/runtime/vocabulary` precisely because it resolves no Node module
+# `@luke/runtime/vocabulary` precisely because it resolves no Node module
 # and no Effect layer that would carry one in. The renderer's own `node:` grep
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
@@ -70,7 +70,7 @@ node --input-type=module -e '
   await walk(path.join(root, "vocabulary.ts"));
   if (offenders.length > 0) {
     process.stderr.write(
-      `error: @sidecar/runtime/vocabulary resolves a Node-reaching import: ${offenders.join(", ")}\n`,
+      `error: @luke/runtime/vocabulary resolves a Node-reaching import: ${offenders.join(", ")}\n`,
     );
     process.exit(1);
   }
@@ -81,7 +81,7 @@ node --input-type=module -e '
 # tokens, layout sizes, and provider-mark path data the desktop renderer and
 # the marketing mock share. If a copy no longer matches the source, it is
 # telling a story the artwork does not; --check fails on any drift.
-pnpm --dir "$SIDECAR_REPO_ROOT" --filter @sidecar/brand --silent check
+pnpm --dir "$SIDECAR_REPO_ROOT" --filter @luke/brand --silent check
 
 # The vercel.json rewrites are what land a route on its grouped function, and
 # they are generated from server/routes/; --check fails if a rewrite went stale.
@@ -121,7 +121,7 @@ fi
 
 # The web functions are bundled from server/routes/ into dist-functions/ and
 # the Build Output tree with every workspace package inlined, so a bare
-# `@sidecar/…` specifier is resolved by
+# `@luke/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only
 # what apps/web/package.json declares, so a specifier the web app's sources name
 # without declaring resolves in a developer's hoisted tree, typechecks, and
@@ -134,11 +134,11 @@ undeclared_packages() {
     local manifest=$1
     shift
     local declared named named_name undeclared=""
-    declared=$(grep -oE '"@sidecar/[a-z-]+": "workspace:\*"' "$manifest" |
-        sed -E 's#"@sidecar/([a-z-]+)".*#\1#' | sort -u)
+    declared=$(grep -oE '"@luke/[a-z-]+": "workspace:\*"' "$manifest" |
+        sed -E 's#"@luke/([a-z-]+)".*#\1#' | sort -u)
     named=$(grep -rhoE --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
-        '(from|import) "@sidecar/[a-z-]+(/[a-z-]+)*"' "$@" |
-        sed -E 's#.*"@sidecar/([a-z-]+).*"#\1#' | sort -u || true)
+        '(from|import) "@luke/[a-z-]+(/[a-z-]+)*"' "$@" |
+        sed -E 's#.*"@luke/([a-z-]+).*"#\1#' | sort -u || true)
     while IFS= read -r named_name; do
         [[ -z "$named_name" ]] && continue
         if ! grep -qx "$named_name" <<<"$declared"; then
@@ -157,7 +157,7 @@ for service in eve coder; do
     fi
 done
 if [[ -n "$undeclared_web_packages" ]]; then
-    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @sidecar specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
+    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @luke specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
         "$undeclared_web_packages" >&2
     exit 1
 fi
@@ -211,7 +211,7 @@ fi
 # A temporary directory, a native-helper process, and a brain composition were
 # each hand-rolled in several test files, and every copy drifted: three
 # temporary directories were never cleaned up. `temporaryDirectory` lives in
-# @sidecar/runtime/testing, because the host's tests are in a package and a
+# @luke/runtime/testing, because the host's tests are in a package and a
 # package cannot reach into an app; the rest are under apps/desktop/src/testing.
 # This call is how a hand-rolled one always begins. A microtask drain and a
 # fake clock are no longer this check's concern: `TestClock` is the clock an
@@ -222,7 +222,7 @@ hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
     'mkdtemp' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src" "$SIDECAR_REPO_ROOT/packages/host/src" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
-    printf 'error: test files import temporaryDirectory from @sidecar/runtime/testing rather than hand-rolling it:\n%s\n' \
+    printf 'error: test files import temporaryDirectory from @luke/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
     exit 1
 fi

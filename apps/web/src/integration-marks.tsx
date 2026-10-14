@@ -1,4 +1,4 @@
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@sidecar/features/integration-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { useId } from "react";
 
 /**

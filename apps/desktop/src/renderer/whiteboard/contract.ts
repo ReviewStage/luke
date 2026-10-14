@@ -1,4 +1,4 @@
-import type { Board } from "@sidecar/features/board-wire";
+import type { Board } from "@luke/features/board-wire";
 
 /**
  * contract.ts -- what the panel and the whiteboard bundle say to each other: the one mount call, and the scene rule both sides read.

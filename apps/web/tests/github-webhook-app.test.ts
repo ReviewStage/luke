@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@sidecar/database/github-installation-vocabulary";
-import { createAutomation, listAutomationRuns } from "@sidecar/database/models/automation-store";
+} from "@luke/database/github-installation-vocabulary";
+import { createAutomation, listAutomationRuns } from "@luke/database/models/automation-store";
 import {
   type CodingAgent,
   createCodingAgent,
   listPublishedCodingAgents,
   updateCodingAgentBranch,
-} from "@sidecar/database/models/coding-agent-store";
-import { listWorkspaces } from "@sidecar/database/models/workspace-store";
-import { account, user } from "@sidecar/database/schemas/auth";
-import { githubInstallation } from "@sidecar/database/schemas/github-installation";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/coding-agent-store";
+import { listWorkspaces } from "@luke/database/models/workspace-store";
+import { account, user } from "@luke/database/schemas/auth";
+import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { getTestDB } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -24,9 +24,9 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
-} from "@sidecar/features/automation-wire";
-import type { CodingAgentPullRequest } from "@sidecar/features/coding-agent-wire";
-import type { WireBoundaryInput } from "@sidecar/wire";
+} from "@luke/features/automation-wire";
+import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { WireBoundaryInput } from "@luke/wire";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";

@@ -5,7 +5,7 @@ import type { MentionNode } from "./contract";
  * mention-node.ts -- a mention in the editors' words: an atom holding the name it was written with and its link's target, drawn by the panel, written back as the link it was read from.
  *
  * A mention is written into markdown as a link whose label starts with `@`
- * (`@sidecar/features/mention-link`, which only the panel reads). The editor
+ * (`@luke/features/mention-link`, which only the panel reads). The editor
  * holds it as one node, an atom one Backspace takes out whole, its name and
  * target in the node and never in the DOM's attributes, since the recording
  * masks words and not every attribute: the chip inside the node's element

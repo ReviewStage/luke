@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { SANDBOX_STATE } from "@sidecar/features/terminal-wire";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { SANDBOX_STATE } from "@luke/features/terminal-wire";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import {

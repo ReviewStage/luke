@@ -1,15 +1,15 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
-} from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@sidecar/features/workspace-wire";
-import { TrashIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/workspace-wire";
+import { TrashIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ExternalLinkIcon, UserMinusIcon, XIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

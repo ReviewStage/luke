@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
@@ -9,27 +9,27 @@ import {
   restorePlanTemplate,
   writeAccountPreferences,
   writePlanTemplate,
-} from "@sidecar/database/models/account-store";
+} from "@luke/database/models/account-store";
 import {
   listTemplateRevisions,
   readTemplateRevision,
-} from "@sidecar/database/models/plan-template-revisions";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/plan-template-revisions";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
 import {
   type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
   MODEL_PROVIDER,
-} from "@sidecar/features/models-wire";
+} from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateAnswer,
   type PlanTemplateRevisionsAnswer,
   planTemplateAnswerSchema,
   planTemplateRevisionsAnswerSchema,
-} from "@sidecar/features/plan-document-template";
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/plan-document-template";
+import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

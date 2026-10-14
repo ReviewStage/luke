@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * `test:store` runs the tests that open a database against a real Postgres
  * on CI, and this is how those tests are found. A test meets a database
  * through one of two doors, `tests/support/hosted-store-database` or
- * `@sidecar/database/testing`, and through nothing else:
+ * `@luke/database/testing`, and through nothing else:
  * `LUKE_STORE_TEST_DATABASE_URL` is read there alone, so a file that
  * imports no door cannot run against Postgres whatever it does, and a file
  * that imports one runs against Postgres the moment it exists. The set is
@@ -28,7 +28,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 /** The support modules whose import makes a test a store test, as a file writes them. */
 export const STORE_TEST_DOORS = {
   HOSTED_STORE_DATABASE: "./support/hosted-store-database",
-  TEST_DB: "@sidecar/database/testing",
+  TEST_DB: "@luke/database/testing",
 } as const;
 
 const TEST_FILE_SUFFIX = ".test.ts";

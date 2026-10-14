@@ -1,4 +1,4 @@
-# @sidecar/database
+# @luke/database
 
 The hosted store's schema, queries, and migrations. The schema modules under
 `src/schemas/` are the source of truth; Drizzle's Effect driver runs every
@@ -11,7 +11,7 @@ statement (`src/core/query.ts`'s `Database`), and the vendored `drizzle` and
 | --- | --- |
 | `pnpm db:generate --name=<what_it_does>` | Write the folder that brings the newest snapshot up to the schema modules |
 | `pnpm db:generate --custom --name=<what_it_does>` | Write a folder for hand-written SQL |
-| `pnpm --filter @sidecar/database check:migrations` | `drizzle-kit check`: refuse two branches' migrations that do not commute (`./scripts/check.sh` runs it) |
+| `pnpm --filter @luke/database check:migrations` | `drizzle-kit check`: refuse two branches' migrations that do not commute (`./scripts/check.sh` runs it) |
 | `pnpm --filter @luke/web db:migrate` | Apply what a database has not recorded, on `DATABASE_URL_UNPOOLED` |
 
 Each migration is a folder, `migrations/<UTC timestamp>_<name>/`, holding

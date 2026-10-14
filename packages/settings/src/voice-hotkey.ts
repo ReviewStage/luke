@@ -205,4 +205,4 @@ export function capturedVoiceHotkey(chord: VoiceHotkeyChord): VoiceHotkeyCapture
   return { outcome: VOICE_HOTKEY_CAPTURE.CAPTURED, accelerator: joinVoiceHotkey(held, key) };
 }
 
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";

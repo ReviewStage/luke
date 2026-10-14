@@ -5,9 +5,9 @@ import {
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
-} from "@sidecar/live";
-import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
-import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+} from "@luke/live";
+import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
+import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
@@ -261,7 +261,7 @@ function onlyPart<Part, Encoded>(
 }
 
 /**
- * One history message as `@sidecar/live` seeds it: the `message` type, a
+ * One history message as `@luke/live` seeds it: the `message` type, a
  * role, and exactly one text part of the type that role writes. The SDK's
  * `InitialItem` also allows an id, a status, and a plain `text` part; none
  * is admitted, because the service composes the request to OpenAI from this

@@ -1,6 +1,6 @@
-import type { ProductSettingValue } from "@sidecar/features/analytics";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { AppSettingId, DescribedSetting } from "@sidecar/wire/app-settings";
+import type { ProductSettingValue } from "@luke/features/analytics";
+import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
+import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import { Schema } from "effect";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import type {

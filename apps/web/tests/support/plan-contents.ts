@@ -1,4 +1,4 @@
-import { NOTE_KIND, type PlanNote } from "@sidecar/features/plan-template";
+import { NOTE_KIND, type PlanNote } from "@luke/features/plan-template";
 
 /**
  * plan-contents.ts -- the notes a notetaker would take, as a test writes them.

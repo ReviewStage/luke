@@ -1,11 +1,11 @@
-import { changedSections } from "@sidecar/features/plan-document";
+import { changedSections } from "@luke/features/plan-document";
 import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateRevisionAnswer,
   type PlanTemplateRevisionLine,
   type PlanTemplateRevisionsAnswer,
-} from "@sidecar/features/plan-document-template";
-import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-document-template";
+import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@luke/features/plan-wire";
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";

@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { saveProviderKey } from "@sidecar/database/models/provider-key-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import { HOSTED_API_ERROR } from "@sidecar/features";
-import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/features/models-wire";
+import { Database } from "@luke/database/core/query";
+import { saveProviderKey } from "@luke/database/models/provider-key-store";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { HOSTED_API_ERROR } from "@luke/features";
+import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
   PROVIDER_KEY_PROVIDER,
-} from "@sidecar/features/provider-key-wire";
-import type { WireBoundaryInput } from "@sidecar/wire";
+} from "@luke/features/provider-key-wire";
+import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Logger, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

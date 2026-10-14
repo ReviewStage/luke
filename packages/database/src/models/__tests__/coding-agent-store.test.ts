@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

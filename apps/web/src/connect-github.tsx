@@ -1,10 +1,10 @@
-import { HOSTED_SERVICE_PATH } from "@sidecar/features";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   GITHUB_CONNECT_CLAIM,
   GITHUB_CONNECT_PAGE,
   type GitHubConnectClaim,
   githubConnectClaimAnswerSchema,
-} from "@sidecar/features/github-connection-wire";
+} from "@luke/features/github-connection-wire";
 import { createAuthClient } from "better-auth/react";
 import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";

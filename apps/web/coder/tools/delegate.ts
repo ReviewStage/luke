@@ -1,4 +1,4 @@
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { Result } from "effect";
 import {
   defineWorkflowTool,

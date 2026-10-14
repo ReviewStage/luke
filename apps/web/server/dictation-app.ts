@@ -1,12 +1,12 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { spendDictationMeter } from "@sidecar/database/models/quota";
-import { base64Bytes, base64Chars } from "@sidecar/features/coding-agent-wire";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { spendDictationMeter } from "@luke/database/models/quota";
+import { base64Bytes, base64Chars } from "@luke/features/coding-agent-wire";
 import {
   DICTATION_BOUNDS,
   type DictationAnswer,
   dictationRequestSchema,
-} from "@sidecar/features/dictation-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/dictation-wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
@@ -33,7 +33,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 /**
  * dictation-app.ts -- a clip the developer dictated into a message box, answered with its words.
  *
- * `POST /api/dictation` takes one clip (`@sidecar/features/dictation-wire`),
+ * `POST /api/dictation` takes one clip (`@luke/features/dictation-wire`),
  * holds it to two minutes and a megabyte, hands it to OpenAI's transcription
  * model on Luke's key with the words the desktop says it is likely to hold
  * (`hosted/transcription.ts`), and answers the text. Nothing of the clip or
@@ -41,7 +41,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * in this request's memory and goes when it ends.
  *
  * What is kept is the meter: one call and the clip's seconds on the
- * account's day (`@sidecar/database/models/quota`), the seconds OpenAI billed where it says
+ * account's day (`@luke/database/models/quota`), the seconds OpenAI billed where it says
  * and the desktop's own timing otherwise, which the bound above holds to two
  * minutes. A meter the database refused is logged and the text still
  * answered, since the transcription was had and paid for. A deployment

@@ -9,16 +9,16 @@ import {
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
-} from "@sidecar/features";
+} from "@luke/features";
 import {
   carried,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
-} from "@sidecar/gateway";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
+} from "@luke/gateway";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";

@@ -1,4 +1,4 @@
-import { describeWire } from "@sidecar/wire/effect";
+import { describeWire } from "@luke/wire/effect";
 import { Schema } from "effect";
 
 /**

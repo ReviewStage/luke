@@ -1,6 +1,6 @@
-import type { CodingAgentAgentAnswer } from "@sidecar/features/coding-agent-view";
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { useRef, useState } from "react";
 import type { AgentServersControl } from "./agent-servers";
 

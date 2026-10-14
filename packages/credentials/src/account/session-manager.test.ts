@@ -6,7 +6,7 @@ import {
   fakeHttpClientLayer,
   HTTP_STATUS,
   jsonResponse,
-} from "@sidecar/wire/testing";
+} from "@luke/wire/testing";
 import { Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { AccountClient, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";

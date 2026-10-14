@@ -1,6 +1,6 @@
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import type { GatewayHost, NodeRegistry } from "@sidecar/gateway";
-import type { AppSettings } from "@sidecar/settings/wire";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { GatewayHost, NodeRegistry } from "@luke/gateway";
+import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";

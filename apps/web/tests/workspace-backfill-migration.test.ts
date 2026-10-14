@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@sidecar/database/core/migrator";
-import { unmigratedPgliteSqlClient } from "@sidecar/database/testing";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
+import { unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

@@ -1,5 +1,5 @@
+import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
-import type { UnparsedWireValue } from "@sidecar/wire";
 import { contextBridge, ipcRenderer } from "electron";
 import { type AppBridge, bridgeEntries } from "#shared/bridge";
 import { TERMINAL_PORT_CHANNEL } from "#shared/messages/terminal";

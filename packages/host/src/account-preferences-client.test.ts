@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 

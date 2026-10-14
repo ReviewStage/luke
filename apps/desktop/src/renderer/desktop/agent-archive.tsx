@@ -1,6 +1,6 @@
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import { ArchiveIcon, UnarchiveIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { ArchiveIcon, UnarchiveIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";

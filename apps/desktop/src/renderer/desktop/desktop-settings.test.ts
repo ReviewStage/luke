@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { settingsView } from "@sidecar/settings/testing";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { settingsView } from "@luke/settings/testing";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
-import type { Board } from "@sidecar/features/board-wire";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
+import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import type { Board } from "@luke/features/board-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -14,9 +14,9 @@ import {
   type PlanCodeShowing,
   type PlanningView,
   type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
-import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
-import { LIVE_STATUS } from "@sidecar/live";
+} from "@luke/features/planning-view";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { LIVE_STATUS } from "@luke/live";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";

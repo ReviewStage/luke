@@ -177,7 +177,7 @@ const workText = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BO
  * answer, under the tool's own name), the newest kept and every string in
  * them cut to the text bound, so a turn that read a large file still travels
  * small. The desktop reads each call by its tool's name
- * (`@sidecar/features/agent-tools`), as it reads a coding agent's.
+ * (`@luke/features/agent-tools`), as it reads a coding agent's.
  */
 const planWorkJournalSchema = EffectSchema.Array(storedObjectSchema).check(
   EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.PARTS),

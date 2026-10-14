@@ -1,4 +1,4 @@
-import { isRecord, text, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { Properties } from "posthog-js";
 // The "no-external" client: the full build without the surveys, product
 // tours, web vitals, and the rest Luke never turns on, and without the

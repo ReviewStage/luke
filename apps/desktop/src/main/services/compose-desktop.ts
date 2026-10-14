@@ -1,12 +1,12 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
   hostStandingLayer,
   layersInOrder,
-} from "@sidecar/host/effect";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+} from "@luke/host/effect";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { Context, Effect, Layer, Stream } from "effect";
 import { callInProgress } from "#shared/messages/voice-view";
 import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";

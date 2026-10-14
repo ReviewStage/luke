@@ -6,7 +6,7 @@
  * its place, and every surface gated on a signed-in account draws as signed in.
  */
 
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { DEAN_AVATAR_DATA_URL } from "./dean-avatar";
 
 /** The account, built once, so a render reads the same object each time. */

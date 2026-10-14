@@ -2,8 +2,8 @@
  * The one re-export surface server code reaches the workspace packages through.
  */
 
-export * from "@sidecar/features";
-export * from "@sidecar/features/analytics";
+export * from "@luke/features";
+export * from "@luke/features/analytics";
 // The brain is named rather than starred: what is listed is what the server
 // imports through this door and nothing more.
 export {
@@ -34,13 +34,13 @@ export {
   UI_PART_TYPE,
   userMessage,
   userMetadataOf,
-} from "@sidecar/features/brain";
-export { wireValidatedTool } from "@sidecar/features/brain/tool-set";
+} from "@luke/features/brain";
+export { wireValidatedTool } from "@luke/features/brain/tool-set";
 // The planning vocabulary stands behind doors of its own, which the barrel
 // above re-exports nothing of.
-export * from "@sidecar/features/plan-wire";
-export * from "@sidecar/runtime/vocabulary";
-export * from "@sidecar/wire";
-export * from "@sidecar/wire/conversation";
-export * from "@sidecar/wire/provider-identity";
-export * from "@sidecar/wire/ui-messages";
+export * from "@luke/features/plan-wire";
+export * from "@luke/runtime/vocabulary";
+export * from "@luke/wire";
+export * from "@luke/wire/conversation";
+export * from "@luke/wire/provider-identity";
+export * from "@luke/wire/ui-messages";

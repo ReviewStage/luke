@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { getTestDB } from "@sidecar/database/testing";
-import type { WireBoundaryInput } from "@sidecar/wire";
+import { Database } from "@luke/database/core/query";
+import { getTestDB } from "@luke/database/testing";
+import type { WireBoundaryInput } from "@luke/wire";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

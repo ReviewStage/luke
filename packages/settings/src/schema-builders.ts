@@ -1,6 +1,6 @@
-import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/features/analytics";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@sidecar/wire/app-settings";
+import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@luke/features/analytics";
+import { isWireString, type UnparsedWireValue } from "@luke/wire";
+import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@luke/wire/app-settings";
 import { Result, Schema } from "effect";
 import {
   type AppSettingReader,

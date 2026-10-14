@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { openPlanConversation, savePlanText } from "@sidecar/database/models/plan-store";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { openPlanConversation, savePlanText } from "@luke/database/models/plan-store";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";

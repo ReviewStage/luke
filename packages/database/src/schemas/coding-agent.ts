@@ -2,8 +2,8 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
   type ContextWindow,
-} from "@sidecar/features/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+} from "@luke/features/coding-agent-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import {
   type AnyPgColumn,
   foreignKey,
@@ -151,7 +151,7 @@ export const codingAgent = pgTable(
  * One delegation of a coding agent's: the model and effort the agent chose
  * for the worker, keyed by the child conversation the worker's session is
  * recorded in, which is a function of the agent's conversation and the call
- * that started the worker (`@sidecar/database/models/ids`). The worker's own steps
+ * that started the worker (`@luke/database/models/ids`). The worker's own steps
  * read the pair here, since eve hands a child's resolvers no lineage and the
  * pair is per call rather than per agent. The call's own id is kept beside
  * it, since the child's id is a digest no reader can turn back into the

@@ -1,13 +1,13 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { PlanningView } from "@sidecar/features/planning-view";
-import type { AppSettings } from "@sidecar/settings/wire";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { PlanningView } from "@luke/features/planning-view";
+import type { AppSettings } from "@luke/settings/wire";
 import {
   isRecord,
   isWireBoolean,
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
 import { type SessionReplayBootstrap, WINDOW_ROLE, type WindowRole } from "./session";
 import type { BuildCommit, UpdateSnapshot } from "./update";

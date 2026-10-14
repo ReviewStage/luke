@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditRequest } from "@sidecar/features/plan-edit";
-import type { Plan } from "@sidecar/features/plan-wire";
-import type { PlanningEditAnswer } from "@sidecar/features/planning-view";
+import type { PlanEditRequest } from "@luke/features/plan-edit";
+import type { Plan } from "@luke/features/plan-wire";
+import type { PlanningEditAnswer } from "@luke/features/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

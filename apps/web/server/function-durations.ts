@@ -1,4 +1,4 @@
-import { VOICE_SERVICE_PATH } from "@sidecar/features";
+import { VOICE_SERVICE_PATH } from "@luke/features";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 
 /**

@@ -1,18 +1,18 @@
-# `@sidecar/features`
+# `@luke/features`
 
 The desktop-to-service wire boundary: the hosted service paths, one wire module
 per domain, and the clients that speak them.
 
 ## The dependency direction is the point
 
-It depends only on lower wire vocabulary, on `@sidecar/live`, and on
-`@sidecar/runtime` (the `effect` door the analytics sender schedules through),
+It depends only on lower wire vocabulary, on `@luke/live`, and on
+`@luke/runtime` (the `effect` door the analytics sender schedules through),
 none of which imports this one, so the edge points down.
 
 A client sits here because it speaks nothing but hosted vocabulary and holds no
 credential of its own. **Behavior that needs anything above this boundary belongs
-above it**: the hosted live session source in `@sidecar/voice`, the account
-preference client in `@sidecar/host` because the snapshot it carries is settings
+above it**: the hosted live session source in `@luke/voice`, the account
+preference client in `@luke/host` because the snapshot it carries is settings
 vocabulary.
 
 **A request frame refuses a key it did not name; an answer ignores one a newer

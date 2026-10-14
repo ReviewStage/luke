@@ -1,4 +1,4 @@
-import type { PlanningPageAnswer, PlanningPageParams } from "@sidecar/features/planning-view";
+import type { PlanningPageAnswer, PlanningPageParams } from "@luke/features/planning-view";
 import { Effect } from "effect";
 import { framedPageOf, PAGE_SCHEME } from "#shared/page-frame";
 

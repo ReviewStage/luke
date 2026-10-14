@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   listRevisions,
   PLAN_REVISION,
   type PlanWriter,
-} from "@sidecar/database/models/plan-revisions";
-import { readPlan } from "@sidecar/database/models/plan-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import { PLAN_HEADING, type PlanNote } from "@sidecar/features/plan-template";
-import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/features/plan-wire";
+} from "@luke/database/models/plan-revisions";
+import { readPlan } from "@luke/database/models/plan-store";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
+import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/plan-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

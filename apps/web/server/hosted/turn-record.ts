@@ -10,16 +10,16 @@
  * a coding agent's journals. A leaf over the row alone, so it reads nothing.
  */
 
-import { TurnUsageColumnSchema } from "@sidecar/database/models/columns";
-import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
+import { TurnUsageColumnSchema } from "@luke/database/models/columns";
+import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import {
   CODING_AGENT_BOUNDS,
   TURN_ENDING,
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "@sidecar/features/coding-agent-wire";
-import { catalogIdOf } from "@sidecar/features/model-label";
+} from "@luke/features/coding-agent-wire";
+import { catalogIdOf } from "@luke/features/model-label";
 import { Option, Schema } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
 

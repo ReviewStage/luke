@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import {
   SANDBOX_STATE,
   terminalCreateRequestSchema,
   terminalRenameRequestSchema,
-} from "@sidecar/features/terminal-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/terminal-wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Result } from "effect";
 import {
   type HttpClient,

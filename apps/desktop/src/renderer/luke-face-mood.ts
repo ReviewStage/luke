@@ -1,4 +1,4 @@
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/brand";
+import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@luke/brand";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
 /**

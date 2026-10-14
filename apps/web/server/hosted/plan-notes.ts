@@ -1,30 +1,30 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type PlanWriter,
   readRevisionContent,
   recordRevision,
-} from "@sidecar/database/models/plan-revisions";
+} from "@luke/database/models/plan-revisions";
 import {
   readPlanForUpdate,
   readStartedText,
   type StoredPlan,
   savePlanText,
-} from "@sidecar/database/models/plan-store";
-import { changedSections } from "@sidecar/features/plan-document";
-import { applyDocumentEdit, type PlanEditRequest } from "@sidecar/features/plan-edit";
+} from "@luke/database/models/plan-store";
+import { changedSections } from "@luke/features/plan-document";
+import { applyDocumentEdit, type PlanEditRequest } from "@luke/features/plan-edit";
 import {
   applyNotesToText,
   type PlanAgentEdit,
   type PlanNote,
   withAgentEdit,
-} from "@sidecar/features/plan-template";
+} from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
   type Plan,
   type PlanDocument,
   type PlanSectionEdit,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
@@ -32,10 +32,10 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 /**
  * plan-notes.ts -- the plan's one write: take the notetaker's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
  *
- * A plan is one Markdown text (`@sidecar/features/plan-document`). Its callers
+ * A plan is one Markdown text (`@luke/features/plan-document`). Its callers
  * are a planning call's notetaker (`voice/plan-scribe.ts`) and a coding
  * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
- * notes (`@sidecar/features/plan-template`): a point added under a heading, a
+ * notes (`@luke/features/plan-template`): a point added under a heading, a
  * phrase corrected, or a line struck. They are taken in order over the text
  * as it stands, and a note that names a phrase the text does not hold is
  * passed over while the rest are saved; a text past the plan's bound is
@@ -50,7 +50,7 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * wrote, is read back off those revisions. The developer's edit is the
  * same save with their text in place of notes, laid over what the text holds
  * now where Luke wrote meanwhile, or answered as a conflict with nothing
- * saved (`@sidecar/features/plan-edit`). Their restore of one of the plan's
+ * saved (`@luke/features/plan-edit`). Their restore of one of the plan's
  * revisions is the same save with the revision's text, kept as a revision of
  * the developer's that names the one it brought back.
  *
@@ -305,7 +305,7 @@ function takeDocumentEdit(
  * service bound under its lock and kept as a revision of theirs: set where
  * the text still holds the edit's base, the developer's change laid over it
  * where Luke wrote meanwhile, and a conflict, with nothing saved, where it
- * cannot be (`@sidecar/features/plan-edit`).
+ * cannot be (`@luke/features/plan-edit`).
  */
 export function saveDeveloperEdit(
   binding: PlanDocumentBinding,

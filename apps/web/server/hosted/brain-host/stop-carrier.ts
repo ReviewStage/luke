@@ -2,8 +2,8 @@
  * stop-carrier.ts -- the Stop a waiting ask took, carried to eve at the start of its turn.
  */
 
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { Effect, type Schema } from "effect";
 import { describeUnreachable, EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
 

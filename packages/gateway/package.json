@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/gateway",
+  "name": "@luke/gateway",
   "version": "0.13.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/live": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

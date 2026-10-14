@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import {
   PLAN_WORK_STATE,
   type PlanWorkState,
   type PlanWorkTurn,
   type PlanWorkWorker,
-} from "@sidecar/features/planning-view";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/features/planning-view";
+import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import {
   conversationOf,

@@ -25,19 +25,19 @@ import {
   PLANNING_READ,
   type PlanWorkPart,
   type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/features/transcript-wire";
+} from "@luke/features/transcript-wire";
 import {
   LIVE_CLOSE_REASON,
   LIVE_DEFAULTS,
   LIVE_STATUS,
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
-} from "@sidecar/live";
+} from "@luke/live";
 import { FIXTURE_CALL_PANEL } from "../planning/planning-fixture";
 import { ago, secondsAgo } from "./clock";
 import { codingAgentAnswers, MODEL } from "./coding-agent";

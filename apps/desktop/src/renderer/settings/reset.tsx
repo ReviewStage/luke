@@ -1,13 +1,13 @@
-import { ResetIcon } from "@sidecar/panel";
-import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@sidecar/settings";
+import { ResetIcon } from "@luke/panel";
+import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@luke/settings";
 import type {
   AppSettingField,
   AppSettingsView,
   AppSettingValue,
   SettingsResetScope,
-} from "@sidecar/settings/wire";
-import { appSettingsView, SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/settings/wire";
+import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useSettingWrite } from "./use-setting-write";

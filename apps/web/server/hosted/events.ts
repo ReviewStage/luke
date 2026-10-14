@@ -1,4 +1,4 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { Clock, Effect, type Layer, Option, type Schema } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

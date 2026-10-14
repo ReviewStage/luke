@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { updatePlan } from "@sidecar/database/models/plan-store";
-import { organization, user } from "@sidecar/database/schemas/auth";
-import { codingAgent } from "@sidecar/database/schemas/coding-agent";
-import { inboxItem } from "@sidecar/database/schemas/inbox";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { updatePlan } from "@luke/database/models/plan-store";
+import { organization, user } from "@luke/database/schemas/auth";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { inboxItem } from "@luke/database/schemas/inbox";
+import { getTestDB } from "@luke/database/testing";
 import {
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxPost,
-} from "@sidecar/features/inbox-wire";
+} from "@luke/features/inbox-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import {

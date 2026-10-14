@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@sidecar/features/account-inbox-wire";
+import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPullRequestAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@sidecar/features/inbox-wire";
+} from "@luke/features/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";

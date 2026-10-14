@@ -11,7 +11,7 @@ import { voiceServer } from "../server/voice/service";
  * and the sessions function's bundle reaches the exchange's own modules, the
  * live-session door among them, which the guard once measured it did not.
  * The desktop half of the same commit, that the host composes no exchange of
- * its own, is held by `@sidecar/voice`'s holder tests and `@sidecar/host`'s
+ * its own, is held by `@luke/voice`'s holder tests and `@luke/host`'s
  * assembly, which stands with no live brain and no live record to provide.
  */
 

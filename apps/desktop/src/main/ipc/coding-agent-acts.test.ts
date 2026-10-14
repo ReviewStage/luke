@@ -3,21 +3,21 @@ import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/features/inbox-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { PROVIDER_KEY_PROVIDER } from "@sidecar/features/provider-key-wire";
+} from "@luke/features/inbox-wire";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";

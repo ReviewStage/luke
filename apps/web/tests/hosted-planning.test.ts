@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { openPlanConversation, readPlan, savePlanText } from "@sidecar/database/models/plan-store";
-import { storeWriter } from "@sidecar/database/models/writer";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import { type PlanDocument, planDocumentSchema } from "@sidecar/features/plan-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { Database } from "@luke/database/core/query";
+import { hostTurnId } from "@luke/database/models/ids";
+import { openPlanConversation, readPlan, savePlanText } from "@luke/database/models/plan-store";
+import { storeWriter } from "@luke/database/models/writer";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { type PlanDocument, planDocumentSchema } from "@luke/features/plan-wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
   type JSONValue,

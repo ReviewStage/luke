@@ -15,7 +15,7 @@ import { Context, Layer } from "effect";
 import type { LiveBrain } from "../live-session/live-brain.js";
 
 export class LiveBrainTag extends Context.Service<LiveBrainTag, LiveBrain>()(
-  "@sidecar/voice/LiveBrain",
+  "@luke/voice/LiveBrain",
 ) {}
 
 /** Hands a brain built imperatively to the session that reads `LiveBrainTag`. */

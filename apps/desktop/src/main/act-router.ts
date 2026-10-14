@@ -1,4 +1,4 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@luke/wire";
 import { Data, Effect, Predicate } from "effect";
 import type { WebContents } from "electron";
 import {

@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
-import { runWebMigrations } from "@sidecar/database/core/migrator";
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
-import { type HostedStore, hostedStore } from "@sidecar/database/models/hosted-store";
-import { user } from "@sidecar/database/schemas/auth";
+import { runWebMigrations } from "@luke/database/core/migrator";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { sqlClientOverUrl } from "@luke/database/core/sql-client";
+import { type HostedStore, hostedStore } from "@luke/database/models/hosted-store";
+import { user } from "@luke/database/schemas/auth";
 import {
   cloneStoreTestPostgres,
   STORE_TEST_DATABASE_ENVIRONMENT,
   sqlClientOverPglite,
-} from "@sidecar/database/testing";
-import { atInstant } from "@sidecar/wire/testing";
+} from "@luke/database/testing";
+import { atInstant } from "@luke/wire/testing";
 import { Effect, type Layer, ManagedRuntime } from "effect";
 
 /**
@@ -22,7 +22,7 @@ import { Effect, type Layer, ManagedRuntime } from "effect";
  * runner applies, because it is opened empty; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied. Each opening
  * is a database of its own on either dialect: a fresh PGlite, or a clone of
- * the migrated Postgres that `close` drops (`@sidecar/database/testing`), so a
+ * the migrated Postgres that `close` drops (`@luke/database/testing`), so a
  * statement one file forgets to scope reaches no other file's rows.
  */
 /**

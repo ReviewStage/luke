@@ -1,7 +1,7 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/features/board-vocabulary";
-import type { Board, DrawingElement } from "@sidecar/features/board-wire";
-import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
+import type { Board, DrawingElement } from "@luke/features/board-wire";
+import type { Plan, PlanSummary } from "@luke/features/plan-wire";
 import {
   type CodeToken,
   PLAN_WORK_STATE,
@@ -11,15 +11,15 @@ import {
   type PlanningRepositoriesAnswer,
   type PlanningView,
   type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/features/transcript-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
-import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+} from "@luke/features/transcript-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
+import type { WireRecord, WireValue } from "@luke/wire";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
 import { TOOL_STATE } from "../ai-elements/tool";

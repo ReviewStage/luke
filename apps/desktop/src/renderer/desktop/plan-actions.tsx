@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import {
   ArchiveIcon,
   CopyIcon,
@@ -10,7 +10,7 @@ import {
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
-} from "@sidecar/panel";
+} from "@luke/panel";
 import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";

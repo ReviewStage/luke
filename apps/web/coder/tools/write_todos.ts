@@ -1,4 +1,4 @@
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
 import { TODOS_SAVED, TODOS_TOOL } from "../../server/hosted/coder-host/todos.js";
 

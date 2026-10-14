@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { askRecord } from "@sidecar/database/models/asks";
-import { childConversationId } from "@sidecar/database/models/ids";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
-import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import type { PlanWorkTurn } from "@sidecar/features/planning-view";
+import { askRecord } from "@luke/database/models/asks";
+import { childConversationId } from "@luke/database/models/ids";
+import { openPlanConversation } from "@luke/database/models/plan-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import type { PlanWorkTurn } from "@luke/features/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -14,9 +14,9 @@ import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrainAsk,
   type LiveBrainRunEvent,
-} from "@sidecar/voice/live-session";
-import { arrival } from "@sidecar/voice/testing";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+} from "@luke/voice/live-session";
+import { arrival } from "@luke/voice/testing";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";

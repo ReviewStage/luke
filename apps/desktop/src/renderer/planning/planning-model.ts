@@ -1,4 +1,4 @@
-import type { Plan, PlanSummary, RepositoryPin } from "@sidecar/features/plan-wire";
+import type { Plan, PlanSummary, RepositoryPin } from "@luke/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -7,8 +7,8 @@ import {
   type RepositoryCallFailure,
   VOICE_PHASE,
   type VoicePhase,
-} from "@sidecar/features/planning-view";
-import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
+} from "@luke/features/planning-view";
+import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { VoiceView } from "#shared/messages/voice-view";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
+import type { UnparsedWireValue } from "@luke/wire";
 import { Effect, Exit, Scope } from "effect";
 import {
   app,

@@ -1,4 +1,4 @@
-import { PLAN_BOUNDS } from "@sidecar/features/plan-wire";
+import { PLAN_BOUNDS } from "@luke/features/plan-wire";
 import { useLayoutEffect, useRef, useState } from "react";
 import { RENAME_FAILED_NOTE } from "../planning/planning-model";
 

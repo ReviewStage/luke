@@ -1,8 +1,5 @@
-import {
-  githubAutomationsOn,
-  recordAutomationRun,
-} from "@sidecar/database/models/automation-store";
-import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
+import { githubAutomationsOn, recordAutomationRun } from "@luke/database/models/automation-store";
+import type { PlanStoreEffect } from "@luke/database/models/plan-store";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
@@ -10,9 +7,9 @@ import {
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
-} from "@sidecar/features/automation-wire";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/automation-wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 
 /**

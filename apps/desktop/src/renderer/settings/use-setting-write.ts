@@ -1,4 +1,4 @@
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 
 /**

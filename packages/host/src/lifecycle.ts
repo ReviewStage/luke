@@ -1,4 +1,4 @@
-import type { GatewayShutdownSteps } from "@sidecar/gateway";
+import type { GatewayShutdownSteps } from "@luke/gateway";
 import { Effect, Fiber, Ref } from "effect";
 
 /**

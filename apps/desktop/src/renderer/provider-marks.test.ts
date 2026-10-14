@@ -1,13 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  type AccountProvider,
-} from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

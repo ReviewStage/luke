@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/panel",
+  "name": "@luke/panel",
   "version": "0.13.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/brand": "workspace:*",
+    "@luke/brand": "workspace:*",
     "react": "catalog:"
   },
   "devDependencies": {

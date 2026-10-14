@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
 import { applyMessagesPage, type CodingAgentMessage } from "./coding-agent-wire.js";
 

@@ -7,7 +7,7 @@ import { defineRule } from "@oxlint/plugins";
  * peers the whole of ESLint and imports `@typescript-eslint/utils` it does
  * not declare, which is a dependency tree for two checks this size. The
  * handles are the names a statement is built on here: `db`, the one shared
- * handle (`@sidecar/database/core/query`), and `authDatabase`, Better Auth's.
+ * handle (`@luke/database/core/query`), and `authDatabase`, Better Auth's.
  */
 const DRIZZLE_HANDLES: ReadonlySet<string> = new Set(["db", "authDatabase"]);
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { WireRecord } from "@sidecar/wire";
+import type { WireRecord } from "@luke/wire";
 import { Duration, Effect, Schedule, type Stream } from "effect";
 import { type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";
 import type { OpenSocket, SocketArrival, SocketClose, SocketOpening } from "./live-socket.js";

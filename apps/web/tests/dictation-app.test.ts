@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import type { WireBoundaryInput } from "@sidecar/wire";
+import { Database } from "@luke/database/core/query";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import type { WireBoundaryInput } from "@luke/wire";
 import {
   HTTP_STATUS,
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@sidecar/wire/testing";
+} from "@luke/wire/testing";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

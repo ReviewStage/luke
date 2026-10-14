@@ -1,4 +1,4 @@
-import type { HostedIntegrationsClient } from "@sidecar/features";
+import type { HostedIntegrationsClient } from "@luke/features";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationConnectView,
@@ -6,11 +6,11 @@ import {
   type IntegrationStatusView,
   type IntegrationToolsView,
   integrationProviderParamsSchema,
-} from "@sidecar/features/integration-view";
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@sidecar/gateway";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/integration-view";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

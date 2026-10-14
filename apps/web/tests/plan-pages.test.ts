@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { listPages, readPageVersion, writePage } from "@sidecar/database/models/plan-pages";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { listPages, readPageVersion, writePage } from "@luke/database/models/plan-pages";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
 import { Effect, Option } from "effect";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 

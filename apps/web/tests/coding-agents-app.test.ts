@@ -1,24 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
-import { readAccountPreferences } from "@sidecar/database/models/account-store";
-import { MENTIONED_HEADING } from "@sidecar/database/models/attached-file-parts";
-import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { sentLineId } from "@sidecar/database/models/ids";
-import { sentLineStands } from "@sidecar/database/models/message-reads";
-import {
-  openPlanConversation,
-  savePlanText,
-  updatePlan,
-} from "@sidecar/database/models/plan-store";
-import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
-import { storeWriter } from "@sidecar/database/models/writer";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { getTestDB } from "@sidecar/database/testing";
-import { HOSTED_API_ERROR } from "@sidecar/features";
-import { accountInboxAnswerSchema } from "@sidecar/features/account-inbox-wire";
+import { Database } from "@luke/database/core/query";
+import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
+import { readAccountPreferences } from "@luke/database/models/account-store";
+import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { sentLineId } from "@luke/database/models/ids";
+import { sentLineStands } from "@luke/database/models/message-reads";
+import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { storeWriter } from "@luke/database/models/writer";
+import { conversations } from "@luke/database/schemas/storage";
+import { getTestDB } from "@luke/database/testing";
+import { HOSTED_API_ERROR } from "@luke/features";
+import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -27,7 +23,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_IMAGE_TYPE,
@@ -36,12 +32,12 @@ import {
   type InboxImageBlock,
   type InboxPost,
   inboxAnswerSchema,
-} from "@sidecar/features/inbox-wire";
-import { MENTION_KIND, mentionMarkdown } from "@sidecar/features/mention-link";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/features/models-wire";
-import { REPOSITORY_UNREACHED } from "@sidecar/features/repository-reach-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/inbox-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import {
   Clock,
   DateTime,

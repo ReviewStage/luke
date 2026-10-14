@@ -31,7 +31,7 @@
  * whatever shape its wire reads it.
  */
 
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import type { UIMessage } from "ai";
 import { Option, Schema } from "effect";
 import { callStart, type TranscriptCallRow } from "./transcript-model";

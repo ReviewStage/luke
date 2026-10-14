@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/features",
+  "name": "@luke/features",
   "version": "0.13.0",
   "private": true,
   "type": "module",
@@ -50,9 +50,9 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/live": "workspace:*",
-    "@sidecar/runtime": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/runtime": "workspace:*",
+    "@luke/wire": "workspace:*",
     "ai": "catalog:",
     "diff": "9.0.0",
     "effect": "catalog:"

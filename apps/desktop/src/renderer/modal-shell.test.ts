@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { FEEDBACK_KIND } from "@sidecar/features/feedback";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { FEEDBACK_KIND } from "@luke/features/feedback";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

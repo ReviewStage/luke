@@ -1,6 +1,6 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { describeWire, readEither } from "@sidecar/wire/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
+import type { UnparsedWireValue } from "@luke/wire";
+import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SandboxSession } from "eve/sandbox";

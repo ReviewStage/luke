@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import {
   VOICE_WRITE_REFUSAL,
   type VoiceTarget,
   type VoiceWriteResult,
   type VoiceWriter,
   voiceWriter,
-} from "@sidecar/database/models/voice-writer";
-import { STORE_WRITE_EFFECT, storeWriter } from "@sidecar/database/models/writer";
-import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
-import { LIVE_DEFAULTS } from "@sidecar/live";
+} from "@luke/database/models/voice-writer";
+import { STORE_WRITE_EFFECT, storeWriter } from "@luke/database/models/writer";
+import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
+import { LIVE_DEFAULTS } from "@luke/live";
 import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";

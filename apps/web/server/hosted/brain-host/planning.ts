@@ -1,17 +1,17 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import type { LabelledAgentEdit, StoredPlan } from "@sidecar/database/models/plan-store";
-import { boardText } from "@sidecar/features/board-text";
-import type { Board } from "@sidecar/features/board-wire";
+import type { DatabaseServices } from "@luke/database/core/query";
+import type { LabelledAgentEdit, StoredPlan } from "@luke/database/models/plan-store";
+import { boardText } from "@luke/features/board-text";
+import type { Board } from "@luke/features/board-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
   type PlanNote,
-} from "@sidecar/features/plan-template";
-import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/features/plan-wire";
-import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
+} from "@luke/features/plan-template";
+import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
+import type { UnparsedWireValue, WireRecord } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

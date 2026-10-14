@@ -1,18 +1,15 @@
 import assert from "node:assert/strict";
-import type { MessageListRead } from "@sidecar/database/models/message-reads";
-import {
-  listRecentMessages,
-  type StoredMessageRecord,
-} from "@sidecar/database/models/message-reads";
-import { CLEARED_CONVERSATION_RETENTION_MS } from "@sidecar/database/models/soft-delete";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import type { MessageListRead } from "@luke/database/models/message-reads";
+import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
+import { CLEARED_CONVERSATION_RETENTION_MS } from "@luke/database/models/soft-delete";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import { type ToolSet, tool } from "ai";
 import { afterAll, test } from "vitest";
 import { z } from "zod";

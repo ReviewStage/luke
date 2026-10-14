@@ -1,4 +1,4 @@
-import { CloseIcon } from "@sidecar/panel";
+import { CloseIcon } from "@luke/panel";
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
 import { useId } from "react";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";

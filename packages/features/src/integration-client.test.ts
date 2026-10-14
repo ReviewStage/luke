@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi } from "@sidecar/wire/testing";
+import { fakeCloudApi } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { HostedIntegrationsClient } from "./integration-client.js";
 import {

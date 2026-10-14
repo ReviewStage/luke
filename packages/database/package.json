@@ -1,5 +1,5 @@
 {
-  "name": "@sidecar/database",
+  "name": "@luke/database",
   "version": "0.13.0",
   "private": true,
   "type": "module",
@@ -82,11 +82,11 @@
   },
   "dependencies": {
     "@effect/sql-pg": "catalog:",
-    "@sidecar/features": "workspace:*",
-    "@sidecar/live": "workspace:*",
-    "@sidecar/runtime": "workspace:*",
-    "@sidecar/settings": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/runtime": "workspace:*",
+    "@luke/settings": "workspace:*",
+    "@luke/wire": "workspace:*",
     "ai": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"

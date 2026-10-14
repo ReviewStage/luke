@@ -11,9 +11,9 @@
  * under: built here once, so both hosts are that core and their own role.
  */
 
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { childConversationId } from "@sidecar/database/models/ids";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { childConversationId } from "@luke/database/models/ids";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import {

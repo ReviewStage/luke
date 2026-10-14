@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { failureKind } from "@sidecar/runtime/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { failureKind } from "@luke/runtime/effect";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { anthropicFastAccess } from "./hosted/coder-host/account-keys.js";

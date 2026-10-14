@@ -1,13 +1,7 @@
-import { HOSTED_SERVICE_PATH } from "@sidecar/features";
-import { onOwnFiber } from "@sidecar/runtime/effect";
-import {
-  isRecord,
-  isWireString,
-  text,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
-import { webResponseFromClientResponse } from "@sidecar/wire/effect";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { onOwnFiber } from "@luke/runtime/effect";
+import { isRecord, isWireString, text, type UnparsedWireValue, type WireRecord } from "@luke/wire";
+import { webResponseFromClientResponse } from "@luke/wire/effect";
 import { Data, Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpBody from "effect/http/HttpBody";

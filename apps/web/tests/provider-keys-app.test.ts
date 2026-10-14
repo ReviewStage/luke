@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { listProviderKeyRows } from "@sidecar/database/models/provider-key-store";
-import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
+import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
 import {
   FAST_ACCESS,
   PROVIDER_KEY_PROVIDER,
@@ -14,10 +14,10 @@ import {
   type ProviderKeyProvider,
   type ProviderKeysAnswer,
   providerKeysAnswerSchema,
-} from "@sidecar/features/provider-key-wire";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
+} from "@luke/features/provider-key-wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";

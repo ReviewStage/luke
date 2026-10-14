@@ -5,8 +5,8 @@ import {
   SCHEMA_REFUSAL,
   type UnparsedWireValue,
   type WireRecord,
-} from "@sidecar/wire";
-import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaTransformation } from "effect";
 
 /**

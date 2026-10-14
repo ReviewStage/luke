@@ -1,5 +1,5 @@
-import type { BoardElement, DrawingElement } from "@sidecar/features/board-wire";
-import type { PlanAgentEdit } from "@sidecar/features/plan-template";
+import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
+import type { PlanAgentEdit } from "@luke/features/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
@@ -41,7 +41,7 @@ export const plan = pgTable(
       .$type<readonly PlanAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@sidecar/features/plan-document`). */
+    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@luke/features/plan-document`). */
     document: text("document").notNull(),
     /**
      * The GitHub repository the plan is about, `owner/name` as GitHub spells

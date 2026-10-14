@@ -1,13 +1,13 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import type {
   VoiceTarget,
   VoiceWriteResult,
   VoiceWriter,
-} from "@sidecar/database/models/voice-writer";
-import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
-import type { LiveServerEvent } from "@sidecar/live";
-import { causeKind, serialQueue } from "@sidecar/runtime/effect";
-import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
+} from "@luke/database/models/voice-writer";
+import { STORE_WRITE_EFFECT } from "@luke/database/models/writer";
+import type { LiveServerEvent } from "@luke/live";
+import { causeKind, serialQueue } from "@luke/runtime/effect";
+import type { LiveRecord, SpokenAskAttach } from "@luke/voice/live-session";
 import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
 
 /**

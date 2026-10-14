@@ -5,20 +5,20 @@ import {
   RATING_WORD,
   type RatingWord,
   type UnparsedWireValue,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import {
   APP_PANEL_TAB,
   APP_SETTING_ID,
   type AppPanelTab,
   type AppSettingId,
-} from "@sidecar/wire/app-settings";
-import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/wire/provider-identity";
+} from "@luke/wire/app-settings";
+import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@luke/wire/provider-identity";
 import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides
- * run over it. The rest of `@sidecar/features` holds the contracts for what Luke's service
+ * run over it. The rest of `@luke/features` holds the contracts for what Luke's service
  * *answers*; this holds the contract for what the desktop *asks* it to record.
  *
  * The vocabulary is the privacy boundary, not a convention on top of one. An

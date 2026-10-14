@@ -1,9 +1,9 @@
-import { CheckIcon, ExternalIcon } from "@sidecar/panel";
+import { CheckIcon, ExternalIcon } from "@luke/panel";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
-} from "@sidecar/settings";
+} from "@luke/settings";
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,

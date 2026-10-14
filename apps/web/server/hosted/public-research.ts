@@ -1,9 +1,9 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
-import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/features/brain";
-import { failureKind } from "@sidecar/runtime/effect";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { describeWire, readEither } from "@sidecar/wire/effect";
+import { BRAIN_OPENAI_DEFAULTS } from "@luke/features/brain";
+import { failureKind } from "@luke/runtime/effect";
+import type { UnparsedWireValue } from "@luke/wire";
+import { describeWire, readEither } from "@luke/wire/effect";
 import {
   Context,
   Data,

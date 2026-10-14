@@ -1,4 +1,4 @@
-import { describeWire, emitJsonSchema } from "@sidecar/wire/effect";
+import { describeWire, emitJsonSchema } from "@luke/wire/effect";
 import { Schema } from "effect";
 import { defineTool } from "eve/tools";
 import { bash } from "eve/tools/bash";

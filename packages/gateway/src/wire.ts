@@ -4,7 +4,7 @@
  * parameter that is not the shape its method takes, and read one event kind
  * under a guard.
  */
-import type { WireValue } from "@sidecar/wire";
+import type { WireValue } from "@luke/wire";
 import { Effect } from "effect";
 import type { GatewayClient } from "./host.js";
 import { type GatewayEventKind, InvalidParamsRefusal } from "./protocol.js";

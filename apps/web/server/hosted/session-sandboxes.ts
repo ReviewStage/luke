@@ -20,12 +20,12 @@
  * delete as unavailable, and the queue waits for a deployment that has one.
  */
 
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
   nextSessionSandboxes,
   sessionSandboxDeferred,
   sessionSandboxDeleted,
-} from "@sidecar/database/models/session-sandbox-cleanup";
+} from "@luke/database/models/session-sandbox-cleanup";
 import { Context, Effect, Layer, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import {

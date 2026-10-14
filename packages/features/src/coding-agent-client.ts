@@ -3,8 +3,8 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";

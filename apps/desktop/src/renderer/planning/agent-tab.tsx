@@ -1,4 +1,4 @@
-import { AGENT_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -8,10 +8,10 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
-import { DocumentIcon } from "@sidecar/panel";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { DocumentIcon } from "@luke/panel";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

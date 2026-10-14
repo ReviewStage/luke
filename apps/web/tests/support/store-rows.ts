@@ -1,10 +1,10 @@
-import { Database } from "@sidecar/database/core/query";
-import { EpochMillisColumnSchema, InstantColumnSchema } from "@sidecar/database/models/columns";
-import { user } from "@sidecar/database/schemas/auth";
-import { conversations, messages, turns } from "@sidecar/database/schemas/storage";
-import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { MessageRoleSchema } from "@sidecar/wire";
+import { Database } from "@luke/database/core/query";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "@luke/database/models/columns";
+import { user } from "@luke/database/schemas/auth";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { MessageRoleSchema } from "@luke/wire";
 import { count, eq, getColumnTable } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";

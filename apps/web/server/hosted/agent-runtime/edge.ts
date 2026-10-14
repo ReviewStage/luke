@@ -13,7 +13,7 @@
  * `runWeb` in production, as `productionBrainHostSeams` is handed one.
  */
 
-import type { QueryError } from "@sidecar/database/core/query";
+import type { QueryError } from "@luke/database/core/query";
 import { Effect, Result, type Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";

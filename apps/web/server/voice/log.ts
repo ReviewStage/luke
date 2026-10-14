@@ -1,5 +1,5 @@
-import type { VoiceSecondsOutcome } from "@sidecar/database/models/quota";
-import type { LiveSessionTrace } from "@sidecar/voice/live-session";
+import type { VoiceSecondsOutcome } from "@luke/database/models/quota";
+import type { LiveSessionTrace } from "@luke/voice/live-session";
 import type { HostedApiError } from "../core.js";
 
 /**

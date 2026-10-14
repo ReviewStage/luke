@@ -16,10 +16,10 @@ import {
   type InboxReplyKind,
   inboxReplyRefusal,
   knownResponse,
-} from "@sidecar/features/inbox-wire";
-import type { PlanFileRequest, PlanSummary } from "@sidecar/features/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@sidecar/features/planning-view";
-import { isWireString } from "@sidecar/wire";
+} from "@luke/features/inbox-wire";
+import type { PlanFileRequest, PlanSummary } from "@luke/features/plan-wire";
+import type { PlanCode, PlanningFileAnswer } from "@luke/features/planning-view";
+import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 

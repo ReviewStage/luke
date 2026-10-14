@@ -43,17 +43,17 @@
  */
 
 import { createPrivateKey, createSign, type KeyObject } from "node:crypto";
-import { Database, type DatabaseServices } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   type GitHubAccountType,
-} from "@sidecar/database/github-installation-vocabulary";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { account } from "@sidecar/database/schemas/auth";
+} from "@luke/database/github-installation-vocabulary";
+import { InstantColumnSchema } from "@luke/database/models/columns";
+import { account } from "@luke/database/schemas/auth";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/features/repository-reach-wire";
+} from "@luke/features/repository-reach-wire";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";

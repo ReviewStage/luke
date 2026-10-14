@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/features";
-import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@sidecar/live";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
+import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@luke/live";
+import type { ParsedJsonObject } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { type HostedLiveSessionOptions, HostedLiveSessionSource } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";

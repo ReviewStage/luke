@@ -2,23 +2,23 @@ import type {
   AccountInboxAnswer,
   AccountInboxEntry,
   AccountInboxPlan,
-} from "@sidecar/features/account-inbox-wire";
+} from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPullRequestAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@sidecar/features/inbox-wire";
-import { modelLabel } from "@sidecar/features/model-label";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import { scheduleOnce } from "@sidecar/runtime/effect";
+} from "@luke/features/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import { modelLabel } from "@luke/features/model-label";
+import type { CatalogModel } from "@luke/features/models-wire";
+import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-state";
 

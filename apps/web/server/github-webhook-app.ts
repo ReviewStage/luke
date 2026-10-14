@@ -1,12 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
-} from "@sidecar/database/github-installation-vocabulary";
-import { listCodingAgentsOnBranches } from "@sidecar/database/models/coding-agent-store";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/database/github-installation-vocabulary";
+import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,

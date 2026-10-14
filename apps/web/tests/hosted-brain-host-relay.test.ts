@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { askRecord } from "@sidecar/database/models/asks";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { askRecord } from "@luke/database/models/asks";
+import { hostTurnId } from "@luke/database/models/ids";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";

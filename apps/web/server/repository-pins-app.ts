@@ -1,10 +1,7 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import {
-  listRepositoryPins,
-  setRepositoryPin,
-} from "@sidecar/database/models/repository-pin-store";
-import { repositoryPinRequestSchema } from "@sidecar/features/plan-wire";
-import { readEither } from "@sidecar/wire/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { listRepositoryPins, setRepositoryPin } from "@luke/database/models/repository-pin-store";
+import { repositoryPinRequestSchema } from "@luke/features/plan-wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";

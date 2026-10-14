@@ -37,7 +37,7 @@ words in any case (`session-replay.ts`).
 
 No credential reaches the voice window, nothing there appends to the model, and it
 writes no Conversation line. The policy — whether a session stands, what the keys
-do — is `LiveVoiceOrchestrator` in `@sidecar/voice`. Two constraints are this
+do — is `LiveVoiceOrchestrator` in `@luke/voice`. Two constraints are this
 bundle's own and are easy to undo:
 
 - The audio line carries a track at every moment of the session's life. GPT Live

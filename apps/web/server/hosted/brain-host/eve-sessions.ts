@@ -2,8 +2,8 @@
  * eve-sessions.ts -- the host's four calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
-import { failureKind } from "@sidecar/runtime/effect";
-import { readEither } from "@sidecar/wire/effect";
+import { failureKind } from "@luke/runtime/effect";
+import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
 import { FetchHttpClient } from "effect/http";

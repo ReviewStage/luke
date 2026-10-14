@@ -1,5 +1,5 @@
-import type { AppSettingField, AppSettingValue } from "@sidecar/settings";
-import type { SettingsUpdateResult } from "@sidecar/settings/wire";
+import type { AppSettingField, AppSettingValue } from "@luke/settings";
+import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { useMemo } from "react";
 import {
   ACT,

@@ -1,4 +1,4 @@
-import type { HostedCodingAgentClient } from "@sidecar/features";
+import type { HostedCodingAgentClient } from "@luke/features";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -38,10 +38,10 @@ import {
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
-} from "@sidecar/features/coding-agent-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@sidecar/gateway";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/coding-agent-view";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

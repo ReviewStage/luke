@@ -1,8 +1,8 @@
-import { Database } from "@sidecar/database/core/query";
-import { roleOf, type WorkspaceStoreEffect } from "@sidecar/database/models/workspace-store";
-import { member, user } from "@sidecar/database/schemas/auth";
-import type { WorkspaceMember, WorkspaceRole } from "@sidecar/features/workspace-wire";
-import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
+import { Database } from "@luke/database/core/query";
+import { roleOf, type WorkspaceStoreEffect } from "@luke/database/models/workspace-store";
+import { member, user } from "@luke/database/schemas/auth";
+import type { WorkspaceMember, WorkspaceRole } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

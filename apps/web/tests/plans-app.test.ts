@@ -1,29 +1,29 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { writePage } from "@sidecar/database/models/plan-pages";
-import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
-import { createPlan } from "@sidecar/database/models/plan-store";
-import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { writePage } from "@luke/database/models/plan-pages";
+import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
+import { createPlan } from "@luke/database/models/plan-store";
+import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { user } from "@luke/database/schemas/auth";
+import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
+import { getTestDB } from "@luke/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
-} from "@sidecar/database/voice-vocabulary";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
-import { boardAnswerSchema } from "@sidecar/features/board-wire";
+} from "@luke/database/voice-vocabulary";
+import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { boardAnswerSchema } from "@luke/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
-} from "@sidecar/features/coding-agent-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/features/plan-edit";
-import { PLAN_HEADING } from "@sidecar/features/plan-template";
+} from "@luke/features/coding-agent-wire";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
+import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
@@ -34,20 +34,20 @@ import {
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
-} from "@sidecar/features/plan-wire";
-import { planWorkAnswerSchema } from "@sidecar/features/planning-view";
+} from "@luke/features/plan-wire";
+import { planWorkAnswerSchema } from "@luke/features/planning-view";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/features/repository-reach-wire";
+} from "@luke/features/repository-reach-wire";
 import {
   planTranscriptAnswerSchema,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/transcript-wire";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

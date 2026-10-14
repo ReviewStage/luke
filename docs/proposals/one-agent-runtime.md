@@ -296,7 +296,7 @@ As built: the planner's turns are drawn by the agent tab's own component
 lines are drawn as messages too, so the deviation from the proposal below
 is that a planner's user lines are drawn, as the voice transcript. The Call
 tab draws each turn's work under the line that asked for it. Every tool name
-lives in one shared vocabulary (`@sidecar/features/agent-tools`, #2397), and
+lives in one shared vocabulary (`@luke/features/agent-tools`, #2397), and
 the agent tab reads the planning model's raw calls by it. The wire switch
 (9b) and the old wire's deletion (9c) come after the release, as one step:
 9c has to wait for a desktop release anyway, and 9b alone would double the

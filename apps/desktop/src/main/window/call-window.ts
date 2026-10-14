@@ -3,7 +3,7 @@
  */
 
 import fs from "node:fs";
-import type { RunMode } from "@sidecar/host";
+import type { RunMode } from "@luke/host";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";

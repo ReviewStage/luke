@@ -2,7 +2,7 @@ import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
   codingAgentDelegationOutputSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {

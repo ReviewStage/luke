@@ -1,7 +1,7 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   LifeBuoyIcon,
   LightbulbIcon,

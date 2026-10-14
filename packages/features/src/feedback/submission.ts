@@ -1,4 +1,4 @@
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
 /**
  * A note from the user to the people who make Luke. Two kinds, because they are
  * read differently on arrival: feedback is about Luke, and a prompt is an ask

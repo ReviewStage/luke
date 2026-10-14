@@ -15,7 +15,7 @@ import {
   sandboxResumedAnswerSchema,
   terminalCreatedAnswerSchema,
   terminalsAnswerSchema,
-} from "@sidecar/features/terminal-wire";
+} from "@luke/features/terminal-wire";
 import { Schema as EffectSchema } from "effect";
 
 /** The channel each attached shell's port is posted on. */

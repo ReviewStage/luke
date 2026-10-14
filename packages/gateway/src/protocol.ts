@@ -7,7 +7,7 @@
  * answers a method and the client that calls it read the same words from one
  * contract. Nothing in this file performs anything.
  */
-import type { WireValue } from "@sidecar/wire";
+import type { WireValue } from "@luke/wire";
 import { Effect, Schema } from "effect";
 
 /** Every method the host answers, by the name a client calls it. */

@@ -33,7 +33,7 @@ import * as schema from "../src/schemas/index.js";
  * must then need no statement against the schema modules, so a module that
  * has moved past the ref fails the conversion rather than hiding in it.
  *
- *     pnpm --filter @sidecar/database migrations:convert [ref, default origin/main]
+ *     pnpm --filter @luke/database migrations:convert [ref, default origin/main]
  *
  * It goes with the map and the transfer, once every database has migrated.
  */

@@ -1,4 +1,4 @@
-import type { ActionResult } from "@sidecar/wire";
+import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
 import { ChangedMark } from "./marks";
 import { PickerRow } from "./picker-row";

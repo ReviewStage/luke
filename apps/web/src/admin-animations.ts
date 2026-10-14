@@ -1,9 +1,4 @@
-import {
-  FACE_MOTION,
-  FACE_MOTION_CYCLE_MS,
-  FACE_MOTION_PARTS,
-  type FaceMotion,
-} from "@sidecar/brand";
+import { FACE_MOTION, FACE_MOTION_CYCLE_MS, FACE_MOTION_PARTS, type FaceMotion } from "@luke/brand";
 
 /**
  * The animations reference page's own vocabulary, held apart from the

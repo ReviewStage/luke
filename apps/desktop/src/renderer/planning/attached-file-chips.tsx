@@ -1,9 +1,6 @@
-import type {
-  CodingAgentAttachment,
-  CodingAgentMessage,
-} from "@sidecar/features/coding-agent-wire";
-import { RemoveIcon } from "@sidecar/panel";
-import { isRecord, isWireString } from "@sidecar/wire";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { RemoveIcon } from "@luke/panel";
+import { isRecord, isWireString } from "@luke/wire";
 import { type ReactNode, useState } from "react";
 import {
   ATTACHMENT_VIEW,

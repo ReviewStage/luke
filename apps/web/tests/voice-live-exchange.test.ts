@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { askRecord } from "@sidecar/database/models/asks";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { PLAN_HEADING } from "@sidecar/features/plan-template";
+import { askRecord } from "@luke/database/models/asks";
+import { hostTurnId } from "@luke/database/models/ids";
+import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -15,9 +15,9 @@ import {
   type LiveAppendEvent,
   type LiveClientEvent,
   type LiveServerEventType,
-} from "@sidecar/live";
-import { sidebandOverSocket } from "@sidecar/voice/live-session";
-import { FakeLiveSocket } from "@sidecar/voice/testing";
+} from "@luke/live";
+import { sidebandOverSocket } from "@luke/voice/live-session";
+import { FakeLiveSocket } from "@luke/voice/testing";
 import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";

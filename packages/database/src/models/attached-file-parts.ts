@@ -1,8 +1,8 @@
-import { UI_PART_STATE, UI_PART_TYPE } from "@sidecar/features/brain";
+import { UI_PART_STATE, UI_PART_TYPE } from "@luke/features/brain";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   type DataUIPart,
   type FileUIPart,

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { parseKeyRing, sealProviderKey } from "@sidecar/database/models/provider-key-seal";
-import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
-import type { ModelChoice } from "@sidecar/features/models-wire";
+import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
+import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
+import type { ModelChoice } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
-} from "@sidecar/features/provider-key-wire";
-import { jsonResponse } from "@sidecar/wire/testing";
+} from "@luke/features/provider-key-wire";
+import { jsonResponse } from "@luke/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";
 import { afterAll, test } from "vitest";

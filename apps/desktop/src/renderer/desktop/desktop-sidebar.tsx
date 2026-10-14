@@ -1,6 +1,6 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
@@ -12,7 +12,7 @@ import {
   PlusIcon,
   SearchIcon,
   UnpinIcon,
-} from "@sidecar/panel";
+} from "@luke/panel";
 import { HouseIcon, InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";

@@ -1,12 +1,12 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   type CodingAgentAttachment,
   type CodingAgentMessage,
   hasWordsOrFiles,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import type { Failure } from "../failure-remedy";
 import {

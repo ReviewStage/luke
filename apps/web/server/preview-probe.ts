@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { withoutTrailingSlash } from "@sidecar/wire";
+import { withoutTrailingSlash } from "@luke/wire";
 import { Clock, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";

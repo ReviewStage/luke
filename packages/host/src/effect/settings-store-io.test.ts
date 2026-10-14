@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
-import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { Effect, Layer, type Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";

@@ -1,7 +1,7 @@
 import {
   type InvitationAcceptQuery,
   invitationAcceptQuery,
-} from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/workspace-invitation-wire";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";

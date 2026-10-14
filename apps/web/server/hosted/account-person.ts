@@ -8,8 +8,8 @@
  * (`integration-connect.ts`).
  */
 
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { user } from "@sidecar/database/schemas/auth";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { user } from "@luke/database/schemas/auth";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

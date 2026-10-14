@@ -4,7 +4,7 @@ import {
   boardElementsSchema,
   type DrawingElement,
   drawingElementsSchema,
-} from "@sidecar/features/board-wire";
+} from "@luke/features/board-wire";
 import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

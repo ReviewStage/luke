@@ -1,9 +1,5 @@
-import type { FeedbackImage } from "@sidecar/features/feedback";
-import {
-  FEEDBACK_IMAGE_TYPE,
-  FEEDBACK_LIMITS,
-  isFeedbackImageType,
-} from "@sidecar/features/feedback";
+import type { FeedbackImage } from "@luke/features/feedback";
+import { FEEDBACK_IMAGE_TYPE, FEEDBACK_LIMITS, isFeedbackImageType } from "@luke/features/feedback";
 
 /**
  * What becomes of a picked file: it rides as it is, it is re-encoded first, or

@@ -6,9 +6,9 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
-import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
+} from "@luke/features/coding-agent-wire";
+import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

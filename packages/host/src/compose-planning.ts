@@ -8,25 +8,22 @@ import type {
   PlanDraftFrame,
   PlanMarks,
   WorkspaceCallResult,
-} from "@sidecar/features";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
-import {
-  DRAW_ON_BOARD_TOOL_NAME,
-  LOOK_AT_BOARD_TOOL_NAME,
-} from "@sidecar/features/board-vocabulary";
+} from "@luke/features";
+import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
   type CodingAgentMessagesAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
   CODING_AGENT_STATUS,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
-} from "@sidecar/features/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
-import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
+} from "@luke/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -80,17 +77,17 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-} from "@sidecar/features/planning-view";
-import { EMPTY_TRANSCRIPT } from "@sidecar/features/transcript-wire";
+} from "@luke/features/planning-view";
+import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
-} from "@sidecar/gateway";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/gateway";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import {
   Clock,
   Data,

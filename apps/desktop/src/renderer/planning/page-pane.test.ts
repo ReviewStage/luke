@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PageLine } from "@sidecar/features/page-wire";
-import { type CodeLines, PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
+import type { PageLine } from "@luke/features/page-wire";
+import { type CodeLines, PLAN_CALL_FAILURE } from "@luke/features/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

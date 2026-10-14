@@ -3,7 +3,7 @@ import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
-import { socketOpened } from "@sidecar/voice";
+import { socketOpened } from "@luke/voice";
 import { Effect, Stream } from "effect";
 import { WebSocketServer } from "ws";
 import { openSocketOverWs } from "./socket-over-ws.js";

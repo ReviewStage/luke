@@ -1,4 +1,4 @@
-import { ArchiveIcon } from "@sidecar/panel";
+import { ArchiveIcon } from "@luke/panel";
 import { useState } from "react";
 import { BusyLabel } from "../spinner";
 

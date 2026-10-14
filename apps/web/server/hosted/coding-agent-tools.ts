@@ -1,23 +1,23 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   awaitingLinesOfReached,
   type CodingAgent,
   latestTurnsOfReached,
   listCodingAgents,
   readCodingAgent,
-} from "@sidecar/database/models/coding-agent-store";
-import { listJournals } from "@sidecar/database/models/message-reads";
-import type { StoreWriter } from "@sidecar/database/models/writer";
+} from "@luke/database/models/coding-agent-store";
+import { listJournals } from "@luke/database/models/message-reads";
+import type { StoreWriter } from "@luke/database/models/writer";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
-} from "@sidecar/features/coding-agent-wire";
-import { modelLabel } from "@sidecar/features/model-label";
-import { type ModelChoice, modelChoiceSchema } from "@sidecar/features/models-wire";
-import { describeWire } from "@sidecar/wire/effect";
+} from "@luke/features/coding-agent-wire";
+import { modelLabel } from "@luke/features/model-label";
+import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
+import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

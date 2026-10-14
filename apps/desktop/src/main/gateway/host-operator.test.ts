@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@sidecar/gateway";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { settingsView } from "@sidecar/settings/testing";
-import type { AppSettings } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@luke/gateway";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { settingsView } from "@luke/settings/testing";
+import type { AppSettings } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import { appSettingsWire } from "../../testing/settings-wire";
 import { createHostOperator } from "./host-operator";

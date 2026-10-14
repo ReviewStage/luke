@@ -1,5 +1,5 @@
-import { PULL_REQUEST_STATE } from "@sidecar/features/coding-agent-wire";
-import type { PlanAgentsSummary, PlanPullRequestLine } from "@sidecar/features/plan-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import type { PlanAgentsSummary, PlanPullRequestLine } from "@luke/features/plan-wire";
 
 /**
  * plan-agents-model.ts -- what a plan's coding agents say on its sidebar row and its hover card: the row's one mark, and the card's lines.

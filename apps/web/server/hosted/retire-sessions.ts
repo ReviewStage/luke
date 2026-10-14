@@ -1,5 +1,5 @@
-import type { StandingSession } from "@sidecar/database/models/recorded-session";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import type { StandingSession } from "@luke/database/models/recorded-session";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import {

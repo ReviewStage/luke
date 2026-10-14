@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { isWireUuid } from "@sidecar/features";
+import { isWireUuid } from "@luke/features";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -12,8 +12,8 @@ import {
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
-} from "@sidecar/features/brain";
-import type { CodingAgentAttachment } from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/brain";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   type AssistantMessageMetadata,
   isWireString,
@@ -31,7 +31,7 @@ import {
   type TurnStatus,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -39,7 +39,7 @@ import {
   type StoredToolPart,
   type StoredUIMessage,
   TOOL_PART_STATE,
-} from "@sidecar/wire/ui-messages";
+} from "@luke/wire/ui-messages";
 import {
   asSchema,
   type ReasoningUIPart,

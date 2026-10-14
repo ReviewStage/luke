@@ -1,7 +1,4 @@
-import {
-  SETTINGS_PAGE as SETTINGS_VIEW,
-  type SettingsPage as SettingsView,
-} from "@sidecar/settings";
+import { SETTINGS_PAGE as SETTINGS_VIEW, type SettingsPage as SettingsView } from "@luke/settings";
 
 export type { SettingsView };
 /**

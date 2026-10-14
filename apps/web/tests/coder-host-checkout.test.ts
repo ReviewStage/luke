@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { getTestDB } from "@sidecar/database/testing";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { getTestDB } from "@luke/database/testing";
 import { Effect, Option, Redacted } from "effect";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
 import { LINK_OUTCOME } from "../server/hosted/github-installations";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { getTestDB } from "@sidecar/database/testing";
-import { SHOWN_CODE_BOUNDS } from "@sidecar/features/plan-wire";
-import { unparsedWire, type WireRecord } from "@sidecar/wire";
+import { getTestDB } from "@luke/database/testing";
+import { SHOWN_CODE_BOUNDS } from "@luke/features/plan-wire";
+import { unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { ACTION_RESULT_STATUS } from "../server/core";

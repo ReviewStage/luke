@@ -5,14 +5,14 @@ import {
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
   integrationProviderFromWire,
-} from "@sidecar/features/integration-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { TURN_STATUS } from "@sidecar/wire";
+} from "@luke/features/integration-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { TURN_STATUS } from "@luke/wire";
 import {
   and,
   asc,

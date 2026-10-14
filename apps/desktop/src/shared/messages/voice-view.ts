@@ -3,7 +3,7 @@ import {
   type LiveStatus,
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
-} from "@sidecar/live";
+} from "@luke/live";
 import {
   isOptionalWireString,
   isRecord,
@@ -12,7 +12,7 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
-} from "@sidecar/wire";
+} from "@luke/wire";
 
 /**
  * What a panel needs to draw the live conversation and cannot derive or read

@@ -1,4 +1,4 @@
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

@@ -1,5 +1,5 @@
-import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@sidecar/features/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningTreeAnswer } from "@sidecar/features/planning-view";
+import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@luke/features/plan-wire";
+import { PLAN_CALL_FAILURE, type PlanningTreeAnswer } from "@luke/features/planning-view";
 import type { FolderEntry, FolderListing } from "../file-tree/contract";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 

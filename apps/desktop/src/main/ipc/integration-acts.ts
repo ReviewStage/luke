@@ -4,7 +4,7 @@ import type {
   IntegrationStatusesView,
   IntegrationStatusView,
   IntegrationToolsView,
-} from "@sidecar/features/integration-view";
+} from "@luke/features/integration-view";
 import type { Effect } from "effect";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";

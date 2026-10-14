@@ -123,45 +123,45 @@ importers:
       '@excalidraw/excalidraw':
         specifier: 0.18.1
         version: 0.18.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(immer@11.1.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@luke/brand':
+        specifier: workspace:*
+        version: link:../../packages/brand
+      '@luke/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@luke/features':
+        specifier: workspace:*
+        version: link:../../packages/features
+      '@luke/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
+      '@luke/host':
+        specifier: workspace:*
+        version: link:../../packages/host
+      '@luke/live':
+        specifier: workspace:*
+        version: link:../../packages/live
+      '@luke/panel':
+        specifier: workspace:*
+        version: link:../../packages/panel
+      '@luke/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@luke/settings':
+        specifier: workspace:*
+        version: link:../../packages/settings
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
+      '@luke/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(shiki@4.5.0)
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
-      '@sidecar/brand':
-        specifier: workspace:*
-        version: link:../../packages/brand
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@sidecar/features':
-        specifier: workspace:*
-        version: link:../../packages/features
-      '@sidecar/gateway':
-        specifier: workspace:*
-        version: link:../../packages/gateway
-      '@sidecar/host':
-        specifier: workspace:*
-        version: link:../../packages/host
-      '@sidecar/live':
-        specifier: workspace:*
-        version: link:../../packages/live
-      '@sidecar/panel':
-        specifier: workspace:*
-        version: link:../../packages/panel
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
-      '@sidecar/settings':
-        specifier: workspace:*
-        version: link:../../packages/settings
-      '@sidecar/voice':
-        specifier: workspace:*
-        version: link:../../packages/voice
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../../packages/wire
       '@tailwindcss/node':
         specifier: 4.3.3
         version: 4.3.3
@@ -309,28 +309,28 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@sidecar/brand':
+      '@luke/brand':
         specifier: workspace:*
         version: link:../../packages/brand
-      '@sidecar/database':
+      '@luke/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../../packages/features
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../../packages/live
-      '@sidecar/runtime':
+      '@luke/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@sidecar/settings':
+      '@luke/settings':
         specifier: workspace:*
         version: link:../../packages/settings
-      '@sidecar/voice':
+      '@luke/voice':
         specifier: workspace:*
         version: link:../../packages/voice
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
       '@tailwindcss/vite':
@@ -433,13 +433,13 @@ importers:
 
   apps/web/coder:
     dependencies:
-      '@sidecar/database':
+      '@luke/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../../../packages/features
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../../../packages/wire
       ai:
@@ -457,13 +457,13 @@ importers:
 
   apps/web/eve:
     dependencies:
-      '@sidecar/database':
+      '@luke/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../../../packages/features
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../../../packages/wire
       ai:
@@ -496,16 +496,16 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@sidecar/brand':
+      '@luke/brand':
         specifier: workspace:*
         version: link:../brand
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@sidecar/runtime':
+      '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -530,19 +530,19 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/runtime':
+      '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/settings':
+      '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       ai:
@@ -588,13 +588,13 @@ importers:
 
   packages/features:
     dependencies:
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/runtime':
+      '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       ai:
@@ -622,10 +622,10 @@ importers:
 
   packages/gateway:
     dependencies:
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -647,36 +647,36 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@luke/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@luke/features':
+        specifier: workspace:*
+        version: link:../features
+      '@luke/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@luke/live':
+        specifier: workspace:*
+        version: link:../live
+      '@luke/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@luke/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../voice
+      '@luke/wire':
+        specifier: workspace:*
+        version: link:../wire
       '@shikijs/langs':
         specifier: 4.5.0
         version: 4.5.0
       '@shikijs/themes':
         specifier: 4.5.0
         version: 4.5.0
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@sidecar/features':
-        specifier: workspace:*
-        version: link:../features
-      '@sidecar/gateway':
-        specifier: workspace:*
-        version: link:../gateway
-      '@sidecar/live':
-        specifier: workspace:*
-        version: link:../live
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@sidecar/voice':
-        specifier: workspace:*
-        version: link:../voice
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -705,7 +705,7 @@ importers:
 
   packages/live:
     dependencies:
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -724,7 +724,7 @@ importers:
 
   packages/panel:
     dependencies:
-      '@sidecar/brand':
+      '@luke/brand':
         specifier: workspace:*
         version: link:../brand
       react:
@@ -743,7 +743,7 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -765,13 +765,13 @@ importers:
 
   packages/settings:
     dependencies:
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -790,22 +790,22 @@ importers:
 
   packages/voice:
     dependencies:
-      '@sidecar/features':
+      '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@sidecar/gateway':
+      '@luke/gateway':
         specifier: workspace:*
         version: link:../gateway
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/runtime':
+      '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/settings':
+      '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -865,13 +865,13 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@sidecar/gateway':
+      '@luke/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
-      '@sidecar/live':
+      '@luke/live':
         specifier: workspace:*
         version: link:../../packages/live
-      '@sidecar/wire':
+      '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
       effect:

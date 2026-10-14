@@ -5,10 +5,10 @@ import {
   LIVE_TRANSPORT_STATE,
   type LivePeerEndReason,
   type LiveTransportState,
-} from "@sidecar/gateway";
-import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
-import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/gateway";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_STATUS, type LiveStatus } from "@luke/live";
+import type { LiveCaptionRow, LiveVoiceSpeakers } from "@luke/voice/orchestrator";
+import type { WireRecord } from "@luke/wire";
 import { type Context, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { LiveCall, type LiveStreamSlot, SESSION_CLOSE_TIMEOUT_MS } from "./live-call";

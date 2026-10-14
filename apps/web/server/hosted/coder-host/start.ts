@@ -1,20 +1,20 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   readAccountPreferences,
   writeAccountPreferences,
-} from "@sidecar/database/models/account-store";
+} from "@luke/database/models/account-store";
 import {
   type CodingAgent,
   createCodingAgent,
   discardCodingAgent,
-} from "@sidecar/database/models/coding-agent-store";
-import { readPlan } from "@sidecar/database/models/plan-store";
-import type { CodingAgentAttachment } from "@sidecar/features/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
-import { planMarkdown } from "@sidecar/features/plan-markdown";
-import { failureKind } from "@sidecar/runtime/effect";
+} from "@luke/database/models/coding-agent-store";
+import { readPlan } from "@luke/database/models/plan-store";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { planMarkdown } from "@luke/features/plan-markdown";
+import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";

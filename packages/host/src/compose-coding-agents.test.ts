@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@sidecar/features/account-inbox-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -9,7 +9,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -18,21 +18,21 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
+} from "@luke/features/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateRevisionLine,
-} from "@sidecar/features/plan-document-template";
-import { PLAN_ACTOR } from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-document-template";
+import { PLAN_ACTOR } from "@luke/features/plan-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/features/provider-key-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
+import type { WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 

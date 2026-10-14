@@ -1,15 +1,15 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type KeyRing,
   openProviderKey,
   parseKeyRing,
   sealProviderKey,
-} from "@sidecar/database/models/provider-key-seal";
+} from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   removeProviderKey,
   saveProviderKey,
-} from "@sidecar/database/models/provider-key-store";
+} from "@luke/database/models/provider-key-store";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
@@ -18,9 +18,9 @@ import {
   type ProviderKeyRejection,
   type ProviderKeySummary,
   providerKeySaveRequestSchema,
-} from "@sidecar/features/provider-key-wire";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/provider-key-wire";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { DateTime, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,
@@ -58,7 +58,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * `GET /api/account/provider-keys` answers the account's keys as hints and
  * statuses; `PUT` saves one, first asking the provider whether it accepts
  * it (`hosted/provider-key-check.ts`), and keeps it sealed
- * (`@sidecar/database/models/provider-key-seal`) only where it does; `DELETE` with the
+ * (`@luke/database/models/provider-key-seal`) only where it does; `DELETE` with the
  * provider in the query removes one. Every answer is the keys as they then
  * stand and none carries a key: the one body that holds a key is the
  * `PUT`'s own, it is sealed the moment it is read, and neither it nor what

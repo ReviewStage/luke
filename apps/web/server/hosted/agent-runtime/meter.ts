@@ -12,7 +12,7 @@
  * no reason to fail a turn.
  */
 
-import { failureKind } from "@sidecar/runtime/effect";
+import { failureKind } from "@luke/runtime/effect";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
 
 /** The meter in front of the model: what counts a use, and where a count that failed is reported. */

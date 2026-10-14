@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { storeWriter } from "@sidecar/database/models/writer";
+import { storeWriter } from "@luke/database/models/writer";
 import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";

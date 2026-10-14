@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
 import { Effect } from "effect";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,

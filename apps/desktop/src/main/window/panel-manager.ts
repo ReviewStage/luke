@@ -1,5 +1,5 @@
-import type { RunMode } from "@sidecar/host";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { RunMode } from "@luke/host";
+import type { UnparsedWireValue } from "@luke/wire";
 import {
   app,
   BrowserWindow,

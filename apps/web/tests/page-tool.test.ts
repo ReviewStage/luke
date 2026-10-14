@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { listPages, readPageVersion } from "@sidecar/database/models/plan-pages";
-import { user } from "@sidecar/database/schemas/auth";
-import { getTestDB } from "@sidecar/database/testing";
-import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@sidecar/wire";
+import { Database } from "@luke/database/core/query";
+import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
+import { user } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
+import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import { type PageToolBinding, runShowPage, SHOW_PAGE_REFUSAL } from "../server/hosted/page-tool";

@@ -3,7 +3,7 @@ import {
   type LiveClientEvent,
   type LiveServerEvent,
   parseLiveServerEvent,
-} from "@sidecar/live";
+} from "@luke/live";
 import { Effect, Result, Stream } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 

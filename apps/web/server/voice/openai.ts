@@ -6,8 +6,8 @@ import {
   liveAttachPath,
   liveCreateAnswerSchema,
   liveCreateRequest,
-} from "@sidecar/live";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/live";
+import { readEither } from "@luke/wire/effect";
 import { Data, Effect, type Layer, Result, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

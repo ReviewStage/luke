@@ -59,7 +59,7 @@ cut from. They are generated files and are not to be hand-edited either:
 | `packages/brand/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
 | `apps/desktop/src/renderer/styles/generated/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
 
-`scripts/repository-checks.sh` runs `pnpm --filter @sidecar/brand check`, i.e. `generate-brand-assets.mjs --check`, which
+`scripts/repository-checks.sh` runs `pnpm --filter @luke/brand check`, i.e. `generate-brand-assets.mjs --check`, which
 compares every committed output against what the script produces now and fails if
 any of them has drifted.
 

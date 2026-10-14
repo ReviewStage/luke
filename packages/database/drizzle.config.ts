@@ -11,7 +11,7 @@ import { defineConfig } from "drizzle-kit";
  * tsx'`). Note that we need it because rc.4 loads the schema modules through
  * jiti, which resolves a workspace package's `exports` target `./src/x.js` to
  * that missing file and never to the `./src/x.ts` beside it, so the first
- * `@sidecar/features/*` import fails. The workaround is the one in
+ * `@luke/features/*` import fails. The workaround is the one in
  * drizzle-team/drizzle-orm#849; #6384 is the open plan to replace jiti.
  * Delete it once drizzle-kit resolves workspace exports on its own.
  *

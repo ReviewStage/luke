@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import { Database } from "@luke/database/core/query";
+import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
   listWorkspaces,
   personalWorkspaceOf,
-} from "@sidecar/database/models/workspace-store";
-import { member, organization, user } from "@sidecar/database/schemas/auth";
-import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/workspace-store";
+import { member, organization, user } from "@luke/database/schemas/auth";
+import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
+import { getTestDB } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option } from "effect";
 import { openWorkspacePlugin } from "./support/workspace-plugin";

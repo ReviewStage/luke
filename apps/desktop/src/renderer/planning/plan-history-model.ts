@@ -1,12 +1,12 @@
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { ModelProvider } from "@sidecar/features/models-wire";
-import { type PlanSection, planSections } from "@sidecar/features/plan-document";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { ModelProvider } from "@luke/features/models-wire";
+import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
   PLAN_ACTOR,
   type PlanDocument,
   type PlanEditor,
   type PlanRevisionLine,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";

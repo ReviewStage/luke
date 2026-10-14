@@ -12,5 +12,5 @@ cd "$SIDECAR_REPO_ROOT"
 # Two branches' migrations that do not commute pass every other check and
 # fail on the deploy that applies the second, so drizzle-kit reads the
 # folders' snapshot graph before anything else runs.
-pnpm --filter @sidecar/database check:migrations
+pnpm --filter @luke/database check:migrations
 pnpm check "$@"

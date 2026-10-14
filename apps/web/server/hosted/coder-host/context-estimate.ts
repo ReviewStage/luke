@@ -1,5 +1,5 @@
-import type { StoredAgentStep } from "@sidecar/database/schemas/coding-agent";
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import type { StoredAgentStep } from "@luke/database/schemas/coding-agent";
+import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";

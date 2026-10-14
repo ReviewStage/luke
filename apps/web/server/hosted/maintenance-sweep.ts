@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { Clock, Effect, type Redacted } from "effect";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import type { AutomationSweepOutcome } from "./automation-sweep.js";

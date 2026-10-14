@@ -1,4 +1,4 @@
-import type { QuotaEffect, VoiceSecondsOutcome } from "@sidecar/database/models/quota";
+import type { QuotaEffect, VoiceSecondsOutcome } from "@luke/database/models/quota";
 import type { UserIdResolver } from "../hosted/http-effect.js";
 
 /**

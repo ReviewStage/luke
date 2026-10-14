@@ -3,28 +3,28 @@ import {
   AccountSessionManager,
   accountGateOpen,
   type StoredAccount,
-} from "@sidecar/credentials";
+} from "@luke/credentials";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   isAccountProvider,
-} from "@sidecar/credentials/snapshot";
+} from "@luke/credentials/snapshot";
 import {
   AccountRefreshFailed,
   type AccountSessionToken,
   type AccountToken,
   hostedVoiceServiceOrigin,
   VOICE_SERVICE_ORIGIN_VARIABLE,
-} from "@sidecar/features";
-import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/features/analytics";
+} from "@luke/features";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
-} from "@sidecar/gateway";
-import { VoiceCapabilityAssembler } from "@sidecar/voice";
+} from "@luke/gateway";
+import { VoiceCapabilityAssembler } from "@luke/voice";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";

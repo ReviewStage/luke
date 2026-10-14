@@ -1,6 +1,6 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { openPlanConversation } from "@sidecar/database/models/plan-store";
-import type { StoreWriter } from "@sidecar/database/models/writer";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { openPlanConversation } from "@luke/database/models/plan-store";
+import type { StoreWriter } from "@luke/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";

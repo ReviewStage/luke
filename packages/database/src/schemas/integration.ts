@@ -1,4 +1,4 @@
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { pgTable, primaryKey, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

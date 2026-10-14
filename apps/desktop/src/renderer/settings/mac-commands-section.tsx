@@ -1,4 +1,4 @@
-import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@sidecar/settings";
+import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
 import { SchemaSettingRows } from "./schema-rows";
 import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";

@@ -1,14 +1,14 @@
-import { AUTOMATION_SCOPE } from "@sidecar/features/automation-wire";
-import type { PlanSectionWriter } from "@sidecar/features/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/features/plan-template";
+import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
+import type { PlanSectionWriter } from "@luke/features/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

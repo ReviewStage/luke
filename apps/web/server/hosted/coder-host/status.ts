@@ -1,7 +1,4 @@
-import type {
-  CodingAgent,
-  CodingAgentLatestTurn,
-} from "@sidecar/database/models/coding-agent-store";
+import type { CodingAgent, CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
@@ -10,7 +7,7 @@ import {
   type CodingAgentFailure,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
@@ -30,7 +27,7 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * than starting forever, as one that never started: eve took the session,
  * and its first turn lands in seconds or not at all. A line that awaits its turn reads as running
  * whatever the newest turn says, because the session took the message and
- * the turn it opens is on its way (`@sidecar/database/models/message-reads`'s
+ * the turn it opens is on its way (`@luke/database/models/message-reads`'s
  * `awaitingLinesOf` is where a line is counted as waiting). A failed turn
  * is also read for why, as one of the wire's fixed words: the sweep's own
  * word for a turn it settled, else the host's refusal sentences where the

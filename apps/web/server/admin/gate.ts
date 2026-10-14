@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { catchAllButInterrupt, causeKind } from "@sidecar/runtime/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { catchAllButInterrupt, causeKind } from "@luke/runtime/effect";
 import { type Cause, Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { AdminViewer } from "./admin-access.js";

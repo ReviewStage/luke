@@ -1,4 +1,4 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -7,16 +7,10 @@ import {
   type CodingAgentSubagentStanding,
   TURN_ENDING,
   type TurnRecord,
-} from "@sidecar/features/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { PLAN_WORK_STATE, type PlanWorkState } from "@sidecar/features/planning-view";
-import {
-  isRecord,
-  isWireString,
-  TURN_ORIGIN,
-  type WireRecord,
-  type WireValue,
-} from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { PLAN_WORK_STATE, type PlanWorkState } from "@luke/features/planning-view";
+import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "./turn-rows";

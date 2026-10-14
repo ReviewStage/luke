@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { archiveCodingAgent, createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
-import { getTestDB } from "@sidecar/database/testing";
-import { HOSTED_API_ERROR } from "@sidecar/features";
+import { Database } from "@luke/database/core/query";
+import { archiveCodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { getTestDB } from "@luke/database/testing";
+import { HOSTED_API_ERROR } from "@luke/features";
 import {
   SANDBOX_STATE,
   type SandboxState,
   type TerminalSummary,
-} from "@sidecar/features/terminal-wire";
+} from "@luke/features/terminal-wire";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

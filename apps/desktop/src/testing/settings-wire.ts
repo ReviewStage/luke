@@ -1,5 +1,5 @@
-import { APP_SETTING_FIELDS, type StoredAppSettings } from "@sidecar/settings";
-import type { AppSettings, AppSettingsView, RuntimeStatus } from "@sidecar/settings/wire";
+import { APP_SETTING_FIELDS, type StoredAppSettings } from "@luke/settings";
+import type { AppSettings, AppSettingsView, RuntimeStatus } from "@luke/settings/wire";
 
 /** Turns a renderer view back into wire state for settings-update fixtures. */
 export function appSettingsWire(settings: AppSettingsView): AppSettings {

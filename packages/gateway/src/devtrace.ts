@@ -10,8 +10,8 @@
  * trace may record is a product decision, not an implementation detail.
  */
 
-import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { Schema } from "effect";
 
 /**

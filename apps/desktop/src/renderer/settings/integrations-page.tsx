@@ -1,13 +1,13 @@
-import type { IntegrationStatusView } from "@sidecar/features/integration-view";
+import type { IntegrationStatusView } from "@luke/features/integration-view";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
-import { ChevronRightIcon, CloseIcon, SearchIcon, TrashIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/integration-wire";
+import { ChevronRightIcon, CloseIcon, SearchIcon, TrashIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

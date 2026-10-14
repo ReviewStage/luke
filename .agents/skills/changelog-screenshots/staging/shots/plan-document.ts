@@ -12,8 +12,8 @@ import {
   type PlanAgentsSummary,
   type PlanSectionEdit,
   type PlanSummary,
-} from "@sidecar/features/plan-wire";
-import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
+} from "@luke/features/plan-wire";
+import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { ago, daysAgo, hoursAgo } from "./clock";
 
 /** The ids the shots share, so a shot's plan, agent, and revisions agree with one another. */

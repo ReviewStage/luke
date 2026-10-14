@@ -1,4 +1,4 @@
-import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/wire/app-settings";
+import { APP_PANEL_TAB, type AppPanelTab } from "@luke/wire/app-settings";
 
 /**
  * The window's two places, Plans and Settings, aliased from the core's set

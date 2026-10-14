@@ -84,7 +84,7 @@ jobs:
   # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is
   # caught before a deployment's `db:migrate` finds it, and the store tests
   # run against what it migrated: each file clones the `luke` database as a
-  # template into one of its own (`@sidecar/database/testing`), so
+  # template into one of its own (`@luke/database/testing`), so
   # `db:migrate` goes first. The job keeps its old name because the ruleset
   # requires it. The image comes from whichever of three registries answers
   # first, because each one rate-limits anonymous pulls; it starts before the

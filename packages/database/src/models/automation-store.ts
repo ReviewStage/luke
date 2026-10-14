@@ -23,8 +23,8 @@ import {
   automationTargetKindSchema,
   automationTriggerSchema,
   type GitHubTriggerEvent,
-} from "@sidecar/features/automation-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/features/workspace-wire";
+} from "@luke/features/automation-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import {
   and,
   asc,

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import type {
   EarlierCallLine,
   VoiceSessionRecord,
-} from "@sidecar/database/models/voice-session-record";
-import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
-import type { Plan } from "@sidecar/features/plan-wire";
+} from "@luke/database/models/voice-session-record";
+import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
+import type { Plan } from "@luke/features/plan-wire";
 import {
   decodeLivePayload,
   developerSeedItem,
@@ -19,7 +19,7 @@ import {
   startupPrefix,
   startupTokens,
   withinStartupBound,
-} from "@sidecar/live";
+} from "@luke/live";
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import {

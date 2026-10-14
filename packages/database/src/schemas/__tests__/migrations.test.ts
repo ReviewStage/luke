@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
+import { temporaryDirectory } from "@luke/runtime/testing";
 import { generateDrizzleJson, generateMigration } from "drizzle-kit/api-postgres";
 import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import { expect, test } from "vitest";

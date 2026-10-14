@@ -28,7 +28,7 @@ import {
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
-} from "@sidecar/features";
+} from "@luke/features";
 import {
   decodeLivePayload,
   isLiveVoice,
@@ -37,7 +37,7 @@ import {
   type LiveDiagnostics,
   type LiveSessionOutcome,
   type LiveVoice,
-} from "@sidecar/live";
+} from "@luke/live";
 import {
   HTTP_STATUS,
   positiveInteger,
@@ -45,7 +45,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import {
   Clock,
   Data,

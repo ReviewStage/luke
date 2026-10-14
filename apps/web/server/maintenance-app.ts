@@ -1,9 +1,9 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { sweepAbandonedTurns } from "@sidecar/database/models/abandoned-turns";
-import { hostedStore } from "@sidecar/database/models/hosted-store";
-import { recordVoiceSeconds } from "@sidecar/database/models/quota";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { storeWriter } from "@sidecar/database/models/writer";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
+import { hostedStore } from "@luke/database/models/hosted-store";
+import { recordVoiceSeconds } from "@luke/database/models/quota";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import type { GitHubApp } from "./github/github-app.js";

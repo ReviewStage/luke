@@ -12,7 +12,7 @@ export const HOSTED_SERVICE_PATH = {
   EVENTS: "/api/events",
   /**
    * Store and read account preferences (GET, PUT). Only settings named by
-   * `@sidecar/settings` as cross-device preferences belong here.
+   * `@luke/settings` as cross-device preferences belong here.
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**

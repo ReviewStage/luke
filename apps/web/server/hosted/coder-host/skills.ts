@@ -6,8 +6,8 @@
  * led by the folder it stands in within the checkout.
  */
 
-import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import type { Effect } from "effect";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import type { RepositorySkill } from "../repository-skills.js";

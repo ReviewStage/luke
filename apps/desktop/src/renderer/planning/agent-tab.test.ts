@@ -5,8 +5,8 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

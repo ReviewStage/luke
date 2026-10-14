@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
-import { settingsView } from "@sidecar/settings/testing";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import { type SettingsSearchInput, searchSettings, settingsSearchEntries } from "./settings-search";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";

@@ -1,4 +1,4 @@
-import type { ActionResult } from "@sidecar/wire";
+import type { ActionResult } from "@luke/wire";
 import { useId, useRef } from "react";
 import { MODAL_ROLE, ModalShell } from "../modal-shell";
 import { BusyLabel } from "../spinner";

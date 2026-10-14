@@ -2,7 +2,7 @@ import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   GitMergeIcon,
   GitPullRequestClosedIcon,

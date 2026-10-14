@@ -8,7 +8,7 @@
  * to the totals #214 names (`coding-agent.ts`): 9 files, +412 −38.
  */
 
-import type { CodingAgentChangedFile } from "@sidecar/features/coding-agent-wire";
+import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { structuredPatch } from "diff";
 
 /** One changed file as written: its path, and its text before (none where it is new) and after. */

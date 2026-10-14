@@ -1,6 +1,6 @@
-import type { ProductSettingValue } from "@sidecar/features/analytics";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import type { AppSettingId, DescribedSetting } from "@sidecar/wire/app-settings";
+import type { ProductSettingValue } from "@luke/features/analytics";
+import type { UnparsedWireValue } from "@luke/wire";
+import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {

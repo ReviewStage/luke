@@ -3,14 +3,14 @@ import { it } from "@effect/vitest";
 import {
   createCodingAgent,
   updateCodingAgentServers,
-} from "@sidecar/database/models/coding-agent-store";
-import { storeWriter } from "@sidecar/database/models/writer";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/coding-agent-store";
+import { storeWriter } from "@luke/database/models/writer";
+import { getTestDB } from "@luke/database/testing";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { GitHubApp } from "../server/github/github-app";

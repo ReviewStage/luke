@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@sidecar/wire";
+import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, test, vi } from "vitest";
 import type { SessionReplayBootstrap } from "#shared/messages/session";

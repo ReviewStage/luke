@@ -1,4 +1,4 @@
-import type { Plan } from "@sidecar/features/plan-wire";
+import type { Plan } from "@luke/features/plan-wire";
 
 /**
  * document-plan.ts -- a synthetic plan, as a service answers one: its text, and no assumptions beside it.

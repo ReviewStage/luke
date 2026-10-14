@@ -6,8 +6,8 @@ import {
   parseKeyRing,
   type SealOwner,
   sealProviderKey,
-} from "@sidecar/database/models/provider-key-seal";
-import { PROVIDER_KEY_PROVIDER } from "@sidecar/features/provider-key-wire";
+} from "@luke/database/models/provider-key-seal";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 import { test } from "vitest";
 

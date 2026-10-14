@@ -1,4 +1,4 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { Effect } from "effect";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";

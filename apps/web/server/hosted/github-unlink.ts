@@ -11,7 +11,7 @@
  * last way to sign in, and that refusal is kept by status for the route.
  */
 
-import { type MemberFailure, pluginCall } from "@sidecar/database/models/workspace-seams";
+import { type MemberFailure, pluginCall } from "@luke/database/models/workspace-seams";
 import { Cause, Effect, Schema } from "effect";
 
 /** The provider id Better Auth names a GitHub account row by. */

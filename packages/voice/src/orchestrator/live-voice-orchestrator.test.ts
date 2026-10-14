@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { VoiceLiveSessionChanged } from "@sidecar/gateway";
-import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
+import type { VoiceLiveSessionChanged } from "@luke/gateway";
+import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { Context, Effect, Fiber } from "effect";
 import type {
   LiveVoiceCall,

@@ -1,6 +1,6 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
-import { listRecentMessages } from "@sidecar/database/models/message-reads";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { listRecentMessages } from "@luke/database/models/message-reads";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import { isTextUIPart, isToolUIPart, type ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";

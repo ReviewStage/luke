@@ -1,7 +1,7 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
 /* Motion tokens first, so base.css can spend them without restating the springs
    or the duration set. */
-@import "@sidecar/brand/motion-tokens.css";
+@import "@luke/brand/motion-tokens.css";
 /* Before base.css: `.settings-input` is equal specificity to the tweaks
    there, and those tweaks have to win. */
 @import "./settings.css";

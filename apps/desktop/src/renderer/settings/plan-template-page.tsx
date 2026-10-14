@@ -1,13 +1,13 @@
-import type { PlanTemplateAnswerView } from "@sidecar/features/coding-agent-view";
+import type { PlanTemplateAnswerView } from "@luke/features/coding-agent-view";
 import {
   PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
-} from "@sidecar/features/plan-document-template";
-import { PLAN_EDIT_REFUSAL } from "@sidecar/features/plan-edit";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/features/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/features/planning-view";
-import { ResetIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/plan-document-template";
+import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
+import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@luke/features/planning-view";
+import { ResetIcon } from "@luke/panel";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

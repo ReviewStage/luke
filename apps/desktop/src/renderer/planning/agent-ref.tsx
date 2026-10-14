@@ -1,6 +1,6 @@
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import type { PlanAgentLine } from "@sidecar/features/plan-wire";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import type { PlanAgentLine } from "@luke/features/plan-wire";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
 import { Tooltip } from "../tooltip";
 import {

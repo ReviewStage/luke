@@ -1,11 +1,6 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import {
-  NOTE_KIND,
-  type PlanNote,
-  planNotesSchema,
-  readNotes,
-} from "@sidecar/features/plan-template";
-import { PLAN_ACTOR } from "@sidecar/features/plan-wire";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { NOTE_KIND, type PlanNote, planNotesSchema, readNotes } from "@luke/features/plan-template";
+import { PLAN_ACTOR } from "@luke/features/plan-wire";
 import { Effect } from "effect";
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
 import {

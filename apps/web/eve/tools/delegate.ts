@@ -1,4 +1,4 @@
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { defineWorkflowTool, type WorkflowServeReceive } from "eve/tools";
 import { PLANNER_DELEGATE_TOOL } from "../../server/hosted/brain-host/planning.js";
 

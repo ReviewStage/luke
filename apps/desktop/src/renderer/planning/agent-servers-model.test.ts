@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
-} from "@sidecar/features/integration-view";
+} from "@luke/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import { test } from "vitest";
 import { CONNECTION_HEALTH, connectionHealth } from "../integration-health";
 import {

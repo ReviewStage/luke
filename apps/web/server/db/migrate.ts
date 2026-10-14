@@ -1,8 +1,8 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
-import { runWebMigrations } from "@sidecar/database/core/migrator";
-import { databaseOverPgClient } from "@sidecar/database/core/query";
+import { runWebMigrations } from "@luke/database/core/migrator";
+import { databaseOverPgClient } from "@luke/database/core/query";
 import { Config, Effect, Layer } from "effect";
 import { POOL_LIMITS } from "./index.js";
 

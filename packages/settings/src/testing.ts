@@ -1,4 +1,4 @@
-import { LIVE_VOICE } from "@sidecar/live";
+import { LIVE_VOICE } from "@luke/live";
 import { APP_SETTING_DEFAULTS } from "./schema-access.js";
 import type { AppSettingsView } from "./wire.js";
 

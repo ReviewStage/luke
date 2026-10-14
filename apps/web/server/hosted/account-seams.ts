@@ -5,12 +5,12 @@ import {
   restorePlanTemplate,
   writeAccountPreferences,
   writePlanTemplate,
-} from "@sidecar/database/models/account-store";
+} from "@luke/database/models/account-store";
 import {
   listTemplateRevisions,
   readTemplateRevision,
-} from "@sidecar/database/models/plan-template-revisions";
-import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
+} from "@luke/database/models/plan-template-revisions";
+import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import type { AccountAppSeams } from "../account-app.js";
 import { resolveHostedUserId } from "./bearer.js";
 import { deploymentEveOrigin } from "./brain-host/eve-origin.js";

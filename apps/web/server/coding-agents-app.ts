@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { childTitlesOf } from "@sidecar/database/models/child-titles";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { childTitlesOf } from "@luke/database/models/child-titles";
 import {
   archiveCodingAgent,
   type CodingAgent,
@@ -8,14 +8,14 @@ import {
   renameCodingAgent,
   updateCodingAgentChoice,
   updateCodingAgentServers,
-} from "@sidecar/database/models/coding-agent-store";
-import { childConversationId } from "@sidecar/database/models/ids";
-import { readPlan } from "@sidecar/database/models/plan-store";
+} from "@luke/database/models/coding-agent-store";
+import { childConversationId } from "@luke/database/models/ids";
+import { readPlan } from "@luke/database/models/plan-store";
 import {
   type ConversationTarget,
   type StoreWriter,
   storeWriter,
-} from "@sidecar/database/models/writer";
+} from "@luke/database/models/writer";
 import {
   base64Chars,
   CODING_AGENT_BOUNDS,
@@ -31,7 +31,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
@@ -42,9 +42,9 @@ import {
   inboxAnswerRequestSchema,
   inboxCursorSchema,
   inboxReplyRefusal,
-} from "@sidecar/features/inbox-wire";
-import { modelChoiceSchema } from "@sidecar/features/models-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/inbox-wire";
+import { modelChoiceSchema } from "@luke/features/models-wire";
+import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "./core.js";
@@ -167,7 +167,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
  * agent's transcript carries: the child conversation is a function of the
- * two (`@sidecar/database/models/ids`), and only a delegation recorded under an
+ * two (`@luke/database/models/ids`), and only a delegation recorded under an
  * agent the account reaches answers, so a call of any other agent reads as
  * none. Each worker's title, generated from its task as it starts, is
  * carried on its own page and, for every worker titled so far, on the

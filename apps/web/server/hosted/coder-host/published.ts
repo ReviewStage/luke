@@ -1,13 +1,13 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   readCodingAgent,
   recordCodingAgentPublished,
-} from "@sidecar/database/models/coding-agent-store";
+} from "@luke/database/models/coding-agent-store";
 import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

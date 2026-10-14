@@ -1,4 +1,4 @@
-import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
   type CodingAgent,
   readCodingAgentOfConversation,
@@ -6,13 +6,13 @@ import {
   recordCodingAgentCompaction,
   recordCodingAgentStep,
   updateCodingAgentBranch,
-} from "@sidecar/database/models/coding-agent-store";
-import { promptHashOf } from "@sidecar/database/models/content-addressed";
-import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
-import { sandboxHeld } from "@sidecar/database/models/sandbox-terminal-lease";
-import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
-import { INBOX_TOOL } from "@sidecar/features/inbox-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
+} from "@luke/database/models/coding-agent-store";
+import { promptHashOf } from "@luke/database/models/content-addressed";
+import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";

@@ -1,10 +1,6 @@
-import {
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-} from "@sidecar/features/brain";
-import { sessionKey } from "@sidecar/runtime/vocabulary";
-import { TURN_STATUS } from "@sidecar/wire";
+import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@luke/features/brain";
+import { sessionKey } from "@luke/runtime/vocabulary";
+import { TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

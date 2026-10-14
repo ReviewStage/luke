@@ -1,8 +1,8 @@
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { conversationReachableBy } from "@sidecar/database/models/recorded-session";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { conversationReachableBy } from "@luke/database/models/recorded-session";
+import type { ConversationTarget } from "@luke/database/models/writer";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -14,7 +14,7 @@ export {
   claimRuntimeSession,
   conversationReachableBy,
   runtimeSessionReachableBy,
-} from "@sidecar/database/models/recorded-session";
+} from "@luke/database/models/recorded-session";
 
 /**
  * The host's own check of who a session is for. eve authenticates a request

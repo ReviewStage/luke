@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   codeLinesReadable,
   INBOX_ANSWER_LEAD,
@@ -16,8 +16,8 @@ import {
   inboxCloseInputSchema,
   inboxPostInputSchema,
   inboxReadInputSchema,
-} from "@sidecar/features/inbox-wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/inbox-wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import {
@@ -43,7 +43,7 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * on the service (`inbox-store.ts`), drawn on the plan's Inbox tab until the
  * developer answers it or the agent takes it back. An item is a title, the
  * blocks of context under it, and the response it asks for, each a closed
- * shape the wire declares (`@sidecar/features/inbox-wire`). An image block
+ * shape the wire declares (`@luke/features/inbox-wire`). An image block
  * names a file in the agent's sandbox, a screenshot of what it rendered,
  * which a post reads there first (`inbox-image.ts`) and the store keeps as
  * an attachment of the item's; a file that is not there, not an image, or

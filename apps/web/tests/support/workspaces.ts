@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@sidecar/database/github-installation-vocabulary";
-import { createPlan, type NewPlan } from "@sidecar/database/models/plan-store";
-import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
-import { member, organization } from "@sidecar/database/schemas/auth";
-import { githubInstallation } from "@sidecar/database/schemas/github-installation";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/features/workspace-wire";
+} from "@luke/database/github-installation-vocabulary";
+import { createPlan, type NewPlan } from "@luke/database/models/plan-store";
+import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
+import { member, organization } from "@luke/database/schemas/auth";
+import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
 

@@ -1,4 +1,4 @@
-import type { LiveAppendEvent } from "@sidecar/live";
+import type { LiveAppendEvent } from "@luke/live";
 import { Clock, Deferred, Duration, Effect, Exit, Option, Queue } from "effect";
 import type { LiveSideband } from "../live-socket.js";
 

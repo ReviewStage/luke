@@ -12,7 +12,7 @@
  * to the menu and from there to the same nothing.
  */
 
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
 export const APP_COMMAND = {
