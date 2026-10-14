@@ -77,11 +77,11 @@ const TICKS = /`+/gu;
 const SPACE_CODE = 0x20;
 const DELETE_CODE = 0x7f;
 
-/** A percent-encoded character, as a path still holds one once its target is read. */
-const ENCODED = /%[0-9A-Fa-f]{2}/u;
+/** A slash, a backslash, or a dot still percent-encoded once a target is read, which a reader decoding again would turn into a step. */
+const ENCODED_STEP = /%(?:2[Ff]|5[Cc]|2[Ee])/u;
 
-/** A blank line, which ends a paragraph and with it any code span left open in it. */
-const BLANK_LINE = /\n[ \t]*\n/gu;
+/** A line that starts a block of its own, a heading, a quote, or a list's item, which ends any code span left open before it. */
+const BLOCK_START_LINE = /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/u;
 
 /** A line indented as code: four spaces, or a tab, before anything. */
 const INDENTED_LINE = /^(?: {4}|\t)/u;
@@ -106,9 +106,10 @@ const pathSchema = EffectSchema.String.check(
         const code = character.codePointAt(0) ?? 0;
         return code < SPACE_CODE || code === DELETE_CODE;
       }) &&
-      // Note that a step still spelled percent-encoded once read is refused, so
-      // no reader that decodes it again can find a separator or a step back in it.
-      !ENCODED.test(path) &&
+      // Note that a separator or a dot still spelled percent-encoded once read is
+      // refused, so no reader decoding the path again finds a step back in it,
+      // while a name that merely holds a percent sign, `report%20final.md`, stands.
+      !ENCODED_STEP.test(path) &&
       path.split("/").every((step) => step !== ".." && step !== "." && step !== ""),
   ),
 );
@@ -217,18 +218,29 @@ interface TextStretch {
   readonly end: number;
 }
 
-/** The paragraph holding the index: from the blank line before it, or the text's start, to the blank line after it, or the text's end. */
+/**
+ * The block of words holding the index, which a code span cannot leave: from
+ * the line after the last blank line or the line that starts the block, to
+ * the line before the next one, as CommonMark's spans stay inside their block.
+ */
 function paragraphAt(text: string, at: number): TextStretch {
   let start = 0;
   let end = text.length;
-  for (const blank of text.matchAll(BLANK_LINE)) {
-    if (blank.index + blank[0].length <= at) start = blank.index + blank[0].length;
-    else if (blank.index >= at) {
-      end = blank.index;
+  let lineStart = 0;
+  for (const line of text.split("\n")) {
+    const lineEnd = lineStart + line.length;
+    const blank = line.trim() === "";
+    const opens = BLOCK_START_LINE.test(line);
+    if (lineStart <= at) {
+      if (blank) start = lineEnd + 1;
+      else if (opens) start = lineStart;
+    } else if (blank || opens) {
+      end = lineStart - 1;
       break;
     }
+    lineStart = lineEnd + 1;
   }
-  return { start, end };
+  return { start, end: Math.max(start, end) };
 }
 
 /** Whether the index stands inside a code span: between a run of backticks and the next run of the same length in its paragraph, across its lines. */
