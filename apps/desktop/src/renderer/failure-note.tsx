@@ -1,13 +1,17 @@
+import { GitHubMark } from "./account-marks";
 import { FAILURE_REASON, type Failure, remedyLabel } from "./failure-remedy";
-import { CONNECTED_ACCOUNTS_LINK, useOpenSettings } from "./open-settings";
+import { useGitHubConnect } from "./github-connect";
 import { RetryButton } from "./retry-button";
 
 /**
  * failure-note.tsx -- a failure's sentence, then the press that mends it, or Retry where trying again is all that can.
  *
- * GitHub not connected is mended in Settings, where the account's own GitHub
- * is connected, so its press opens Settings at the account's connected
- * accounts. Any other remedy is the surface's own (`onRemedy`).
+ * Connect GitHub connects the account's own GitHub in the browser, as
+ * Settings › Connected accounts does, with Cancel beside it while the
+ * browser has it; once the window is back with GitHub connected the failed
+ * action is asked again by itself (`onRetry`), and a connect withdrawn or
+ * outlived by the note leaves nothing retried (`github-connect.tsx`). Any
+ * other remedy is the surface's own (`onRemedy`).
  */
 export function FailureNote({
   failure,
@@ -17,17 +21,15 @@ export function FailureNote({
 }: {
   failure: Failure;
   className: string;
-  /** Retry's press, where trying again is all that mends the failure. */
+  /** Retry's press, and what follows a GitHub connect that landed. */
   onRetry?: (() => void) | undefined;
   /** Opens the API keys or reconnects the integration, as the reason says. */
   onRemedy?: (() => void) | undefined;
 }): React.JSX.Element {
-  const openSettings = useOpenSettings();
+  const connect = useGitHubConnect(() => onRetry?.());
+  const github = failure.reason === FAILURE_REASON.GITHUB_SIGN_IN;
+  const waiting = github && connect.waiting;
   const label = remedyLabel(failure);
-  const remedy =
-    failure.reason === FAILURE_REASON.GITHUB_SIGN_IN
-      ? () => openSettings(CONNECTED_ACCOUNTS_LINK)
-      : onRemedy;
   return (
     <p className={`failure-note ${className}`} role="alert">
       <span className="failure-note-words">{failure.text}</span>
@@ -35,11 +37,18 @@ export function FailureNote({
         <button
           type="button"
           className="toolbar-button bordered-button failure-note-remedy"
-          onClick={remedy}
+          disabled={waiting}
+          onClick={github ? connect.begin : onRemedy}
         >
-          {label}
+          {github && !waiting ? <GitHubMark /> : null}
+          {waiting ? "Waiting for browser…" : label}
         </button>
       )}
+      {waiting ? (
+        <button type="button" className="toolbar-button quiet-button" onClick={connect.cancel}>
+          Cancel
+        </button>
+      ) : null}
       {label === undefined && onRetry !== undefined ? <RetryButton onRetry={onRetry} /> : null}
     </p>
   );

@@ -1,4 +1,5 @@
-import { OPEN_SETTINGS_LABEL } from "./open-settings";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import { CONNECT_GITHUB_LABEL } from "./planning/planning-model";
 
 /**
  * failure-remedy.ts -- why a failure stands, as a typed word beside its sentence, and what the press that mends it says.
@@ -13,19 +14,24 @@ export const FAILURE_REASON = {
 
 export type FailureReason = (typeof FAILURE_REASON)[keyof typeof FAILURE_REASON];
 
-export interface Failure {
-  readonly reason: FailureReason;
-  readonly text: string;
-}
+export type Failure =
+  | {
+      readonly reason: typeof FAILURE_REASON.RECONNECT_INTEGRATION;
+      readonly text: string;
+      readonly provider: IntegrationProvider;
+    }
+  | {
+      readonly reason: Exclude<FailureReason, typeof FAILURE_REASON.RECONNECT_INTEGRATION>;
+      readonly text: string;
+    };
 
 /** The remedy's label; none where only Retry answers. */
 export function remedyLabel(failure: Failure): string | undefined {
   switch (failure.reason) {
     case FAILURE_REASON.GITHUB_SIGN_IN:
-      return OPEN_SETTINGS_LABEL;
-    // An integration is connected in one place, Settings › Integrations, so the press goes there.
+      return CONNECT_GITHUB_LABEL;
     case FAILURE_REASON.RECONNECT_INTEGRATION:
-      return OPEN_SETTINGS_LABEL;
+      return `Reconnect ${INTEGRATION_NAME[failure.provider]}`;
     case FAILURE_REASON.API_KEY:
       return "Open API keys";
     case FAILURE_REASON.OTHER:

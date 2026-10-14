@@ -116,7 +116,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   return (
     <div className="start-agent" ref={root} data-unavailable={String(unavailable)}>
       {start.note !== undefined ? (
-        // A Start a sign-in mended is pressed again by itself.
+        // A Start a GitHub connect mended is pressed again by itself.
         <FailureNote
           failure={start.note}
           className="desktop-toolbar-note"

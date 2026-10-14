@@ -19,9 +19,6 @@ export const CONNECTED_ACCOUNTS_LINK: SettingsLink = {
 /** The words of every button that opens Settings at a place. */
 export const OPEN_SETTINGS_LABEL = "Open Settings";
 
-/** What a GitHub remedy that opens Settings says on hover: where GitHub is connected. */
-export const GITHUB_REMEDY_TITLE = "Connect GitHub in Settings › Connected accounts";
-
 const OpenSettingsContext = createContext<(link: SettingsLink) => void>(() => undefined);
 
 /** Hands the window's opener to everything under it. */

@@ -23,6 +23,7 @@ import {
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { imageFiles } from "../feedback-images";
+import { useIntegrationGrant } from "../integration-grant";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
@@ -65,12 +66,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * one Stop the tab has. A message that did not go stays in the box with why under the card
  * and what mends it (`../failure-note.tsx`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
- * once, or the GitHub sign-in a refusal needs, after which it is sent again
+ * once, or the GitHub connect a refusal needs, after which it is sent again
  * by itself; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
- * the agent has on whose sign-in expired offers Settings › Integrations, the
- * one place a server is reconnected. The box takes
+ * the agent has on whose sign-in expired is offered to reconnect, in place, as
+ * the MCP popover reconnects it. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
@@ -191,6 +192,7 @@ export function AgentComposer({
   const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const statuses = useIntegrationStatuses();
+  const grant = useIntegrationGrant(statuses);
   const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
   const words =
     composer.closed ?? refusal ?? (composer.note === undefined ? model?.note : undefined);
@@ -203,6 +205,7 @@ export function AgentComposer({
           : {
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
               text: `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
+              provider: lapsed,
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === composer.note;
@@ -409,7 +412,7 @@ export function AgentComposer({
           failure={note}
           className="agent-note agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
-          onRemedy={lapsed === undefined ? undefined : servers.onOpenSettings}
+          onRemedy={lapsed === undefined ? undefined : () => void grant.begin(lapsed)}
         />
       ) : null}
     </div>
