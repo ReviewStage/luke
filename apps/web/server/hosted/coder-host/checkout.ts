@@ -12,7 +12,7 @@ import {
   runInSandbox,
   setCheckoutIdentity,
 } from "../repository-shell.js";
-import { planWorkspace } from "../workspace-repository.js";
+import { agentWorkspace as workspaceOfAgent } from "../workspace-repository.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -62,9 +62,9 @@ function refusedBy(): CheckoutRefused {
   return new CheckoutRefused({ reason: CODER_REFUSAL.GITHUB_UNAVAILABLE });
 }
 
-/** The workspace of the agent's plan, whose installation its repository is reached through; none where its starter no longer reaches the plan. */
+/** The agent's workspace, whose installation its repository is reached through; none where its starter no longer reaches it. */
 function agentWorkspace(target: ConversationTarget, agent: CodingAgent) {
-  return planWorkspace(target.userId, agent.planId);
+  return workspaceOfAgent(target.userId, agent);
 }
 
 /**

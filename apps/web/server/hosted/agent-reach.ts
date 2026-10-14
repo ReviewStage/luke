@@ -1,5 +1,5 @@
 /**
- * agent-reach.ts -- the one rule for which coding agent a request reaches: the bearer's account, and an agent of a plan in a workspace it belongs to.
+ * agent-reach.ts -- the one rule for which coding agent a request reaches: the bearer's account, and an agent of a workspace it belongs to.
  *
  * Every route that names an agent by its id reads it through here, its
  * transcript, its controls, and its terminals alike, so who may reach an
@@ -19,6 +19,7 @@ import {
 } from "@luke/service/http/http-effect";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
+import { plannedAgent } from "./coder-host/status.js";
 
 /** What resolves a request's bearer to the account it answers for. */
 export interface AccountResolving {
@@ -61,9 +62,12 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The agent the path names, where the account is a member of its plan's
+ * The agent the path names, where the account is a member of its
  * workspace, or not found; its conversation is targeted under the member
- * who started it, which is whom the conversation belongs to.
+ * who started it, which is whom the conversation belongs to. Note that an
+ * agent with no plan reads as not found here, before any route acts on it,
+ * because the agent routes answer with its summary and the wire's summary
+ * names a plan; the routes reach it once the wire's summary does.
  */
 export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountResolving,
@@ -72,7 +76,9 @@ export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   const agentId = yield* uuidOf(request, AGENT_ID_QUERY);
   const userId = yield* resolvedUserId(seams, request);
   const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
-  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (Option.isNone(agent) || !plannedAgent(agent.value)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
   return {
     userId,
     agent: agent.value,

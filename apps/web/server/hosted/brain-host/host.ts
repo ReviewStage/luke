@@ -31,6 +31,7 @@ import { titleSubagent } from "../coder-host/title.js";
 import { type ModelCatalog, providerModelOf } from "../model-catalog.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import type { RepositorySkill } from "../repository-skills.js";
+import { planWorkspace } from "../workspace-repository.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
@@ -470,7 +471,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // The repository is read through the plan's workspace installation, as every planning read of it is.
         return yield* repositorySkills(
           { userId: admitted.caller, conversationId: admitted.target.conversationId },
-          plan.plan.id,
+          planWorkspace(admitted.caller, plan.plan.id),
           repository,
           planningSkillMarkdown,
         );

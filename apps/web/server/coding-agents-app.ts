@@ -73,7 +73,7 @@ import {
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
-import { codingAgentSummary } from "./hosted/coder-host/status.js";
+import { codingAgentSummary, plannedAgent } from "./hosted/coder-host/status.js";
 import { steerCodingAgent } from "./hosted/coder-host/steer.js";
 import {
   type EveReach,
@@ -363,7 +363,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       disabledServers,
     }),
   );
-  if (!created) {
+  if (!created || !plannedAgent(agent)) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
   }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
@@ -403,7 +403,9 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents.map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
+    agents: agents
+      .filter(plannedAgent)
+      .map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
   });
 });
 
