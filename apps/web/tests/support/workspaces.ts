@@ -46,6 +46,15 @@ export const joinWorkspace = (
       .values({ id: randomUUID(), organizationId, userId, role, createdAt: now });
   });
 
+/** Takes the account out of the workspace, as the plugin's `removeMember` would. */
+export const leaveWorkspace = (organizationId: string, userId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    yield* db
+      .delete(member)
+      .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)));
+  });
+
 /** A new workspace the account owns, answering its id. */
 export const openWorkspace = (ownerId: string) =>
   Effect.gen(function* () {

@@ -56,14 +56,16 @@ export function hostAdmission(now: () => number): HostAdmission {
 export interface DelegatedChild {
   readonly parent: ConversationTarget;
   readonly child: ConversationTarget;
+  /** The member the worker's session acts for, who pays for what it runs; the parent's owner keeps its rows. */
+  readonly caller: string;
 }
 
 /**
  * The child conversation a worker's session records into, under the call
- * that started it: admitted on ownership alone, as the worker's resolvers
+ * that started it: admitted on reach alone, as the worker's resolvers
  * are, since claiming the parent's record for the child's session would
  * refuse every later call of the parent's own; nothing for a session with
- * no parent, or one the account does not own.
+ * no parent, or one the account does not reach.
  */
 export function delegatedChildOf(
   session: SessionContext["session"],
@@ -76,8 +78,9 @@ export function delegatedChildOf(
       standing: SESSION_STANDING.DELEGATED,
     });
     if (Result.isFailure(admitted)) return Option.none();
-    const { target } = admitted.success;
+    const { target, caller } = admitted.success;
     return Option.some({
+      caller,
       parent: target,
       child: {
         userId: target.userId,

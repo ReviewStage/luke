@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { Effect, Layer, Option, Result } from "effect";
+import { generateText } from "ai";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -16,7 +17,10 @@ import {
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
-import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "../server/hosted/brain-host/conversation";
 import type { SessionOwnership } from "../server/hosted/brain-host/door";
 import {
   type BrainHost,
@@ -30,7 +34,7 @@ import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, setConversationDeletedAt } from "./support/store-rows";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and
@@ -66,9 +70,9 @@ const writer = await database.run(
 
 /** The door's reads exactly as `productionBrainHostSeams` composes them, over the test database instead of the deployment's. */
 const ownership: SessionOwnership = {
-  sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
-  ownsConversation: (userId, conversationId) =>
-    database.run(conversationOwnedBy(userId, conversationId)),
+  reachesSession: (userId, sessionId) => database.run(runtimeSessionReachableBy(userId, sessionId)),
+  reachesConversation: (userId, conversationId) =>
+    database.run(conversationReachableBy(userId, conversationId)),
 };
 
 /** A seam a refused call must never reach; reaching it is the failure, named. */
@@ -82,7 +86,7 @@ interface TestHost {
   readonly host: BrainHost;
 }
 
-function hostOverTestDatabase(): TestHost {
+function hostOverTestDatabase(overrides: Partial<BrainHostSeams> = {}): TestHost {
   const seams: BrainHostSeams = {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
@@ -94,6 +98,7 @@ function hostOverTestDatabase(): TestHost {
     scriptedModel: () => false,
     spend: unreached("spend"),
     now: () => NOW,
+    ...overrides,
   };
   return { host: brainHost(seams) };
 }
@@ -274,7 +279,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userA, started.id)),
-  );
+  ).conversationId;
   const target = { userId: userA, conversationId };
   const seat = ownSeat(userA, conversationId);
   const { host } = hostOverTestDatabase();
@@ -318,4 +323,105 @@ test("a tool call is admitted again as it runs: the current session's lands, and
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
+});
+test("a member of the plan's workspace is admitted to the conversation a teammate opened, at the door and as its tools run, and the turn's inference is metered to the member; a stranger is refused", async () => {
+  const SESSION = sessions();
+  const userA = await database.createUser();
+  const teammate = await database.createUser();
+  const stranger = await database.createUser();
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
+  await database.run(joinWorkspace(started.workspaceId, teammate));
+  const { conversationId } = Option.getOrThrow(
+    await database.run(openPlanConversation(userA, started.id)),
+  );
+  const target = { userId: userA, conversationId };
+  const seat = ownSeat(userA, conversationId);
+  const spent: string[] = [];
+  const titled: string[] = [];
+  const { host } = hostOverTestDatabase({
+    titleModel: (userId) => {
+      titled.push(userId);
+      return undefined;
+    },
+    openAi: () => ({
+      apiKey: Redacted.make("sk-test-ownership"),
+      choice: { model: "openai/gpt-6.1-sol", effort: "medium" },
+    }),
+    spend: async (userId) => {
+      spent.push(userId);
+    },
+  });
+  assert.equal(await start(host, seat, SESSION.OLDER), true);
+  const speaking = (userId: string): SessionAuth => ({
+    current: principal(userId, {
+      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
+      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+    }),
+    initiator: seat.initiator,
+  });
+
+  const auth = channelAuth([userA, teammate, stranger]);
+  const followUp = (bearer: string) =>
+    request(
+      `/eve/v1/session/${SESSION.OLDER}`,
+      bearer,
+      { [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED },
+      "POST",
+    );
+  assert.deepEqual(await auth(followUp(teammate)), { admitted: teammate });
+  assert.deepEqual(await auth(followUp(stranger)), forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER));
+
+  const admitted = await database.run(host.admit(speaking(teammate), SESSION.OLDER));
+  assert.ok(Result.isSuccess(admitted));
+  assert.equal(admitted.success.caller, teammate);
+  assert.deepEqual(admitted.success.target, target);
+  const selection = host.model(admitted.success);
+  assert.ok(Result.isSuccess(selection));
+  // The inference is refused before it leaves the process: the meter in front of it counts first.
+  await assert.rejects(
+    generateText({
+      model: selection.success.model,
+      prompt: "hello",
+      abortSignal: AbortSignal.abort(),
+      maxRetries: 0,
+    }),
+  );
+  assert.deepEqual(spent, [teammate]);
+  // A worker the member's turn started is titled on the member's meter, not the opener's.
+  await database.run(
+    host.titleChild(
+      toolContext("wrun_worker", speaking(teammate), { rootSessionId: SESSION.OLDER }).session,
+    ),
+  );
+  assert.deepEqual(titled, [teammate]);
+
+  const question = {
+    question: "Should a withdrawn invite tell the invitee who withdrew it?",
+    recommendation: "No: just say the invite is no longer valid.",
+  };
+  const call = (auth: SessionAuth) =>
+    database.run(
+      host
+        .runTool(
+          QUEUE_QUESTION_TOOL.name,
+          binding(target, SESSION.OLDER),
+          question,
+          toolContext(SESSION.OLDER, auth),
+        )
+        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
+    );
+  assert.deepEqual(await call(speaking(teammate)), { status: ACTION_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(await call(speaking(stranger)), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: BRAIN_HOST_REFUSAL.NOT_INITIATOR,
+  });
+  const strangerOwnSeat = principal(stranger, {
+    [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
+  });
+  assert.deepEqual(
+    await database.run(
+      host.admitDelegated({ current: strangerOwnSeat, initiator: strangerOwnSeat }, SESSION.OLDER),
+    ),
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER),
+  );
 });

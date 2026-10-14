@@ -433,7 +433,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, eve, ask } = yield* openPlan();
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(owner, plan.id));
+        const { conversationId } = Option.getOrThrow(yield* openPlanConversation(owner, plan.id));
         const sessionId = `wrun_${randomUUID()}`;
         assert.equal(
           yield* claimRuntimeSession({ userId: owner, conversationId }, sessionId, new Date()),
