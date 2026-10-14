@@ -994,6 +994,22 @@ test("a plan moved lists the workspace it moved to while it is still open, and a
   assert.equal(tab.control().workspace?.id, ACME.id);
 });
 
+test("a move pressed before the workspaces were read still lists the workspace it moved to once they land", async () => {
+  const answers: ((answer: { workspaceId: string }) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+
+  const moved = tab.control().onMovePlan("billing", ACME.id);
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  answers[0]?.({ workspaceId: ACME.id });
+  await settle();
+
+  assert.equal(await moved, true);
+  assert.equal(tab.control().workspace?.id, ACME.id);
+});
+
 test("the listed workspace left lists the first one again, and another workspace left keeps the one listed", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(ACME.id));

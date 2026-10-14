@@ -1147,7 +1147,9 @@ export function usePlansTab(input: {
       .catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }) as const)
       .then((answer) => {
         if (!("failure" in answer)) {
-          if (openNow.current === planId && listedNow.current === listedThen) {
+          // A first workspace read landing meanwhile lists one where none was, which nobody chose.
+          const stillListed = listedThen === undefined || listedNow.current === listedThen;
+          if (openNow.current === planId && stillListed) {
             workspace.choose(answer.workspaceId);
           }
           return true;

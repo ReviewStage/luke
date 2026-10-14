@@ -397,3 +397,17 @@ test("words edited while the move is out are never overwritten by the words that
   );
   assert.equal(composerEditor(box.container).textContent, "Rebase on main and fix CI");
 });
+
+test("a message sent and refused while the move is out is not sent again when the move lands", async () => {
+  const box = await mountedRefusedForMove();
+  typeInComposer(box.container, " and fix CI");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.landMove();
+
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Rebase on main", "Rebase on main and fix CI"],
+  );
+});
