@@ -192,6 +192,8 @@ export const chatAskSchema = EffectSchema.Struct({
   needsReply: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
+export type ChatAsk = typeof chatAskSchema.Type;
+
 /**
  * What a post's tool part carries as its input: the words, Markdown; where
  * they go, a channel by `#name` or a member's DM by `@handle`, the poster's

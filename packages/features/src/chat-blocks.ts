@@ -123,6 +123,8 @@ export const ASK_STATUS = {
   CLOSED: "closed",
 } as const;
 
+export type AskStatus = (typeof ASK_STATUS)[keyof typeof ASK_STATUS];
+
 /** How an ask was answered. */
 export const CHAT_REPLY = {
   /** Picked one or more of a choice's options. */
