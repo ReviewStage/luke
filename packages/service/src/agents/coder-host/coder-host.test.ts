@@ -600,4 +600,31 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         );
       }),
   );
+
+  it.effect(
+    "a chat post lands where the deployment names no secret or no origin for eve, the members it addresses left to read it next",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const posted = yield* host
+          .chat(admitted, {
+            tool: CHAT_TOOL.POST,
+            input: unparsedWire({ text: "Taking the invite table." }),
+            clientKey: "call-1",
+            postsInTurn: 0,
+            sandbox: () => Promise.reject(new Error("the sandbox was opened")),
+          })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read);
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#teammate-invitations"],
+        );
+      }),
+  );
 });

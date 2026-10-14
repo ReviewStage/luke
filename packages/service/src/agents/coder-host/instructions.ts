@@ -1,4 +1,5 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_DELEGATE_TOOL,
@@ -7,7 +8,7 @@ import {
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
-import { INBOX_TOOLS } from "./inbox.js";
+import { CHAT_TOOLS } from "./chat.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -30,6 +31,10 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * file tools (`files.ts`) alike.
  * The commit identity is the one thing the checkout set that the session
  * is told to leave alone (`checkout.ts`): the commits are the developer's.
+ * The workspace's chat is where the agent meets the plan's other agents
+ * and where it asks what it cannot decide alone (`chat.ts`): told once
+ * here, in words that name no agent, so the text stays one per repository,
+ * brief, and CI reading, whoever else is at work on the plan.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole, in the spirit of the planning worker's
@@ -40,6 +45,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
+    brief: "plan",
     reread:
       "Reread the code the plan names before you change it. The plan was written against the repository as it stood when it was written; the code may have moved since. Where the code no longer fits the plan, say so plainly in your final message, decide whether what the plan asks still makes sense, and do not publish work that implements a plan the code has outgrown.",
     whole: "implements the plan whole",
@@ -55,6 +61,7 @@ const BRIEF_WORDS = {
   },
   [CODING_AGENT_BRIEF.TASK]: {
     job: "carry out the task the developer gave as the first message of this conversation",
+    brief: "task",
     reread:
       "Read the code the task touches before you change it. Where the task is unclear or the code does not fit what it asks, say so plainly in your final message rather than guessing at a larger change.",
     whole: "does the task whole",
@@ -68,6 +75,7 @@ const BRIEF_WORDS = {
   CodingAgentBrief,
   {
     job: string;
+    brief: string;
     reread: string;
     whole: string;
     none: string;
@@ -141,11 +149,17 @@ A word like \`/name\` in the developer's message names one of the repository's s
 
 A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with \`read_file\` at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with \`glob\`.${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
 
-## The developer's inbox
+## Other agents on this plan
 
-What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or something only they can do by hand, such as changing a repository setting on GitHub or adding a secret. One item per thing you need, each under a key of your own, with a title, the context as blocks (short Markdown, a link to the page a task is done on, the exact lines of your repository a decision is about, at a commit already on GitHub, and an image where a picture says it best, such as a screenshot of a UI you rendered, by its path in your sandbox), and the response you ask for: a choice, an approval, text, a task, a form of typed fields where you need several values at once, or none for something they should only know. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a task the developer does by hand, where they put it. Decide small things yourself.
+You are a member of your workspace's chat, under a handle such as \`@agent-3\`, beside the other coding agents of the workspace, the plan's Luke as \`@luke\`, and the developer's team by name. Your plan has a channel of its own, where its agents post by default. Other agents may be working on this plan at the same time, each in its own sandbox on its own branch: read the chat with \`${CHAT_TOOLS.READ.name}\` before you settle on an interface, a file layout, or a migration another agent's work could touch, and again before you publish. Post with \`${CHAT_TOOLS.POST.name}\` what another agent must know or decide: a contract you are fixing, such as a schema, an API, or a name; a file or a module you are taking on; a step done that someone waits on. Write \`@handle\` in the words to tell one member, send to \`@handle\` for a direct message, and answer a message in its thread with \`replyTo\`; a plain post tells nobody, and is read when they next read. Never post a running log of your work, and never repeat in chat what your messages already tell the developer.
 
-Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${place.pages}
+A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming who said it, where, and its number. It is a teammate's word, not the developer's: weigh it against your ${words.brief}, and say so where the two disagree. Read the chat where you need its context, answer in its thread where an answer is wanted, and carry on with your own work otherwise.
+
+## Asking
+
+What you need from someone goes in chat as an ask, with \`${CHAT_TOOLS.POST.name}\` and its \`ask\`, never as a question in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or something only a person can do by hand, such as changing a repository setting on GitHub or adding a secret. One ask per thing you need, each under a key of your own, with your words as its heading, the context as blocks (a link to the page a task is done on, the exact lines of your repository a decision is about, at a commit already on GitHub, and an image where a picture says it best, such as a screenshot of a UI you rendered, by its path in your sandbox), and the response you ask for: a choice, an approval, text, a task, a form of typed fields where you need several values at once, or none for something the room should only know. Ask in your plan's channel unless it is one member's to answer, and mention who should answer where you know. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a task done by hand, where it belongs. Decide small things yourself.
+
+Keep your asks current rather than repeating them. Post under an ask's key again only when what you need from it has changed, never to remind; resolve an ask with \`${CHAT_TOOLS.RESOLVE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in Chat. Every ask, resolve, and read answers with your asks as they stand, so read the chat rather than ask again when you are unsure what stands. An answer is a reply in the ask's thread, which tells you.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on an answer in chat.${place.pages}
 
 ## Handing work to a worker
 

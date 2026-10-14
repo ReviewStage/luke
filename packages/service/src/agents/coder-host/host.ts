@@ -20,6 +20,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../plans/page-tool.js";
 import {
@@ -38,7 +39,14 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_MOUNT,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+  eveSessionsComposer,
+} from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import {
@@ -258,8 +266,10 @@ export interface CoderHost extends HostAdmission {
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
   /**
-   * Runs one of the agent's chat tools (`chat.ts`): a post, told through the
-   * deployment acting for the agent's starter on eve, or a read.
+   * Runs one of the agent's chat tools (`chat.ts`): a post, told to each
+   * agent it addresses through eve as the deployment acting for that agent's
+   * starter, and held for its next read where the deployment names no secret
+   * or no origin for eve; a read; or a resolve.
    */
   chat(
     admitted: AdmittedConversation,
@@ -317,6 +327,35 @@ export type ChatCall =
     }
   | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
   | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue };
+
+/**
+ * eve as a deployment that names no secret or no origin for it reaches it:
+ * every call answered as failed, so a chat post still lands and a member it
+ * addresses, whose notice could not be handed over, reads it when it next
+ * reads, as one whose steer eve refused does (`chat-notify.ts`).
+ */
+const EVE_UNREACHED: EveSessions = {
+  open: () =>
+    Effect.succeed({
+      outcome: EVE_SEND_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  send: () =>
+    Effect.succeed({
+      outcome: EVE_SEND_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  cancel: () =>
+    Effect.succeed({
+      outcome: EVE_CANCEL_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  reset: () =>
+    Effect.succeed({
+      outcome: EVE_RESET_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+};
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -609,12 +648,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // agent does: no bearer stands here.
         const secret = seams.deploymentSecret();
         const origin = seams.eveOrigin();
-        if (secret === undefined || origin === undefined) {
-          return chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE);
-        }
         const compose = yield* eveSessionsComposer;
         const eveFor = (starter: string) =>
-          compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+          secret === undefined || origin === undefined
+            ? EVE_UNREACHED
+            : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
         const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
         const { clientKey, postsInTurn, sandbox } = call;
         return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
