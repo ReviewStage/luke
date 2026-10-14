@@ -278,7 +278,10 @@ export function changesOffers(
     offered.add(pullRequest.url);
     const agentId = changesAgentOf(agents, each.id, open);
     const agent = agents.agents?.find((other) => other.id === agentId) ?? each;
-    return [{ agentId: agent.id, agent, label: agentTabLabel(agent, agents.models), pullRequest }];
+    // The row shows the pull request as the agent its tab stands for last read it, as its tab's card does.
+    const shown = agents.pullRequests.get(agent.id) ?? pullRequest;
+    const label = agentTabLabel(agent, agents.models);
+    return [{ agentId: agent.id, agent, label, pullRequest: shown }];
   });
 }
 

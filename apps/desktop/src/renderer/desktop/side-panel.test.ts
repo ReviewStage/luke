@@ -81,17 +81,24 @@ test('an agent\'s Changes chip opens the one tab the "+" offers for its pull req
 });
 
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {
-  const control = agents();
+  // Read apart, the later agent's snapshot of the shared pull request is the newer one.
+  const newer = { ...pullRequest(41, "Teammate invitations, with expiry"), changedFiles: 9 };
+  const read = agents();
+  const control = { ...read, pullRequests: new Map([...read.pullRequests, [SECOND.id, newer]]) };
   const open = [{ changes: SECOND.id }];
   assert.deepEqual(
     [FIRST, SECOND].map((each) => changesTabOf(control, each.id, open)),
     [{ changes: SECOND.id }, { changes: SECOND.id }],
   );
   assert.deepEqual(
-    changesOffers(control, open).map((offer) => [offer.agentId, offer.label]),
+    changesOffers(control, open).map((offer) => [
+      offer.agentId,
+      offer.label,
+      offer.pullRequest.title,
+    ]),
     [
-      [SECOND.id, "Invite fixes"],
-      [THIRD.id, "Expiry job"],
+      [SECOND.id, "Invite fixes", "Teammate invitations, with expiry"],
+      [THIRD.id, "Expiry job", "Expire invitations"],
     ],
   );
 });
