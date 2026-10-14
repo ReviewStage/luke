@@ -7,12 +7,13 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@sidecar/database/models/account-store";
-import { user } from "@sidecar/database/schemas/auth";
+import { member, organization, user } from "@sidecar/database/schemas/auth";
+import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
-import { count, eq, getColumnTable } from "drizzle-orm";
+import { count, eq, getColumnTable, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
@@ -38,6 +39,43 @@ const openUser = Effect.gen(function* () {
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
+
+/**
+ * An organization with its first member as owner, as the plugin writes one,
+ * and, for a personal workspace, the row naming it the account's, as
+ * `ensurePersonalWorkspace` writes it.
+ */
+const openWorkspace = (input: { name: string; slug: string; owner: string; personal: boolean }) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const id = randomUUID();
+    const now = new Date("2099-01-01T00:00:00.000Z");
+    yield* db
+      .insert(organization)
+      .values({ id, name: input.name, slug: input.slug, createdAt: now });
+    yield* db.insert(member).values({
+      id: randomUUID(),
+      organizationId: id,
+      userId: input.owner,
+      role: "owner",
+      createdAt: now,
+    });
+    if (input.personal) {
+      yield* db
+        .insert(personalWorkspace)
+        .values({ userId: input.owner, organizationId: id, createdAt: now });
+    }
+    return id;
+  });
+
+/** The organizations carrying the account's personal slug or its name. */
+const organizationsNaming = (userId: string, name: string) =>
+  Database.use((db) =>
+    db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(or(eq(organization.slug, `personal-${userId}`), eq(organization.name, name))),
+  );
 
 /** The account's own rows in the table one owning column belongs to. */
 const rowsOwnedBy = (column: PgColumn, userId: string) =>
@@ -114,5 +152,60 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
       assert.deepEqual(yield* countRows(erased), { preferences: 0, usage: 0 });
       assert.deepEqual(yield* countRows(kept), { preferences: 1, usage: 1 });
     }),
+  );
+
+  it.effect(
+    "the delete takes the account's personal workspace and leaves a shared one standing",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const erased = `user-${randomUUID()}`;
+        const erasedName = `Erased ${erased}`;
+        yield* db
+          .insert(user)
+          .values({ id: erased, name: erasedName, email: `${erased}@luke.test` });
+        const kept = yield* openUser;
+        yield* openWorkspace({
+          name: erasedName,
+          slug: `personal-${erased}`,
+          owner: erased,
+          personal: true,
+        });
+        const keptPersonal = yield* openWorkspace({
+          name: "Test User",
+          slug: `personal-${kept}`,
+          owner: kept,
+          personal: true,
+        });
+        const shared = yield* openWorkspace({
+          name: "Acme",
+          slug: `acme-${randomUUID()}`,
+          owner: kept,
+          personal: false,
+        });
+        yield* db.insert(member).values({
+          id: randomUUID(),
+          organizationId: shared,
+          userId: erased,
+          role: "member",
+          createdAt: new Date("2099-01-01T00:00:00.000Z"),
+        });
+
+        yield* deleteAccount(erased);
+
+        assert.deepEqual(yield* organizationsNaming(erased, erasedName), []);
+        const standing = yield* db
+          .select({ id: organization.id })
+          .from(organization)
+          .where(or(eq(organization.id, keptPersonal), eq(organization.id, shared)));
+        assert.equal(standing.length, 2);
+        assert.deepEqual(
+          yield* db
+            .select({ userId: member.userId })
+            .from(member)
+            .where(eq(member.organizationId, shared)),
+          [{ userId: kept }],
+        );
+      }),
   );
 });

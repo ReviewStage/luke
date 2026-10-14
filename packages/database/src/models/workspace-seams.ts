@@ -1,0 +1,80 @@
+import { type Cause, Effect, Option, Schema } from "effect";
+
+/**
+ * workspace-seams.ts -- the one workspace write that goes through Better Auth, handed to the store as a seam.
+ *
+ * A workspace is created by the organization plugin itself, so its
+ * organization and owner rows are the plugin's own, through the server-only
+ * `auth.api.createOrganization`: called with a `userId` and neither a
+ * request nor headers, which is the one way the plugin creates for an
+ * account with no session. The call is the auth service's promise, wrapped
+ * once here the way `bearer.ts` wraps `oauth2UserInfo`, and the store keeps
+ * the one field of its answer it needs. The auth service is handed in
+ * rather than imported, so a route hands it `auth.api` and a test the API
+ * of a Better Auth over its own database.
+ */
+
+/** The metadata the plugin stores on a personal workspace, as JSON text; only the server writes it. */
+export const PERSONAL_WORKSPACE_METADATA = { personal: true } as const;
+
+const MarkedMetadataSchema = Schema.Struct({ personal: Schema.optional(Schema.Boolean) });
+
+/** An organization's metadata as the plugin hands it back: the column's JSON text, or the record where it parsed it. */
+export type StoredOrganizationMetadata =
+  | string
+  | typeof MarkedMetadataSchema.Type
+  | null
+  | undefined;
+
+const decodeStoredMetadata = Schema.decodeUnknownOption(
+  Schema.Union([Schema.fromJsonString(MarkedMetadataSchema), MarkedMetadataSchema]),
+);
+
+/**
+ * Whether an organization's metadata marks a personal workspace. The
+ * plugin's adapter answers the column's text unparsed, so the text is read
+ * as JSON, and a record is read as it stands; anything else marks nothing.
+ */
+export function isPersonalWorkspaceMetadata(metadata: StoredOrganizationMetadata): boolean {
+  const stored = decodeStoredMetadata(metadata);
+  return Option.isSome(stored) && stored.value.personal === true;
+}
+
+/** What a workspace is created with: its name and slug, the account that will own it, and the metadata the plugin stores as JSON text. */
+export interface WorkspaceCreation {
+  readonly name: string;
+  readonly slug: string;
+  readonly userId: string;
+  readonly metadata: Readonly<Record<string, boolean>>;
+}
+
+/** The plugin's writes the workspace store makes. */
+export interface WorkspaceSeams {
+  readonly createOrganization: (
+    creation: WorkspaceCreation,
+  ) => Effect.Effect<{ readonly id: string }, Cause.UnknownError>;
+}
+
+/** The part of a Better Auth `api` with the organization plugin that the seams call. */
+export interface OrganizationAuthApi {
+  readonly createOrganization: (input: {
+    body: { name: string; slug: string; userId: string; metadata: Record<string, boolean> };
+  }) => Promise<{ readonly id: string }>;
+}
+
+/** The workspace writes over one auth service: `auth.api` on a deployment. */
+export function workspaceSeams(api: OrganizationAuthApi): WorkspaceSeams {
+  return {
+    createOrganization: (creation) =>
+      Effect.tryPromise(() =>
+        api.createOrganization({
+          body: {
+            name: creation.name,
+            slug: creation.slug,
+            userId: creation.userId,
+            metadata: { ...creation.metadata },
+          },
+        }),
+      ).pipe(Effect.map((created) => ({ id: created.id }))),
+  };
+}

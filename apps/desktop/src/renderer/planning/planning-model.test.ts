@@ -12,6 +12,7 @@ const _BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const _PLAN: Plan = {
   id: INVITES,
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -23,6 +24,7 @@ function _view(patch: Partial<PlanningView>): PlanningView {
   return {
     plans: [],
     listStatus: PLANNING_READ.READY,
+    workspaces: [],
     document: { status: PLANNING_READ.IDLE },
     ...patch,
   };
@@ -101,5 +103,5 @@ test("the microphone asks for the permission first, then for a plan, and then ta
 
 /** A plan's row of the list on a repository, last updated at `updatedAt`. */
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
-  return { id: name, name, createdAt: 1, updatedAt, repository };
+  return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }

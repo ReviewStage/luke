@@ -17,6 +17,8 @@ export const SETTINGS_PAGE = {
   CODING_AGENTS: "coding-agents",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
+  /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */
+  WORKSPACE: "workspace",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];

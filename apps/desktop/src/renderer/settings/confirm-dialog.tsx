@@ -101,9 +101,15 @@ export function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
 export function ConfirmDialog({
   confirm,
   question,
+  field,
+  children,
 }: {
   confirm: DialogConfirm;
   question: DialogQuestion;
+  /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in it answers. */
+  field?: React.RefObject<HTMLInputElement | null>;
+  /** What the card holds under its body: the field, where the question asks one. */
+  children?: React.ReactNode;
 }): React.JSX.Element | null {
   const { stage, rejection } = confirm;
   // Note that an answer under way is hidden with its surface rather than
@@ -126,7 +132,7 @@ export function ConfirmDialog({
     answered.current = false;
   }, [open]);
 
-  useStagedFocus(cancel, open && !acting);
+  useStagedFocus<HTMLElement>(field ?? cancel, open && !acting);
   // Both answers are stilled while the act runs, so the card holds focus
   // itself rather than letting it fall to the window behind.
   useStagedFocus(card, open && acting);
@@ -160,6 +166,11 @@ export function ConfirmDialog({
     event.stopPropagation();
     if (event.key === "Tab") {
       trappedTab(event);
+      return;
+    }
+    if (event.key === "Enter" && event.target === field?.current && !acting) {
+      event.preventDefault();
+      act();
       return;
     }
     // The dialog is the nearest layer, so Escape withdraws it alone and
@@ -196,6 +207,7 @@ export function ConfirmDialog({
         <p id={bodyId} className="confirm-dialog-body">
           {question.body}
         </p>
+        {children}
         {rejection !== undefined && !acting ? (
           <p className="confirm-dialog-error" role="alert">
             {rejection}

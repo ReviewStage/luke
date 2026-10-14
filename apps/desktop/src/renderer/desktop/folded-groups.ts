@@ -65,7 +65,7 @@ interface Folds {
 const OPEN: Folds = { groups: [], pinned: false };
 
 /** A kept value, or `fallback` where none was kept, it no longer reads, or storage refuses the read. */
-function readKept<A>(key: string, schema: Schema.Codec<A, string>, fallback: A): A {
+export function readKept<A>(key: string, schema: Schema.Codec<A, string>, fallback: A): A {
   try {
     const decoded = Schema.decodeUnknownOption(schema)(window.localStorage.getItem(key));
     return Option.getOrElse(decoded, () => fallback);
@@ -75,7 +75,7 @@ function readKept<A>(key: string, schema: Schema.Codec<A, string>, fallback: A):
 }
 
 /** Keeps a value; a write that fails costs only a group open again next launch, so it is not worth a word. */
-function writeKept<A>(key: string, schema: Schema.Codec<A, string>, value: A): void {
+export function writeKept<A>(key: string, schema: Schema.Codec<A, string>, value: A): void {
   try {
     window.localStorage.setItem(key, Schema.encodeSync(schema)(value));
   } catch {

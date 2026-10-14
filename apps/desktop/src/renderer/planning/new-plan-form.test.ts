@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { OpenSettingsProvider } from "../open-settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { NewPlanForm } from "./new-plan-form";
+import type { RepositoryChooser } from "./repository-chip";
 
 /**
  * The new-plan page as the developer meets it: a name drawn as the plan's
@@ -22,6 +27,7 @@ let template: string | undefined;
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installScrollIntoView();
   template = TEMPLATE;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -51,25 +57,43 @@ async function settle(): Promise<void> {
   });
 }
 
+/** What a page stands over besides the start's answer: a repository picked for it, and the chooser's workspace and recent repositories. */
+interface Staging {
+  readonly preset?: { readonly repository: string };
+  readonly chooser?: Partial<RepositoryChooser>;
+}
+
 /** The page over a start answered by `answer`, each start's name and repository written down. */
-async function mount(answer: string | undefined = undefined) {
+async function mount(answer: string | undefined = undefined, staging: Staging = {}) {
   const starts: [string, string | null][] = [];
   const control = plansControl();
   const newPlan = {
     ...control.newPlan,
+    preset: staging.preset ?? control.newPlan.preset,
     start: (name: string, repository: string | null) => {
       starts.push([name, repository]);
       return Promise.resolve(answer);
     },
   };
-  const repositories = { ...control.repositories, recent: ["acme/web"] };
+  const links: SettingsLink[] = [];
+  let repositories: RepositoryChooser = {
+    ...control.repositories,
+    recent: ["acme/web"],
+    ...staging.chooser,
+  };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const render = (presses: number) =>
     act(() =>
-      root.render(createElement(NewPlanForm, { newPlan: { ...newPlan, presses }, repositories })),
+      root.render(
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => links.push(link) },
+          createElement(NewPlanForm, { newPlan: { ...newPlan, presses }, repositories }),
+        ),
+      ),
     );
   render(0);
   await settle();
@@ -88,6 +112,15 @@ async function mount(answer: string | undefined = undefined) {
       await settle();
     },
     create,
+    container,
+    /** Every Settings link the page's presses followed. */
+    links,
+    /** Stands the page again over another chooser, as a workspace switch or the first workspaces read hands it. */
+    rechoose: async (next: Partial<RepositoryChooser>) => {
+      repositories = { ...repositories, ...next };
+      render(0);
+      await settle();
+    },
     type: (words: string) => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
       act(() => {
@@ -161,4 +194,97 @@ test("Create plan pressed creates the plan, and a refusal keeps the name and say
   assert.equal(page.note(), "Luke can't reach acme/web.");
   assert.equal(page.field.value, "Dark mode toggle");
   assert.equal(page.create.disabled, false, "the press can be made again");
+});
+
+test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
+  const page = await mount(undefined, {
+    preset: { repository: "alice/private" },
+    chooser: { scope: "workspace-personal", recent: ["alice/notes"] },
+  });
+  page.type("Dark mode");
+
+  await page.rechoose({ scope: "workspace-acme", recent: ["acme/relay"] });
+  await page.pressReturn();
+
+  assert.deepEqual(page.starts, [["Dark mode", "acme/relay"]]);
+});
+
+test("the workspace first resolving keeps a repository picked before the workspaces were read", async () => {
+  const page = await mount(undefined, {
+    preset: { repository: "alice/private" },
+    chooser: { scope: undefined, recent: ["alice/notes"] },
+  });
+  page.type("Dark mode");
+
+  await page.rechoose({ scope: "workspace-personal" });
+  await page.pressReturn();
+
+  assert.deepEqual(page.starts, [["Dark mode", "alice/private"]]);
+});
+
+test("a list refused for GitHub not connected points to Settings, and the menu's Open Settings opens the account's connected accounts", async () => {
+  const page = await mount(undefined, {
+    chooser: {
+      read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }),
+    },
+  });
+  const chip =
+    page.container.querySelector<HTMLButtonElement>(".plan-compose-chip") ??
+    assert.fail("the page draws the repository chip");
+
+  act(() => chip.click());
+  await settle();
+  const buttons = () => [...page.container.querySelectorAll("button")];
+  const alert = page.container.querySelector("[role=alert]")?.textContent;
+  const retry = buttons().find((button) => button.textContent === "Retry");
+  const open = buttons().find((button) => button.textContent === "Open Settings");
+  assert.ok(open, "the menu offers to open Settings");
+  act(() => open.click());
+
+  assert.equal(alert, "Connect GitHub in Settings to use a repository with Luke.");
+  assert.equal(retry, undefined);
+  assert.deepEqual(page.links, [
+    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+  ]);
+  assert.equal(page.container.querySelector(".plan-compose-menu"), null);
+});
+
+test("a workspace with Luke installed nowhere offers Open Settings at that workspace's GitHub repositories, and the chip itself installs nothing", async () => {
+  const page = await mount(undefined, {
+    chooser: {
+      scope: "workspace-acme",
+      read: () =>
+        Promise.resolve({
+          repositories: {
+            installed: false,
+            repositories: [],
+            installationUrl: "https://github.com/apps/luke/installations/new",
+          },
+        }),
+    },
+  });
+  const chip =
+    page.container.querySelector<HTMLButtonElement>(".plan-compose-chip") ??
+    assert.fail("the page draws the repository chip");
+
+  act(() => chip.click());
+  await settle();
+  const open =
+    [...page.container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Open Settings",
+    ) ?? assert.fail("the menu offers to open Settings");
+  act(() => open.click());
+
+  assert.equal(
+    chip.textContent?.includes("Install"),
+    false,
+    "the chip offers no install of its own",
+  );
+  assert.deepEqual(page.links, [
+    {
+      page: SETTINGS_VIEW.WORKSPACE,
+      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+      workspaceId: "workspace-acme",
+    },
+  ]);
 });

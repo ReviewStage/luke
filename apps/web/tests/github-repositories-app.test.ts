@@ -19,6 +19,8 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 
+import { openInstallationWorkspace, openWorkspace } from "./support/workspaces";
+
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test
  * scripts, and the account rows on a real dialect: the bearer names the
@@ -74,15 +76,18 @@ const openAccounts = (github: FakeGitHub) =>
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const ask = (userId: string | undefined, method = "GET") =>
-      answer(
+    const ask = (userId: string | undefined, method = "GET", workspaceIds: string[] = []) => {
+      const url = new URL(HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES, ORIGIN);
+      for (const id of workspaceIds) url.searchParams.append("workspaceId", id);
+      return answer(
         bearers,
         github,
-        new Request(new URL(HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES, ORIGIN), {
+        new Request(url, {
           method,
           headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
         }),
       );
+    };
     return { owner, other, ask };
   });
 
@@ -156,5 +161,64 @@ it.layer(getTestDB())("the repositories route", (it) => {
       );
       assert.equal(github.sent.length, 0);
     }),
+  );
+
+  it.effect(
+    "a workspace of an installation lists that installation's repositories alone, and a workspace of none, or none named, lists everything",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7201, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+          { id: 7202, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
+        ]);
+        const { owner, ask } = yield* openAccounts(github);
+        const acme = yield* openInstallationWorkspace(owner, {
+          installationId: 7201,
+          accountId: 9201,
+          accountLogin: "acme",
+        });
+        const personal = yield* openWorkspace(owner);
+        const names = (answered: Answer) => {
+          const reached = listed(answered);
+          return [reached.installed, reached.repositories.map((repository) => repository.fullName)];
+        };
+
+        assert.deepEqual(names(yield* ask(owner, "GET", [acme])), [true, ["acme/relay"]]);
+        assert.deepEqual(names(yield* ask(owner, "GET", [personal])), [
+          true,
+          ["acme/relay", "octocat/dotfiles"],
+        ]);
+        assert.deepEqual(names(yield* ask(owner)), [true, ["acme/relay", "octocat/dotfiles"]]);
+      }),
+  );
+
+  it.effect(
+    "a workspace the account is not in is not found, and two named are invalid, before GitHub is asked",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7301, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ]);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const theirs = yield* openInstallationWorkspace(other, {
+          installationId: 7301,
+          accountId: 9301,
+          accountLogin: "acme",
+        });
+        const mine = yield* openWorkspace(owner);
+
+        assert.deepEqual(
+          [yield* ask(owner, "GET", [theirs]), yield* ask(owner, "GET", ["nowhere"])],
+          [
+            refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+            refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          ],
+        );
+        assert.deepEqual(
+          yield* ask(owner, "GET", [mine, mine]),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(github.sent.length, 0);
+      }),
   );
 });

@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { writePage } from "@sidecar/database/models/plan-pages";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
+import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { getTestDB } from "@sidecar/database/testing";
@@ -64,6 +65,12 @@ import {
   makeSavedDocumentPlan,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
+import {
+  fakeWorkspaceSeams,
+  joinWorkspace,
+  openInstallationWorkspace,
+  openWorkspace,
+} from "./support/workspaces";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -96,6 +103,10 @@ const PAGE = "/api/plans/page";
 
 const RELAY = {
   name: "Teammate invitations",
+} as const;
+
+const LEDGER = {
+  name: "Billing export",
 } as const;
 
 interface Answer {
@@ -153,6 +164,7 @@ const answer = (
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
+        workspaces: yield* fakeWorkspaceSeams,
         // A plan here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
         eveOrigin: () => undefined,
       }).pipe(HttpRouter.provideRequest(services)),
@@ -361,6 +373,76 @@ it.layer(getTestDB())("the plan routes", (it) => {
         saved.status === PLAN_SAVE_STATUS.SAVED ? saved.document : undefined,
       );
     }),
+  );
+
+  it.effect("a start that names no workspace lands in the account's personal one", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+
+      const started = yield* ask(request(PLANS, owner, { method: "POST", body: RELAY }));
+      yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER }));
+
+      const personal = yield* personalWorkspaceOf(owner);
+      assert.ok(Option.isSome(personal));
+      assert.equal(
+        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
+        personal.value,
+      );
+      const listed = yield* ask(request(PLANS, owner));
+      assert.deepEqual(
+        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+          (plan) => plan.workspaceId,
+        ),
+        [personal.value, personal.value],
+      );
+    }),
+  );
+
+  it.effect("a member starts a plan in a workspace a teammate made", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const shared = yield* openWorkspace(other);
+      yield* joinWorkspace(shared, owner);
+
+      const started = yield* ask(
+        request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
+      );
+
+      assert.equal(
+        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
+        shared,
+      );
+      const listed = yield* ask(request(PLANS, owner));
+      assert.deepEqual(
+        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+          plan.name,
+          plan.workspaceId,
+        ]),
+        [[RELAY.name, shared]],
+      );
+    }),
+  );
+
+  it.effect(
+    "a start in a workspace the account is not in answers as none, and starts nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const theirs = yield* openWorkspace(other);
+
+        const refused = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: theirs } }),
+        );
+        const unknown = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: "nowhere" } }),
+        );
+
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(refused, notFound);
+        assert.deepEqual(unknown, notFound);
+        const listed = yield* ask(request(PLANS, owner));
+        assert.deepEqual(readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans, []);
+      }),
   );
 
   it.effect("another account's plan answers as none on every route", () =>
@@ -963,6 +1045,62 @@ it.layer(getTestDB())("the plan routes", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
         });
+      }),
+  );
+
+  it.effect(
+    "a plan in an installation's workspace takes that installation's repositories and refuses another's, at its start and in a change, while a personal plan takes either",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7101, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+          { id: 7102, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
+        ]);
+        const { owner, ask } = yield* openAccounts(github);
+        const acme = yield* openInstallationWorkspace(owner, {
+          installationId: 7101,
+          accountId: 9101,
+          accountLogin: "acme",
+        });
+        const start = (body: WireBoundaryInput) =>
+          ask(request(PLANS, owner, { method: "POST", body }));
+        const change = (planId: string, repository: string) =>
+          ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { repository } }));
+        const repositoryOf = (status: number, answered: Answer) =>
+          readAnswer(planAnswerSchema, status, answered).plan.repository;
+        const notReachable = refusal(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        );
+
+        const relay = yield* start({ ...RELAY, workspaceId: acme, repository: "acme/relay" });
+        const otherStart = yield* start({
+          ...LEDGER,
+          workspaceId: acme,
+          repository: "octocat/dotfiles",
+        });
+        const unnamed = startedId(yield* start({ ...LEDGER, workspaceId: acme }));
+        const otherChange = yield* change(unnamed, "octocat/dotfiles");
+        const ownChange = yield* change(unnamed, "acme/relay");
+        const personal = startedId(yield* start(LEDGER));
+        const personalChanges = [
+          yield* change(personal, "octocat/dotfiles"),
+          yield* change(personal, "acme/relay"),
+        ];
+
+        assert.equal(repositoryOf(HOSTED_HTTP_STATUS.CREATED, relay), "acme/relay");
+        assert.deepEqual([otherStart, otherChange], [notReachable, notReachable]);
+        assert.equal(repositoryOf(HOSTED_HTTP_STATUS.OK, ownChange), "acme/relay");
+        assert.deepEqual(
+          personalChanges.map((answered) => repositoryOf(HOSTED_HTTP_STATUS.OK, answered)),
+          ["octocat/dotfiles", "acme/relay"],
+        );
+        const listed = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+        assert.equal(listed.plans.length, 3);
       }),
   );
 });

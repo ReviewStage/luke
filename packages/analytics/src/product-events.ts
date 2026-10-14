@@ -217,6 +217,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   INTEGRATIONS: "integrations",
   API_KEYS: "api_keys",
   PLAN_TEMPLATE: "plan_template",
+  WORKSPACE: "workspace",
 } as const;
 
 export type ProductSettingsView =

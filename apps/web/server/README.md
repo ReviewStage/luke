@@ -94,6 +94,68 @@ as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
 adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
 access token through the adapter over PGlite to hold the two together.
 
+The organization plugin's tables (`organization`, `member`, `invitation`, and
+`session.active_organization_id`) are transcribed into
+`packages/database/src/schemas/auth.ts` from `auth generate` for 1.6.29 with
+one edit, instants through `timestamptz()`, and migration
+`20261013230002_organization` is drizzle-kit's from that module. They keep
+Better Auth's default model names, since the Drizzle adapter finds a model by
+its export's name. A Luke workspace is an
+`organization` and its team the `member` rows, under the plugin's default
+roles `owner`, `admin`, and `member`. A desktop caller holds an OAuth token and
+no Better Auth session, which every member and organization endpoint requires,
+so a hosted route reads membership through Drizzle over these tables and
+writes only through the plugin's server-only `auth.api.createOrganization`
+(with a `userId` and no headers) and `auth.api.addMember`. Never call either
+inside `client.withTransaction`: Better Auth writes over its own pool, outside
+the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
+member through the plugin over PGlite.
+
+Every account has a personal workspace, named for the account, slugged
+`personal-<user id>`, with `{"personal":true}` as its metadata text, and named
+the account's own by a `personal_workspace` row
+(`packages/database/src/schemas/personal-workspace.ts`; its generated migration
+is followed by a custom one that backfills one for every account lacking it in
+one data-modifying statement). `packages/database/src/models/workspace-store.ts`'s
+`ensurePersonalWorkspace` makes it the first time it is asked for, through
+`models/workspace-seams.ts`'s
+`createOrganization` over the plugin, so its organization and owner rows are
+the plugin's own; no transaction encloses it, so two Macs ensuring at once
+settle on the unique slug and the row's primary key, and the one the plugin
+refuses adopts the workspace under the slug. `listWorkspaces` answers every
+workspace the account is a member of, its personal one first and the rest by
+name. `tests/workspace-store.test.ts` holds the three. The workspace names the
+account rather than being named by it, so the user row's cascade would take
+only the `personal_workspace` row and leave the organization, with the
+account's name and id, standing: `account-store.ts`'s `deleteAccount` deletes
+it first (`deletePersonalWorkspace`), in the same transaction as the user row.
+That is a direct delete from the plugin's table, because Better Auth documents
+no deletion without a session: `deleteOrganization` requires session cookies
+and is off under `disableOrganizationDeletion`, and `user.deleteUser` wants a
+fresh session.
+
+Every plan belongs to one workspace: `plan.organization_id`, not null and
+cascading with the organization (`20261013231728_plan_organization` adds the
+column nullable, the custom `20261013231735_plan_organization_backfill` after
+it moves every plan standing into its starter's personal workspace, and
+`20261013231809_plan_organization_not_null` then sets the column not null). A plan's summary on the wire names it as `workspaceId`.
+`memberOfWorkspace` is the one membership condition, a `member` row, which a
+statement joins into its own where clause.
+
+A workspace's members are read, removed, and left through
+`server/workspaces-app.ts` under the bearer, since the plugin's own
+`listMembers`, `removeMember`, and `leaveOrganization` take a session cookie
+a Mac never holds. `GET /api/workspaces/members?workspaceId=` answers a
+workspace's members to a member, read through Drizzle
+(`hosted/workspace-members.ts`), owners first, then admins, then members.
+`POST /api/workspaces/members/remove` lets an owner or an admin remove a
+member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
+an owner leave; both delete the `member` row through Drizzle, no
+organization hook being configured that the plugin's own delete would run.
+A workspace the account is not in is `not-found`; a personal one, or a role
+that does not allow it, `not-permitted`. `tests/workspaces-app.test.ts` holds each over the plugin on
+PGlite.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
@@ -105,7 +167,22 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
 App's "Email addresses: read" among them, which is what answers the email
-read Luke requires for its account snapshot.
+read Luke requires for its account snapshot, and what Better Auth's GitHub
+provider reads to link the account at all.
+
+Accounts link (`accountLinking` in `ACCOUNT_TOKEN_STORAGE`,
+[Better Auth: account linking](https://www.better-auth.com/docs/concepts/users-accounts#account-linking)).
+A sign-in through a provider that verified the same email address as an
+existing account joins that account, Better Auth's default, and no provider
+is trusted beyond that (`trustedProviders` stays unset; the docs warn it
+risks account takeover). A signed-in account may also link GitHub to itself
+through Better Auth's own `/link-social`, whatever email address GitHub holds
+(`allowDifferentEmails`), which is how an account made with Google comes to
+hold the GitHub its workspaces and repositories need; `/link-social`,
+`/unlink-account`, and `/list-accounts` stay open, since none of them answers
+a token. A user revoking the App's authorization on GitHub deletes that
+GitHub user's account row (`github_app_authorization` under "The Luke GitHub
+App" below).
 
 ## The Luke GitHub App
 
@@ -172,7 +249,11 @@ the two reads reaches nothing rather than failing the whole.
 passes before it is kept: only the installation on the owner can reach it,
 so only that one is paged, and only as far as the page the repository is on,
 the name is matched the way GitHub folds case, and what is answered is the
-full name as GitHub spells it. `repositoryReadToken(userId, "owner/name")`
+full name as GitHub spells it; `userRepositoryInstallation` answers the
+same with the id of the installation it was reached through.
+`userInstallationRepositories(userId, installationId)` pages one
+installation's repositories on the user's token, most recently updated
+first. `repositoryReadToken(userId, "owner/name")`
 is the same check followed by the one token the App mints: `POST
 /app/installations/{id}/access_tokens` under the App's JWT, naming that one
 repository and `contents: read`, answered sealed beside the repository as
@@ -188,7 +269,12 @@ listing under the account bearer, answered as
 `packages/hosted/src/github-repositories-wire.ts` declares it: `installed`,
 `repositories` (owner, name, full name, default branch, private, and when
 GitHub last saw it change), and `installationUrl`, which is where the desktop
-sends an account with nothing installed. Nothing is stored. An account whose
+sends an account with nothing installed. Nothing is stored. A
+`workspaceId` query names the workspace the listing is for: a workspace of
+an installation lists that installation's repositories alone, `installed`
+true, to a member of it; one the account is not in is `not-found` (404),
+and the query given twice is `invalid-request`. A personal workspace, or
+none named, lists everything as before. An account whose
 token the service cannot use, having never signed in with GitHub, signed in
 before the App, or had the token refused or revoked, is `github-sign-in-required`
 (403); a GitHub or a store the service could not reach is `unavailable`.
@@ -202,17 +288,32 @@ browser to `https://github.com/apps/<slug>/installations/new`, where the
 developer installs the App on an account or organization and chooses its
 repositories. The App's registered Setup URL, with "Redirect on update", is
 `https://tryluke.dev/api/github/installed`: GitHub lands the browser there
-with `installation_id` and `setup_action`, the route confirms the
-installation through `installation(id)`, and sends the browser on to
+with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
-(`@sidecar/hosted`): `installed`, `updated`, `requested` (a member asked an
-organization's owner, so there is no installation yet), `not-found`, or
-`unavailable`. The page draws a fixed card per status and interpolates
-nothing the address brought it; the desktop's repository chip picks the
-installation up by reading the account's repositories again when the window
-next takes focus (`apps/desktop/src/renderer/planning/repository-chip.tsx`).
-Nothing is stored at install time: which installations a user can reach is
-read from GitHub on the user's own token when a repository is chosen.
+(`@sidecar/hosted`). Without a `state`, the route confirms the installation
+through `installation(id)` as the App and links nothing: `installed`,
+`updated`, `requested` (a member asked an organization's owner, so there is
+no installation yet), `not-found`, or `unavailable`.
+
+With a `state`, the install began as a workspace's connect, and the route
+never trusts `installation_id` alone: GitHub's guidance is that anyone can
+put any id on the Setup URL, so the installation must be confirmed as
+associated with the user who installed it
+([About the setup URL](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)).
+It spends the intent (deleted with `RETURNING`, so it links once; unknown,
+spent, or expired is `expired`), requires the intent's account to still be
+an owner or admin of the workspace (`expired` otherwise), and reads
+`GET /user/installations` on that account's own GitHub token
+(`GitHubApp.userInstallations`): an installation it does not reach is
+`not-found`, and an account with no readable token is
+`github-sign-in-required`. Only then is the installation linked to the
+workspace (`connected`); one already linked to another workspace, or another
+installation on the same GitHub account, is `already-connected`.
+
+The page draws a fixed card per status and interpolates nothing the address
+brought it; the desktop's repository chip picks the installation up by
+reading the account's repositories again when the window next takes focus
+(`apps/desktop/src/renderer/planning/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`server/github-webhook-app.ts`),
 which keeps what a coding agent published current on the agent's row
@@ -230,8 +331,20 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on its owner's own token
 through `agentPublished`, as the agent's tab reads it, which writes the row.
 A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. `tests/github-webhook-app.test.ts` holds it over a
-scripted GitHub and PGlite.
+answered and ignored. An `installation` delivery, which GitHub sends every
+App unsubscribed, moves the status of its workspace's `github_installation`
+row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
+`GET /api/workspaces` then carries that workspace's `github.active` as false,
+its plans stay reachable, and nothing is deleted. A `github_app_authorization`
+delivery, which GitHub also sends every App unsubscribed
+([GitHub: github_app_authorization](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)),
+with action `revoked` deletes the `account` rows of provider `github` whose
+`accountId` is the delivery's `sender.id`, and the sealed tokens on them,
+which no longer reach anything; every other way the account signs in is
+kept. That is a write to Better Auth's own table, since a webhook carries no
+session and Better Auth offers no server call that unlinks another user's
+provider account. `tests/github-webhook-app.test.ts`
+holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
@@ -608,6 +721,21 @@ provider redirect, an unknown endpoint, a refused method, a HEAD, and a path
 outside the group, and `tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
+
+The organization plugin is served in the group with `ORGANIZATION_OPTIONS`
+(`server/auth-policy.ts`): no workspace is deleted, and no signed-in user
+creates one (`allowUserToCreateOrganization: false`). Every organization
+write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
+because a workspace is adopted by its slug, and a session free to create an
+organization or rename its own could take a team's slug first. That covers
+create, update, delete, check-slug, set-active, member removal, role changes,
+leave, every invitation endpoint (Luke sends no invitation mail), and the
+team and role endpoints this deployment does not mount. `disabledPaths` is
+read by the HTTP router alone, so the server-only `auth.api` calls a hosted
+route makes still run, and a create that names a `userId` and carries no
+session passes the creation rule as a system action.
+`auth-database.test.ts` holds both sides with an account signed up through
+`auth.api.signUpEmail`.
 
 ## The events and maintenance groups
 
@@ -1034,7 +1162,10 @@ started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
 template as its document, and the repository it is about where one is
-chosen, `GET /api/plans/{id}` opens one with its saved document,
+chosen, in the workspace its `workspaceId` names, which the account must be
+a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
+in the account's personal workspace, ensured first, where it names none,
+`GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, or several at once, each pin and archive a
 stamp on the row (`pinned_at`, `archived_at`) answered as `pinnedAt` and
@@ -1067,6 +1198,40 @@ deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
+
+`server/workspaces-app.ts` answers the account's workspaces
+(`packages/hosted/src/workspace-wire.ts`). Membership has nothing to do with
+GitHub: a teammate joins a workspace by invitation, and a workspace's
+repositories come from at most one Luke GitHub App installation an owner or
+admin connects to it. Every request resolves the bearer first and ensures the
+account's personal workspace.
+
+- `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
+  is a member of, personal first and the rest by name, each
+  `{ id, name, personal, role, github: { login, active } | null }`. It asks
+  GitHub nothing.
+- `POST /api/workspaces { name }` creates a workspace through the plugin's
+  server-only `auth.api.createOrganization` (`body.userId`, no session
+  headers; [docs](https://www.better-auth.com/docs/plugins/organization#create-an-organization)),
+  so the caller is its owner, and answers `{ workspace }` (201). The slug is
+  spelled from the name and never takes a personal one; a slug the plugin
+  refuses as taken is never adopted (`createLinkedOrganization`), and the
+  workspace takes it with a random suffix.
+- `POST /api/workspaces/github/connect { workspaceId }`, for an owner or admin,
+  writes a `github_install_intent` row (the SHA-256 of a random state, the
+  account, the workspace, an hour's expiry) and answers `{ url }`: the App's
+  install address with that `state`. A member is `not-permitted` (403); a
+  workspace the account is not in is `not-found`.
+- `POST /api/workspaces/github/disconnect { workspaceId }`, for an owner or
+  admin, deletes the workspace's `github_installation` row and answers
+  `{ workspace }`.
+
+A `github_installation` row (`packages/database/src/schemas/github-installation.ts`)
+ties one workspace to one installation, keyed on GitHub's installation id and
+account id (both unique), with the account's login and kind and the
+installation's status, which the installation webhook keeps. The Setup URL
+links it (below, under the install group). `tests/workspaces-app.test.ts` holds
+all of it over the plugin on PGlite and a scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's
@@ -1124,7 +1289,7 @@ A plan id another account owns reads as an empty history and restores as
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is
-kept only once `userRepository` on the `GitHubApp` confirms the account
+kept only once `userRepositoryInstallation` on the `GitHubApp` confirms the account
 reaches it, read from GitHub on the account's own token before the row is
 written, so a plan never names a repository its owner could not reach
 through the Luke GitHub App at the moment it was named; the stored spelling
@@ -1134,6 +1299,12 @@ the App reaches no installation of for the account is
 included; an account that must sign in with GitHub again is
 `github-sign-in-required` (403); and a GitHub the service could not read is
 `unavailable`, the plan standing as it was. A change naming null clears it.
+A plan in the workspace of a GitHub App installation (one with a
+`github_installation` row) may name only a repository reached through that
+installation, compared by GitHub's installation id rather than the owner's
+login; one of another installation is `repository-not-reachable` too, since
+the workspace does not reach it. A personal workspace's plan may name any
+repository the account reaches.
 
 A plan's text has one write, `server/hosted/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
