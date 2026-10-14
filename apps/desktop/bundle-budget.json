@@ -6,6 +6,7 @@
     "renderer/file-tree.js": 70635,
     "renderer/plan-editor.js": 164568,
     "renderer/session-recorder.js": 61872,
-    "renderer/terminal.js": 133576
+    "renderer/terminal.js": 133576,
+    "renderer/pcm-tee-worklet.js": 430
   }
 }
