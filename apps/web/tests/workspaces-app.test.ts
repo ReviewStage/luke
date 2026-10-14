@@ -21,6 +21,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../server/github-install-app";
+import { createConnectIntent } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { workspacesApp } from "../server/workspaces-app";
 import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
@@ -401,6 +402,40 @@ it.effect("an installation connected to one workspace is refused for a second", 
       assert.equal(githubOf(workspaces, second.id), null);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "a personal workspace is never connected: its owner's connect is not permitted, and a Setup URL return with an intent for it links nothing",
+  () =>
+    Effect.gen(function* () {
+      const { seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const github = githubReaching([ACME]);
+        const [personal] = yield* workspacesOf(seams, github, ada);
+        assert.ok(personal?.personal);
+
+        const asked = yield* send(
+          seams,
+          github,
+          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT, ada, {
+            workspaceId: personal.id,
+          }),
+        );
+        const landed = yield* landedAt(seams, github, {
+          installation_id: String(ACME.id),
+          setup_action: "install",
+          state: yield* createConnectIntent(ada, personal.id),
+        });
+
+        assert.deepEqual(
+          { status: asked.status, body: asked.body },
+          { status: 403, body: { error: HOSTED_API_ERROR.NOT_PERMITTED } },
+        );
+        assert.equal(landed, GITHUB_INSTALL_STATUS.EXPIRED);
+        assert.equal(githubOf(yield* workspacesOf(seams, github, ada), personal.id), null);
+      }).pipe(Effect.provide(database));
+    }),
 );
 
 it.effect(

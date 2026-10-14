@@ -158,6 +158,18 @@ const upsertInstallation = SqlSchema.void({
   },
 });
 
+const findInstallationOfWorkspace = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ installationId: Schema.Number }),
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({ installationId: githubInstallation.installationId })
+        .from(githubInstallation)
+        .where(eq(githubInstallation.organizationId, organizationId)),
+    ),
+});
+
 const updateInstallationStatus = SqlSchema.void({
   Request: Schema.Struct({
     installationId: Schema.Number,
@@ -255,4 +267,14 @@ export function disconnectInstallation(
   organizationId: string,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.andThen(deleteWorkspaceIntents(organizationId), deleteInstallation(organizationId));
+}
+
+/** GitHub's id for the installation connected to the workspace, whatever its status; none for a workspace with none connected, a personal one among them. */
+export function installationOfWorkspace(
+  organizationId: string,
+): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    findInstallationOfWorkspace(organizationId),
+    Option.map((row) => row.installationId),
+  );
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
@@ -79,6 +80,7 @@ import {
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
+import { LINK_OUTCOME, linkInstallation } from "../server/hosted/github-installations";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
@@ -488,6 +490,29 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         ]);
         // The default stands: nothing was chosen.
         assert.equal(yield* readAccountPreferences(owner), undefined);
+      }),
+  );
+
+  it.effect(
+    "a Start on a plan named before its workspace connected another installation is refused as not reachable, and opens nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const linked = yield* linkInstallation(plan.workspaceId, {
+          installationId: INSTALLATION.id + 1,
+          accountId: 9_008,
+          accountLogin: "elsewhere",
+          accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+        });
+        assert.equal(linked, LINK_OUTCOME.LINKED);
+
+        const started = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+
+        assert.deepEqual(
+          started,
+          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+        );
+        assert.deepEqual(eve.opened, []);
       }),
   );
 
