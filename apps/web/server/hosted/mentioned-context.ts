@@ -1,14 +1,14 @@
 import { MENTIONED_HEADING } from "@sidecar/database/models/attached-file-parts";
-import { MENTION_KIND, mentionsIn, type PlanMention } from "@sidecar/hosted/mention-link";
-import { planSections } from "@sidecar/hosted/plan-document";
-import { planMarkdown } from "@sidecar/hosted/plan-markdown";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { MENTION_KIND, mentionsIn, type PlanMention } from "@sidecar/features/mention-link";
+import { planSections } from "@sidecar/features/plan-document";
+import { planMarkdown } from "@sidecar/features/plan-markdown";
+import type { Plan } from "@sidecar/features/plan-wire";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
  *
  * A message names things as links whose label starts with `@`
- * (`@sidecar/hosted/mention-link`). The words go to the model as written,
+ * (`@sidecar/features/mention-link`). The words go to the model as written,
  * links and all. A file or a folder is the agent's to read from its own
  * checkout, on its own branch, so nothing of it is added here. The plan, or
  * one of its sections, is not: a coding agent has no tool to read the plan

@@ -1,5 +1,5 @@
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
+import type { PlanSummary } from "@sidecar/features/plan-wire";
+import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
 import { Schema } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readKept, writeKept } from "../desktop/folded-groups";

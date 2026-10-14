@@ -1,9 +1,9 @@
-import { INTEGRATION_CALL_FAILURE } from "@sidecar/hosted/integration-view";
+import { INTEGRATION_CALL_FAILURE } from "@sidecar/features/integration-view";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { useCallback } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";

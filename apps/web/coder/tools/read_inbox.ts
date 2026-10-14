@@ -1,4 +1,4 @@
-import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
+import { INBOX_TOOL } from "@sidecar/features/inbox-wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";

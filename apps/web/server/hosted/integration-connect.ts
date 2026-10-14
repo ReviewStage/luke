@@ -30,7 +30,7 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import {
   ConnectError,
   ConnectorInstallationRequiredError,

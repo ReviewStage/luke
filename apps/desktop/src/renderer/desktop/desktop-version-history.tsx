@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
+import type { PlanRevisionLine } from "@sidecar/features/plan-wire";
 import { BackIcon, EllipsisIcon, WingFace } from "@sidecar/panel";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

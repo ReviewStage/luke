@@ -1,6 +1,6 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
 import { BackIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";

@@ -12,7 +12,10 @@ import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/p
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
+import {
+  PROVIDER_KEY_PROVIDER,
+  type ProviderKeyProvider,
+} from "@sidecar/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {

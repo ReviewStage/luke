@@ -1,10 +1,10 @@
-import { catalogIdOf } from "@sidecar/hosted/model-label";
+import { catalogIdOf } from "@sidecar/features/model-label";
 import {
   type PlanTranscript,
   TRANSCRIPT_BOUNDS,
   TRANSCRIPT_PART_TYPE,
   type TranscriptCall,
-} from "@sidecar/hosted/transcript-wire";
+} from "@sidecar/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "@sidecar/live";
 import { desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";

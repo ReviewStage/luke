@@ -1,6 +1,6 @@
-import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
-import { MENTION_KIND, type PlanMention } from "@sidecar/hosted/mention-link";
-import { planSections } from "@sidecar/hosted/plan-document";
+import type { CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
+import { MENTION_KIND, type PlanMention } from "@sidecar/features/mention-link";
+import { planSections } from "@sidecar/features/plan-document";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

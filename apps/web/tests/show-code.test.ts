@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@sidecar/database/testing";
-import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
+import { SHOWN_CODE_BOUNDS } from "@sidecar/features/plan-wire";
 import { unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

@@ -19,12 +19,12 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSubagentTitle,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_STATE,
   type PlanWorkTurn,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";

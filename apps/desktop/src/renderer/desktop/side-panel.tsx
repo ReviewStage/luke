@@ -1,15 +1,15 @@
-import type { Board } from "@sidecar/hosted/board-wire";
+import type { Board } from "@sidecar/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import type { PageLine } from "@sidecar/hosted/page-wire";
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
+import type { PageLine } from "@sidecar/features/page-wire";
+import type { CodeRef } from "@sidecar/features/plan-wire";
+import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/features/planning-view";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

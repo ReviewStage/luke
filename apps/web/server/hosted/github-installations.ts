@@ -9,7 +9,7 @@ import {
 import { member, organization } from "@sidecar/database/schemas/auth";
 import { githubInstallIntent } from "@sidecar/database/schemas/github-install-intent";
 import { githubInstallation } from "@sidecar/database/schemas/github-installation";
-import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
 import { and, eq, gt, ne, or, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

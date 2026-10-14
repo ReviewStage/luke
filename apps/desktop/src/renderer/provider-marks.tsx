@@ -1,5 +1,5 @@
 import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@sidecar/features/integration-wire";
 import { useId } from "react";
 
 /**

@@ -1,4 +1,4 @@
-import { MODEL_PROVIDER, type ModelProvider } from "@sidecar/hosted/models-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@sidecar/features/models-wire";
 
 /**
  * harness-marks.tsx -- the marks of the two harnesses a coding agent's model runs in: Claude Code for Anthropic's models, Codex for OpenAI's.

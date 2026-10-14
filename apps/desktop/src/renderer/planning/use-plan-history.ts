@@ -1,8 +1,8 @@
-import type { PlanDocument, PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import type { PlanDocument, PlanRevisionLine } from "@sidecar/features/plan-wire";
 import type {
   PlanningRevisionAnswer,
   PlanningRevisionsAnswer,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { revisionOfSave } from "./plan-history-model";

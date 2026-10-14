@@ -1,4 +1,4 @@
-import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
+import { type PlanSection, planSections } from "@sidecar/features/plan-document";
 import { diffArrays } from "diff";
 import type { MarkdownEdit } from "../markdown-message";
 import { diffHunks, type Hunk } from "./plan-diff";
@@ -7,13 +7,13 @@ import { diffHunks, type Hunk } from "./plan-diff";
  * plan-reveal.ts -- how the open plan writes itself in: one caret taking each note down where it lands, as a person taking notes on a call would.
  *
  * The notetaker changes the plan one note at a time, and the service sends
- * the document after each (`textNotesInProgress` in `@sidecar/hosted/plan-template`):
+ * the document after each (`textNotesInProgress` in `@sidecar/features/plan-template`):
  * a point growing at the end of a section, a phrase corrected, or a line
  * struck. Every document is final or still growing at its end, so nothing
  * here guesses at what the stream means; it plays the difference.
  *
  * The body is cut into units a section at a time, as the service cuts a
- * plan's text (`planSections` in `@sidecar/hosted/plan-document`): the words
+ * plan's text (`planSections` in `@sidecar/features/plan-document`): the words
  * before the first heading, then each `#` or `##` heading with what stands
  * under it, a heading inside a code fence being code. A unit is known from
  * one document to the next by its heading, never by position, so a section

@@ -10,7 +10,7 @@
  * holds the call.
  */
 
-import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
+import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
 import { ReturnIcon } from "@sidecar/panel";
 import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

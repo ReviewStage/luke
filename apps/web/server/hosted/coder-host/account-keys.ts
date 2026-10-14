@@ -16,7 +16,7 @@ import {
   type FastAccess,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { DateTime, Effect, type Redacted, Result } from "effect";
 import type { WebStoreRun } from "../../runtime.js";
 import type { MeterSeams } from "../agent-runtime/meter.js";

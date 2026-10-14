@@ -10,7 +10,7 @@ import {
   type CodingAgentFailure,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";

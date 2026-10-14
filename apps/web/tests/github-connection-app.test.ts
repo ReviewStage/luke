@@ -4,7 +4,10 @@ import { Database } from "@sidecar/database/core/query";
 import { OrganizationRefused } from "@sidecar/database/models/workspace-seams";
 import { account } from "@sidecar/database/schemas/auth";
 import { openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
-import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@sidecar/hosted/github-connection-wire";
+import {
+  GITHUB_CONNECT_CLAIM,
+  GITHUB_CONNECT_PAGE,
+} from "@sidecar/features/github-connection-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";

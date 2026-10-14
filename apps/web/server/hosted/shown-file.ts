@@ -1,4 +1,4 @@
-import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
+import { SHOWN_CODE_BOUNDS } from "@sidecar/features/plan-wire";
 
 /**
  * shown-file.ts -- the one rule a file of the plan's repository is put on the developer's screen by, whichever reader read it.

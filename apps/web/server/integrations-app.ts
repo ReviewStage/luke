@@ -57,7 +57,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@sidecar/database/core/query";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { HOSTED_SERVICE_PATH } from "@sidecar/features";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -74,7 +74,7 @@ import {
   type IntegrationToolsProblemReason,
   integrationLandingPath,
   integrationProviderFromWire,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";

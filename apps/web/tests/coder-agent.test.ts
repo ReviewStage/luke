@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_BRIEF } from "@sidecar/features/coding-agent-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";

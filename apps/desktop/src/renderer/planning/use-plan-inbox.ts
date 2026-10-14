@@ -6,7 +6,7 @@ import {
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
@@ -14,7 +14,7 @@ import {
   type InboxItem,
   type InboxReplyKind,
   knownBlock,
-} from "@sidecar/hosted/inbox-wire";
+} from "@sidecar/features/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { messageFailureWords } from "./coding-agent-model";
 import {

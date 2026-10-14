@@ -24,8 +24,8 @@ import {
   BOARD_IMAGE_MAX_SIDE,
   DRAWING_ZONE,
   LUKE_MARK,
-} from "@sidecar/hosted/board-vocabulary";
-import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
+} from "@sidecar/features/board-vocabulary";
+import type { Board, DrawingElement } from "@sidecar/features/board-wire";
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import {

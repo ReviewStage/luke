@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
-import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
+import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/features/plan-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
 import { useEffect, useMemo, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";

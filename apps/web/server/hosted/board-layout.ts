@@ -1,5 +1,5 @@
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE, LUKE_MARK } from "@sidecar/hosted/board-vocabulary";
-import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE, LUKE_MARK } from "@sidecar/features/board-vocabulary";
+import type { BoardElement, DrawingElement } from "@sidecar/features/board-wire";
 import { Schema } from "effect";
 
 /**

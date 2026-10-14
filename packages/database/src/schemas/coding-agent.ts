@@ -2,8 +2,8 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
   type ContextWindow,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/features/integration-wire";
 import { foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

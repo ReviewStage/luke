@@ -5,13 +5,13 @@ import {
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
   integrationProviderFromWire,
-} from "@sidecar/hosted/integration-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/integration-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import { TURN_STATUS } from "@sidecar/wire";
 import {
   and,

@@ -5,7 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { ASK_ORIGIN } from "@sidecar/hosted";
+import { ASK_ORIGIN } from "@sidecar/features";
 import { Effect, Schema } from "effect";
 import { afterAll } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

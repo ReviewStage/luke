@@ -3,7 +3,7 @@
  *
  * The one registry of the agent runtime's tools (`docs/proposals/one-agent-runtime.md`):
  * each tool, named once by the name a model calls it by
- * (`@sidecar/hosted/agent-tools`, which the desktop reads its calls by too),
+ * (`@sidecar/features/agent-tools`, which the desktop reads its calls by too),
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
  * twice is derived from it: what each planning agent is offered
  * (`../brain-host/planning.ts`), what each coding agent's authored tools are
@@ -20,7 +20,7 @@
  * registry imports no tool and no host, and every module may import it.
  */
 
-import { AGENT_TOOL, type AgentTool } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL, type AgentTool } from "@sidecar/features/agent-tools";
 import { AGENT_ROLE, type AgentRole } from "./role.js";
 
 export { AGENT_TOOL, type AgentTool };

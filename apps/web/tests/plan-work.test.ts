@@ -8,20 +8,20 @@ import { listJournals } from "@sidecar/database/models/message-reads";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
-import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   TURN_ENDING,
   type TurnRecord,
-} from "@sidecar/hosted/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_STATE,
   type PlanWorkAnswer,
   type PlanWorkTurn,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import {
   isRecord,
   isWireString,

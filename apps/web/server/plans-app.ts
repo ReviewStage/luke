@@ -21,15 +21,15 @@ import {
   isWorkspaceMember,
 } from "@sidecar/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
-import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/features/board-wire";
 import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
-} from "@sidecar/hosted/coding-agent-wire";
-import { pageVersionNumberSchema } from "@sidecar/hosted/page-wire";
-import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
+} from "@sidecar/features/coding-agent-wire";
+import { pageVersionNumberSchema } from "@sidecar/features/page-wire";
+import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/features/plan-edit";
 import {
   PLAN_BOUNDS,
   type PlanFileRequest,
@@ -37,7 +37,7 @@ import {
   planFileRequestSchema,
   planRevisionSeqSchema,
   planTreeRequestSchema,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import {

@@ -1,5 +1,5 @@
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
-import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@sidecar/features/coding-agent-wire";
+import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/features/plan-wire";
 import type { AppInboxPlan, AppInboxWaitingItem } from "#shared/messages/app-state";
 import { agentStillWriting } from "../planning/coding-agent-model";
 

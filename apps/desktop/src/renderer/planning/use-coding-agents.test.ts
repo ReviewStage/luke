@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

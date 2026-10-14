@@ -1,4 +1,4 @@
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";

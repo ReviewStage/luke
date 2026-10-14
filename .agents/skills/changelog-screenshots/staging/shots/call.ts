@@ -25,12 +25,12 @@ import {
   PLANNING_READ,
   type PlanWorkPart,
   type PlanWorkTurn,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/hosted/transcript-wire";
+} from "@sidecar/features/transcript-wire";
 import {
   LIVE_CLOSE_REASON,
   LIVE_DEFAULTS,

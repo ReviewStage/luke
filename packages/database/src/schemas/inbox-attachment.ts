@@ -1,5 +1,5 @@
-import type { InboxImageType } from "@sidecar/hosted/inbox-wire";
-import { INBOX_BOUNDS } from "@sidecar/hosted/inbox-wire";
+import type { InboxImageType } from "@sidecar/features/inbox-wire";
+import { INBOX_BOUNDS } from "@sidecar/features/inbox-wire";
 import { sql } from "drizzle-orm";
 import { check, customType, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";

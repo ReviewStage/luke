@@ -1,4 +1,4 @@
-import { AGENT_TOOL } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL } from "@sidecar/features/agent-tools";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -8,8 +8,8 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
 import { DocumentIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";

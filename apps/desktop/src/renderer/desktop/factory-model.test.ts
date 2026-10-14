@@ -3,13 +3,13 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import type {
   PlanAgentLine,
   PlanAgentsSummary,
   PlanPullRequestLine,
   PlanSummary,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { test } from "vitest";
 import type { AppInboxPlan } from "#shared/messages/app-state";
 import {

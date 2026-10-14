@@ -1,5 +1,5 @@
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import type { PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
+import type { CodeRef } from "@sidecar/features/plan-wire";
+import type { PlanCode, PlanCodeShowing } from "@sidecar/features/planning-view";
 import {
   type CallRecord,
   callEndedLine,

@@ -1,4 +1,4 @@
-import { ASK_ORIGIN, type AskOrigin } from "@sidecar/hosted";
+import { ASK_ORIGIN, type AskOrigin } from "@sidecar/features";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

@@ -1,4 +1,4 @@
-import { planNotesSchema } from "@sidecar/hosted/plan-template";
+import { planNotesSchema } from "@sidecar/features/plan-template";
 import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import { test } from "vitest";
 

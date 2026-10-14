@@ -5,7 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import { writeDrawing, writeScene } from "@sidecar/database/models/board-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect } from "effect";
 import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "../server/hosted/board-look";

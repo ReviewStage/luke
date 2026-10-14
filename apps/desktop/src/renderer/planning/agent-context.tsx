@@ -1,4 +1,4 @@
-import type { CodingAgentBrief, CodingAgentContext } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentBrief, CodingAgentContext } from "@sidecar/features/coding-agent-wire";
 import { CloseIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";

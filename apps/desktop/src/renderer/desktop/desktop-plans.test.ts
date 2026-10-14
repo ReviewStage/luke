@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { INBOX_CURSOR_START } from "@sidecar/features/inbox-wire";
+import type { Plan } from "@sidecar/features/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";

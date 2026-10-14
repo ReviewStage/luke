@@ -68,7 +68,7 @@ carried `luke://` only so that one codec covered every kind. A GitHub
 So that the answer changes one module and nothing else:
 
 - **PR 0 builds `mention-link`.** It is a single module in
-  `packages/hosted/src/` that turns a typed `Mention` into the text stored in
+  `packages/features/src/` that turns a typed `Mention` into the text stored in
   the words and back:
   - `encodeMention(mention) → string`;
   - `decodeMention(target) → Mention | undefined`;
@@ -351,7 +351,7 @@ of it, plus the path" ([Raycast chat](https://manual.raycast.com/ai/ai-chat.md))
   - A `/` at a word's start opens the list (`skill-mention.ts`), with ↑↓,
     Enter/Tab and Esc. Backspace at a chip's end removes the word whole.
 - **The wire:** a message is `{text, clientKey, attachments?}`
-  (`packages/hosted/src/coding-agent-wire.ts:329`), with `text` capped at
+  (`packages/features/src/coding-agent-wire.ts:329`), with `text` capped at
   16,000 characters.
   - The stored row is AI SDK `parts`: one text part, then file parts
     (`packages/database/src/models/attached-file-parts.ts:56`).
@@ -380,7 +380,7 @@ of it, plus the path" ([Raycast chat](https://manual.raycast.com/ai/ai-chat.md))
     default branch, cached by `planning/folder-listings.ts`. The command
     palette already fuzzy-ranks it with `pathScore`
     (`desktop/command-palette.tsx:276`).
-  - Plan sections: `planSections` (`packages/hosted/src/plan-document.ts:122`).
+  - Plan sections: `planSections` (`packages/features/src/plan-document.ts:122`).
   - The plan's agents: `CODING_AGENTS_LIST`.
   - Pull requests: off each agent's summary.
   - Inbox, pages, calls, and workspace members
@@ -516,7 +516,7 @@ it fixes [@LUKE-142 Token refresh fails after the Mac sleeps](https://linear.app
 - **The targets above are placeholders** until worker 273's Part 1
   settles them (see "Pending: the link format"). Only `mention-link`'s
   encoder and decoder know them.
-- **One Schema,** in `packages/hosted/src/mention-link.ts`, decodes a
+- **One Schema,** in `packages/features/src/mention-link.ts`, decodes a
   target into a tagged `Mention` and encodes one back. `mentionsIn(text)`
   finds the mentions outside code. `MENTION_BOUNDS` caps a message at 20
   mentions and a target at 400 characters.

@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { Board } from "@sidecar/hosted/board-wire";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
+import type { Board } from "@sidecar/features/board-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";

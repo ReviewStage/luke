@@ -43,8 +43,8 @@
  * each row's words instead.
  */
 
-import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/hosted/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/features/plan-wire";
+import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/features/planning-view";
 import { GearIcon, SearchIcon } from "@sidecar/panel";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";

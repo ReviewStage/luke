@@ -5,7 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/features";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";

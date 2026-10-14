@@ -7,7 +7,7 @@ import {
   PLAN_TREE_ENTRY,
   type PlanTreeAnswer,
   type PlanTreeRequest,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";

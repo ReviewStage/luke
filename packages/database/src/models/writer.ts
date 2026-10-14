@@ -12,8 +12,8 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "@sidecar/brain";
-import { isWireUuid } from "@sidecar/hosted";
-import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import { isWireUuid } from "@sidecar/features";
+import type { CodingAgentAttachment } from "@sidecar/features/coding-agent-wire";
 import {
   isSettledToolPartState,
   isStoredToolPart,

@@ -6,7 +6,7 @@ import { childConversationId } from "@sidecar/database/models/ids";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import type { PlanWorkTurn } from "@sidecar/hosted/planning-view";
+import type { PlanWorkTurn } from "@sidecar/features/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,

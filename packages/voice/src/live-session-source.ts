@@ -28,7 +28,7 @@ import {
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
 import {
   decodeLivePayload,
   isLiveVoice,

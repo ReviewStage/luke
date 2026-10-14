@@ -6,8 +6,8 @@ import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { listJournals, type SpokenAskRow } from "@sidecar/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
-import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
-import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
+import type { TurnRecord } from "@sidecar/features/coding-agent-wire";
+import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/features/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,

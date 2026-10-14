@@ -1,15 +1,15 @@
-import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
 import {
   type CatalogModel,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/models-wire";
 import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
   type ProviderKeySummary,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

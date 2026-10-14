@@ -1,4 +1,4 @@
-import type { ContextWindow } from "@sidecar/hosted/coding-agent-wire";
+import type { ContextWindow } from "@sidecar/features/coding-agent-wire";
 import { pgTable, text } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
@@ -28,7 +28,7 @@ export const accountPreference = pgTable("account_preference", {
   /**
    * The Markdown a new plan of this account starts from, kept verbatim as
    * Settings wrote it; null means the built-in `DEFAULT_PLAN_TEMPLATE`
-   * (`@sidecar/hosted/plan-document-template`). Its own path writes it
+   * (`@sidecar/features/plan-document-template`). Its own path writes it
    * (`/api/account/plan-template`), apart from the preferences snapshot.
    */
   planTemplate: text("plan_template"),

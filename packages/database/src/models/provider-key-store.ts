@@ -5,7 +5,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyProvider,
   type ProviderKeyStatus,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

@@ -4,7 +4,7 @@ import {
   MENTION_KIND,
   type Mention,
   type PlanMention,
-} from "@sidecar/hosted/mention-link";
+} from "@sidecar/features/mention-link";
 import { DocumentIcon } from "@sidecar/panel";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
@@ -18,7 +18,7 @@ import { FileTypeIcon } from "./file-type-icon";
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.
  *
  * A mention is written into markdown as a link whose label starts with `@`
- * (`@sidecar/hosted/mention-link`), and wherever the words are drawn by a
+ * (`@sidecar/features/mention-link`), and wherever the words are drawn by a
  * place that can open what a mention names, the link is drawn as this
  * chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a

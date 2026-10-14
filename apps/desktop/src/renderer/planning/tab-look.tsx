@@ -1,5 +1,5 @@
-import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelProvider } from "@sidecar/hosted/models-wire";
+import type { CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
+import type { ModelProvider } from "@sidecar/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
 import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";

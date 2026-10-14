@@ -1,4 +1,4 @@
-import type { PlanActor } from "@sidecar/hosted/plan-wire";
+import type { PlanActor } from "@sidecar/features/plan-wire";
 import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { codingAgent } from "./coding-agent.js";

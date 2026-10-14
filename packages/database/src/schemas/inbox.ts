@@ -3,7 +3,7 @@ import type {
   InboxReply,
   InboxResponse,
   InboxStatus,
-} from "@sidecar/hosted/inbox-wire";
+} from "@sidecar/features/inbox-wire";
 import {
   boolean,
   index,
@@ -27,7 +27,7 @@ import { plan } from "./plan.js";
  * revision moves on, the item opens again, and what it asked replaces what
  * it asked before. The title, the blocks of context, and the response the
  * item asks for are what the agent posted last, the blocks and the response
- * as the wire's own JSON (`@sidecar/hosted/inbox-wire`), so a block type
+ * as the wire's own JSON (`@sidecar/features/inbox-wire`), so a block type
  * added later is a member of that JSON rather than a column; `needs_reply`
  * is whether the agent is to hear the answer as a message. The status is
  * open until the developer answers it, which writes the answer and the key

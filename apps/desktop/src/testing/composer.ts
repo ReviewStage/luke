@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { act } from "react";
 import { mountComposer } from "../renderer/plan-editor/composer-editor";

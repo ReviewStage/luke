@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
 import type {
   PlanActivityFrame,
   PlanCallEndingFrame,
   PlanCodeFrame,
   PlanWorkFrame,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
+import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
 import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@sidecar/live";
 import type { WireRecord } from "@sidecar/wire";
 import { Effect, type Scope, type Stream } from "effect";

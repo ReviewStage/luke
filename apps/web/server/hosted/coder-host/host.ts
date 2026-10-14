@@ -10,9 +10,9 @@ import {
 import { promptHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { sandboxHeld } from "@sidecar/database/models/sandbox-terminal-lease";
-import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
-import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
+import { INBOX_TOOL } from "@sidecar/features/inbox-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";

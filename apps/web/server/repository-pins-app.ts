@@ -3,7 +3,7 @@ import {
   listRepositoryPins,
   setRepositoryPin,
 } from "@sidecar/database/models/repository-pin-store";
-import { repositoryPinRequestSchema } from "@sidecar/hosted/plan-wire";
+import { repositoryPinRequestSchema } from "@sidecar/features/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";

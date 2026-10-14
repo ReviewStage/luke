@@ -1,5 +1,5 @@
-import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
-import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@sidecar/hosted/transcript-wire";
+import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
+import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@sidecar/features/transcript-wire";
 import type { UIMessage } from "ai";
 import type { VoiceView } from "#shared/messages/voice-view";
 

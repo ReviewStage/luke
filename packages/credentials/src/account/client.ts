@@ -1,4 +1,4 @@
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { HOSTED_SERVICE_PATH } from "@sidecar/features";
 import { onOwnFiber } from "@sidecar/runtime/effect";
 import {
   isRecord,

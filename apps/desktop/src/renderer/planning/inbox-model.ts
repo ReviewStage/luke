@@ -16,9 +16,9 @@ import {
   type InboxReplyKind,
   inboxReplyRefusal,
   knownResponse,
-} from "@sidecar/hosted/inbox-wire";
-import type { PlanFileRequest, PlanSummary } from "@sidecar/hosted/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/inbox-wire";
+import type { PlanFileRequest, PlanSummary } from "@sidecar/features/plan-wire";
+import type { PlanCode, PlanningFileAnswer } from "@sidecar/features/planning-view";
 import { isWireString } from "@sidecar/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";

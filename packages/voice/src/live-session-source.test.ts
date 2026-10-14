@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/features";
 import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { Effect } from "effect";

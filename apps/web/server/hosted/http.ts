@@ -6,7 +6,7 @@ import type { HostedApiError, HostedQuota } from "../core.js";
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
  * and every refusal names its reason from the wire contract in
- * `@sidecar/hosted` — the same module the desktop's hosted
+ * `@sidecar/features` — the same module the desktop's hosted
  * clients validate against, so an error slug cannot drift between the two.
  */
 

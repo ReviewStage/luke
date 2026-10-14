@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@sidecar/features/coding-agent-wire";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

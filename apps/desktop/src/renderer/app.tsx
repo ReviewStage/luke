@@ -1,7 +1,7 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
 import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/feedback";
-import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import { appSettingsView } from "@sidecar/settings/wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";

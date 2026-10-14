@@ -296,7 +296,7 @@ replaced installation decides the very next read.
 
 `GET /api/github/repositories` (`server/github-repositories-app.ts`) is that
 listing under the account bearer, answered as
-`packages/hosted/src/github-repositories-wire.ts` declares it: `installed`,
+`packages/features/src/github-repositories-wire.ts` declares it: `installed`,
 whether the workspace has an installation connected, `repositories` (owner,
 name, full name, default branch, private, and when GitHub last saw it
 change), and `installationUrl`. Nothing is stored. A `workspaceId` query
@@ -316,7 +316,7 @@ The App's registered Setup URL, with "Redirect on update", is
 `https://tryluke.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
-(`@sidecar/hosted`). Without a `state`, the route confirms the installation
+(`@sidecar/features`). Without a `state`, the route confirms the installation
 through `installation(id)` as the App and links nothing: `installed`,
 `updated`, `requested` (a member asked an organization's owner, so there is
 no installation yet), `not-found`, or `unavailable`.
@@ -421,7 +421,7 @@ removing a route, and `repository-checks.sh` refuses drift on either half. The
 same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
-scripts' — and the exports of `@sidecar/hosted`'s paths module, evaluated, must
+scripts' — and the exports of `@sidecar/features`'s paths module, evaluated, must
 resolve to a rewrite of the table or to an extensionless alias the Build Output
 emits, and a builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
@@ -855,7 +855,7 @@ The plan template is the group's third path, `/api/account/plan-template`:
 `GET` answers `{ template, custom }`, the account's own Markdown or
 `DEFAULT_PLAN_TEMPLATE` with `custom: false`, and `PUT { template }` keeps a
 string verbatim (untrimmed, empty allowed, at most 20,000 characters) or goes
-back to the default on null (`@sidecar/hosted/plan-document-template`). It is
+back to the default on null (`@sidecar/features/plan-document-template`). It is
 a path of its own rather than a third part of the snapshot, because the
 desktop syncs the snapshot over its own settings and a long text does not
 belong in that loop. It lives in `account_preference.plan_template`
@@ -869,7 +869,7 @@ the preferences part's own, so a row a template opened answers no snapshot.
 account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, and `DELETE
 ?provider=<provider>` removes one, each answered with the keys as they then
-stand (`@sidecar/hosted/provider-key-wire`). No answer carries a key: what
+stand (`@sidecar/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
 `verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
@@ -930,7 +930,7 @@ whose ring it would need.
 
 `server/dictation-app.ts` answers `POST /api/dictation`: one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
-(`@sidecar/hosted/dictation-wire`), answered `{ text }`. The clip is WebM
+(`@sidecar/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the plan's
@@ -984,7 +984,7 @@ server takes a GitHub App user token, and an account that signed in with
 GitHub already holds one: the Luke GitHub App's, which `GitHubApp.userToken`
 reads off the `account` row and refreshes ("The Luke GitHub App" above). So
 GitHub has no connector, no `integration_connection` row, and no Connect or
-Disconnect (`INTEGRATION_GRANT_OF` in `@sidecar/hosted/integration-wire`): the
+Disconnect (`INTEGRATION_GRANT_OF` in `@sidecar/features/integration-wire`): the
 statuses route answers it `connected` while that token reads, `disconnected`
 for an account with no usable GitHub sign-in, and `unavailable` on a
 deployment without the App, and a turn is handed GitHub's server wherever the
@@ -1446,7 +1446,7 @@ they opened, each number once and at most three, as GitHub last answered a
 read of them. Three statements answer the whole list: the agents of every
 plan listed with `coding_agent.published` (migration 0078), their newest
 turns, and the lines awaiting a turn; the list asks GitHub nothing.
-`packages/hosted/src/plan-wire.ts` declares every request and answer. Each
+`packages/features/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
 `packages/database/src/models/plan-store.ts` names the account beside the plan and gates on
 its membership of the plan's workspace, so a teammate's plan reads and
@@ -1465,7 +1465,7 @@ nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
 
 `server/workspaces-app.ts` answers the account's workspaces
-(`packages/hosted/src/workspace-wire.ts`). Membership has nothing to do with
+(`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
 repositories come only from the one Luke GitHub App installation an owner or
 admin connects to it. Every request resolves the bearer first and ensures the
@@ -1508,7 +1508,7 @@ names the turn the next older page is read before while one stands. The
 newest page also carries every answered `show_code` call in the
 conversation, oldest first, picked by its parts in the statement and read
 through `shownCodeOf`, so what the call refused and a secret file are
-never read back. `packages/hosted/src/planning-view.ts` declares the
+never read back. `packages/features/src/planning-view.ts` declares the
 answer (`planWorkAnswerSchema`).
 
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
@@ -1527,7 +1527,7 @@ directory, a missing file, a file past a megabyte, or one with a NUL among
 its first bytes is refused by name, a path GitHub finds nothing at with the
 branch or the commit it was looked for at; and each line is cut to 400
 characters.
-`packages/hosted/src/plan-wire.ts` declares the request and the answer
+`packages/features/src/plan-wire.ts` declares the request and the answer
 (`planFileRequestSchema`, `planFileAnswerSchema`). The file's `path` query
 reaches the route because the grouped function's dispatcher reads its own
 path override from `route-path` (`server/function-dispatch.ts`): it once
@@ -1550,7 +1550,7 @@ It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
 Every member of the plan's workspace reads the history any of them wrote;
 a plan of a workspace the account is not in reads as an empty history and
-restores as `not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
+restores as `not-found`. `packages/features/src/plan-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
 A plan's repository is `plan.repository` (migration 0063), the full name
@@ -1568,7 +1568,7 @@ App or store the service could not read `unavailable`, the plan standing as
 it was. A change naming null clears it.
 
 A `repository-not-reachable` refusal says why in `unreached`
-(`@sidecar/hosted/repository-reach-wire`, read by `repositoryReach` on the
+(`@sidecar/features/repository-reach-wire`, read by `repositoryReach` on the
 `GitHubApp`), naming the repository: the workspace has nothing connected
 (`not-connected`); the installation GitHub no longer knows or its account
 suspended (`connection-lapsed`); the installation is on another account
@@ -1588,11 +1588,11 @@ writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what Luke wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands, with
-nothing saved, where it cannot (`packages/hosted/src/plan-edit.ts`); a
+nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. A planning call's notetaker
 (`server/voice/plan-scribe.ts`) and a coding agent's `edit_plan`
 (`server/hosted/coder-host/plan-edit.ts`) answer with notes
-(`packages/hosted/src/plan-template.ts`): a point added under a heading, a
+(`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the plan does not
 hold, and saves it under a binding of account and plan the service built
@@ -1890,11 +1890,11 @@ with it.
 `server/routes/voice/sessions.ts` is the hosted voice service: one Vercel
 Function serving WebSockets on Fluid compute, the part of this deployment
 that holds the GPT Live project key and owns each hosted voice session
-(`live-contract.ts` in `@sidecar/hosted` is the Mac's contract with it). The
+(`live-contract.ts` in `@sidecar/features` is the Mac's contract with it). The
 file exports the `http.Server` that `server/voice/service.ts`'s
 `voiceServer()` builds, with `ws` handling the upgrade on it, exactly as
 Vercel's WebSocket guide has it; the Mac opens `wss://` on this deployment's own origin,
-`HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/hosted`, at `VOICE_SERVICE_PATH`.
+`HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/features`, at `VOICE_SERVICE_PATH`.
 A plain request to the path answers 426, since the path is a socket's.
 
 On `/api/voice/sessions` a signed-in Mac's handshake carries its account
@@ -2580,7 +2580,7 @@ store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 budgeted per turn on Luke's key and counted on the account's meter, the page
 read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`coder-host/plan-edit.ts`), which takes the
-notetaker's own notes (`@sidecar/hosted/plan-template`'s `planNotesSchema`)
+notetaker's own notes (`@sidecar/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the plan
@@ -2721,7 +2721,7 @@ membership gate (`coding-agent-store.ts`), so any member lists, reads,
 messages, renames, re-models, and stops an agent a teammate started, while
 its conversation stays its starter's, the row's `userId`, under which its
 turns and lines are read and written, and its Start's retry key stays the
-starter's own; `packages/hosted/src/coding-agent-wire.ts`
+starter's own; `packages/features/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -2732,7 +2732,7 @@ the plan's workspace no longer reaches, read at the start rather than when
 the plan named it (`repository-not-reachable`, 403;
 `server/hosted/workspace-repository.ts`), snapshots the
 plan's document as the Markdown Copy puts on the clipboard
-(`@sidecar/hosted/plan-markdown`), makes the agent and its conversation
+(`@sidecar/features/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
 naming a task, the developer's own words bounded as a message is, opens the
@@ -2917,7 +2917,7 @@ fired by a trigger (`docs/proposals/automations-research.md` is the
 research and the plan behind it). The account, the plan, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
-and the guards as `@sidecar/hosted/automation-wire`'s own JSON; every
+and the guards as `@sidecar/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
 run. The store is `packages/database/src/models/automation-store.ts`: an
@@ -2925,7 +2925,7 @@ automation is made only on a plan the account reaches, and every other
 statement an account makes names it.
 
 A schedule is five-field cron read in an IANA zone
-(`@sidecar/hosted/automation-schedule`), so nine o'clock stays nine o'clock
+(`@sidecar/features/automation-schedule`), so nine o'clock stays nine o'clock
 in that zone across a daylight-saving change; one that would fire more
 often than every fifteen minutes is refused. Its next due instant is the
 row's `next_run_at`, which the minute sweep claims by
@@ -2998,7 +2998,7 @@ workspace the account left, is `not-found`:
   most, each with its agent's title and status as the agent's tab reads
   them.
 
-`@sidecar/hosted/automation-wire` declares every body and `service-paths.ts`
+`@sidecar/features/automation-wire` declares every body and `service-paths.ts`
 the addresses; `tests/automations-app.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 

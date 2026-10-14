@@ -1,4 +1,4 @@
-import { desktopSessionPageUrl } from "@sidecar/hosted/desktop-session-wire";
+import { desktopSessionPageUrl } from "@sidecar/features/desktop-session-wire";
 import { singleFlightEffect } from "@sidecar/runtime/effect";
 import {
   Cause,

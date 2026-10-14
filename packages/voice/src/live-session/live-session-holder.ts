@@ -1,12 +1,4 @@
 import {
-  LIVE_SESSION_PHASE,
-  LIVE_TRANSPORT_STATE,
-  type LivePeerEndReason,
-  type LiveTransportState,
-  type VoiceLiveSessionChanged,
-  type VoiceReportLiveTransportParams,
-} from "@sidecar/gateway";
-import {
   type LiveSessionCreated,
   type PlanActivityFrame,
   type PlanCallEndingFrame,
@@ -14,7 +6,15 @@ import {
   type PlanDraftFrame,
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
+import {
+  LIVE_SESSION_PHASE,
+  LIVE_TRANSPORT_STATE,
+  type LivePeerEndReason,
+  type LiveTransportState,
+  type VoiceLiveSessionChanged,
+  type VoiceReportLiveTransportParams,
+} from "@sidecar/gateway";
 import {
   generalLiveError,
   LIVE_CLOSE_REASON,

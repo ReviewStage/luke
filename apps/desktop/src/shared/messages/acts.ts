@@ -1,19 +1,6 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
 import {
-  type FeedbackResult,
-  type FeedbackSubmission,
-  feedbackSubmission,
-} from "@sidecar/feedback";
-import {
-  type VoiceCreateLiveSessionResult,
-  voiceCreateLiveSessionParamsSchema,
-  voiceCreateLiveSessionResultSchema,
-  voiceEndLiveSessionParamsSchema,
-  voiceReportLiveActivityParamsSchema,
-  voiceReportLiveTransportParamsSchema,
-} from "@sidecar/gateway";
-import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -64,7 +51,7 @@ import {
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   type IntegrationConnectView,
   type IntegrationStatusesView,
@@ -75,8 +62,8 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@sidecar/hosted/integration-view";
-import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
+} from "@sidecar/features/integration-view";
+import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
@@ -126,17 +113,30 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import {
   type WorkspaceInvitation,
   workspaceInvitationSchema,
-} from "@sidecar/hosted/workspace-invitation-wire";
+} from "@sidecar/features/workspace-invitation-wire";
 import {
   type Workspace,
   type WorkspaceMember,
   workspaceMemberSchema,
   workspaceSchema,
-} from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/workspace-wire";
+import {
+  type FeedbackResult,
+  type FeedbackSubmission,
+  feedbackSubmission,
+} from "@sidecar/feedback";
+import {
+  type VoiceCreateLiveSessionResult,
+  voiceCreateLiveSessionParamsSchema,
+  voiceCreateLiveSessionResultSchema,
+  voiceEndLiveSessionParamsSchema,
+  voiceReportLiveActivityParamsSchema,
+  voiceReportLiveTransportParamsSchema,
+} from "@sidecar/gateway";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
   APP_SETTING_SCHEMA,

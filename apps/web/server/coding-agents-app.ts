@@ -31,7 +31,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
@@ -42,8 +42,8 @@ import {
   inboxAnswerRequestSchema,
   inboxCursorSchema,
   inboxReplyRefusal,
-} from "@sidecar/hosted/inbox-wire";
-import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/inbox-wire";
+import { modelChoiceSchema } from "@sidecar/features/models-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";

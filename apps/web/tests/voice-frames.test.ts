@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import { VOICE_SERVICE_FRAME } from "@sidecar/features";
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
 import { test } from "vitest";
 import {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { PLAN_EDIT_REFUSAL } from "@sidecar/hosted/plan-edit";
-import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
+import { PLAN_EDIT_REFUSAL } from "@sidecar/features/plan-edit";
+import { PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
 import { test } from "vitest";
 import {
   DOCUMENT_EDITOR_STATE,

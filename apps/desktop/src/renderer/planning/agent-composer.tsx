@@ -8,9 +8,9 @@ import {
   type CodingAgentStatus,
   type CodingAgentUsage,
   hasWordsOrFiles,
-} from "@sidecar/hosted/coding-agent-wire";
-import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-wire";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/features/integration-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
 import { PlusIcon } from "@sidecar/panel";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";

@@ -11,7 +11,7 @@
  */
 
 import { turnsNamed } from "@sidecar/database/models/message-reads";
-import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import type { TurnRecord } from "@sidecar/features/coding-agent-wire";
 import { Effect } from "effect";
 import type { SubagentJournal } from "../voice/plan-work.js";
 import { turnRecordOf } from "./turn-record.js";

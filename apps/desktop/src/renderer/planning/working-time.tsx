@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+import type { TurnRecord } from "@sidecar/features/coding-agent-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
 import { Clock, Duration, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { ReactNode } from "react";

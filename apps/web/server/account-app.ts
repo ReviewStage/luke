@@ -6,9 +6,9 @@ import type {
 } from "@sidecar/database/models/account-store";
 import type { PlanStoreFailure } from "@sidecar/database/models/plan-store";
 import type { StandingSession } from "@sidecar/database/models/recorded-session";
-import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
+import { contextWindowSchema } from "@sidecar/features/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
@@ -16,9 +16,9 @@ import {
   type PlanTemplateRevisionAnswer,
   type PlanTemplateRevisionsAnswer,
   planTemplateWriteRequestSchema,
-} from "@sidecar/hosted/plan-document-template";
-import { planRevisionSeqSchema } from "@sidecar/hosted/plan-wire";
-import type { FastAccess } from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/plan-document-template";
+import { planRevisionSeqSchema } from "@sidecar/features/plan-wire";
+import type { FastAccess } from "@sidecar/features/provider-key-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";

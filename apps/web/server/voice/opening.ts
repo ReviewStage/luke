@@ -5,7 +5,7 @@ import type {
   VoiceSessionRecord,
 } from "@sidecar/database/models/voice-session-record";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import type { Plan } from "@sidecar/features/plan-wire";
 import {
   decodeLivePayload,
   developerSeedItem,

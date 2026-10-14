@@ -1,9 +1,9 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/coding-agent-view";
+import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
 import { useRef, useState } from "react";
 import { chooseFailureNote } from "./coding-agent-model";
 

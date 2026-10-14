@@ -300,7 +300,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   Markdown, and nothing else: the text has no title line, its assumptions
   are a section of it, and nothing stands in for a section it leaves empty.
   The text is cut into sections as the service cuts it (`planSections` in
-  `packages/hosted/src/plan-document.ts`): what stands before the first
+  `packages/features/src/plan-document.ts`): what stands before the first
   heading, then each `#` or `##` heading with what stands under it, a
   heading inside a code fence being code. The `assumptions` list beside the
   body, always empty now, is not drawn.
@@ -533,7 +533,7 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
   `GET /api/plans/{id}/transcript` (`packages/database/src/models/transcript-store.ts`), grouped
   into turns by the same ledger the captions use, so a call that ended reads
   back in the lines its captions drew. Each turn is answered as an AI SDK
-  `UIMessage` (`packages/hosted/src/transcript-wire.ts`): its place on the
+  `UIMessage` (`packages/features/src/transcript-wire.ts`): its place on the
   call as the id, the speaker as the role, and its words as one text part,
   the shape Luke's `messages` table keeps every conversation in. The newest
   4,000 fragments are read; past that, the tab says earlier lines are not
@@ -604,7 +604,7 @@ The developer edits the plan whole, in place, with its title
 (`planning/plan-document-editor.tsx`; the editor is `renderer/plan-editor/`,
 its saves `planning/use-plan-editing.ts` and `planning/plan-edit-model.ts`).
 The service lays each save over what Luke wrote meanwhile
-(`packages/hosted/src/plan-edit.ts`).
+(`packages/features/src/plan-edit.ts`).
 
 - **Opening.** The title and each section are blocks, and nothing on them
   marks them editable. A click into a section's words opens the whole text in
@@ -753,7 +753,7 @@ stands, so it offers no restore.
 
 The notes type in while they are written. The call streams its answer, and
 the notes so far are taken over the saved text exactly as a save would take
-them (`textNotesInProgress` in `packages/hosted/src/plan-template.ts`):
+them (`textNotesInProgress` in `packages/features/src/plan-template.ts`):
 every note before the last is whole, and the last is drawn only when it adds
 a point, as its text so far. Each draft is sent to the Mac on the call's own
 socket as a `plan.draft` frame, at most every 150 ms, then once more as saved,
@@ -769,7 +769,7 @@ is left standing.
 
 ### The template
 
-A plan is one free Markdown document (`packages/hosted/src/plan-document.ts`,
+A plan is one free Markdown document (`packages/features/src/plan-document.ts`,
 the row's `plan.document`), with no title line, since the plan's name is its
 own, and its assumptions an ordinary section of the text. Every plan starts
 as a copy of its account's own template, copied as the plan starts so a
@@ -777,13 +777,13 @@ later edit of the template leaves every plan as it stands. The service keeps
 the template in `account_preference.plan_template` and serves it at
 `GET`/`PUT /api/account/plan-template` (null goes back to the default); an
 account that never wrote one gets `DEFAULT_PLAN_TEMPLATE`
-(`packages/hosted/src/plan-document-template.ts`): the sections below as `##`
+(`packages/features/src/plan-document-template.ts`): the sections below as `##`
 headings, each with one plain guidance sentence. The template is plain
 Markdown with no convention of its own: whatever guidance it holds is
 ordinary text the developer and Luke both see and write over. The first
 point Luke's notes add to a section that still holds exactly what the
 plan's template put under its heading, where that is one paragraph of prose,
-takes the place of those words (`packages/hosted/src/plan-template.ts`'s
+takes the place of those words (`packages/features/src/plan-template.ts`'s
 `applyNotesToText`), so a filled section never keeps its prompt above its
 answer. A template's list, code, quote, or table is its own starting content
 and is kept; once anything else stands in a section, a point is added after
@@ -1177,7 +1177,7 @@ The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
 toolbar reads `Copied`. The
 clipboard holds the current document as readable Markdown: the plan's name
 as a `#` title over its document exactly as saved, whose assumptions are a
-section like any other (`packages/hosted/src/plan-markdown.ts`):
+section like any other (`packages/features/src/plan-markdown.ts`):
 
 ```markdown
 # Teammate invitations
@@ -1234,13 +1234,13 @@ the exact shape.
 | Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
-| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/hosted/src/plan-markdown.ts`). |
+| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `planning/tab-strip-model.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/hosted/src/plan-document-template.ts`), the headings and notes it is written in (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 

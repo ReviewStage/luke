@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanningTreeAnswer } from "@sidecar/features/planning-view";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";

@@ -2,7 +2,7 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import type { IntegrationTool } from "./integration-health";
 import { byName } from "./integration-tool-model";
 import { matchesTokens, searchTokens } from "./search-tokens";

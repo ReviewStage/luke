@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@sidecar/features/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import type { Failure } from "../failure-remedy";
 import { AgentComposer } from "./agent-composer";

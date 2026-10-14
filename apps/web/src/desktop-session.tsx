@@ -20,7 +20,7 @@ import {
   type DesktopSessionPageQuery,
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
-} from "@sidecar/hosted/desktop-session-wire";
+} from "@sidecar/features/desktop-session-wire";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";

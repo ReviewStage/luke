@@ -138,6 +138,9 @@ importers:
       '@sidecar/devtrace':
         specifier: workspace:*
         version: link:../../packages/devtrace
+      '@sidecar/features':
+        specifier: workspace:*
+        version: link:../../packages/features
       '@sidecar/feedback':
         specifier: workspace:*
         version: link:../../packages/feedback
@@ -150,9 +153,6 @@ importers:
       '@sidecar/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../../packages/hosted
       '@sidecar/live':
         specifier: workspace:*
         version: link:../../packages/live
@@ -333,9 +333,9 @@ importers:
       '@sidecar/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@sidecar/hosted':
+      '@sidecar/features':
         specifier: workspace:*
-        version: link:../../packages/hosted
+        version: link:../../packages/features
       '@sidecar/live':
         specifier: workspace:*
         version: link:../../packages/live
@@ -460,9 +460,9 @@ importers:
       '@sidecar/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@sidecar/hosted':
+      '@sidecar/features':
         specifier: workspace:*
-        version: link:../../../packages/hosted
+        version: link:../../../packages/features
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../../../packages/wire
@@ -484,9 +484,9 @@ importers:
       '@sidecar/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@sidecar/hosted':
+      '@sidecar/features':
         specifier: workspace:*
-        version: link:../../../packages/hosted
+        version: link:../../../packages/features
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../../../packages/wire
@@ -505,12 +505,12 @@ importers:
 
   packages/analytics:
     dependencies:
+      '@sidecar/features':
+        specifier: workspace:*
+        version: link:../features
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../hosted
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -567,9 +567,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@sidecar/hosted':
+      '@sidecar/features':
         specifier: workspace:*
-        version: link:../hosted
+        version: link:../features
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -604,9 +604,9 @@ importers:
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../brain
-      '@sidecar/hosted':
+      '@sidecar/features':
         specifier: workspace:*
-        version: link:../hosted
+        version: link:../features
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
@@ -685,6 +685,34 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/features:
+    dependencies:
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
+
   packages/feedback:
     dependencies:
       '@sidecar/wire':
@@ -753,12 +781,12 @@ importers:
       '@sidecar/devtrace':
         specifier: workspace:*
         version: link:../devtrace
+      '@sidecar/features':
+        specifier: workspace:*
+        version: link:../features
       '@sidecar/gateway':
         specifier: workspace:*
         version: link:../gateway
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../hosted
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
@@ -793,34 +821,6 @@ importers:
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/hosted:
-    dependencies:
-      '@sidecar/live':
-        specifier: workspace:*
-        version: link:../live
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      diff:
-        specifier: 9.0.0
-        version: 9.0.0
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -955,12 +955,12 @@ importers:
 
   packages/voice:
     dependencies:
+      '@sidecar/features':
+        specifier: workspace:*
+        version: link:../features
       '@sidecar/gateway':
         specifier: workspace:*
         version: link:../gateway
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../hosted
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live

@@ -3,7 +3,7 @@ import {
   IDLE_PLANNING_VIEW,
   PLANNING_READ,
   type PlanningView,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";

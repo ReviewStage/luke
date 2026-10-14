@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { Plan } from "@sidecar/hosted/plan-wire";
-import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
+import type { Plan } from "@sidecar/features/plan-wire";
+import { PLANNING_READ, type PlanningView } from "@sidecar/features/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";

@@ -27,7 +27,7 @@ import {
   PATCH_OMITTED,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

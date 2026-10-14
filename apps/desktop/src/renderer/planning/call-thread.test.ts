@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
+import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@sidecar/live";
 import type { UIMessage } from "ai";
 import { test } from "vitest";

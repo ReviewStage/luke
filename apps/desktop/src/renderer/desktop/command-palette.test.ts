@@ -5,9 +5,9 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
-import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/coding-agent-wire";
+import { PLAN_TREE_ENTRY } from "@sidecar/features/plan-wire";
+import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/features/planning-view";
 import { settingsView } from "@sidecar/settings/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

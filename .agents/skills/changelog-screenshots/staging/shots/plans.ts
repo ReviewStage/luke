@@ -11,7 +11,7 @@
  * The owners' pictures are drawn from `owner-pictures.ts`, not fetched.
  */
 
-import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { ago, daysAgo, hoursAgo } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

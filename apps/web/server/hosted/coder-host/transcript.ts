@@ -37,7 +37,7 @@ import {
   type CodingAgentSubagentTitle,
   type CodingAgentUsage,
   type TurnRecord,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import {

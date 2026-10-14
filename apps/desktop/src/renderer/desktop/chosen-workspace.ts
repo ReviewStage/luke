@@ -1,4 +1,4 @@
-import type { Workspace } from "@sidecar/hosted/workspace-wire";
+import type { Workspace } from "@sidecar/features/workspace-wire";
 import { Schema } from "effect";
 import { useState } from "react";
 import { readKept, writeKept } from "./folded-groups";

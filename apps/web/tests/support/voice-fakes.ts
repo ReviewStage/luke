@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { VOICE_SECONDS_OUTCOME } from "@sidecar/database/models/quota";
 import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import type { VoiceCloseReason } from "@sidecar/database/voice-vocabulary";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import type { Plan } from "@sidecar/features/plan-wire";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "@sidecar/live";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";

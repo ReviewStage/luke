@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
-import { FAST_ACCESS } from "@sidecar/hosted/provider-key-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
+import { FAST_ACCESS } from "@sidecar/features/provider-key-wire";
 import {
   type JsonValue,
   jsonResponse,

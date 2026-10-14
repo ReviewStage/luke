@@ -1,4 +1,4 @@
-import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_SERVICE_PATH } from "@sidecar/features";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 
 /**

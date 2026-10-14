@@ -1,5 +1,5 @@
 import type { PlanArchived } from "@sidecar/database/models/plan-store";
-import type { RepositoryUnreached } from "@sidecar/hosted/repository-reach-wire";
+import type { RepositoryUnreached } from "@sidecar/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { UnparsedWireValue } from "../core.js";

@@ -4,13 +4,13 @@ import {
   PROVIDER_KEY_UNREADABLE,
   type ProviderKeyUnreadable,
 } from "@sidecar/database/models/provider-key-seal";
-import { MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import { MODEL_PROVIDER, type ModelChoice } from "@sidecar/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import {
   APICallError,
   type LanguageModel,

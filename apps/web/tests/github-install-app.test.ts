@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/features";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";

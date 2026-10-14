@@ -18,7 +18,7 @@ import {
   type ProviderKeyRejection,
   type ProviderKeySummary,
   providerKeySaveRequestSchema,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { DateTime, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";

@@ -11,8 +11,8 @@ import {
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import { PLAN_HEADING, type PlanNote } from "@sidecar/features/plan-template";
+import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/features/plan-wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {

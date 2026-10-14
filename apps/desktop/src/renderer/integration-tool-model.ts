@@ -1,11 +1,11 @@
-import type { IntegrationToolAnnotations } from "@sidecar/hosted/integration-wire";
+import type { IntegrationToolAnnotations } from "@sidecar/features/integration-wire";
 import type { IntegrationTool } from "./integration-health";
 
 /**
  * integration-tool-model.ts -- how a list of an integration's tools orders them and badges each, in the MCP popover and Settings alike.
  *
  * The tools are one list in alphabetical order of their names. A badge comes
- * from the server's own `ToolAnnotations` (`@sidecar/hosted/integration-wire`),
+ * from the server's own `ToolAnnotations` (`@sidecar/features/integration-wire`),
  * the MCP spec's field for them, and from nothing else: Read-only where it
  * sent `readOnlyHint`, Destructive where it sent `destructiveHint` on a tool
  * it did not mark read-only, which is the only case the spec reads that hint

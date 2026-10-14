@@ -1,7 +1,7 @@
-import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
+import type { CodingAgentMessage } from "@sidecar/features/coding-agent-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
+import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
+import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
 import { CallIcon } from "@sidecar/panel";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@sidecar/wire";
 import type { UIMessage } from "ai";

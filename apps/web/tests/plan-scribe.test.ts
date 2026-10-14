@@ -5,7 +5,7 @@ import { Database } from "@sidecar/database/core/query";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
+import { NOTE_KIND, PLAN_HEADING } from "@sidecar/features/plan-template";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, mentionMarkdown, mentionsIn } from "@sidecar/hosted/mention-link";
-import { planSections } from "@sidecar/hosted/plan-document";
+import { MENTION_KIND, mentionMarkdown, mentionsIn } from "@sidecar/features/mention-link";
+import { planSections } from "@sidecar/features/plan-document";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";

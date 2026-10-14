@@ -10,7 +10,7 @@ import {
   turnsBefore,
 } from "@sidecar/database/models/message-reads";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
-import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_BOUNDS } from "@sidecar/features/coding-agent-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";

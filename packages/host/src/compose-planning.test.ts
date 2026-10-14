@@ -1,32 +1,26 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethod,
-} from "@sidecar/gateway";
-import {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubRepositoriesAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
-} from "@sidecar/hosted";
-import type { Board } from "@sidecar/hosted/board-wire";
+} from "@sidecar/features";
+import type { Board } from "@sidecar/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
-} from "@sidecar/hosted/coding-agent-view";
+} from "@sidecar/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
-} from "@sidecar/hosted/coding-agent-wire";
-import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
-import type { PageLine, PageVersion } from "@sidecar/hosted/page-wire";
-import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
+} from "@sidecar/features/coding-agent-wire";
+import type { GitHubConnection } from "@sidecar/features/github-connection-wire";
+import type { PageLine, PageVersion } from "@sidecar/features/page-wire";
+import type { PlanEditAnswer } from "@sidecar/features/plan-edit";
 import {
   PLAN_ACTOR,
   type Plan,
@@ -38,7 +32,7 @@ import {
   type PlanSummary,
   type PlanTreeAnswer,
   type RepositoryPin,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -48,14 +42,20 @@ import {
   type PlanWorkAnswer,
   planningViewSchema,
   type RepositoryCallFailure,
-} from "@sidecar/hosted/planning-view";
-import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
-import type { WorkspaceInvitation } from "@sidecar/hosted/workspace-invitation-wire";
+} from "@sidecar/features/planning-view";
+import type { PlanTranscript } from "@sidecar/features/transcript-wire";
+import type { WorkspaceInvitation } from "@sidecar/features/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@sidecar/hosted/workspace-wire";
+} from "@sidecar/features/workspace-wire";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethod,
+} from "@sidecar/gateway";
 import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Duration, Effect, Fiber, Queue, Result } from "effect";

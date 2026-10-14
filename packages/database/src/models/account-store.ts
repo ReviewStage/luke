@@ -1,6 +1,6 @@
-import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
+import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/features/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";

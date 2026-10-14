@@ -2,13 +2,13 @@ import {
   PLAN_FILE_BOUNDS,
   PLAN_FILE_REFUSAL,
   type PlanFileRefusal,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import type {
   PlanCode,
   PlanCodeShowing,
   PlanFileShown,
   PlanningFileAnswer,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { githubPath } from "./coding-agent-model";
 import type { OpenFile } from "./use-side-panel";
 

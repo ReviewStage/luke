@@ -6,7 +6,7 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
 } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

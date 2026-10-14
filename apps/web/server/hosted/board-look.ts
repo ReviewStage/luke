@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import { readBoardImage } from "@sidecar/database/models/board-store";
-import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/features/board-vocabulary";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";

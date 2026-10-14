@@ -1,5 +1,5 @@
-import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+import type { CodingAgentUsage } from "@sidecar/features/coding-agent-wire";
+import type { CatalogModel } from "@sidecar/features/models-wire";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { CHIP_LOOK, Chip } from "../chip";

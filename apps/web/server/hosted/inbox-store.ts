@@ -11,7 +11,7 @@ import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { inboxItem } from "@sidecar/database/schemas/inbox";
 import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
 import { plan } from "@sidecar/database/schemas/plan";
-import type { AccountInboxEntry, AccountInboxPlan } from "@sidecar/hosted/account-inbox-wire";
+import type { AccountInboxEntry, AccountInboxPlan } from "@sidecar/features/account-inbox-wire";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -27,7 +27,7 @@ import {
   inboxImageTypeSchema,
   inboxReplySchema,
   inboxResponseSchema,
-} from "@sidecar/hosted/inbox-wire";
+} from "@sidecar/features/inbox-wire";
 import {
   and,
   count,

@@ -4,7 +4,7 @@ import {
   accountBearer,
   accountCall,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
 import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
 import {
   HTTP_METHOD,

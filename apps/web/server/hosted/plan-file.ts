@@ -5,7 +5,7 @@ import {
   type PlanFileAnswer,
   type PlanFileRefusal,
   type PlanFileRequest,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

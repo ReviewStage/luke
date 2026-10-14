@@ -8,7 +8,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
 import type { StoreWriter } from "@sidecar/database/models/writer";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
 import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {

@@ -38,7 +38,7 @@ follows PRs 2 and 3, assigned separately.
 
 - A plan is one row in `plan` (`apps/web/server/db/plan-schema.ts:29-73`).
 - `fields jsonb` holds the fixed template's fields, defined by
-  `planFieldsSchema` in `packages/hosted/src/plan-template.ts:126-143`. They
+  `planFieldsSchema` in `packages/features/src/plan-template.ts:126-143`. They
   are Goal (problem, outcome), Scope (included, excluded, constraints), rules
   with Given/When/Then examples, Implementation (changeMap, contracts,
   patterns, order), decisions, verification, leftToAgent, openQuestions, and
@@ -53,7 +53,7 @@ follows PRs 2 and 3, assigned separately.
   document. "There is no earlier document to fall back on"
   (`plan-schema.ts:17-20`).
 - The wire document is `{ body, assumptions }`, "replaced whole on every save"
-  (`packages/hosted/src/plan-wire.ts:12-13, 53-59`).
+  (`packages/features/src/plan-wire.ts:12-13, 53-59`).
 - `PLAN_BOUNDS.MAX_BODY_CHARS = 200_000` (`plan-wire.ts:35`) is the "body
   bound". It is checked after formatting (`plan-notes.ts:108`) and again by
   rename (`plan-store.ts:517-522`).
@@ -430,7 +430,7 @@ CREATE TABLE "plan_revision" (
   retiring it.
 - **Rename writes no revision.** It changes the heading, not the content.
 
-### Wire (`packages/hosted/src/plan-wire.ts`)
+### Wire (`packages/features/src/plan-wire.ts`)
 
 - `planSchema.lastEdit?: { actor, label?, at, duringCall: boolean }`, where
   `label` is present only for a coding agent. Optional, so an older service
@@ -485,13 +485,13 @@ CREATE TABLE "plan_revision" (
 
 ## 5. Tests (hermetic, smallest layer)
 
-- **`packages/hosted`, pure:** `applyDeveloperEdit`:
+- **`packages/features`, pure:** `applyDeveloperEdit`:
   - Set when base matches; null-out.
   - A clean rebase over a notetaker `add` in the same field.
   - A conflict when hunks overlap.
   - A typed `## Heading` line contained by `planBody`.
   - The rules and list kinds compared whole.
-- **`packages/hosted`, goldens:** the existing JSON-Schema goldens prove
+- **`packages/features`, goldens:** the existing JSON-Schema goldens prove
   `planNotesSchema` didn't move.
 - **`apps/web` on PGlite** (`it.layer(testSqlClient)`, `support/hosted-store-database.ts`):
   - A developer edit writes a revision and answers the saved plan.

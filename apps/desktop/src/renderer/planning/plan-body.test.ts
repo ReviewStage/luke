@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import type { Plan } from "@sidecar/features/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

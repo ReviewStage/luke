@@ -3,7 +3,7 @@ import {
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
   githubInstallStatusFromWire,
-} from "@sidecar/hosted";
+} from "@sidecar/features";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { GitHubMark } from "./account-marks";

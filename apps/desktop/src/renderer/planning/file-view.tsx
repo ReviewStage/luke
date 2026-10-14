@@ -1,5 +1,9 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+import type {
+  PlanCode,
+  PlanCodeShowing,
+  PlanningTreeAnswer,
+} from "@sidecar/features/planning-view";
 import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
 import {
   Fragment,

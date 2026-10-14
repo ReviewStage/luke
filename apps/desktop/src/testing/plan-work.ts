@@ -6,7 +6,7 @@
  * by the service reaches it.
  */
 
-import { EVE_TOOL } from "@sidecar/hosted/agent-tools";
+import { EVE_TOOL } from "@sidecar/features/agent-tools";
 import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
@@ -14,13 +14,13 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
   TURN_ENDING,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   PLAN_WORK_STATE,
   type PlanWorkState,
   type PlanWorkTurn,
   type PlanWorkWorker,
-} from "@sidecar/hosted/planning-view";
+} from "@sidecar/features/planning-view";
 import { MESSAGE_ROLE, type TurnOrigin, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../renderer/ai-elements/tool";
 

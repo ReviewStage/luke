@@ -2,7 +2,7 @@ import {
   CODING_AGENT_BRIEF,
   type CodingAgentBrief,
   type CodingAgentContext,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import { compactCount } from "./coding-agent-model";
 import { agoText } from "./plan-time";
 

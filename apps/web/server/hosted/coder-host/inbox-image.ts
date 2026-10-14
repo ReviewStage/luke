@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import { INBOX_BOUNDS, INBOX_IMAGE_TYPE, type InboxImageType } from "@sidecar/hosted/inbox-wire";
+import { INBOX_BOUNDS, INBOX_IMAGE_TYPE, type InboxImageType } from "@sidecar/features/inbox-wire";
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../inbox-store.js";

@@ -69,5 +69,5 @@ its next answer.
 ## One door that exists for the graph
 
 `account-preferences-client.ts` would belong beside the plan client in
-`@sidecar/hosted`, but the snapshot it carries is `@sidecar/settings` vocabulary
-and `settings` already reaches `hosted`. This is the lowest package holding both.
+`@sidecar/features`, but the snapshot it carries is `@sidecar/settings` vocabulary
+and `settings` already reaches `features`. This is the lowest package holding both.

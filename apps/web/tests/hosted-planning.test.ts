@@ -7,7 +7,7 @@ import { openPlanConversation, readPlan, savePlanText } from "@sidecar/database/
 import { storeWriter } from "@sidecar/database/models/writer";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
+import { type PlanDocument, planDocumentSchema } from "@sidecar/features/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import {
   generateText,

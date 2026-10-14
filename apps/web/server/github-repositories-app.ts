@@ -19,8 +19,8 @@ import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
   HOSTED_SERVICE_PATH,
-} from "@sidecar/hosted";
-import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features";
+import { workspaceIdSchema } from "@sidecar/features/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import {

@@ -8,7 +8,7 @@
  * whether an agent may start on it. A workspace with no installation
  * reaches no repository at all.
  *
- * A refusal says why (`@sidecar/hosted/repository-reach-wire`), and where
+ * A refusal says why (`@sidecar/features/repository-reach-wire`), and where
  * the owner's installation stands for another workspace the plan's owner is
  * in, it names that workspace, since one installation stands for one
  * workspace and moving the plan there is the one thing that reaches the
@@ -18,7 +18,7 @@
 
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import { readPlan } from "@sidecar/database/models/plan-store";
-import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
+import { REPOSITORY_UNREACHED } from "@sidecar/features/repository-reach-wire";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubRepository } from "../core.js";

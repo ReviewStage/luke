@@ -24,8 +24,8 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
-} from "@sidecar/hosted/automation-wire";
-import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/automation-wire";
+import type { CodingAgentPullRequest } from "@sidecar/features/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";

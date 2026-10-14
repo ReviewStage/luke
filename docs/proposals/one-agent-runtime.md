@@ -71,7 +71,7 @@ Can we pause and discuss why they are different and how we can unify them?"
 | **Hooks** | `eve/hooks/store.ts`: relay only. Worker hook relays its child session and titles it | `coder/hooks/store.ts` (149 lines): relay, title, sandbox stop, credential renewal, branch record. Worker hook relays and pins `parentCallId` |
 | **Session lifetime** | No eve timeout. Rotates when eve answers `RETIRED` or not-ready (`brain-ask.ts:260-282`); the new session is seeded from the store (`host.seed`) | No eve timeout. No seed path. Lives until archived or the plan is deleted |
 | **Transcript store** | The plan's conversation (`plan.conversation_id`). Worker in `childConversationId(parent, callId)` (`brain-host/host.ts:450-477`) | The agent's conversation (kind `coding_agent`). Workers in child conversations under the same function |
-| **Transcript wire** | A typed, bounded server projection `planWorkOf` (`voice/plan-work.ts:403`) → `planWorkTurnSchema` (`packages/hosted/src/planning-view.ts:118-273`). Pushed: `GET /api/plans/{id}/work?before=` plus the live `plan.work` socket frame, into `app:state` | Raw stored AI SDK parts (`coding-agent-wire.ts:620-821`). Pulled: held `GET /api/agents/{id}/messages?after=` (`coder-host/transcript.ts:436`) |
+| **Transcript wire** | A typed, bounded server projection `planWorkOf` (`voice/plan-work.ts:403`) → `planWorkTurnSchema` (`packages/features/src/planning-view.ts:118-273`). Pushed: `GET /api/plans/{id}/work?before=` plus the live `plan.work` socket frame, into `app:state` | Raw stored AI SDK parts (`coding-agent-wire.ts:620-821`). Pulled: held `GET /api/agents/{id}/messages?after=` (`coder-host/transcript.ts:436`) |
 | **Transcript UI** | Work tab, `planning/plan-work.tsx` (535) and `work-model.ts` (427) | Agent tab, `planning/agent-tab.tsx` (816), `coding-agent-model.ts` (1,118) and `tool-call-model.ts` (531) |
 | **Plan writing** | The brain never writes the plan (`planning.ts:144`). The notetaker does: `voice/plan-scribe.ts`, `gpt-5.6-luna`, inside the voice service, through `saveNotes` (`plan-notes.ts:248`) | `edit_plan` reuses the notetaker's schema and `saveNotes`, capped per turn (`coder-host/plan-edit.ts`) |
 | **Evals** | `eve/evals/brain-host.eval.ts` plus `eve/scripted-model.ts` (139 lines) | `coder/evals/coder.eval.ts` plus `coder/scripted-model.ts` (140 lines) |
@@ -296,7 +296,7 @@ As built: the planner's turns are drawn by the agent tab's own component
 lines are drawn as messages too, so the deviation from the proposal below
 is that a planner's user lines are drawn, as the voice transcript. The Call
 tab draws each turn's work under the line that asked for it. Every tool name
-lives in one shared vocabulary (`@sidecar/hosted/agent-tools`, #2397), and
+lives in one shared vocabulary (`@sidecar/features/agent-tools`, #2397), and
 the agent tab reads the planning model's raw calls by it. The wire switch
 (9b) and the old wire's deletion (9c) come after the release, as one step:
 9c has to wait for a desktop release anyway, and 9b alone would double the

@@ -1,8 +1,8 @@
 import { Database } from "@sidecar/database/core/query";
 import { roleOf, type WorkspaceStoreEffect } from "@sidecar/database/models/workspace-store";
 import { member, user } from "@sidecar/database/schemas/auth";
-import type { WorkspaceMember, WorkspaceRole } from "@sidecar/hosted/workspace-wire";
-import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+import type { WorkspaceMember, WorkspaceRole } from "@sidecar/features/workspace-wire";
+import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

@@ -2,7 +2,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { ArrowLeftIcon, ChevronRightIcon, GearIcon, McpIcon, SearchIcon } from "@sidecar/panel";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";

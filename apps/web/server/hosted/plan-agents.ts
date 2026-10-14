@@ -10,14 +10,14 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   PLAN_AGENTS_BOUNDS,
   type PlanAgentLine,
   type PlanAgentsSummary,
   type PlanPullRequestLine,
   type PlanSummary,
-} from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-wire";
 import { Clock, Effect } from "effect";
 import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
 

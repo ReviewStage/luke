@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
-import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import type { AccountInboxEntry } from "@sidecar/features/account-inbox-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -10,7 +9,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
+} from "@sidecar/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -19,19 +18,20 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/hosted/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+} from "@sidecar/features/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateRevisionLine,
-} from "@sidecar/hosted/plan-document-template";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+} from "@sidecar/features/plan-document-template";
+import { PLAN_ACTOR } from "@sidecar/features/plan-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@sidecar/hosted/provider-key-wire";
+} from "@sidecar/features/provider-key-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
 import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";

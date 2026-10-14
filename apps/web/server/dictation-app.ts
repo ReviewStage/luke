@@ -1,11 +1,11 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import { spendDictationMeter } from "@sidecar/database/models/quota";
-import { base64Bytes, base64Chars } from "@sidecar/hosted/coding-agent-wire";
+import { base64Bytes, base64Chars } from "@sidecar/features/coding-agent-wire";
 import {
   DICTATION_BOUNDS,
   type DictationAnswer,
   dictationRequestSchema,
-} from "@sidecar/hosted/dictation-wire";
+} from "@sidecar/features/dictation-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import {
@@ -33,7 +33,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 /**
  * dictation-app.ts -- a clip the developer dictated into a message box, answered with its words.
  *
- * `POST /api/dictation` takes one clip (`@sidecar/hosted/dictation-wire`),
+ * `POST /api/dictation` takes one clip (`@sidecar/features/dictation-wire`),
  * holds it to two minutes and a megabyte, hands it to OpenAI's transcription
  * model on Luke's key with the words the desktop says it is likely to hold
  * (`hosted/transcription.ts`), and answers the text. Nothing of the clip or

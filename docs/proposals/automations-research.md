@@ -835,7 +835,7 @@ start path.
 3. Run execution: guards, the start through `startCodingAgent` as the
    deployment acting for the account, run settling, auto-pause.
 4. The HTTP API: CRUD, Run now, run history, wire schemas in
-   `@sidecar/hosted`.
+   `@sidecar/features`.
 5. GitHub App webhook triggers.
 6. The generic signed webhook (then Connect triggers).
 7. Desktop host and gateway plumbing, then the UI.

@@ -10,7 +10,7 @@ import {
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxPost,
-} from "@sidecar/hosted/inbox-wire";
+} from "@sidecar/features/inbox-wire";
 import { Effect, Option, Result } from "effect";
 import {
   accountInboxPlans,

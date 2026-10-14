@@ -1,11 +1,11 @@
-import type { IntegrationStatusView } from "@sidecar/hosted/integration-view";
+import type { IntegrationStatusView } from "@sidecar/features/integration-view";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/hosted/integration-wire";
+} from "@sidecar/features/integration-wire";
 import { ChevronRightIcon, CloseIcon, SearchIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { RefreshCwIcon } from "lucide-react";
