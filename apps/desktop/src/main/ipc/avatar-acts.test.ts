@@ -60,13 +60,24 @@ function settle() {
  * The host's avatar as a fake over the same in-process streams the holder
  * exposes: a test moves it as the service would, and a close this side did
  * not start stops it and asks once more, as the holder does on a call's
- * first such close.
+ * first such close. Its toggle answers as the holder's does: a start is
+ * asked, and an off stops whatever is starting or up.
  */
 function fakeHost() {
   return Effect.gen(function* () {
     const states = yield* PubSub.unbounded<LiveAvatarState>({ replay: 1 });
     const grants = yield* PubSub.unbounded<AvatarGrant | undefined>();
-    const move = (state: LiveAvatarState) => PubSub.publishUnsafe(states, state);
+    let current: LiveAvatarState = { status: LIVE_AVATAR_STATUS.OFF };
+    /** A restart the host stands at and has not yet told, which a test holds back to open the gap. */
+    let untold: LiveAvatarState | undefined;
+    const tell = (state: LiveAvatarState) => PubSub.publishUnsafe(states, state);
+    const move = (state: LiveAvatarState) => {
+      if (untold !== undefined) tell(untold);
+      untold = undefined;
+      current = state;
+      tell(state);
+    };
+    const restarts = { told: true };
     move({ status: LIVE_AVATAR_STATUS.OFF });
     const host: HostAvatar = {
       states: Stream.fromPubSub(states),
@@ -74,7 +85,12 @@ function fakeHost() {
       closed: (reason: AvatarStopReason) => {
         move({ status: LIVE_AVATAR_STATUS.ENDED, end: { by: LIVE_AVATAR_END.STOPPED, reason } });
         PubSub.publishUnsafe(grants, undefined);
-        move({ status: LIVE_AVATAR_STATUS.STARTING });
+        if (restarts.told) {
+          move({ status: LIVE_AVATAR_STATUS.STARTING });
+        } else {
+          current = { status: LIVE_AVATAR_STATUS.STARTING };
+          untold = current;
+        }
         return true;
       },
     };
@@ -82,14 +98,29 @@ function fakeHost() {
       move({ status: LIVE_AVATAR_STATUS.GRANTED });
       PubSub.publishUnsafe(grants, granted);
     };
-    return { host, move, grant };
+    const setVideo = (on: boolean) => {
+      if (on) {
+        move({ status: LIVE_AVATAR_STATUS.STARTING });
+        return true;
+      }
+      const up =
+        current.status === LIVE_AVATAR_STATUS.STARTING ||
+        current.status === LIVE_AVATAR_STATUS.GRANTED;
+      if (!up) return false;
+      move({
+        status: LIVE_AVATAR_STATUS.ENDED,
+        end: { by: LIVE_AVATAR_END.STOPPED, reason: AVATAR_STOP_REASON.USER },
+      });
+      return true;
+    };
+    return { host, move, grant, setVideo, restarts };
   });
 }
 
 function fixture() {
   return Effect.gen(function* () {
     const state = new AppStateStore(initialAppState(RUN, false), Context.empty());
-    const { host, move, grant } = yield* fakeHost();
+    const { host, move, grant, setVideo, restarts } = yield* fakeHost();
     /** What reached the call window's page: each grant handed over, and each feed relayed. */
     const grants: (AvatarGrant | undefined)[] = [];
     const feeds: AvatarFeed[] = [];
@@ -103,8 +134,7 @@ function fixture() {
       setVideo: (on) =>
         Effect.sync(() => {
           asked.push(on);
-          if (on) move({ status: LIVE_AVATAR_STATUS.STARTING });
-          return true;
+          return setVideo(on);
         }),
     });
     yield* settle();
@@ -150,7 +180,7 @@ function fixture() {
       settle(),
     );
     const avatarNow = () => state.snapshot().voice.avatar;
-    return { perform, feed, moved, granted, avatarNow, page, asked };
+    return { perform, feed, moved, granted, avatarNow, page, asked, restarts };
   });
 }
 
@@ -271,30 +301,61 @@ it.effect("the tile's Restart video and Video off reach the host's toggle", () =
     assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
     assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
     assert.deepEqual(f.asked, [true, false]);
-    assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
-  }),
-);
-
-it.effect("Video off once the avatar has ended takes the tile down without asking the host", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.moved({
-      status: LIVE_AVATAR_STATUS.ENDED,
-      end: { by: LIVE_AVATAR_END.STOPPED, reason: AVATAR_STOP_REASON.SERVER_CLOSED },
-    });
-    assert.deepEqual(f.avatarNow(), {
-      status: AVATAR_STATUS.ENDED,
-      endReason: AVATAR_END_REASON.SERVER_CLOSED,
-    });
-
-    yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
-
-    assert.deepEqual(f.asked, []);
     assert.deepEqual(f.avatarNow(), {
       status: AVATAR_STATUS.ENDED,
       endReason: AVATAR_END_REASON.USER,
     });
   }),
+);
+
+it.effect(
+  "Video off once the avatar has ended takes the tile down where the host had nothing to stop",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.moved({
+        status: LIVE_AVATAR_STATUS.ENDED,
+        end: { by: LIVE_AVATAR_END.STOPPED, reason: AVATAR_STOP_REASON.SERVER_CLOSED },
+      });
+      assert.deepEqual(f.avatarNow(), {
+        status: AVATAR_STATUS.ENDED,
+        endReason: AVATAR_END_REASON.SERVER_CLOSED,
+      });
+
+      yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
+
+      assert.deepEqual(f.asked, [false]);
+      assert.deepEqual(f.avatarNow(), {
+        status: AVATAR_STATUS.ENDED,
+        endReason: AVATAR_END_REASON.USER,
+      });
+    }),
+);
+
+it.effect(
+  "Video off pressed after a close, before the restart reaches the document, stops the restart",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
+      yield* f.granted;
+      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+
+      // The close asks the host for a restart, and the off lands before its start is written.
+      f.restarts.told = false;
+      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, {
+        status: AVATAR_STATUS.ENDED,
+        endReason: AVATAR_END_REASON.SERVER_CLOSED,
+      });
+      assert.equal(f.avatarNow().status, AVATAR_STATUS.ENDED);
+      yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
+
+      assert.deepEqual(f.asked, [false]);
+      assert.deepEqual(f.avatarNow(), {
+        status: AVATAR_STATUS.ENDED,
+        endReason: AVATAR_END_REASON.USER,
+      });
+    }),
 );
 
 it.effect(

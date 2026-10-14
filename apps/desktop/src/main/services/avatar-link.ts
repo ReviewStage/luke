@@ -107,7 +107,7 @@ export function avatarAfter(input: {
 export interface AvatarLink {
   /** The call window's report, written where the host lets it stand, and a close this side did not start told to the host. */
   report(report: AvatarReport): void;
-  /** Video on or off from the tile; off once the avatar has ended is answered here, since the host has nothing to stop. */
+  /** Video on or off from the tile; off where the host had nothing to stop takes an ended avatar's tile down here. */
   setVideo(on: boolean): Effect.Effect<void>;
 }
 
@@ -160,14 +160,15 @@ export const linkAvatar = Effect.fnUntraced(function* ({
       // Note that the host's own moves follow on its stream: the stop, and the one restart a call has.
       if (granted && unstarted !== undefined) host.closed(unstarted);
     },
+    // Note that the host is asked even where the document reads ENDED, because a
+    // restart it already began may not have reached the document yet: only its
+    // answer that nothing stood to stop lets the tile be taken down here.
     setVideo: (on) =>
-      Effect.suspend(() => {
-        if (!on && state.snapshot().voice.avatar.status === AVATAR_STATUS.ENDED) {
-          return Effect.sync(() =>
-            write({ status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER }),
-          );
+      Effect.map(setVideo(on), (requested) => {
+        if (on || requested || state.snapshot().voice.avatar.status !== AVATAR_STATUS.ENDED) {
+          return;
         }
-        return Effect.asVoid(setVideo(on));
+        write({ status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER });
       }),
   };
 });
