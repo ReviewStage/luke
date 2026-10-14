@@ -2096,14 +2096,6 @@ body,
   color: var(--integration-ink-sentry);
 }
 
-/* PostHog's gradient mark is for a light ground alone; on a dark one its
-   rules ask for the solid white mark, so every part is filled white. */
-@media not (prefers-color-scheme: light) {
-  .integration-mark-posthog path {
-    fill: #fff;
-  }
-}
-
 /* The searchable menu, in the shape of a command menu: the search as the
    first row, flush and edge to edge over a hairline; under it the list,
    its rows inset by the list's own padding so a highlight never meets the
