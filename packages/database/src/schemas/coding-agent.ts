@@ -4,9 +4,19 @@ import {
   type ContextWindow,
 } from "@sidecar/features/coding-agent-wire";
 import type { IntegrationProvider } from "@sidecar/features/integration-wire";
-import { foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
+import { automation } from "./automation.js";
 import { plan } from "./plan.js";
 import { conversations } from "./storage.js";
 
@@ -78,9 +88,16 @@ export const codingAgent = pgTable(
   "coding_agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    planId: uuid("plan_id")
-      .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+    /** The plan the agent works on; null for an agent an automation started with no plan. */
+    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    /** The workspace the agent belongs to, its plan's or its automation's; null only on rows the backfill has not reached. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
+    automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
+      onDelete: "set null",
+    }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -99,8 +116,10 @@ export const codingAgent = pgTable(
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
     task: text("task"),
-    /** The GitHub repository the agent works in, as `owner/name`. */
+    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
     repository: text("repository").notNull(),
+    /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
+    repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
@@ -123,6 +142,8 @@ export const codingAgent = pgTable(
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one plan's agents in the order they were started.
     index("coding_agent_plan_created").on(table.planId, table.createdAt),
+    // A workspace's agents with no plan are read newest first.
+    index("coding_agent_org_created").on(table.organizationId, table.createdAt),
   ],
 );
 

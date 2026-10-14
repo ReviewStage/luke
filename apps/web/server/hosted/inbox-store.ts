@@ -196,11 +196,15 @@ function itemReachableBy(userId: string): SQL {
 /** The agent's row under its own lock, where the account started it and still reaches its plan, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
+        .select({
+          id: codingAgent.id,
+          // An agent the backfill has not reached yet is its plan's workspace's.
+          organizationId: sql<string>`coalesce(${codingAgent.organizationId}, ${plan.organizationId})`,
+        })
         .from(codingAgent)
         .innerJoin(plan, eq(plan.id, codingAgent.planId))
         .where(
@@ -233,6 +237,7 @@ const countOpenBesides = SqlSchema.findOne({
 const PostWriteSchema = Schema.Struct({
   userId: Schema.String,
   planId: Schema.String,
+  organizationId: Schema.String,
   agentId: Schema.String,
   key: Schema.String,
   title: Schema.String,
@@ -246,6 +251,7 @@ const AttachmentWriteSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   planId: Schema.String,
+  organizationId: Schema.String,
   itemId: Schema.String,
   contentType: inboxImageTypeSchema,
   byteCount: Schema.Number,
@@ -338,6 +344,7 @@ const upsertItem = SqlSchema.findOne({
         .values({
           userId: write.userId,
           planId: write.planId,
+          organizationId: write.organizationId,
           agentId: write.agentId,
           key: write.key,
           revision: 1,
@@ -657,6 +664,7 @@ export function postInboxItem(
         );
         const row = yield* upsertItem({
           ...agent,
+          organizationId: locked.value.organizationId,
           key: post.key,
           title: post.title,
           blocks: storedBlocks(
@@ -672,6 +680,7 @@ export function postInboxItem(
             id: attachment.id,
             userId: agent.userId,
             planId: agent.planId,
+            organizationId: locked.value.organizationId,
             itemId: row.id,
             contentType: attachment.contentType,
             byteCount: attachment.bytes.byteLength,

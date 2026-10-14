@@ -15,6 +15,8 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { inboxItem } from "../schemas/inbox.js";
+import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
@@ -717,6 +719,26 @@ const followingAutomations = SqlSchema.void({
 });
 
 /**
+ * The plan's agents and inbox moved along with it to another workspace, so
+ * no row of the plan's stays tied to the workspace it left, whose deletion
+ * would otherwise take them with it.
+ */
+const followingAgentsAndInbox = Effect.fnUntraced(function* (
+  planId: string,
+  organizationId: string,
+) {
+  yield* Database.use((db) =>
+    db.update(codingAgent).set({ organizationId }).where(eq(codingAgent.planId, planId)),
+  );
+  yield* Database.use((db) =>
+    db.update(inboxItem).set({ organizationId }).where(eq(inboxItem.planId, planId)),
+  );
+  yield* Database.use((db) =>
+    db.update(inboxAttachment).set({ organizationId }).where(eq(inboxAttachment.planId, planId)),
+  );
+});
+
+/**
  * Changes the plan, a new name with its document's heading, a repository or
  * none, pinned or not, archived or not, its workspace, and answers it as
  * changed, or nothing where the account reaches no such plan. The changes
@@ -776,6 +798,9 @@ export function updatePlan<E = never, R = never>(
             organizationId: row.organizationId,
             repository: row.repository,
           });
+        }
+        if (changes.organizationId !== undefined) {
+          yield* followingAgentsAndInbox(planId, row.organizationId);
         }
         return Option.some(yield* planOf(row));
       }),

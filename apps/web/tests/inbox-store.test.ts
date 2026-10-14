@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { user } from "@sidecar/database/schemas/auth";
+import { updatePlan } from "@sidecar/database/models/plan-store";
+import { organization, user } from "@sidecar/database/schemas/auth";
+import { codingAgent } from "@sidecar/database/schemas/coding-agent";
+import { inboxItem } from "@sidecar/database/schemas/inbox";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   INBOX_REPLY,
@@ -11,6 +14,7 @@ import {
   INBOX_STATUS,
   type InboxPost,
 } from "@sidecar/features/inbox-wire";
+import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import {
   accountInboxPlans,
@@ -23,7 +27,7 @@ import {
   readInboxItem,
   withdrawInboxAnswer,
 } from "../server/hosted/inbox-store";
-import { joinWorkspace, startPlan } from "./support/workspaces";
+import { joinWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions
@@ -73,6 +77,66 @@ const SETTINGS: InboxPost = {
 };
 
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "a plan moved to another workspace takes its agents and their items along, so deleting the workspace it left keeps them",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const destination = yield* openWorkspace(agent.userId);
+
+        yield* updatePlan(agent.userId, agent.planId, { organizationId: destination });
+        yield* Database.use((db) =>
+          db.delete(organization).where(eq(organization.id, workspaceId)),
+        );
+
+        const agents = yield* Database.use((db) =>
+          db
+            .select({ organizationId: codingAgent.organizationId })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, agent.agentId)),
+        );
+        const items = yield* Database.use((db) =>
+          db
+            .select({ organizationId: inboxItem.organizationId })
+            .from(inboxItem)
+            .where(eq(inboxItem.id, posted.success.id)),
+        );
+        assert.deepEqual(agents, [{ organizationId: destination }]);
+        assert.deepEqual(items, [{ organizationId: destination }]);
+      }),
+  );
+
+  it.effect(
+    "an agent started on a plan, and the item it posts, belong to the plan's workspace, the agent working in its one repository as the list",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+
+        const [agentRow] = yield* Database.use((db) =>
+          db
+            .select({
+              organizationId: codingAgent.organizationId,
+              repositories: codingAgent.repositories,
+            })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, agent.agentId)),
+        );
+        const [itemRow] = yield* Database.use((db) =>
+          db
+            .select({ organizationId: inboxItem.organizationId })
+            .from(inboxItem)
+            .where(eq(inboxItem.id, posted.success.id)),
+        );
+
+        assert.deepEqual(agentRow, { organizationId: workspaceId, repositories: ["acme/relay"] });
+        assert.deepEqual(itemRow, { organizationId: workspaceId });
+      }),
+  );
+
   it.effect(
     "an answer is taken only at the revision it names and only while the item is open, withdrawn only under its own key, and another account's finds nothing",
     () =>

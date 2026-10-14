@@ -15,7 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
 
@@ -47,9 +47,12 @@ export const inboxItem = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    planId: uuid("plan_id")
-      .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+    /** The agent's plan; null for an agent with no plan. */
+    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    /** The agent's workspace; null only on rows the backfill has not reached. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
     agentId: uuid("agent_id")
       .notNull()
       .references(() => codingAgent.id, { onDelete: "cascade" }),
@@ -80,6 +83,8 @@ export const inboxItem = pgTable(
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
     // A plan's inbox is read the latest changed first.
     index("inbox_item_plan_updated").on(table.planId, table.updatedAt),
+    // A workspace's items of agents with no plan are read the latest changed first.
+    index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
     // What waits across the account is read on every look of a held read, its open items the latest changed first.
     index("inbox_item_user_status_updated").on(table.userId, table.status, table.updatedAt),
   ],

@@ -249,11 +249,19 @@ function reachableAgent(userId: string, agentId: string): SQL | undefined {
 /** The plan row under its own lock, where the account is a member of its workspace, with whether it is archived. */
 const lockReachablePlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    archived: Schema.Boolean,
+    organizationId: Schema.String,
+  }),
   execute: ({ userId, planId }) =>
     Database.use((db) =>
       db
-        .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
+        .select({
+          id: plan.id,
+          archived: sql<boolean>`${plan.archivedAt} is not null`,
+          organizationId: plan.organizationId,
+        })
         .from(plan)
         .where(reachablePlan(userId, planId))
         .for("update"),
@@ -298,6 +306,7 @@ const insertAgent = SqlSchema.findOne({
     userId: Schema.String,
     conversationId: Schema.String,
     planId: Schema.String,
+    organizationId: Schema.String,
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -316,6 +325,7 @@ const insertAgent = SqlSchema.findOne({
         .values({
           userId: write.userId,
           planId: write.planId,
+          organizationId: write.organizationId,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -323,6 +333,7 @@ const insertAgent = SqlSchema.findOne({
           planSnapshot: write.planSnapshot,
           task: write.task,
           repository: write.repository,
+          repositories: [write.repository],
           disabledServers: write.disabledServers,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
@@ -654,6 +665,7 @@ export function createCodingAgent(
           userId,
           conversationId: conversation.id,
           planId: started.planId,
+          organizationId: reached.value.organizationId,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
