@@ -128,9 +128,6 @@ export const INTEGRATION_SIGN_IN_FAILURE = {
   ERROR: "error",
 } as const;
 
-export type IntegrationSignInFailureReason =
-  (typeof INTEGRATION_SIGN_IN_FAILURE)[keyof typeof INTEGRATION_SIGN_IN_FAILURE];
-
 /** One provider's sign-in that ended without a grant, and why, with Connect's own line where it carried no credential. */
 export const integrationSignInFailureSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,

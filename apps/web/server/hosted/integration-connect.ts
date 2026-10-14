@@ -85,7 +85,7 @@ export interface IntegrationToken {
 }
 
 /** A browser sign-in Connect began: the address the browser opens, and the handle that asks Connect how it ended. */
-export interface IntegrationAuthorization {
+interface IntegrationAuthorization {
   readonly url: string;
   readonly verifier: Redacted.Redacted;
 }
