@@ -1,5 +1,6 @@
 import {
   AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationAction,
@@ -17,12 +18,13 @@ import {
   automationRunStatusSchema,
   automationTriggerSchema,
 } from "@sidecar/hosted/automation-wire";
-import { and, asc, desc, eq, exists, gte, inArray, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, ne, or, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect } from "./plan-store.js";
@@ -440,6 +442,129 @@ const writeNextRun = SqlSchema.void({
     Database.use((db) => db.update(automation).set({ nextRunAt }).where(eq(automation.id, id))),
 });
 
+const findAutomationToRun = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: AutomationRowSchema,
+  execute: (id) =>
+    Database.use((db) =>
+      db
+        .select(AUTOMATION_COLUMNS)
+        .from(automation)
+        .innerJoin(plan, eq(plan.id, automation.planId))
+        .where(eq(automation.id, id)),
+    ),
+});
+
+const findQueuedRuns = SqlSchema.findAll({
+  Request: Schema.Struct({ since: Schema.Date, limit: Schema.Int }),
+  Result: RunRowSchema,
+  execute: ({ since, limit }) =>
+    Database.use((db) =>
+      db
+        .select(RUN_COLUMNS)
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED),
+            gte(automationRun.firedAt, since),
+          ),
+        )
+        .orderBy(asc(automationRun.firedAt), asc(automationRun.id))
+        .limit(limit),
+    ),
+});
+
+const StartedAgentSchema = Schema.Struct({
+  codingAgentId: Schema.String,
+  conversationId: Schema.String,
+  createdAt: InstantColumnSchema,
+});
+
+/** An agent one of an automation's runs started: its id, its conversation, and when it was made. */
+export type StartedRunAgent = typeof StartedAgentSchema.Type;
+
+const findStartedAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ automationId: Schema.String, since: Schema.Date }),
+  Result: StartedAgentSchema,
+  execute: ({ automationId, since }) =>
+    Database.use((db) =>
+      db
+        .select({
+          codingAgentId: codingAgent.id,
+          conversationId: codingAgent.conversationId,
+          createdAt: codingAgent.createdAt,
+        })
+        .from(automationRun)
+        .innerJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            gte(automationRun.firedAt, since),
+          ),
+        ),
+    ),
+});
+
+const findLatestStarts = SqlSchema.findAll({
+  Request: Schema.Struct({ automationId: Schema.String, limit: Schema.Int }),
+  Result: RunRowSchema,
+  execute: ({ automationId, limit }) =>
+    Database.use((db) =>
+      db
+        .select(RUN_COLUMNS)
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            // A run that never tried, missed past its hour, is no failed start.
+            or(
+              eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+              and(
+                eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
+                ne(automationRun.reason, AUTOMATION_RUN_REASON.MISSED),
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
+        .limit(limit),
+    ),
+});
+
+const writeExpired = SqlSchema.findAll({
+  Request: Schema.Struct({
+    before: Schema.Date,
+    reason: automationRunReasonSchema,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ before, reason, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ status: AUTOMATION_RUN_STATUS.FAILED, reason, settledAt: now })
+        .where(
+          and(
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED),
+            lte(automationRun.firedAt, before),
+          ),
+        )
+        .returning({ id: automationRun.id }),
+    ),
+});
+
+const writePause = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
+  execute: ({ id, reason, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ enabled: false, pausedReason: reason, nextRunAt: null, updatedAt: now })
+        .where(eq(automation.id, id)),
+    ),
+});
+
 const findRunsSince = SqlSchema.findAll({
   Request: Schema.Struct({ automationId: Schema.String, since: Schema.Date }),
   Result: RunRowSchema,
@@ -582,4 +707,52 @@ export function claimDueAutomations(claim: DueClaim): PlanStoreEffect<readonly C
       }),
     ),
   );
+}
+
+/**
+ * One automation by id, whoever owns it, for a run the service fires: the
+ * sweep and a trigger hold no account's bearer, and the run's own start
+ * checks the owner still reaches the plan, as every Start does.
+ */
+export function readAutomationToRun(id: string): PlanStoreEffect<Option.Option<Automation>> {
+  return findAutomationToRun(id);
+}
+
+/** The runs still queued that fired at or after `since`, oldest first, at most `limit`, for the sweep to act on. */
+export function queuedAutomationRuns(
+  since: Date,
+  limit: number,
+): PlanStoreEffect<readonly AutomationRun[]> {
+  return findQueuedRuns({ since, limit });
+}
+
+/** The agents the automation's runs fired at or after `since` started, and that stand still. */
+export function startedRunAgents(
+  automationId: string,
+  since: Date,
+): PlanStoreEffect<readonly StartedRunAgent[]> {
+  return findStartedAgents({ automationId, since });
+}
+
+/** The automation's newest starts, the runs that started an agent or tried and failed to, newest first, at most `limit`, whoever owns it. */
+export function latestAutomationStarts(
+  automationId: string,
+  limit: number,
+): PlanStoreEffect<readonly AutomationRun[]> {
+  return findLatestStarts({ automationId, limit });
+}
+
+/** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */
+export function expireQueuedAutomationRuns(
+  before: Date,
+  reason: AutomationRunReason,
+): PlanStoreEffect<number> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
+  );
+}
+
+/** Pauses the automation for the reason the service gives, so nothing fires it until its owner resumes it. */
+export function pauseAutomation(id: string, reason: AutomationPause): PlanStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => writePause({ id, reason, now }));
 }

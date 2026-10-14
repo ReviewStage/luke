@@ -45,6 +45,7 @@
     "./schemas/_helpers": "./src/schemas/_helpers.js",
     "./schemas/account-provider-key": "./src/schemas/account-provider-key.js",
     "./schemas/auth": "./src/schemas/auth.js",
+    "./schemas/automation": "./src/schemas/automation.js",
     "./schemas/coding-agent": "./src/schemas/coding-agent.js",
     "./schemas/favorite": "./src/schemas/favorite.js",
     "./schemas/github-connect-intent": "./src/schemas/github-connect-intent.js",

@@ -156,7 +156,7 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
 };
 
 /** Why an automation stands paused where the developer did not pause it. */
-const AUTOMATION_PAUSE = {
+export const AUTOMATION_PAUSE = {
   /** Its last runs failed one after another, so the service stopped firing it. */
   FAILURES: "failures",
 } as const;
@@ -236,6 +236,10 @@ export const AUTOMATION_RUN_REASON = {
   MODEL: "model",
   /** The coding agents' service could not be reached. */
   UNAVAILABLE: "unavailable",
+  /** The automation was paused after this run was queued and before it was acted on. */
+  PAUSED: "paused",
+  /** It waited queued past the hour it could still be started in, the sweep down or failing all that while. */
+  MISSED: "missed",
 } as const;
 
 export type AutomationRunReason =

@@ -6,12 +6,17 @@ import { voiceSessionRecord } from "@sidecar/database/models/voice-session-recor
 import { storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
+import type { GitHubApp } from "./github/github-app.js";
+import type { EveForAccount } from "./hosted/automation-runs.js";
 import { sweepAutomations } from "./hosted/automation-sweep.js";
+import { deploymentEveOrigin } from "./hosted/brain-host/eve-origin.js";
+import { EVE_MOUNT, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js";
+import { effectPassthrough, HOSTED_REFUSAL, hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
+import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "./hosted/session-sandboxes.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
@@ -29,16 +34,27 @@ import {
  * seams and the database queries behind them, each answering an Effect over
  * the group's own `SqlClient.SqlClient`. A deployment without the voice key
  * sweeps no detached voice session, since it opened none; one with it ends
- * them on the same upstream the voice functions attach through.
+ * them on the same upstream the voice functions attach through. An
+ * automation's run reaches eve as the deployment acting for the
+ * automation's owner, under the same secret the cron calls with; a
+ * deployment without it, or without an origin for eve, fails each run it
+ * acts on as unavailable.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
 ): Effect.fn.Return<
   Response,
   unknown,
-  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog
 > {
   const environment = yield* HostedEnvironment;
+  const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
+  const secret = environment.cronSecret;
+  const origin = deploymentEveOrigin();
+  const eveFor: EveForAccount = (account) =>
+    secret === undefined || origin === undefined
+      ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
+      : eveSessions({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
     Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
@@ -61,7 +77,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         sweepAbandonedTurns({ writer }, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
-    sweepAutomations,
+    sweepAutomations: (now) =>
+      sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)
@@ -83,7 +100,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
  * since `vercel.json` sends the function only its own path.
  */
 export function maintenanceApp(): WebRoutes<
-  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog
 > {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `GET`: the handler decides its own method refusal, so a

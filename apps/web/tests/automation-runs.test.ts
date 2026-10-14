@@ -1,0 +1,380 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
+import { readAccountPreferences } from "@sidecar/database/models/account-store";
+import {
+  type Automation,
+  createAutomation,
+  listAutomationRuns,
+  readAutomation,
+  recordAutomationRun,
+  settleAutomationRun,
+  updateAutomation,
+} from "@sidecar/database/models/automation-store";
+import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { automationRun } from "@sidecar/database/schemas/automation";
+import { getTestDB } from "@sidecar/database/testing";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_PAUSE,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
+  AUTOMATION_TRIGGER,
+  type AutomationGuards,
+} from "@sidecar/hosted/automation-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { eq } from "drizzle-orm";
+import { Clock, Effect, Layer, Option } from "effect";
+import { executeAutomationRun } from "../server/hosted/automation-runs";
+import { sweepAutomations } from "../server/hosted/automation-sweep";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "../server/hosted/brain-host/eve-sessions";
+import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
+import { githubReaching, openGithubUser } from "./support/github-app-fake";
+import { startPlan } from "./support/workspaces";
+
+/**
+ * An automation's runs acted on, over a real dialect: a due schedule starts
+ * one coding agent on the plan's repository as the deployment acting for
+ * the owner, handed the prompt as its task, and a sweep after it starts
+ * nothing; a run past the concurrency guard or the daily cap is skipped and
+ * starts nothing, as is a run queued before its automation was paused; one
+ * automation's runs queued together are acted on one after another, so its
+ * guards hold across them; a run left queued past the hour is settled as
+ * missed; and three failed starts in a row pause the automation, however
+ * many skipped runs stand between them. eve
+ * is a fake at the client's boundary, GitHub a script, the catalog fixed,
+ * and the store PGlite. Synthetic accounts, plans, and words throughout.
+ */
+
+const RELAY = { owner: "Acme", name: "Relay" } as const;
+const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+const SOL = "openai/gpt-6.1-sol";
+
+const CATALOG: readonly OfferedModel[] = [
+  {
+    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+  },
+  { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
+];
+
+const PROMPT = "Find the flakiest test in CI this week and fix it.";
+
+/** One session opened, as the fake eve saw it: whom for, and its first message. */
+interface Opened {
+  readonly account: string;
+  readonly message: EveMessage;
+}
+
+/** eve's coding-agent service as the deployment reaches it for each account, writing down every open. */
+function fakeEve() {
+  const opened: Opened[] = [];
+  const sessions = (account: string): EveSessions => ({
+    open: (message) =>
+      Effect.sync(() => {
+        opened.push({ account, message });
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
+      }),
+    send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
+    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
+    reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+  });
+  return { opened, eveFor: (account: string) => Effect.succeed(sessions(account)) };
+}
+
+/** What a run reaches beside the store: GitHub reaching the repository, and the catalog. */
+const services = Layer.mergeAll(githubReaching([INSTALLATION]).layer, modelCatalogOf(CATALOG));
+
+/** An owner signed in with GitHub, a plan on the repository (or none), and an automation on it due a minute ago. */
+const openAutomation = (
+  options: { readonly repository?: string | null; readonly guards?: AutomationGuards } = {},
+) =>
+  Effect.gen(function* () {
+    const owner = yield* openGithubUser();
+    const plan = yield* startPlan(owner, {
+      name: "Flaky tests",
+      repository: options.repository === undefined ? `${RELAY.owner}/${RELAY.name}` : null,
+    });
+    const now = yield* Clock.currentTimeMillis;
+    const made = yield* createAutomation(owner, {
+      planId: plan.id,
+      name: "Flaky-test sweep",
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+      action: {
+        kind: AUTOMATION_ACTION.CODING_AGENT,
+        prompt: PROMPT,
+        choice: { model: SOL, effort: "low" },
+      },
+      guards: options.guards ?? AUTOMATION_DEFAULT_GUARDS,
+      nextRunAt: new Date(now - 60_000),
+      webhookSecretHash: null,
+    });
+    return { owner, automation: Option.getOrThrow(made), now };
+  });
+
+/** A "Run now" of the automation, queued. */
+const runNow = (automation: Automation) =>
+  Effect.map(
+    recordAutomationRun(automation, {
+      dedupeKey: randomUUID(),
+      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      firedAt: new Date(),
+    }),
+    Option.getOrThrow,
+  );
+
+it.layer(getTestDB())("an automation's runs", (it) => {
+  it.effect(
+    "a due schedule starts one coding agent as the deployment acting for its owner, handed the prompt as its task, and a sweep after it starts nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, now } = yield* openAutomation();
+        const eve = fakeEve();
+
+        const first = yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+        const second = yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+
+        assert.ok(first.fired >= 1 && first.started >= 1);
+        assert.equal(second.started, 0, "a sweep after starts nothing");
+        const runs = yield* listAutomationRuns(owner, automation.id);
+        assert.equal(runs.length, 1, "one run for the one due instant");
+        const [run] = runs;
+        assert.equal(run?.status, AUTOMATION_RUN_STATUS.STARTED);
+        assert.equal(run?.firing.kind, AUTOMATION_FIRING.SCHEDULE);
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, run?.codingAgentId ?? ""));
+        assert.equal(agent.model, SOL);
+        assert.equal(agent.effort, "low");
+        assert.ok(agent.task?.startsWith(PROMPT), "the prompt is the agent's task");
+        assert.match(agent.task ?? "", /the automation "Flaky-test sweep"/u);
+        assert.deepEqual(
+          eve.opened
+            .filter((each) => each.account === owner)
+            .map((each) => each.message.conversationId),
+          [agent.conversationId],
+        );
+        assert.equal(
+          yield* readAccountPreferences(owner),
+          undefined,
+          "an automation's choice does not become the account's default",
+        );
+      }),
+  );
+
+  it.effect("a run past the concurrency guard or the daily cap is skipped and starts nothing", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve();
+      const execute = (automation: Automation) =>
+        Effect.flatMap(runNow(automation), (run) =>
+          executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
+        );
+      const concurrent = yield* openAutomation({
+        guards: { maxConcurrentRuns: 1, dailyRunCap: 10 },
+      });
+      const capped = yield* openAutomation({
+        guards: { maxConcurrentRuns: 5, dailyRunCap: 1 },
+      });
+
+      const whileWorking = [
+        yield* execute(concurrent.automation),
+        yield* execute(concurrent.automation),
+      ];
+      const pastCap = [yield* execute(capped.automation), yield* execute(capped.automation)];
+
+      assert.deepEqual(
+        whileWorking.map((outcome) => outcome?.status),
+        [AUTOMATION_RUN_STATUS.STARTED, AUTOMATION_RUN_STATUS.SKIPPED],
+      );
+      assert.deepEqual(whileWorking[1], {
+        status: AUTOMATION_RUN_STATUS.SKIPPED,
+        reason: AUTOMATION_RUN_REASON.CONCURRENCY,
+      });
+      assert.deepEqual(pastCap[1], {
+        status: AUTOMATION_RUN_STATUS.SKIPPED,
+        reason: AUTOMATION_RUN_REASON.DAILY_CAP,
+      });
+      assert.equal(eve.opened.length, 2, "only the two started runs opened a session");
+    }),
+  );
+
+  it.effect(
+    "three failed starts in a row pause the automation, each failure named in one fixed word",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({ repository: null });
+        const eve = fakeEve();
+
+        const outcomes = [];
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const run = yield* runNow(automation);
+          outcomes.push(
+            yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
+          );
+        }
+
+        assert.deepEqual(
+          outcomes.map(
+            (outcome) => outcome?.status === AUTOMATION_RUN_STATUS.FAILED && outcome.reason,
+          ),
+          [
+            AUTOMATION_RUN_REASON.NO_REPOSITORY,
+            AUTOMATION_RUN_REASON.NO_REPOSITORY,
+            AUTOMATION_RUN_REASON.NO_REPOSITORY,
+          ],
+        );
+        const paused = Option.getOrThrow(yield* readAutomation(owner, automation.id));
+        assert.equal(paused.enabled, false);
+        assert.equal(paused.pausedReason, AUTOMATION_PAUSE.FAILURES);
+        assert.equal(paused.nextRunAt, null);
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a scheduled run queued before its automation was paused starts nothing, and one still queued hours on is settled as missed",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, now } = yield* openAutomation();
+        const eve = fakeEve();
+        const queuedThenPaused = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: "due-1",
+            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: now - 120_000 },
+            firedAt: new Date(now - 60_000),
+          }),
+        );
+        const stale = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: "due-0",
+            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: now - 3 * 60 * 60_000 },
+            firedAt: new Date(now - 3 * 60 * 60_000),
+          }),
+        );
+        yield* updateAutomation(owner, automation.id, { enabled: false, nextRunAt: null });
+
+        yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+
+        const runs = new Map(
+          (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
+        );
+        assert.equal(runs.get(queuedThenPaused.id)?.reason, AUTOMATION_RUN_REASON.PAUSED);
+        assert.equal(runs.get(stale.id)?.status, AUTOMATION_RUN_STATUS.FAILED);
+        assert.equal(runs.get(stale.id)?.reason, AUTOMATION_RUN_REASON.MISSED);
+        assert.deepEqual(
+          eve.opened.filter((each) => each.account === owner),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "one automation's runs queued together are acted on one after another, so the concurrency guard holds across them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, now } = yield* openAutomation({
+          guards: { maxConcurrentRuns: 1, dailyRunCap: 10 },
+        });
+        const eve = fakeEve();
+        yield* updateAutomation(owner, automation.id, { nextRunAt: null });
+        for (const key of ["a", "b", "c"]) {
+          yield* recordAutomationRun(automation, {
+            dedupeKey: key,
+            firing: { kind: AUTOMATION_FIRING.MANUAL },
+            firedAt: new Date(now),
+          });
+        }
+
+        yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+
+        const runs = yield* listAutomationRuns(owner, automation.id);
+        assert.deepEqual(runs.map((run) => [run.status, run.reason]).sort(), [
+          [AUTOMATION_RUN_STATUS.SKIPPED, AUTOMATION_RUN_REASON.CONCURRENCY],
+          [AUTOMATION_RUN_STATUS.SKIPPED, AUTOMATION_RUN_REASON.CONCURRENCY],
+          [AUTOMATION_RUN_STATUS.STARTED, null],
+        ]);
+        assert.equal(eve.opened.filter((each) => each.account === owner).length, 1);
+      }),
+  );
+
+  it.effect(
+    "three failed starts pause the automation however many skipped runs stand between them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({ repository: null });
+        const eve = fakeEve();
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
+            Effect.provide(services),
+          );
+          for (let skip = 0; skip < 12; skip += 1) {
+            const skipped = yield* runNow(automation);
+            yield* settleAutomationRun(skipped.id, {
+              status: AUTOMATION_RUN_STATUS.SKIPPED,
+              reason: AUTOMATION_RUN_REASON.CONCURRENCY,
+            });
+          }
+        }
+
+        const paused = Option.getOrThrow(yield* readAutomation(owner, automation.id));
+        assert.equal(paused.pausedReason, AUTOMATION_PAUSE.FAILURES);
+      }),
+  );
+
+  it.effect("missed runs never count as failed starts toward a pause", () =>
+    Effect.gen(function* () {
+      const { owner, automation } = yield* openAutomation({ repository: null });
+      const eve = fakeEve();
+      for (let missed = 0; missed < 2; missed += 1) {
+        const run = yield* runNow(automation);
+        yield* settleAutomationRun(run.id, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.MISSED,
+        });
+      }
+
+      yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
+        Effect.provide(services),
+      );
+
+      const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
+      assert.equal(standing.enabled, true, "one failed start after two missed runs pauses nothing");
+    }),
+  );
+
+  it.effect(
+    "a run whose agent started but whose settling was lost settles as that start on its next try, whatever the guards read",
+    () =>
+      Effect.gen(function* () {
+        const { automation } = yield* openAutomation({
+          guards: { maxConcurrentRuns: 1, dailyRunCap: 1 },
+        });
+        const eve = fakeEve();
+        const run = yield* runNow(automation);
+        const first = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        // The settling lost: the run stands queued again, its agent still running.
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ status: AUTOMATION_RUN_STATUS.QUEUED, codingAgentId: null, settledAt: null })
+            .where(eq(automationRun.id, run.id)),
+        );
+
+        const again = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+
+        assert.equal(first?.status, AUTOMATION_RUN_STATUS.STARTED);
+        assert.deepEqual(again, first, "the same agent, not a skip");
+        assert.equal(eve.opened.filter((each) => each.account === automation.userId).length, 1);
+      }),
+  );
+});

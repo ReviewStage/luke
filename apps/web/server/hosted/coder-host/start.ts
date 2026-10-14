@@ -73,6 +73,8 @@ export interface StartAsk {
   readonly task: string | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  /** Whether a named choice becomes the account's default, as a developer's own Start makes it; an automation's run keeps the default as it stands. */
+  readonly rememberChoice?: boolean;
 }
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -168,7 +170,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
-  if (ask.choice !== undefined) {
+  if (ask.choice !== undefined && ask.rememberChoice !== false) {
     yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }
   return { agent, created };
