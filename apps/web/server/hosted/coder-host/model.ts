@@ -4,7 +4,7 @@ import {
   PROVIDER_KEY_UNREADABLE,
   type ProviderKeyUnreadable,
 } from "@sidecar/database/models/provider-key-seal";
-import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@sidecar/hosted/models-wire";
+import { MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import {
   APICallError,
@@ -34,9 +34,11 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * model asked for Anthropic's fast speed, the SDK sending the beta header
  * that speed needs, and on Luke's key alone: Anthropic's fast mode is a
  * research preview it grants organization by organization, so a step on an
- * account's own key is refused before any request, and Anthropic's refusal
- * of fast mode for Luke's own organization fails the step in words saying
- * so. The agent's
+ * account's own key is refused before any request. A fast call Anthropic
+ * refuses with a 429, whether its organization was never granted fast mode
+ * or is past its fast rate, runs again at standard speed, as Anthropic's
+ * docs and Claude Code fall back, and the step's turn is marked so, which
+ * its card says. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
  * same provider door, always on Luke's own Anthropic key. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
@@ -80,14 +82,19 @@ const OPENAI_NO_QUOTA = "insufficient_quota";
 /** Anthropic's words, in a refusal's body, for an account out of credit. */
 const ANTHROPIC_NO_CREDIT = /credit balance/iu;
 
-/** Anthropic's words, in a 429's body, for an organization fast mode was never enabled for: a fast limit of 0. */
-const ANTHROPIC_FAST_NOT_ENABLED = /rate limit of 0 fast mode/iu;
+/** The Anthropic provider option a fast step asks its speed by; a call without it runs at standard speed, and the SDK sends fast mode's beta only beside it. */
+const ANTHROPIC_SPEED_OPTION = "speed";
 
 const PROVIDER_REFUSAL_STATUS = {
   UNAUTHORIZED: 401,
   TOO_MANY_REQUESTS: 429,
   SERVER_ERROR: 500,
 } as const;
+
+/** What a model call is asked with, as a middleware is handed it. */
+type ModelCallOptions = Parameters<
+  NonNullable<LanguageModelMiddleware["wrapGenerate"]>
+>[0]["params"];
 
 /** Luke's own keys, sealed; one absent is that provider's agents refused at their first step where the account holds none of its own. */
 export interface LukeKeys {
@@ -144,7 +151,7 @@ function stepOptions(named: ProviderModel, effort: string): AgentModelOptionsDef
             ...(THINKS_BY_DEFAULT.test(named.modelId)
               ? { thinking: ANTHROPIC_SHOWN_THINKING }
               : undefined),
-            ...(named.fast ? { speed: ANTHROPIC_FAST_SPEED } : undefined),
+            ...(named.fast ? { [ANTHROPIC_SPEED_OPTION]: ANTHROPIC_FAST_SPEED } : undefined),
           },
         },
       };
@@ -212,47 +219,73 @@ function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddle
   };
 }
 
-/**
- * The call, with Anthropic's refusal of fast mode for the key's
- * organization read as that, in words, rather than as a model call that
- * failed. Note that the words are thrown as a plain error, because the SDK
- * retries a 429 and a limit of 0 answers every retry the same.
- */
-async function fastModeSettled<A>(call: () => PromiseLike<A>): Promise<A> {
-  try {
-    return await call();
-  } catch (failure) {
-    const notEnabled =
-      APICallError.isInstance(failure) &&
-      failure.statusCode === PROVIDER_REFUSAL_STATUS.TOO_MANY_REQUESTS &&
-      ANTHROPIC_FAST_NOT_ENABLED.test(failure.responseBody ?? "");
-    if (notEnabled) throw new Error(CODER_REFUSAL.FAST_NOT_ENABLED);
-    throw failure;
-  }
+/** The call's options with Anthropic's speed left out, which is the same call at standard speed. */
+function atStandardSpeed(params: ModelCallOptions): ModelCallOptions {
+  const anthropic = params.providerOptions?.[MODEL_PROVIDER.ANTHROPIC];
+  if (anthropic === undefined) return params;
+  const { [ANTHROPIC_SPEED_OPTION]: _fast, ...standard } = anthropic;
+  return { ...params, providerOptions: { ...params.providerOptions, anthropic: standard } };
 }
 
-/** A fast step's calls, each settled as above. */
-const FAST_MODE_MIDDLEWARE: LanguageModelMiddleware = {
-  wrapGenerate: ({ doGenerate }) => fastModeSettled(doGenerate),
-  wrapStream: ({ doStream }) => fastModeSettled(doStream),
-};
+/**
+ * A fast step's call, run once more at standard speed where Anthropic
+ * refuses it with a 429, and the refusal reported once the standard call
+ * answers. Note that the standard call is made at once rather than left to
+ * the SDK's retries, because a fast limit of 0 answers every retry the same,
+ * and that the call is made again under this middleware rather than around
+ * it, so the meter in front counts the step once. A standard call that fails
+ * fails the step as any call would. The prompt cache is keyed by speed, so
+ * the standard call reads none of what the fast calls before it cached.
+ */
+function fastFallbackMiddleware(onFastRefused: () => Promise<void>): LanguageModelMiddleware {
+  const settled = async <A>(
+    fast: () => PromiseLike<A>,
+    standard: () => PromiseLike<A>,
+  ): Promise<A> => {
+    try {
+      return await fast();
+    } catch (failure) {
+      const refused =
+        APICallError.isInstance(failure) &&
+        failure.statusCode === PROVIDER_REFUSAL_STATUS.TOO_MANY_REQUESTS;
+      if (!refused) throw failure;
+    }
+    const answer = await standard();
+    // The mark is the turn card's note and no reason to fail a step that answered.
+    await onFastRefused().catch(() => undefined);
+    return answer;
+  };
+  return {
+    wrapGenerate: ({ doGenerate, model, params }) =>
+      settled(doGenerate, () => model.doGenerate(atStandardSpeed(params))),
+    wrapStream: ({ doStream, model, params }) =>
+      settled(doStream, () => model.doStream(atStandardSpeed(params))),
+  };
+}
 
-/** The provider's model on the key, behind the account's middleware where the key is the account's own, and the meter where it is Luke's. */
+/**
+ * The provider's model on the key: falling back from a refused fast call
+ * where the step is a fast version, behind the account's middleware where
+ * the key is the account's own, and the meter where it is Luke's.
+ */
 function modelOnKey(
-  provider: ModelProvider,
-  modelId: string,
+  named: ProviderModel,
   key: ProviderKey,
   fetch: typeof globalThis.fetch | undefined,
+  onFastRefused: () => Promise<void>,
 ): Exclude<LanguageModel, string> {
   // The key is revealed here alone, into the SDK client that puts it on its requests.
   const settings = {
     apiKey: Redacted.value(key.key),
     ...(fetch === undefined ? undefined : { fetch }),
   };
-  const model =
-    provider === MODEL_PROVIDER.ANTHROPIC
-      ? createAnthropic(settings)(modelId)
-      : createOpenAI(settings).responses(modelId);
+  const provided =
+    named.provider === MODEL_PROVIDER.ANTHROPIC
+      ? createAnthropic(settings)(named.modelId)
+      : createOpenAI(settings).responses(named.modelId);
+  const model = named.fast
+    ? wrapLanguageModel({ model: provided, middleware: fastFallbackMiddleware(onFastRefused) })
+    : provided;
   if (key.account === undefined) {
     return key.meter === undefined ? model : meteredModel(model, key.meter);
   }
@@ -274,11 +307,18 @@ export function titleModel(
   return meteredModel(createAnthropic(settings)(AGENT_TITLE_MODEL_ID), meter);
 }
 
-/** The choice as a step runs it, or why it cannot: a provider Luke does not run, a fast version Luke cannot ask its provider for or would run on the account's own key, an account's key that cannot be read, or no key at all. */
+/**
+ * The choice as a step runs it, or why it cannot: a provider Luke does not
+ * run, a fast version Luke cannot ask its provider for or would run on the
+ * account's own key, an account's key that cannot be read, or no key at
+ * all. `onFastRefused` marks the step's turn where a fast call of it ran at
+ * standard speed instead.
+ */
 export function coderModel(
   choice: ModelChoice,
   keys: ProviderKeys,
   contextWindowTokens: number,
+  onFastRefused: () => Promise<void>,
 ): Result.Result<ProviderModelSelection, CoderRefusal> {
   const named = providerModelOf(choice.model);
   if (named === undefined) return Result.fail(CODER_REFUSAL.UNKNOWN_PROVIDER);
@@ -288,9 +328,8 @@ export function coderModel(
   if (key === undefined) return Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY);
   if (key === PROVIDER_KEY_UNREADABLE) return Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE);
   if (named.fast && key.account !== undefined) return Result.fail(CODER_REFUSAL.FAST_ON_OWN_KEY);
-  const model = modelOnKey(named.provider, named.modelId, key, keys.fetch);
   return Result.succeed({
-    model: named.fast ? wrapLanguageModel({ model, middleware: FAST_MODE_MIDDLEWARE }) : model,
+    model: modelOnKey(named, key, keys.fetch, onFastRefused),
     modelContextWindowTokens: contextWindowTokens,
     modelOptions: stepOptions(named, choice.effort),
   });

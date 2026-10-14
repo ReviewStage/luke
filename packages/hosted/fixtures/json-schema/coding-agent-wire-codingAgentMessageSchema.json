@@ -118,6 +118,9 @@
         "failed",
         "abandoned"
       ]
+    },
+    "fastRefused": {
+      "type": "boolean"
     }
   },
   "required": [

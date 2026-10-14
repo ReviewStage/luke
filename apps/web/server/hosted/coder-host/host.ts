@@ -149,10 +149,11 @@ export interface CoderHost extends HostAdmission {
   admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
   agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
-  /** The model one step runs on, read from the agent's row now, with the window the catalog lists for it. */
+  /** The model one step of the turn named runs on, read from the agent's row now, with the window the catalog lists for it. */
   model(
     admitted: AdmittedConversation,
     scripted: ScriptedCoderModel | undefined,
+    turnId: string,
   ): Effect.Effect<
     Result.Result<CoderModelSelection, CoderRefusal>,
     QueryError | Schema.SchemaError,
@@ -164,11 +165,12 @@ export interface CoderHost extends HostAdmission {
    * child conversation the call names ahead of the worker's session.
    */
   delegate(admitted: AdmittedConversation, callId: string, asked: DelegationAsk): DelegationEffect;
-  /** The model one step of a worker runs on, read from the delegation the parent's call recorded, with the window the catalog lists for it. */
+  /** The model one step of a worker's turn named runs on, read from the delegation the parent's call recorded, with the window the catalog lists for it. */
   delegatedModel(
     admitted: AdmittedConversation,
     parentCallId: string,
     scripted: ScriptedCoderModel | undefined,
+    turnId: string,
   ): Effect.Effect<
     Result.Result<CoderModelSelection, CoderRefusal>,
     QueryError | Schema.SchemaError,
@@ -302,11 +304,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     catalog.read.pipe(Effect.orElseSucceed((): readonly OfferedModel[] => [])),
   );
 
-  /** The model a step runs on for the choice: the fixture's own under the scripted model, else the provider's at the window the choice names of the ones the catalog lists, or the fallback where it lists none. */
+  /** The model a step of the turn runs on for the choice: the fixture's own under the scripted model, else the provider's at the window the choice names of the ones the catalog lists, or the fallback where it lists none. */
   const selectedModel = (
     userId: string,
     choice: ModelChoice,
     scripted: ScriptedCoderModel | undefined,
+    turnId: string,
   ) =>
     Effect.gen(function* () {
       if (scripted !== undefined) {
@@ -322,7 +325,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         choice.model,
         choice.contextWindow ?? CONTEXT_WINDOW.LONG,
       );
-      return coderModel(choice, yield* seams.keys(userId), window);
+      return coderModel(choice, yield* seams.keys(userId), window, () =>
+        seams.fastRefused(userId, turnId),
+      );
     });
 
   /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
@@ -396,7 +401,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
     agent: agentOf,
 
-    model: (admitted, scripted) =>
+    model: (admitted, scripted, turnId) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return Result.fail(found.failure);
@@ -405,6 +410,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           admitted.target.userId,
           { model: agent.model, effort: agent.effort, contextWindow: agent.contextWindow },
           scripted,
+          turnId,
         );
       }),
 
@@ -438,13 +444,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
       }),
 
-    delegatedModel: (admitted, parentCallId, scripted) =>
+    delegatedModel: (admitted, parentCallId, scripted, turnId) =>
       Effect.gen(function* () {
         const childId = childConversationId(admitted.target.conversationId, parentCallId);
         const delegation = yield* readDelegation(admitted.target, childId);
         if (Option.isNone(delegation)) return Result.fail(CODER_REFUSAL.NO_DELEGATION);
         const { model, effort } = delegation.value;
-        return yield* selectedModel(admitted.target.userId, { model, effort }, scripted);
+        return yield* selectedModel(admitted.target.userId, { model, effort }, scripted, turnId);
       }),
 
     prompt: (admitted, agent) =>

@@ -2,7 +2,7 @@ import type { TurnUsageRow } from "@sidecar/database/models/coding-agent-store";
 import type { StoredTurnUsage } from "@sidecar/database/schemas/storage";
 import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
 import type { BrainRunUsage } from "../../core.js";
-import { type OfferedModel, tokensCostUsd } from "../model-catalog.js";
+import { type OfferedModel, standardModelIdOf, tokensCostUsd } from "../model-catalog.js";
 
 /**
  * usage.ts -- what a coding agent has cost: its turns' tokens summed, and their price where the catalog lists one for every model they ran on.
@@ -10,7 +10,10 @@ import { type OfferedModel, tokensCostUsd } from "../model-catalog.js";
  * A turn's row keeps its counts whole and, since the model can change
  * between steps, the same counts by the model each step ran on; a row from
  * before that breakdown was kept ran every step on the model the row
- * names. Each share is priced at its own model's catalog prices, and the
+ * names. Each share is priced at its own model's catalog prices, a fast
+ * version's at its base model's where Anthropic refused a fast step of the
+ * turn, since those steps ran and were billed at standard speed and every
+ * step of an organization never granted fast mode is refused; and the
  * price is answered only when every share has one: a model the catalog no
  * longer lists, or lists without prices, leaves the tokens alone to tell.
  * The catalog's prices are per token to many places, so the dollars are
@@ -21,11 +24,20 @@ import { type OfferedModel, tokensCostUsd } from "../model-catalog.js";
 /** How many decimals of a dollar the wire carries. */
 const USD_DECIMALS = 6;
 
-/** The turn's counts by model: the breakdown its row keeps, or the whole at the row's model, which is nothing to price where the row names none. */
-function sharesOf(row: TurnUsageRow): readonly (BrainRunUsage & { readonly model?: string })[] {
+/** Counts as they are priced: at the model named, or at none. */
+type UsageShare = BrainRunUsage & { readonly model?: string };
+
+/** The turn's counts by model: the breakdown its row keeps, or the whole at the row's model, which is nothing to price where the row names none; a fast version's at its base model where a fast step was refused. */
+function sharesOf(row: TurnUsageRow): readonly UsageShare[] {
   const { byModel, ...whole } = row.usage;
-  if (byModel !== undefined && byModel.length > 0) return byModel;
-  return [row.model === null ? whole : { model: row.model, ...whole }];
+  const shares: readonly UsageShare[] =
+    byModel !== undefined && byModel.length > 0
+      ? byModel
+      : [row.model === null ? whole : { model: row.model, ...whole }];
+  if (!row.fastRefused) return shares;
+  return shares.map((share) =>
+    share.model === undefined ? share : { ...share, model: standardModelIdOf(share.model) },
+  );
 }
 
 /** The tokens of every turn summed, and their price where every share of them has one. */
@@ -60,9 +72,14 @@ export function usageOfTurns(
 
 /** One turn's usage as the wire carries it, or nothing for a turn with none recorded yet. */
 export function usageOfTurn(
-  turn: { readonly model: string | null; readonly usage: StoredTurnUsage | null } | undefined,
+  turn:
+    | (Pick<TurnUsageRow, "model" | "fastRefused"> & { readonly usage: StoredTurnUsage | null })
+    | undefined,
   offered: readonly OfferedModel[],
 ): CodingAgentUsage | undefined {
   if (turn === undefined || turn.usage === null) return undefined;
-  return usageOfTurns([{ model: turn.model, usage: turn.usage }], offered);
+  return usageOfTurns(
+    [{ model: turn.model, usage: turn.usage, fastRefused: turn.fastRefused }],
+    offered,
+  );
 }

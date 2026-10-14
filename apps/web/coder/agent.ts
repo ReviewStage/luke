@@ -2,7 +2,7 @@ import { Effect, Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import { CODER } from "../server/hosted/coder-host/bounds.js";
 import { runWeb } from "../server/runtime.js";
-import { host, seams } from "./host.js";
+import { host, readStepStarted, seams, stepTurnId } from "./host.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**
@@ -28,13 +28,17 @@ export default defineAgent({
   experimental: { workflow: { retention: 0 } },
   model: defineDynamic({
     events: {
-      "step.started": async (_event, ctx) => {
+      "step.started": async (event, ctx) => {
         const scripted = seams.scriptedModel() ? { model: scriptedModel() } : undefined;
         const selected = await runWeb(
           Effect.gen(function* () {
             const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
             if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
-            return yield* host.model(admitted.success, scripted);
+            return yield* host.model(
+              admitted.success,
+              scripted,
+              stepTurnId(ctx.session.id, readStepStarted(event)),
+            );
           }),
         );
         if (Result.isFailure(selected)) throw new Error(selected.failure);

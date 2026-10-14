@@ -1,6 +1,6 @@
 import { defineAgent, defineDynamic } from "eve";
 import { CODER_REFUSAL } from "../../../server/hosted/coder-host/bounds.js";
-import { selectDelegatedModel } from "../../host.js";
+import { readStepStarted, selectDelegatedModel, stepTurnId } from "../../host.js";
 import { delegationRecord } from "../../session-prompt.js";
 
 /**
@@ -19,11 +19,16 @@ export default defineAgent({
   tool: false,
   model: defineDynamic({
     events: {
-      "step.started": (_event, ctx) => {
+      "step.started": (event, ctx) => {
         // Read before anything awaits, since the state is this session's and a statement can hand the fiber back in another's context.
         const { parentCallId } = delegationRecord.get();
         if (parentCallId === undefined) throw new Error(CODER_REFUSAL.NO_DELEGATION_PINNED);
-        return selectDelegatedModel(ctx.session.auth, ctx.session.id, parentCallId);
+        return selectDelegatedModel(
+          ctx.session.auth,
+          ctx.session.id,
+          parentCallId,
+          stepTurnId(ctx.session.id, readStepStarted(event)),
+        );
       },
     },
   }),

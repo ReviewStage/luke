@@ -96,6 +96,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       },
       deploymentSecret: () => undefined,
       keys: () => Effect.succeed(KEYS),
+      fastRefused: async () => undefined,
       titleModel: () => titleModel,
       research: () => ({ openAi: undefined, spend: Effect.void }),
       scriptedModel: () => false,
@@ -323,7 +324,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
 
         assert.deepEqual(yield* host.agent(other.success), Result.fail(CODER_REFUSAL.NO_AGENT));
         assert.deepEqual(
-          yield* host.model(other.success, undefined).pipe(Effect.provide(modelCatalogOf(CATALOG))),
+          yield* host
+            .model(other.success, undefined, "turn-fixture")
+            .pipe(Effect.provide(modelCatalogOf(CATALOG))),
           Result.fail(CODER_REFUSAL.NO_AGENT),
         );
       }),

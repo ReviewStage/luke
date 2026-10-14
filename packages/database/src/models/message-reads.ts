@@ -573,6 +573,8 @@ export interface LatestTurn {
   /** What the turn ran under and what it cost, as the row holds them; null where the row names no model, and until the turn settles. */
   readonly model: string | null;
   readonly usage: StoredTurnUsage | null;
+  /** Whether a step of the turn ran at standard speed because Anthropic refused it Fast. */
+  readonly fastRefused: boolean;
 }
 
 const LatestTurnRowSchema = Schema.Struct({
@@ -588,6 +590,7 @@ const LatestTurnRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(InstantColumnSchema),
   model: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(TurnUsageColumnSchema),
+  fastRefused: Schema.Boolean,
 });
 
 /** A read of conversations by id, under the account that owns them, or by id alone (null) where the caller passed a gate of its own. */
@@ -616,6 +619,7 @@ const findLatestTurns = SqlSchema.findAll({
           settledAt: turns.settledAt,
           model: turns.model,
           usage: turns.usage,
+          fastRefused: turns.fastRefused,
         })
         .from(turns)
         .where(
@@ -629,11 +633,14 @@ const findLatestTurns = SqlSchema.findAll({
 });
 
 /** What one settled turn ran under and cost, as a conversation's total is summed from it. */
-export type TurnUsageRow = Pick<LatestTurn, "model"> & { readonly usage: StoredTurnUsage };
+export type TurnUsageRow = Pick<LatestTurn, "model" | "fastRefused"> & {
+  readonly usage: StoredTurnUsage;
+};
 
 const TurnUsageRowSchema = Schema.Struct({
   model: Schema.NullOr(Schema.String),
   usage: TurnUsageColumnSchema,
+  fastRefused: Schema.Boolean,
 });
 
 /**
@@ -647,7 +654,7 @@ const findTurnUsages = SqlSchema.findAll({
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
-        .select({ model: turns.model, usage: turns.usage })
+        .select({ model: turns.model, usage: turns.usage, fastRefused: turns.fastRefused })
         .from(turns)
         .where(
           and(
@@ -873,6 +880,7 @@ const TURN_FIELDS = {
   settledAt: turns.settledAt,
   failure: turns.failure,
   cancelRequestedAt: turns.cancelRequestedAt,
+  fastRefused: turns.fastRefused,
 };
 
 const TurnRowSchema = Schema.Struct({
@@ -894,6 +902,8 @@ const TurnRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  /** Whether a step of the turn ran at standard speed because Anthropic refused it Fast. */
+  fastRefused: Schema.Boolean,
 });
 
 export type StoredTurnRecord = typeof TurnRowSchema.Type;

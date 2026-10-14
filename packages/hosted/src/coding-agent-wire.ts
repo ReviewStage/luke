@@ -665,7 +665,8 @@ const recordedChoice = EffectSchema.String.check(
 /**
  * What a finished turn ran on and spent, as its row recorded them, which a
  * turn's footer card says: the model's catalog id, the effort it ran at,
- * its tokens, and how it ended where it did not simply answer. Each is
+ * its tokens, how it ended where it did not simply answer, and whether a
+ * fast step of it ran at standard speed. Each is
  * absent where the row recorded none and from a service older than it; the
  * tokens and the ending, too, until the turn has ended.
  */
@@ -675,6 +676,8 @@ export const turnRecordFields = {
   effort: EffectSchema.optionalKey(recordedChoice),
   tokens: EffectSchema.optionalKey(turnTokensSchema),
   ending: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(TURN_ENDING))),
+  /** Whether Anthropic refused a fast step of the turn, which ran at standard speed instead; absent where none was refused, and from a service older than it. */
+  fastRefused: EffectSchema.optionalKey(EffectSchema.Boolean),
 };
 
 const turnRecordSchema = EffectSchema.Struct(turnRecordFields);

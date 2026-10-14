@@ -1,6 +1,8 @@
+import { recordTurnFastRefused } from "@sidecar/database/models/coding-agent-store";
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { spendHostedMeter } from "@sidecar/database/models/quota";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
+import { failureKind } from "@sidecar/runtime/effect";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
@@ -40,6 +42,8 @@ export interface CoderHostSeams {
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The keys the account's step runs on: its own where it saved one, Luke's where it did not, each absent where neither stands. */
   readonly keys: (userId: string) => PlanStoreEffect<ProviderKeys>;
+  /** Marks the account's turn as one a step of ran at standard speed because Anthropic refused it Fast; a mark that cannot be written is logged, never thrown. */
+  readonly fastRefused: (userId: string, turnId: string) => Promise<void>;
   /** The model one account's agent's title is generated on, behind that account's meter; nothing leaves every agent untitled. */
   readonly titleModel: (userId: string) => LanguageModel | undefined;
   /** What one account's public search runs on and counts against: Luke's OpenAI access, nothing while the deployment holds no key, and the account's meter. */
@@ -88,6 +92,11 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           meter,
           ring: environment.providerKeyEncryptionKeys,
           run,
+        }),
+      fastRefused: (userId, turnId) =>
+        run(recordTurnFastRefused(userId, turnId)).catch((cause: unknown) => {
+          // Note that the failure is reported by its kind, because a store's message can quote a row.
+          console.warn(`A turn's Fast refusal was not recorded: ${failureKind(cause)}`);
         }),
       titleModel: (userId) => titleModel(luke, meter(userId)),
       research: (userId) => ({

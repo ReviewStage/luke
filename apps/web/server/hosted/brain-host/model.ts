@@ -31,6 +31,8 @@ export function brainModelSelection(
     access.choice,
     { anthropic: undefined, openAi: { key: access.apiKey, meter } },
     BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS,
+    // The brain runs on OpenAI alone, which has no fast version Luke runs, so no fast step is refused.
+    async () => undefined,
   );
 }
 

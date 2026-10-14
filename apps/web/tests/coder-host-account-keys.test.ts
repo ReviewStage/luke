@@ -119,7 +119,7 @@ async function stepModel(
       run: database.run,
     }),
   );
-  return coderModel(CHOICE[providerId], { ...keys, fetch }, WINDOW);
+  return coderModel(CHOICE[providerId], { ...keys, fetch }, WINDOW, async () => undefined);
 }
 
 /** Runs one step on the model, answering its text or the failure's message. */
