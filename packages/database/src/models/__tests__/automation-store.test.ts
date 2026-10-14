@@ -282,7 +282,7 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "a repository's event finds the enabled GitHub automations on its plans, however its name is cased, and no other",
+    "a repository's event finds the enabled GitHub automations listening for it on its plans, however its name is cased, and no other",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -301,14 +301,23 @@ it.layer(getTestDB())("the automation store", (it) => {
         yield* updateAutomation(owner, paused.id, { enabled: false });
         yield* createAutomation(owner, nightly(planId));
 
-        const found = yield* githubAutomationsOn("ACME/api", 10);
+        const found = yield* githubAutomationsOn("ACME/api", "issue-opened", 10);
         assert.deepEqual(
           found.filter((each) => each.userId === owner).map((each) => [each.id, each.trigger]),
           [[listening.id, github]],
         );
         assert.deepEqual(
-          (yield* githubAutomationsOn("acme/other", 10)).filter((each) => each.userId === owner),
+          (yield* githubAutomationsOn("acme/other", "issue-opened", 10)).filter(
+            (each) => each.userId === owner,
+          ),
           [],
+        );
+        assert.deepEqual(
+          (yield* githubAutomationsOn("acme/api", "push", 10)).filter(
+            (each) => each.userId === owner,
+          ),
+          [],
+          "nor an automation listening for another event",
         );
       }),
   );

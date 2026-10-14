@@ -249,6 +249,8 @@ export const AUTOMATION_RUN_REASON = {
   MODEL: "model",
   /** The coding agents' service could not be reached. */
   UNAVAILABLE: "unavailable",
+  /** The plan moved to another repository after this run's GitHub event was queued. */
+  REPOSITORY_CHANGED: "repository-changed",
   /** The automation was paused after this run was queued and before it was acted on. */
   PAUSED: "paused",
   /** It waited queued past the hour it could still be started in, the sweep down or failing all that while. */

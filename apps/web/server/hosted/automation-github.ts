@@ -23,7 +23,8 @@ import { Clock, Effect, Option, Result, Schema } from "effect";
  * or labelled, a check suite that completed without passing, and a push to
  * a branch are read; nothing else is. Only what the run's history shows is
  * read off the delivery: the repository, the number, title, and address of
- * the issue or pull request, and the branch, never a body. The run is
+ * the issue or pull request, the branch, and a failed check's commit by its
+ * address, never a body. The run is
  * recorded queued under GitHub's own delivery id, which a redelivery
  * carries again, so a delivery GitHub sends twice records one run per
  * automation; the sweep acts on it within the minute, since starting an
@@ -63,8 +64,8 @@ const BRANCH_REF = "refs/heads/";
 /** The branch prefix a coding agent works on, whose own checks it already watches. */
 const AGENT_BRANCH_PREFIX = "luke/";
 
-/** The most automations one delivery queues runs for. */
-const MAXIMUM_AUTOMATIONS = 25;
+/** The most automations one delivery queues runs for, of those listening for its event. */
+const MAXIMUM_AUTOMATIONS = 100;
 
 const LabelSchema = Schema.Struct({ name: Schema.String });
 const RepositorySchema = Schema.Struct({ full_name: Schema.String });
@@ -101,9 +102,10 @@ const IssueSchema = Schema.Struct({
 
 const CheckSuiteSchema = Schema.Struct({
   action: Schema.String,
-  repository: RepositorySchema,
+  repository: Schema.Struct({ full_name: Schema.String, html_url: Schema.String }),
   check_suite: Schema.Struct({
     head_branch: Schema.NullOr(Schema.String),
+    head_sha: Schema.String,
     conclusion: Schema.NullOr(Schema.String),
   }),
 });
@@ -233,6 +235,8 @@ function githubEventOf(event: string, payload: UnparsedWireValue): GitHubEventRe
           event: GITHUB_TRIGGER_EVENT.CHECK_FAILED,
           repository: repository.full_name,
           branch,
+          // The failed commit by its address, so the agent reads the revision that failed even after the branch moves on.
+          url: `${repository.html_url}/commit/${suite.head_sha}`,
         },
       };
     }
@@ -291,9 +295,11 @@ export function queueGithubRuns(
   const read = githubEventOf(event, payload);
   if (read === undefined || deliveryId.length === 0) return Effect.succeed(0);
   return Effect.gen(function* () {
-    const listening = (yield* githubAutomationsOn(read.repository, MAXIMUM_AUTOMATIONS)).filter(
-      (automation) => triggerMatches(automation.trigger, read),
-    );
+    const listening = (yield* githubAutomationsOn(
+      read.repository,
+      read.event,
+      MAXIMUM_AUTOMATIONS,
+    )).filter((automation) => triggerMatches(automation.trigger, read));
     const firedAt = new Date(yield* Clock.currentTimeMillis);
     const recorded = yield* Effect.forEach(listening, (automation) =>
       recordAutomationRun(automation, { dedupeKey: deliveryId, firing: read.firing, firedAt }),

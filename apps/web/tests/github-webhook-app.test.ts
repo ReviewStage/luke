@@ -504,8 +504,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       const github = githubReaching([INSTALLATION]);
       const suite = (branch: string, conclusion: string) => ({
         action: "completed",
-        repository: { full_name: repositoryName },
-        check_suite: { head_branch: branch, conclusion, pull_requests: [] },
+        repository: { full_name: repositoryName, html_url: `https://github.com/${repositoryName}` },
+        check_suite: { head_branch: branch, head_sha: "f00dfeed", conclusion, pull_requests: [] },
       });
 
       const failedMain = yield* answer(
@@ -532,7 +532,19 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           { read: 0, queued: 0 },
         ],
       );
-      assert.equal((yield* listAutomationRuns(owner, made.id)).length, 1);
+      assert.deepEqual(
+        (yield* listAutomationRuns(owner, made.id)).map((run) => run.firing),
+        [
+          {
+            kind: AUTOMATION_FIRING.GITHUB,
+            event: GITHUB_TRIGGER_EVENT.CHECK_FAILED,
+            repository: repositoryName,
+            branch: "main",
+            url: `https://github.com/${repositoryName}/commit/f00dfeed`,
+          },
+        ],
+        "the failed commit is kept by its address",
+      );
     }),
   );
 });
