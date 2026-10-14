@@ -95,7 +95,7 @@ a full-bleed tile stands larger than every other app's. Only the animated
 | `avatar/luke-avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the face with room around it, on the icon's gradient per mode or on flat black. The square marks are cropped to the face, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo takes the eyes and the smile's end; here the face's bounding box diagonal spans 80% of the canvas, so the whole face sits inside that circle. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
 | `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside this directory, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
-| `button/luke-cta-download-{light,dark}.svg` | The download button, drawn as the site's hero CTA, per mode. The repository README carries it |
+| `button/luke-cta-download-{light,dark}.svg` | The download button, drawn as the site's hero CTA, per mode, for a page that links the download |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states

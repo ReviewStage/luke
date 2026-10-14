@@ -8,12 +8,12 @@ This page covers setup and points at the documents that own the rest.
 
 ## Before you write code
 
-Read [AGENTS.md](AGENTS.md). It holds the trust constraints every change has to
-respect: Luke never writes a provider's transcripts or session state, never
-injects terminal input or requests Accessibility, and never requires a provider
-MCP, plugin, or wrapper to work. A change that widens what Luke may read or
-write is a product decision, so open an issue first rather than a pull
-request.
+Read [AGENTS.md](AGENTS.md). Its Never section holds the rules every change has
+to respect: no credential or account secret reaches an answer, an event, the
+voice window, a trace, or a fixture, and session replay leaves the machine as
+layout, never text. A change that widens what Luke may read or write, or what
+leaves the developer's machine, is a product decision, so open an issue first
+rather than a pull request.
 
 ## Set up
 

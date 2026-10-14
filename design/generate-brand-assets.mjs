@@ -1391,14 +1391,14 @@ const CARD = { WIDTH: 1200, HEIGHT: 630, GROUND: "#08090b", WORDMARK_FILL: 0.56 
     "Luke — your AI engineering manager",
   );
 }
-// README CTA button: the repository page's download link, drawn as the hero's
-// own download CTA in apps/web/src/App.tsx so the README and the site offer
-// the same door. An SVG served as an image can reach no stylesheet, so the
+// CTA button: a download link drawn as the hero's own download CTA in
+// apps/web/src/App.tsx, so a page that links the download offers the same door
+// as the site. An SVG served as an image can reach no stylesheet, so the
 // hero's values are restated here — the filled button's --primary pair with
 // its oklch values resolved to hex, the 0.5rem radius, and the 14px/600
 // label; a change to the hero's look belongs in both places or in neither.
 // The label is forced to its designed advance with textLength, because the
-// README renders on machines without Geist and the padding must hold under
+// button renders on machines without Geist and the padding must hold under
 // whatever font answers.
 const CTA = {
   HEIGHT: 44,
