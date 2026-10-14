@@ -325,12 +325,13 @@ function filesNotice(repositoryOpen: boolean, held: FilesHeld | undefined): stri
 /** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
 function fileRow(
   path: string,
-  shown: readonly PlanCodeShowing[],
+  read: { readonly shown: readonly PlanCodeShowing[]; readonly repository: string | null },
   open: (path: string) => void,
 ): PaletteRow {
+  const note = newestFileNote(read.shown, path, { repository: read.repository, commit: undefined });
   return {
     ...fileLook(path),
-    card: <FileCard path={path} note={newestFileNote(shown, path)} />,
+    card: <FileCard path={path} note={note} />,
     onChoose: () => open(path),
   };
 }
@@ -775,7 +776,9 @@ export function CommandPalette({
     onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
-      ? matchedPaths.map((path) => fileRow(path, plans.shownCode ?? [], openFile))
+      ? matchedPaths.map((path) =>
+          fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
+        )
       : tiersOf[kind]()
           .flatMap((tier) => ranked(tier, query, limit, byRow))
           .slice(0, limit);

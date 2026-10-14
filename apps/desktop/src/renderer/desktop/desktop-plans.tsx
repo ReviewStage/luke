@@ -536,6 +536,7 @@ function PlanDocument({
             cardId={summaryCard}
             inbox={inbox.board}
             held={views.held}
+            repository={plan.repository}
           />
         </div>
         {/* Note that a call of the plan's own still stands, so it can be

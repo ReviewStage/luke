@@ -415,13 +415,15 @@ function stripTabs(input: {
   pages: readonly DrawnPage[];
   /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
   shown: readonly PlanCodeShowing[];
+  /** The plan's repository, whose showings alone a file tab's card reads its note from. */
+  repository: string | null;
   held: HeldTranscripts;
   copied: TranscriptCopier;
   /** Reads a planning worker's whole session for a copy, the plan standing in the agent's place. */
   readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, shown, held } = input;
-  const { copied, readWorker } = input;
+  const { repository, copied, readWorker } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -469,8 +471,9 @@ function stripTabs(input: {
     };
   });
   // A file's tab hangs the file's card, as every place naming the file does.
-  const fileTabs = files.map(({ path }) => {
-    const card = <FileCard path={path} note={newestFileNote(shown, path)} />;
+  const fileTabs = files.map(({ path, commit }) => {
+    const note = newestFileNote(shown, path, { repository, commit });
+    const card = <FileCard path={path} note={note} />;
     return {
       tab: { file: path },
       look: look({ file: path }, { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path, card }),
@@ -537,6 +540,7 @@ function PanelTabs({
   pages,
   shownFiles,
   shown,
+  repository,
   offeredPages,
   held,
   readWorker,
@@ -562,6 +566,8 @@ function PanelTabs({
   shownFiles: readonly ShownFile[];
   /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
   shown: readonly PlanCodeShowing[];
+  /** The plan's repository, whose showings alone the file tabs' cards read. */
+  repository: string | null;
   /** The plan's pages, which the "+" offers. */
   offeredPages: readonly PageLine[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
@@ -579,6 +585,7 @@ function PanelTabs({
     changes,
     pages,
     shown,
+    repository,
     held,
     copied,
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
@@ -1499,6 +1506,7 @@ export function SidePanel({
             pages={pageTabs}
             shownFiles={offered}
             shown={shownCode ?? []}
+            repository={repository}
             offeredPages={planPages}
             held={drawnTranscripts}
             readWorker={work.readWorker}

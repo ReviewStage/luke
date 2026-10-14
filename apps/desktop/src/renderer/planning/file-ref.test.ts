@@ -61,22 +61,31 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan open, its side panel on the Code tab holding the file's code, and the file's own tab open beside it; each file opened recorded. */
-function mount(opened: unknown[][]): HTMLElement {
+/**
+ * The plan open, its side panel on the Code tab holding the file's code,
+ * and the file's own tab open beside it, read at `commit` where it names
+ * one; each file opened recorded.
+ */
+function mount(
+  opened: unknown[][],
+  shownCode: readonly PlanCodeShowing[] = [SHOWING],
+  commit?: string,
+): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   const base = plansControl();
+  const tab = { path: PATH, range: { startLine: 3, endLine: 5 }, opened: 1 };
   const plans = plansControl({
     page: PLANS_PAGE.DOCUMENT,
     activePlanId: PLAN.id,
     region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-    shownCode: [SHOWING],
+    shownCode,
     sidePanel: {
       ...base.sidePanel,
       open: true,
       tab: SIDE_PANEL_TAB.CODE,
-      files: [{ path: PATH, range: { startLine: 3, endLine: 5 }, opened: 1 }],
+      files: [commit === undefined ? tab : { ...tab, commit }],
       onOpenFile: (...asked) => opened.push(asked),
     },
   });
@@ -141,4 +150,24 @@ test("a code card's head says its lines as Lines 3–5, and a press on it opens 
   assert.equal(head.textContent, `${PATH}Lines 3–5`);
   act(() => head.click());
   assert.deepEqual(opened, [[SHOWING.code.ref, SHOWING.code.commit]]);
+});
+
+test("a file's tab read at a commit hangs Luke's note on the lines he showed at that commit, never a later showing's, nor another repository's", () => {
+  const later: PlanCodeShowing = {
+    ...SHOWING,
+    callId: "d",
+    code: { ...SHOWING.code, commit: "fedcba9876543210", note: "Sends the email." },
+  };
+  const elsewhere: PlanCodeShowing = {
+    ...SHOWING,
+    callId: "e",
+    code: { ...SHOWING.code, repository: "acme/other", note: "Another repository's file." },
+  };
+  const panel = mount([], [SHOWING, later, elsewhere], SHOWING.code.commit).querySelector(
+    ".side-panel",
+  );
+  const tab = [...(panel?.querySelectorAll('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".tab-label")?.textContent === "accept.ts",
+  );
+  assert.deepEqual(cardOn(tab), [PATH, NOTE]);
 });

@@ -328,9 +328,10 @@ function withCards(
     workers: ReturnType<typeof planWorkers>;
     files: readonly string[];
     changes: readonly ChangesOffer[];
+    repository: string | null;
   },
 ): SummaryEntry[] {
-  const { plans, inbox, held, workers, files, changes } = input;
+  const { plans, inbox, held, workers, files, changes, repository } = input;
   const { agents, mainTabs } = plans;
   const models = agents.models ?? [];
   const shown = plans.shownCode ?? [];
@@ -364,7 +365,8 @@ function withCards(
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
     if (path === undefined) return entry;
-    return { ...entry, card: <FileCard path={path} note={newestFileNote(shown, path)} /> };
+    const note = newestFileNote(shown, path, { repository, commit: undefined });
+    return { ...entry, card: <FileCard path={path} note={note} /> };
   });
 }
 
@@ -378,6 +380,7 @@ function summarySections(
   plans: PlansControl,
   inbox: InboxBoardView,
   held: HeldTranscripts,
+  repository: string | null,
 ): SummarySection[] {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(workRowsOf(work.conversation, work.callLive));
@@ -401,7 +404,15 @@ function summarySections(
     ...agentEntries(mainTabs, agents),
   ];
   const paths = files.map((ref) => ref.path);
-  const entries = withCards(rows, { plans, inbox, held, workers, files: paths, changes });
+  const entries = withCards(rows, {
+    plans,
+    inbox,
+    held,
+    workers,
+    files: paths,
+    changes,
+    repository,
+  });
   // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
   return SECTION_ORDER.flatMap((heading) => {
@@ -705,6 +716,7 @@ export function PlanSummary({
   cardId,
   inbox,
   held,
+  repository,
 }: {
   plans: PlansControl;
   layout: SummaryLayout;
@@ -713,8 +725,10 @@ export function PlanSummary({
   inbox: InboxBoardView;
   /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
+  /** The plan's repository, whose showings alone a file row's card reads its note from. */
+  repository: string | null;
 }): React.JSX.Element {
-  const sections = summarySections(plans, inbox, held);
+  const sections = summarySections(plans, inbox, held, repository);
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,

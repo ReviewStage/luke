@@ -3,6 +3,7 @@ import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "./code-pane-model";
+import { shownWhereRead } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 
 /**
@@ -39,12 +40,30 @@ export function fileLook(path: string): FileLook {
   };
 }
 
-/** Luke's note on the newest lines of the file he showed with one, if any, which the file's card says. */
+/** Where a file is read: the plan's repository, none before one is chosen, and the commit a tab is pinned to, none for the default branch's head. */
+export interface FileRead {
+  readonly repository: string | null;
+  readonly commit: string | undefined;
+}
+
+/**
+ * Luke's note on the newest lines of the file he showed with one, if any,
+ * which the file's card says: of those read where the file is read, as a
+ * File tab's notes are (`notesOf`), so a card never speaks of another
+ * repository's file of the same path, nor of another commit than its tab's.
+ */
 export function newestFileNote(
   shown: readonly PlanCodeShowing[],
   path: string,
+  read: FileRead,
 ): string | undefined {
-  return shown.findLast(({ code }) => code.ref.path === path && code.note !== undefined)?.code.note;
+  return shown.findLast(
+    ({ code }) =>
+      code.ref.path === path &&
+      code.note !== undefined &&
+      (read.repository === null || code.repository === read.repository) &&
+      shownWhereRead(code, read.commit),
+  )?.code.note;
 }
 
 /**
