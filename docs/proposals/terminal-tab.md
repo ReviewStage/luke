@@ -36,7 +36,11 @@ architecture's text stands.
 8. **⌘J** opens the current or most recent agent's terminal, and ⌘K stays
    the palette inside it.
 
-## New terminal: the rules (round 3)
+## New terminal: the rules (round 3, approved)
+
+Dean approved round 3 on 2026-10-14 ("Terminal - looks good to me"). Desktop
+PRs 5–9 build these rules and the states below exactly as the show draws
+them.
 
 A terminal belongs to **one coding agent's sandbox**, never to the plan. Two
 commands open one:
