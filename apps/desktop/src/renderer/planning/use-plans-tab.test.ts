@@ -15,6 +15,7 @@ import {
   type PlanningView,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
+import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { LIVE_STATUS } from "@sidecar/live";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -37,6 +38,7 @@ import {
 } from "#shared/messages/voice-view";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
+import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { ToastHost } from "../toast";
 import { PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
@@ -103,6 +105,9 @@ function mount(
   const shownInboxes: (string | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
+  /** Each asked act's payload, unread until a test reads it as the act's schema would. */
+  const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
+  const links: SettingsLink[] = [];
   const record = (kind: ActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
@@ -131,6 +136,7 @@ function mount(
           ...args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
           record(kind);
+          payloads.push({ kind, payload: args[0] });
           const answer = answers[kind];
           if (answer !== undefined) return answer(...args);
           return Promise.reject(new Error("Not answered in this test."));
@@ -161,6 +167,7 @@ function mount(
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
+      onOpenSettings: (link) => links.push(link),
     });
     return null;
   }
@@ -177,6 +184,9 @@ function mount(
     shownAgents,
     shownInboxes,
     voiceCommands,
+    payloads,
+    /** Every Settings link the tab followed, in order. */
+    links,
     control: () => {
       assert.ok(control);
       return control;
@@ -254,6 +264,87 @@ function _row(
     ...marks,
   };
 }
+
+/** A plan's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
+function row(
+  id: string,
+  createdAt: number,
+  marks: { pinnedAt?: number; archivedAt?: number } = {},
+) {
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt,
+    updatedAt: createdAt,
+    repository: null,
+    ...marks,
+  };
+}
+
+const PERSONAL = {
+  id: "workspace-personal",
+  name: "Personal",
+  personal: true,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+
+const ACME = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+};
+
+/** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
+const TWO_WORKSPACES: PlanningView = {
+  ...IDLE_PLANNING_VIEW,
+  listStatus: PLANNING_READ.READY,
+  workspaces: [PERSONAL, ACME],
+  plans: [
+    row("notes", 4),
+    { ...row("alerts", 3), workspaceId: ACME.id },
+    row("billing", 2),
+    { ...row("old-launch", 1, { archivedAt: 9 }), workspaceId: ACME.id },
+    row("old-notes", 1, { archivedAt: 8 }),
+  ],
+};
+
+/** A start's or a repository read's payload, read back as the acts' own schemas admit it. */
+const readWorkspaceNamed = Schema.decodeUnknownOption(
+  Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
+);
+
+/** A create's payload, read back as the act's own schema admits it. */
+const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
+
+/** The workspace each act of `kind` the tab asked named, none where it named none. */
+function namedIn(
+  payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
+  kind: ActKind,
+): (string | undefined)[] {
+  return payloads
+    .filter((asked) => asked.kind === kind)
+    .map((asked) => Option.getOrUndefined(readWorkspaceNamed(asked.payload))?.workspaceId);
+}
+
+/** The workspace each start the tab asked for named. */
+const startedIn = (payloads: Parameters<typeof namedIn>[0]) =>
+  namedIn(payloads, ACT_KIND.PLANNING_START);
+
+const UNSTARTED = {
+  [ACT_KIND.PLANNING_START]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+};
+
+const PLATFORM = {
+  id: "workspace-platform",
+  name: "Platform",
+  personal: false,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
 
 test("a repository pin still waiting on the service is let go with a sign-out, so the next account never wears it", () => {
   const tab = mount(
@@ -625,4 +716,213 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
+});
+
+test("the sidebar lists the personal workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
+
+  const personal = {
+    workspace: tab.control().workspace?.id,
+    plans: tab.control().listed.plans.map((plan) => plan.id),
+    archived: tab.control().listed.archived.map((plan) => plan.id),
+  };
+  await tab.control().newPlan.start("Invites", null);
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await tab.control().newPlan.start("Usage", "acme/relay");
+
+  assert.deepEqual(personal, {
+    workspace: PERSONAL.id,
+    plans: ["notes", "billing"],
+    archived: ["old-notes"],
+  });
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["alerts"],
+  );
+  assert.deepEqual(
+    tab.control().listed.archived.map((plan) => plan.id),
+    ["old-launch"],
+  );
+  assert.deepEqual(startedIn(tab.payloads), [PERSONAL.id, ACME.id]);
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    ["notes", "alerts", "billing"],
+    "the palette, the inbox, and the history find every workspace's plans",
+  );
+  assert.deepEqual(
+    tab.control().archived.map((plan) => plan.id),
+    ["old-launch", "old-notes"],
+  );
+});
+
+test("opening a plan of another workspace lists that workspace once it opened, one of the workspace listed changes nothing, and one that would not open changes nothing", async () => {
+  let opens = true;
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(opens) },
+  );
+
+  opens = false;
+  act(() => tab.control().onSelect("alerts"));
+  await settle();
+  const refused = tab.control().workspace?.id;
+  const keptAfterRefusal = window.localStorage.getItem("luke.chosenWorkspace");
+  opens = true;
+  act(() => tab.control().onSelect("billing"));
+  await settle();
+  const stayed = tab.control().workspace?.id;
+  act(() => tab.control().onSelect("alerts"));
+  await settle();
+
+  assert.equal(refused, PERSONAL.id, "a plan that would not open leaves the workspace");
+  assert.equal(keptAfterRefusal, null, "and keeps nothing for the next launch");
+  assert.equal(stayed, PERSONAL.id);
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["alerts"],
+  );
+});
+
+test("the new-plan page's recent repositories are the chosen workspace's own, and the chip names its workspace", () => {
+  const tab = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      plans: [
+        { ...row("notes", 4), repository: "alice/private" },
+        { ...row("alerts", 3), workspaceId: ACME.id, repository: "acme/relay" },
+      ],
+    },
+  });
+
+  const personal = tab.control().repositories;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const acme = tab.control().repositories;
+
+  assert.deepEqual([personal.recent, personal.scope], [["alice/private"], PERSONAL.id]);
+  assert.deepEqual([acme.recent, acme.scope], [["acme/relay"], ACME.id]);
+});
+
+test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the personal one", () => {
+  const first = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => first.control().onChooseWorkspace(ACME.id));
+  document.body.innerHTML = "";
+
+  const relaunched = mount({ shown: true, planning: TWO_WORKSPACES });
+  const kept = relaunched.control().workspace?.id;
+  relaunched.stand({ planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL] } });
+
+  assert.equal(kept, ACME.id);
+  assert.equal(relaunched.control().workspace?.id, PERSONAL.id);
+  assert.deepEqual(
+    relaunched.control().listed.plans.map((plan) => plan.id),
+    ["notes", "billing"],
+  );
+});
+
+test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the personal one", async () => {
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
+
+  await tab.control().newPlan.start("Invites", null);
+
+  assert.equal(tab.control().workspace, undefined);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["notes", "alerts", "billing"],
+  );
+  assert.deepEqual(startedIn(tab.payloads), [undefined]);
+});
+
+test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
+  const listed = {
+    repositories: {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+  );
+
+  await tab.control().repositories.read();
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await tab.control().repositories.read();
+  tab.stand({ planning: { ...OPEN, workspaces: [PERSONAL, ACME] } });
+  await tab.control().repositories.read();
+
+  assert.deepEqual(namedIn(tab.payloads, ACT_KIND.PLANNING_REPOSITORIES), [
+    PERSONAL.id,
+    ACME.id,
+    PLAN.workspaceId,
+  ]);
+});
+
+test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
+  let refuse = false;
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.WORKSPACE_CREATE]: () =>
+        refuse
+          ? Promise.reject(new Error("Could not make that workspace on this system."))
+          : Promise.resolve(PLATFORM),
+    },
+  );
+
+  const made = await tab.control().onCreateWorkspace("Platform");
+  await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } });
+  refuse = true;
+  const refused = await tab.control().onCreateWorkspace("Platform");
+
+  assert.equal(made, undefined);
+  assert.equal(refused, "Could not make that workspace on this system.");
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_CREATE)
+      .map((asked) => Option.getOrUndefined(readCreate(asked.payload))?.name),
+    ["Platform", "Platform"],
+  );
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+});
+
+test("Workspace settings opens Settings on the listed workspace's page", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().onOpenWorkspaceSettings());
+
+  assert.deepEqual(tab.links, [{ page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id }]);
+});
+
+test("the listed workspace left lists the personal one again, and another workspace left keeps the one listed", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const chosen = tab.control().workspace?.id;
+
+  act(() => tab.control().onLeftWorkspace("workspace-elsewhere"));
+  const keptOnAnother = tab.control().workspace?.id;
+  act(() => tab.control().onLeftWorkspace(ACME.id));
+
+  assert.equal(chosen, ACME.id);
+  assert.equal(keptOnAnother, ACME.id);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("a fixture run lists its personal workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+  const staged = fixture.control().listed.plans.map((plan) => plan.name);
+  act(() => fixture.control().onChooseWorkspace("workspace-acme"));
+
+  assert.deepEqual(staged, ["Teammate invitations", "Billing export"]);
+  assert.deepEqual(
+    fixture.control().listed.plans.map((plan) => plan.name),
+    ["Usage alerts"],
+  );
+  assert.equal(fixture.control().workspaces.length, 2);
+  assert.equal(window.localStorage.length, 0);
 });

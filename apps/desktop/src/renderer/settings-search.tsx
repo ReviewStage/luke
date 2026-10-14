@@ -5,6 +5,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@sidecar/hosted/integration-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@sidecar/hosted/workspace-wire";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import {
   APP_SETTING_SCHEMA,
@@ -20,7 +21,12 @@ import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
-import { SETTINGS_PAGE_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import {
+  SETTINGS_PAGE_LIST,
+  SETTINGS_SECTION,
+  SETTINGS_VIEW,
+  type SettingsView,
+} from "./settings-views";
 import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 
@@ -72,8 +78,9 @@ export interface SettingsSearchEntry {
  * record the rows themselves are drawn from. The settings' own half is the
  * schema's — each entry says whether its row is drawn right now, judged from
  * this same record — so nothing here restates a condition a page branches on.
+ * Beside it, the workspace the Workspace page shows, absent while it draws none.
  */
-export type SettingsSearchInput = SettingsRowsInput;
+export type SettingsSearchInput = SettingsRowsInput & { workspace?: Workspace | undefined };
 
 /**
  * The page named the way a group's head says it: the names the sidebar's own
@@ -88,6 +95,7 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
   [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
+  [SETTINGS_VIEW.WORKSPACE]: "Workspace",
 } satisfies Record<SettingsView, string>;
 
 /** The words every shortcut row can be found by, beside its own name. */
@@ -246,6 +254,23 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
             "OpenAI API key",
             "api keys byok own key gpt codex billing provider credential",
           ],
+        }
+      : undefined,
+    // The Workspace page's groups, as it draws them for the workspace it shows.
+    input.workspace && !input.workspace.personal
+      ? {
+          id: SETTINGS_SECTION.MEMBERS,
+          label: "Members",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Members", "invite people team remove leave"],
+        }
+      : undefined,
+    input.workspace && !input.workspace.personal && input.workspace.role !== WORKSPACE_ROLE.MEMBER
+      ? {
+          id: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+          label: "GitHub repositories",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["GitHub repositories", "connect choose disconnect organization"],
         }
       : undefined,
     // The window's own chords, fixed rather than chosen, listed below them.

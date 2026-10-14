@@ -21,18 +21,6 @@
   animation-timeline: scroll(self block);
 }
 
-/* Native focus scrolling knows nothing of the pinned header, so a control
-   tabbed to near the page's top would be brought flush with the scroller's
-   edge — under the header rather than below it. Scroll padding is what that
-   scrolling reads. `--settings-header-height` is the back button's own 26px,
-   the header's height whenever its line has not wrapped; scoped to a page
-   that pins one, so the front page keeps its plain edge. */
-.settings:has(> .settings-header) {
-  --settings-header-height: 26px;
-
-  scroll-padding-top: calc(var(--settings-header-height) + var(--settings-gap));
-}
-
 /* A page's own name, at the head of its column: the page list says where
    Settings is, and this says which page the column holds. Its line is a
    control tall, so a head with Reset is no taller than one without. */
@@ -142,45 +130,6 @@
   gap: var(--space-12);
 }
 
-/* A page's head: the way back beside the page's own name, above the sections
-   it holds. Pinned to the scroller's top edge, so the way back never has to
-   be scrolled back to, in the surface's own fill so the rows slide under it
-   rather than through it. Raised above the sections, whose arrival transforms
-   make each its own stacking context. */
-.settings-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 9px;
-  padding: 0 2px;
-  background: var(--surface-fill);
-}
-
-/* The band below the pinned header, where a passing row dissolves into the
-   surface the way every scroller's foot already does. It spans exactly the
-   scroller's own gap: any taller and the first section would read faded while
-   the page rests at its top, any shorter and a row would be sliced against
-   the header's edge on its way under. */
-.settings-header::after {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  left: 0;
-  height: var(--settings-gap);
-  background: linear-gradient(to bottom, var(--surface-fill), transparent);
-  content: "";
-  pointer-events: none;
-}
-
-.settings-header strong {
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 700;
-}
-
 /* Where the query's words landed, so a result says why it matched. A wash
    rather than the engine's yellow: the mark identifies text, and the row's
    own colours keep saying everything else. No padding — these lines
@@ -213,17 +162,6 @@
   }
 }
 
-/* The front page's list of pages. The rows sit at a menu's spacing rather
-   than a form's — each is one name, so the 9px a section keeps between rows
-   of copy would read as gaps, not as calm — and the card's own padding plus
-   the rows' pill padding puts the first and last rows' content 15px from the
-   card's edge, the same inset the sides keep. */
-.settings-index {
-  gap: 3px;
-  padding-top: 11px;
-  padding-bottom: 11px;
-}
-
 /* A page that is one nameless group is no group at all: its rows stand on the
    page itself, under the header that already names it, and a card around them
    would be a border around nothing. With no card there is no card inset
@@ -233,49 +171,6 @@
   padding: 2px;
   border: 0;
   background: none;
-}
-
-/* A front-page row that opens a page rather than holding a control: glyph,
-   name, what the page holds, and the chevron that promises somewhere to go.
-   The hover bleeds to the section's padding so the pill reads as the row. */
-.settings-nav {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 10px;
-  margin: 0 -8px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  background: none;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.settings-nav:hover {
-  background: var(--raised);
-}
-
-.settings-nav .settings-copy {
-  flex: 1;
-}
-
-/* The page's glyph in a small plate, the way macOS marks a settings row. */
-.settings-nav-mark {
-  display: flex;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-}
-
-.settings-nav-mark .settings-icon {
-  width: 13px;
-  height: 13px;
-  opacity: 1;
 }
 
 .settings-chevron {

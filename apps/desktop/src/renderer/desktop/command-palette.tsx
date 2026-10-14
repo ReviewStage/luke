@@ -44,7 +44,6 @@
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/hosted/plan-wire";
 import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { ArchiveIcon, DocumentIcon, GearIcon, SearchIcon } from "@sidecar/panel";
-import type { SettingsRowsInput } from "@sidecar/settings";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -72,7 +71,12 @@ import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
 import { settingsPageOf } from "../settings/pages";
-import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
+import {
+  landOnSettingsRow,
+  RESULT_PAGE_WORD,
+  type SettingsSearchInput,
+  settingsSearchEntries,
+} from "../settings-search";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
@@ -464,7 +468,7 @@ function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteR
 
 /** Every settings row the pages draw now, as the settings search finds them, beside its page's name. */
 function settingRows(
-  rows: SettingsRowsInput | undefined,
+  rows: SettingsSearchInput | undefined,
   land: (page: SettingsView, id: string) => void,
 ): readonly PaletteRow[] {
   if (rows === undefined) return [];
@@ -578,7 +582,7 @@ export function CommandPalette({
   plans: PlansControl;
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
-    rows: SettingsRowsInput | undefined;
+    rows: SettingsSearchInput | undefined;
     onViewChange: (view: SettingsView) => void;
   };
   /** Lists everything in the plan's repository in one read, which the Files rows are. */
