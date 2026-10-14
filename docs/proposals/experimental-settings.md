@@ -1,9 +1,11 @@
 # Proposal: an Experimental settings page that gates features
 
-Status: proposed, waiting on Dean's decisions below. No product code until he
-answers. On 2026-10-14 Dean asked for two changes to the page, now drawn here
-and in the show: no intro text, and the empty Inbox's empty state in place of
-a one-line note.
+Status: decided by Dean on 2026-10-14 ("I agree with all the Experimental
+settings and I approve any appropriate AGENTS.md changes"). Every decision
+below took its recommendation, and the page follows his two later changes:
+no intro text, and the empty Inbox's empty state with a title in place of a
+one-line note. It is being built as the stack §4 describes. Where what
+shipped differs from this text, the text says what shipped.
 
 Dean's ask: "I want to build the thin version of Factory. HOWEVER, I want to
 add an Experimental settings tab that gates features. Can we plan this out
@@ -19,9 +21,10 @@ components in dark and light. It shows the page with Factory listed, Factory
 switched on, the sidebar with Factory hidden and shown, Factory open, ⌘K,
 Settings search, several experiments at once, and the empty state.
 
-## Decisions for Dean
+## Decisions (Dean, 2026-10-14)
 
-Each decision lists its options; **the recommendation is in bold**.
+Each decision lists its options; **the recommendation, which Dean took in
+every case, is in bold**.
 
 1. **Where the choice is stored.**
    - **(a) Per account, on the server.** It follows the developer to every
@@ -424,7 +427,7 @@ An old build that hasn't auto-updated yet loses the feature until it does.
 The tests follow `AGENTS.md` "Testing": hermetic, at the smallest layer, and
 built from the shared builders.
 
-- **Helper.** `experimentsOn(...keys)` in `@sidecar/settings/testing` builds
+- **Helper.** `experimentsOn(...keys)` in `@luke/settings/testing` builds
   the app-state value. Renderer tests pass it through the existing state
   builders, and host tests pair it with `fakeHttpClientLayer`. There is no
   network and no real clock, and each test passes alone.
@@ -443,8 +446,9 @@ built from the shared builders.
   - the page lists its rows, or the empty state;
   - the search finds a row by its name.
 - **Main.** The menu template omits Go › Factory while it is off.
-- **Evidence.** `./scripts/verify.sh` evidence for the page and the sidebar,
-  in light and dark. The PR body says CI could not verify it.
+- **Evidence.** The page's PR body says plainly that CI could not verify the
+  Mac: CI is Linux only, and the release rehearsal on a tag is the only Mac
+  gate.
 
 ## 4. The PRs
 
@@ -452,10 +456,10 @@ They form one stack, in order. Each is small enough to review in one sitting.
 
 | # | PR | Size | Builds |
 | --- | --- | --- | --- |
-| 1 | `feat(web,settings): experiments stored on the account` | S–M, ~300 lines | The registry module (starting empty), the tolerant wire reader, the `experiments` column and migration, the store's read and per-key merge with tests, and the endpoint's third part with tests |
+| 1 | `feat(web,settings): experiments stored on the account` | S–M, ~300 lines | The registry module (with Factory, so worker 260 can gate on it), the tolerant wire reader, the `experiments` column and migration, the store's read and per-key merge with tests, and the endpoint's third part with tests |
 | 2 | `feat(desktop,host): read and write an experiment, gated in one place per list` | M, ~450 lines | The host cache, reconcile and write, `experiments.set`, `ACT_KIND.EXPERIMENT_SET`, app state, `useExperiment`, the `experiment` tags and their filters (shortcuts, "+" entries), the menu rebuild, history skipping an off place, and `experimentsOn` |
-| 3 | `feat(desktop): Settings › Experimental` | M, ~350 lines | The page, its place and icon, counted names, rows and empty state (`EmptyState` gains an optional title), search entries, the feedback dialog's experiment, and `experiment:toggle`. With the registry still empty, it ships showing the empty state. `verify.sh` evidence |
-| 4 | Factory's view (worker 260), gated | Worker 260's | Factory's registry entry, then its view, sidebar row, command, chord and Go menu item, each behind `useExperiment(EXPERIMENT.FACTORY)`, with the toolbar badge and Send feedback |
+| 3 | `feat(desktop): Settings › Experimental` | M, ~350 lines | The page, its place and icon, counted names, rows and empty state (`EmptyState` gains an optional title), search entries, the feedback dialog's experiment, and `experiment:toggle`. Its body says CI could not verify the Mac |
+| 4 | Factory's view (worker 260), gated | Worker 260's | Factory's view, sidebar row, command, chord and Go menu item, each behind `useExperiment(EXPERIMENT.FACTORY)`, with the toolbar badge and Send feedback |
 
 **Order.** Factory stacks on PR 3, because that is the only way to turn it on
 in the app.
