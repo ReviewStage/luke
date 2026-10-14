@@ -6,12 +6,14 @@ import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updatePlan } from "@luke/database/models/plan-store";
 import { organization, user } from "@luke/database/schemas/auth";
+import { automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, joinWorkspace, openWorkspace, startPlan } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import {
@@ -87,7 +89,7 @@ const SETTINGS: InboxPost = {
 /** The reply a task takes: done. */
 const DONE = { reply: INBOX_REPLY.DONE } as const;
 
-/** An automation of the account's on a plan of the workspace, which its runs start agents beside. */
+/** A workspace automation of the account's on a plan of the workspace, which its runs start agents beside. */
 const openAutomation = (userId: string, workspaceId: string) =>
   Effect.gen(function* () {
     const plan = yield* startPlan(userId, { name: "Flaky tests" });
@@ -95,6 +97,7 @@ const openAutomation = (userId: string, workspaceId: string) =>
     const made = yield* createAutomation(userId, {
       planId: plan.id,
       name: "Flaky-test sweep",
+      scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
       action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
       guards: AUTOMATION_DEFAULT_GUARDS,
@@ -130,7 +133,7 @@ const openPlanlessAgent = openPlanlessAgentOf(false);
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
-    "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, and never among the plans' items",
+    "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation only to who may read it",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId, automationId } = yield* openPlanlessAgentOf(true);
@@ -159,6 +162,24 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.ok(!theirs.items.some((entry) => entry.id === posted.success.id));
         assert.deepEqual([others.planless, others.automations], [[], []]);
+
+        // Made personal, the automation's runs stay the workspace's, and its name its creator's.
+        yield* Database.use((db) =>
+          db
+            .update(automationTable)
+            .set({ scope: AUTOMATION_SCOPE.PERSONAL })
+            .where(eq(automationTable.id, automationId ?? "")),
+        );
+        const teammateRead = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        const creatorRead = yield* accountInboxPast(agent.userId, INBOX_CURSOR_START);
+        assert.deepEqual(
+          teammateRead.planless?.map((entry) => [entry.id, entry.automationName]),
+          [[posted.success.id, null]],
+        );
+        assert.deepEqual(
+          creatorRead.planless?.map((entry) => entry.automationName),
+          ["Flaky-test sweep"],
+        );
       }),
   );
 

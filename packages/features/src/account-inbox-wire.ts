@@ -61,7 +61,10 @@ export type AccountInboxPlan = typeof accountInboxPlanSchema.Type;
  * where a plan's item names its plan, this names the automation whose run
  * started the agent and the repository it works in, which together stand
  * in the plan's place. The automation is null for an agent no automation
- * started or once that automation is deleted, and its name with it.
+ * started or once that automation is deleted, and its name with it; the
+ * name is null too for a reader the automation's own rule does not let
+ * read it, such as a member beside another's personal automation, whose
+ * runs every member reads.
  */
 export const accountPlanlessEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,

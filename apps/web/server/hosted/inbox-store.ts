@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { automationReadableBy } from "@luke/database/models/automation-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
@@ -574,7 +575,11 @@ const findPlanlessWaitingItems = SqlSchema.findAll({
         })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
-        .leftJoin(automation, eq(automation.id, codingAgent.automationId))
+        // The automation's name is told only to an account that may read the automation itself.
+        .leftJoin(
+          automation,
+          and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+        )
         .where(planlessWaiting(userId))
         .orderBy(...LATEST_FIRST),
     ),
