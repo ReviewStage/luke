@@ -62,11 +62,13 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
-import { SentWords, useSkillFile } from "./skill-chip";
+import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
+import { SkillCard } from "./skill-ref";
 import {
   cardTitle,
   delegationView,
+  loadedSkill,
   TARGET_HINT,
   type ToolTarget,
   todoFocus,
@@ -120,7 +122,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * runs of calls and its finished lead folded as the Call tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Call tab draws one, each skill it
  * names the chip that opens the skill's file (`skill-chip.tsx`), as a
- * "Loaded skill" row opens it too; and while
+ * "Loaded skill" row opens it too, hanging the same card; and while
  * the agent may still write, a shimmering line stands at the end saying
  * what it is doing, "Starting…" until its turn opens, "Thinking…" until
  * the turn draws its first row, and "Working…" after (`agentWorkingPhase`),
@@ -364,7 +366,8 @@ function TodosDock({
 
 /**
  * A call that loaded a skill: the one button that opens the skill's
- * `SKILL.md`, where it is one of the plan's skills, and a call's row
+ * `SKILL.md`, hanging the card a sent message's chip of the skill hangs
+ * (`skill-ref.tsx`), where it is one of the plan's skills, and a call's row
  * otherwise. Note that a load that failed keeps the call's row, because the
  * row is where its error is read.
  */
@@ -373,15 +376,19 @@ function LoadedSkillView({
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
 }): ReactNode {
-  const onOpen = useSkillFile(toolCallView(part).subject);
-  if (onOpen === undefined || part.state === TOOL_STATE.OUTPUT_ERROR) {
+  const subject = useSkill(loadedSkill(part.input));
+  if (subject === undefined || part.state === TOOL_STATE.OUTPUT_ERROR) {
     return <ToolCallView part={part} />;
   }
-  return <OpeningCallView part={part} hint={SKILL_HINT} onOpen={onOpen} />;
+  return (
+    <OpeningCallView
+      part={part}
+      hint={subject.skill.path}
+      card={<SkillCard subject={subject} />}
+      onOpen={subject.onOpen}
+    />
+  );
 }
-
-/** What the hover over a loaded skill's row says it opens. */
-const SKILL_HINT = "Open SKILL.md";
 
 /** A call about something drawn in a tab of its own: the one button that opens that tab, saying what it did, its hover saying what it opens. */
 function OpeningCallView({

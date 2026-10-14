@@ -5,9 +5,7 @@ import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
 import { CallIcon } from "@sidecar/panel";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@sidecar/wire";
 import type { UIMessage } from "ai";
-import { AudioLinesIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
   ConversationContent,
@@ -19,9 +17,8 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
-import { CallEnded } from "./call-card";
+import { CallCheckpoint, CallEnded } from "./call-card";
 import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
-import { callHeading } from "./plan-time";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
 import {
@@ -66,9 +63,6 @@ import { WorkingLine } from "./working-time";
  * repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
-
-/** What a call's checkpoint says while the call stands. */
-const LIVE_LABEL = "Live";
 
 /** What the tab says where the transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
@@ -270,18 +264,7 @@ function CallSection({
     <>
       {/* Before the checkpoint rather than on it, since a sticky checkpoint stands at the top however far it has scrolled. */}
       {revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
-      <Checkpoint
-        trailing={
-          call.live ? (
-            <span className="flex items-center gap-1.5 text-developer">
-              <AudioLinesIcon className="size-3.5" aria-hidden="true" />
-              {LIVE_LABEL}
-            </span>
-          ) : null
-        }
-      >
-        {callHeading(call.startedAt, now)}
-      </Checkpoint>
+      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} />
       <CallEntries entries={entries} doors={doors} />
       {ended === undefined ? null : (
         <CallEnded line={ended} startedAt={call.startedAt} record={call.record} />

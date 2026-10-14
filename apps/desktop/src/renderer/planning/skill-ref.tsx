@@ -1,0 +1,53 @@
+import { BookOpenIcon } from "lucide-react";
+import { CardDetail } from "../desktop/plan-card";
+import { CardHead, CardNote, HoverCard } from "../hover-card";
+import { Tooltip } from "../tooltip";
+import { FileTypeIcon } from "./file-type-icon";
+import { type SkillOption, skillWord } from "./skill-mention";
+
+/**
+ * skill-ref.tsx -- a skill named anywhere in the window: the card it hangs, and its `/name` as the one button that hangs that card and opens its `SKILL.md`.
+ *
+ * A skill is named as the words that load it, `/name`, wherever it is
+ * drawn: a sent message's chip, the composer's chip, the composer's list,
+ * the card, and a coding agent's "Loaded skill" row. Each place that can
+ * open the skill's file hangs the one card while the pointer rests on the
+ * name, drawn from every card's parts (`hover-card.tsx`) and a plan card's
+ * rows (`plan-card.tsx`): the skill's mark and name at its head, what it is
+ * for under it, and its file's line, named from the repository's root,
+ * which opens it too.
+ * A press on the name, or Enter once it has the focus, opens the same
+ * file. A name inside a message is the chip the composer drew it as
+ * (`SkillRef`); a transcript's row that loaded the skill is a call's row,
+ * which hangs the same card (`agent-tab.tsx`), as a row that opens an
+ * agent's tab hangs that tab's card.
+ */
+
+/** A skill a place can open: the skill as the plan's repository holds it, and what opens its `SKILL.md`. */
+export interface SkillSubject {
+  readonly skill: SkillOption;
+  readonly onOpen: () => void;
+}
+
+/** The skill's card: its mark and name, what it is for, and its file's line, which a press opens. */
+export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Element {
+  const { skill, onOpen } = subject;
+  return (
+    <HoverCard data-skill-card="">
+      <CardHead glyph={<BookOpenIcon aria-hidden="true" />} name={skillWord(skill.name)} />
+      {skill.description === "" ? null : <CardNote>{skill.description}</CardNote>}
+      <CardDetail glyph={<FileTypeIcon name={skill.path} />} label={skill.path} onPress={onOpen} />
+    </HoverCard>
+  );
+}
+
+/** A skill named in place: its `/name` as the composer's chip, one button that hangs its card and opens its file. */
+export function SkillRef({ subject }: { subject: SkillSubject }): React.JSX.Element {
+  return (
+    <Tooltip label={subject.skill.path} card={<SkillCard subject={subject} />}>
+      <button type="button" className="skill-chip" data-skill-ref="" onClick={subject.onOpen}>
+        {skillWord(subject.skill.name)}
+      </button>
+    </Tooltip>
+  );
+}

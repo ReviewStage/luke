@@ -145,13 +145,18 @@ export function matchingSkills(
   return [...starts, ...holds, ...describes];
 }
 
+/** The word a skill is named by wherever it is drawn or written: `/name`, the words that load it. */
+export function skillWord(name: string): string {
+  return `${SLASH}${name}`;
+}
+
 /** The message with the `/` word under the caret written as the skill chosen, a space after it, and the caret after that. */
 export function chooseSkill(text: string, mention: SkillMention, name: string): TextEdit {
   let end = mention.start + 1;
   while (end < text.length && NAME_CHARACTER.test(text[end] ?? "")) end += 1;
   const after = text.slice(end);
   const spaced = after.startsWith(" ") ? after : ` ${after}`;
-  const written = `${SLASH}${name}`;
+  const written = skillWord(name);
   return {
     text: `${text.slice(0, mention.start)}${written}${spaced}`,
     caret: mention.start + written.length + 1,

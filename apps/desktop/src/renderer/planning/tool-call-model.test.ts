@@ -130,7 +130,7 @@ test("a skill load says the skill it loaded, and answers with the skill's instru
     output: body,
   });
   assert.equal(view.kind, CALL_KIND.LOAD_SKILL);
-  assert.equal(view.subject, "release-notes");
+  assert.equal(view.subject, "/release-notes");
   assert.deepEqual(view.input, { kind: TOOL_BLOCK.TEXT, text: "release-notes" });
   assert.deepEqual(view.output, { kind: TOOL_BLOCK.TEXT, text: body });
 
@@ -139,7 +139,7 @@ test("a skill load says the skill it loaded, and answers with the skill's instru
     input: { skill: "release-notes" },
     output: undefined,
   });
-  assert.equal(loading.subject, "release-notes");
+  assert.equal(loading.subject, "/release-notes");
   assert.equal(loading.output, undefined);
 });
 

@@ -1,4 +1,3 @@
-import { BookOpenIcon } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -10,12 +9,15 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
-import { CardDetail } from "../desktop/plan-card";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { Tooltip } from "../tooltip";
-import { FileTypeIcon } from "./file-type-icon";
-import { holdsSlashWord, type SkillOption, skillTokens, type TextRange } from "./skill-mention";
+import {
+  holdsSlashWord,
+  type SkillOption,
+  skillTokens,
+  skillWord,
+  type TextRange,
+} from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
+import { SkillRef, type SkillSubject } from "./skill-ref";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -24,22 +26,19 @@ import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
  * A message the developer sent a coding agent names a skill as the words
  * `/name` (`skill-mention.ts`), and its bubble draws each `/name` that names
  * one of the plan's repository's skills as the chip the composer drew it as
- * while it was typed (`.skill-chip`), where Claude Code and Codex draw a
+ * while it was typed (`skill-ref.tsx`), where Claude Code and Codex draw a
  * slash command as a token too; a `/word` that names none stays words. The
  * chip is a button: a press, or Enter once it has the focus, opens the
  * skill's `SKILL.md` in a File tab of the side panel, at the default branch
- * as the repository's skills were read, and its hover card says what the
- * skill is for and where it stands, drawn from a plan card's rows
- * (`plan-card.tsx`) as a pinned tab's is: the skill's mark and name at its
- * head, what it is for under it, and its file's line, which opens it too.
+ * as the repository's skills were read, and it hangs the skill's card.
  * A chip the composer drew opens the same file on a press
  * (`skill-picker.tsx`). The words stay the message's own underneath, so a
  * copy of the message and a find in the tab read `/name`.
  * The skills are the ones the composer offers, read once for the plan
  * (`repository-skills.ts`), and only once a transcript holds a word they
  * could name, so a conversation naming none reads nothing. The "Loaded
- * skill" row of a call that loaded one opens the same file
- * (`useSkillFile`).
+ * skill" row of a call that loaded one hangs the same card and opens the
+ * same file (`useSkill`).
  */
 
 /** The plan's skills as read, by name, the ask that reads them, and what opening one's file does, handed to every transcript of the plan. */
@@ -74,48 +73,10 @@ function withChips(text: string, tokens: readonly TextRange[]): string {
   let at = 0;
   for (const token of tokens) {
     const name = text.slice(token.start + 1, token.end);
-    written += `${text.slice(at, token.start)}<${SKILL_ELEMENT.TAG} ${SKILL_ELEMENT.NAME}="${name}">/${name}</${SKILL_ELEMENT.TAG}>`;
+    written += `${text.slice(at, token.start)}<${SKILL_ELEMENT.TAG} ${SKILL_ELEMENT.NAME}="${name}">${skillWord(name)}</${SKILL_ELEMENT.TAG}>`;
     at = token.end;
   }
   return written + text.slice(at);
-}
-
-/**
- * What the hover card of a skill's chip says, in a plan card's rows: the
- * skill's mark and its name as the chip says it, what it is for, and the
- * line of its file, named from the repository's root, which a press opens.
- */
-function SkillCard({
-  skill,
-  onOpen,
-}: {
-  skill: SkillOption;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <HoverCard data-skill-card="">
-      <CardHead glyph={<BookOpenIcon aria-hidden="true" />} name={`/${skill.name}`} />
-      {skill.description === "" ? null : <CardNote>{skill.description}</CardNote>}
-      <CardDetail glyph={<FileTypeIcon name={skill.path} />} label={skill.path} onPress={onOpen} />
-    </HoverCard>
-  );
-}
-
-/** A skill named in a sent message: the composer's chip, as a button that opens its file, hanging a card that says what it is. */
-function SkillChip({
-  skill,
-  onOpen,
-}: {
-  skill: SkillOption;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <Tooltip label={skill.path} card={<SkillCard skill={skill} onOpen={onOpen} />}>
-      <button type="button" className="skill-chip" onClick={onOpen}>
-        /{skill.name}
-      </button>
-    </Tooltip>
-  );
 }
 
 /**
@@ -127,8 +88,8 @@ function SkillElement({ node }: ExtraProps): ReactNode {
   const doors = useContext(SkillFileContext);
   const name = String(node?.properties[SKILL_ELEMENT.NAME] ?? "");
   const skill = doors?.skills?.get(name);
-  if (doors === undefined || skill === undefined) return `/${name}`;
-  return <SkillChip skill={skill} onOpen={() => doors.onOpen(skill)} />;
+  if (doors === undefined || skill === undefined) return skillWord(name);
+  return <SkillRef subject={{ skill, onOpen: () => doors.onOpen(skill) }} />;
 }
 
 const SKILL_COMPONENTS: Components = { [SKILL_ELEMENT.TAG]: SkillElement };
@@ -175,12 +136,12 @@ export function SkillFiles({
   return <SkillFileContext.Provider value={doors}>{children}</SkillFileContext.Provider>;
 }
 
-/** What opens the named skill's `SKILL.md`; nothing where no skill of the plan's is so named, or its skills are not read. */
-export function useSkillFile(name: string | undefined): (() => void) | undefined {
+/** The named skill and what opens its `SKILL.md`; nothing where no skill of the plan's is so named, or its skills are not read. */
+export function useSkill(name: string | undefined): SkillSubject | undefined {
   const onOpen = useContext(SkillFileContext)?.onOpen;
   const skill = useKnownSkills(name !== undefined && name !== "")?.get(name ?? "");
   if (skill === undefined || onOpen === undefined) return undefined;
-  return () => onOpen(skill);
+  return { skill, onOpen: () => onOpen(skill) };
 }
 
 /** What opens a skill's `SKILL.md`, for the composer's chips, which read the skills themselves; nothing outside a plan's page. */
