@@ -64,6 +64,7 @@ import {
   type ChatNoticeMetadata,
   isRecord,
   isWireString,
+  MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type UnparsedWireValue,
@@ -1533,9 +1534,23 @@ export interface SentLine {
   readonly steers: boolean;
 }
 
-/** The developer's own rows of a transcript, which a sent line is read back as one of. */
+/**
+ * Whether a user row is the developer's own words, typed or spoken by
+ * them: never a chat notice, nor a line the voice model or the brain
+ * wrote. A row whose metadata this build cannot read, or one written
+ * before metadata was kept, is taken as the developer's, as it always was.
+ */
+function developersOwn(message: CodingAgentMessage): boolean {
+  if (message.role !== MESSAGE_ROLE.USER) return false;
+  if (message.metadata === undefined) return true;
+  const read = Option.getOrUndefined(readUserMetadata(message.metadata));
+  if (read === undefined) return true;
+  return read.author === MESSAGE_AUTHOR.DEVELOPER && chatNoticeOf(message) === undefined;
+}
+
+/** The developer's own rows of a transcript, which a sent line is read back as one of; a chat notice of the same words never answers it. */
 function developerRows(messages: readonly CodingAgentMessage[]): readonly CodingAgentMessage[] {
-  return messages.filter((message) => message.role === MESSAGE_ROLE.USER);
+  return messages.filter(developersOwn);
 }
 
 /** The ids of the developer's rows a transcript holds now, for a line about to go. */
