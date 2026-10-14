@@ -605,6 +605,7 @@ export function usePlansTab(input: {
     planId: fixture === undefined ? viewed.activePlanId : undefined,
     repository:
       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+    rollout: openDocument?.id === viewed.activePlanId ? (openDocument?.rollout.length ?? 0) : 0,
     // Read through the marks, so an Unarchive opens the composers at once, as it does the document.
     archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
     onUnarchive: () => {

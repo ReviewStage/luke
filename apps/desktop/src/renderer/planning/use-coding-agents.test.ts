@@ -7,8 +7,11 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -16,6 +19,9 @@ import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#sha
 import { onRegistry } from "#testing/copy-feedback";
 import type { Failure } from "../failure-remedy";
 import { ToastHost } from "../toast";
+
+import { PLAN_ASK } from "./coding-agent-model";
+
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -36,6 +42,7 @@ interface Standing {
   planId: string | undefined;
   repository: string | null;
   archived?: boolean;
+  rollout?: number;
 }
 
 /** One act as the hook asked it. */
@@ -92,6 +99,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
       archived: held.archived === true,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
+      rollout: held.rollout ?? 0,
       onUnarchive: () => {
         unarchives += 1;
       },
@@ -142,6 +150,88 @@ function startPayloads(
 }
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
+test("a plan whose rollout names more than one pull request rolls out through Luke: the press sends the fixed line, an unanswered line goes again under its key, and a line taken or refused lets its key go", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay", rollout: 2 });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  tab.answer(
+    ACT_KIND.PLANNING_MESSAGE,
+    { failure: PLAN_CALL_FAILURE.UNANSWERED },
+    { ask: { id: "ask-1", queuedAt: 1 } },
+    { failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED },
+  );
+  await tab.mount();
+  assert.equal(tab.control().start.rollOut, true);
+
+  act(() => tab.control().start.onPress());
+  await settle();
+  assert.equal(tab.control().start.note?.text, "Luke could not be reached. Try again.");
+  act(() => tab.control().start.onPress());
+  await settle();
+  assert.equal(tab.control().start.note, undefined);
+  act(() => tab.control().start.onPress());
+  await settle();
+  assert.equal(tab.control().start.note?.text, "This plan is archived. Unarchive it first.");
+  act(() => tab.control().start.onPress());
+  await settle();
+
+  assert.deepEqual(startPayloads(tab.asked), []);
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind === ACT_KIND.PLANNING_MESSAGE).map((each) => each.payload),
+    [
+      { planId: PLAN, text: PLAN_ASK.ROLL_OUT, clientKey: "key-1" },
+      { planId: PLAN, text: PLAN_ASK.ROLL_OUT, clientKey: "key-1" },
+      { planId: PLAN, text: PLAN_ASK.ROLL_OUT, clientKey: "key-2" },
+      { planId: PLAN, text: PLAN_ASK.ROLL_OUT, clientKey: "key-3" },
+    ],
+  );
+});
+
+test("each plan keeps its own unanswered Roll out key, so a Roll out of another plan between two presses does not make the first plan's line a second one", async () => {
+  const OTHER = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const tab = mount({ planId: PLAN, repository: "acme/relay", rollout: 2 });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [] });
+  tab.answer(
+    ACT_KIND.PLANNING_MESSAGE,
+    { failure: PLAN_CALL_FAILURE.UNANSWERED },
+    { ask: { id: "ask-1", queuedAt: 1 } },
+    { ask: { id: "ask-2", queuedAt: 2 } },
+  );
+  await tab.mount();
+
+  act(() => tab.control().start.onPress());
+  await settle();
+  await tab.stand({ planId: OTHER });
+  act(() => tab.control().start.onPress());
+  await settle();
+  await tab.stand({ planId: PLAN });
+  act(() => tab.control().start.onPress());
+  await settle();
+
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind === ACT_KIND.PLANNING_MESSAGE).map((each) => each.payload),
+    [
+      { planId: PLAN, text: PLAN_ASK.ROLL_OUT, clientKey: "key-1" },
+      { planId: OTHER, text: PLAN_ASK.ROLL_OUT, clientKey: "key-2" },
+      { planId: PLAN, text: PLAN_ASK.ROLL_OUT, clientKey: "key-1" },
+    ],
+  );
+});
+
+test("a plan whose rollout names one pull request, or none, keeps Start and its one agent", async () => {
+  for (const rollout of [0, 1]) {
+    const tab = mount({ planId: PLAN, repository: "acme/relay", rollout });
+    tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] });
+    tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: STARTED });
+    await tab.mount();
+    assert.equal(tab.control().start.rollOut, false);
+
+    act(() => tab.control().start.onPress());
+    await settle();
+    assert.deepEqual(startPayloads(tab.asked), [{ planId: PLAN, idempotencyKey: "key-1" }]);
+    assert.equal(tab.asked.filter((each) => each.kind === ACT_KIND.PLANNING_MESSAGE).length, 0);
+    assert.deepEqual(tab.started, [AGENT]);
+  }
+});
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
