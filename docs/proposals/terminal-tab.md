@@ -36,6 +36,71 @@ architecture's text stands.
 8. **⌘J** opens the current or most recent agent's terminal, and ⌘K stays
    the palette inside it.
 
+## New terminal: the rules (round 3)
+
+A terminal belongs to **one coding agent's sandbox**, never to the plan. Two
+commands open one:
+
+- **⌘J ("show terminal")** goes to an existing Terminal tab.
+- **New terminal** adds a shell. It is reached from ⌘K, from the panel's
+  "+", and from a list's "+".
+
+Each command first decides *which agent*:
+
+| Where you are | ⌘J (show terminal) | New terminal (⌘K, "+") |
+| --- | --- | --- |
+| An agent's tab, its Changes tab, or its Terminal tab | That agent's Terminal tab | A new shell in that agent's sandbox |
+| Anywhere else (plan, Board, Code, a file), one agent on the plan | That agent's Terminal tab | A new shell in that agent's sandbox |
+| Anywhere else, several agents, one used before | The last-used agent's Terminal tab | The picker, last-used agent preselected |
+| Anywhere else, several agents, none used yet | The picker | The picker |
+| No agent on the plan | The picker's empty state: "Start a coding agent" | The same |
+
+**The picker.** The command palette asks "New terminal in which agent's
+sandbox?". Each row is the agent as `AgentRef` draws it (glyph and name),
+with its state: "Working · sandbox running", "Idle · sandbox stopped". The
+panel's "+" lists the same agents under "Terminal".
+
+**The list's "+"** always adds a shell to *this* agent's sandbox. The list
+never switches agent. To reach another agent, use "+", ⌘K, or that agent's
+own "Terminal" chip, which always opens its own terminal.
+
+**When the chosen sandbox isn't simply running:**
+
+| The sandbox is | The tab shows |
+| --- | --- |
+| Running | A shell, connected |
+| Stopped | The last scrollback, dimmed, under a slim bar: "Sandbox stopped. · ~5 s · **Resume sandbox ⏎**". It resumes only on that click or key |
+| Still starting (the agent hasn't run its first command) | "Waiting for the agent to open its sandbox…", then it connects. That is the agent's own start, not a resume |
+| Gone (agent archived or retired) | Not offered anywhere. An open tab closes, like its Changes tab |
+
+**Ownership in the chrome.** The tab is labelled "Terminal", with the
+agent's name as its detail and the agent's glyph as its icon (the working
+mark while it works). The bar names the agent with `AgentRef`. The hover
+card is the agent tab's card, plus "Terminal in this agent's sandbox ·
+3 shells". The plan appears only as context.
+
+**When the agent's run changes:**
+
+- **The turn finishes, fails, or is cancelled.** If a terminal is
+  connected, nothing changes and the shells keep running. Otherwise the
+  sandbox stops as today, and the tab shows the stopped bar.
+- **A new turn starts and eve resumes the sandbox.** A shown tab connects by
+  itself, because the agent started the sandbox, not the terminal. Shells
+  from before the stop are gone, so it opens a new one.
+- **The agent is never told** a human was there.
+
+**States, the way terminals say them.**
+
+- A state that needs nothing from you is one dim inline line:
+  - `[Disconnected after 5 min without typing. Press any key to reconnect.]`
+  - `[Process exited with code 0. Press any key for a new shell …]`
+- A state with an action is one slim mono bar with one text action and its
+  key:
+  - "Connection lost. Reconnecting… · **Retry now ⏎**"
+  - "Sandbox stopped. · ~5 s · **Resume sandbox ⏎**"
+  - "Resuming sandbox… restoring snapshot · 3 s"
+- The scrollback stays, dimmed. There are no cards, icons, or pills.
+
 ## What Dean asked for
 
 Dean first asked for "a terminal tab". He then dropped the local-shell
