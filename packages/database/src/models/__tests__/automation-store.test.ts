@@ -7,6 +7,8 @@ import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@sidecar/hosted/automation-wire";
 import { eq } from "drizzle-orm";
@@ -14,6 +16,7 @@ import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
+import { plan } from "../../schemas/plan.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
@@ -82,6 +85,36 @@ const nightly = (planId: string): NewAutomation => ({
 });
 
 it.layer(getTestDB())("the automation store", (it) => {
+  it.effect(
+    "a new automation takes its plan's workspace and repository, its owner's alone and a new agent each run where the maker names neither",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const [planRow] = yield* Database.use((db) =>
+          db.select({ organizationId: plan.organizationId }).from(plan).where(eq(plan.id, planId)),
+        );
+
+        assert.deepEqual(
+          [
+            made.organizationId,
+            made.repositories,
+            made.scope,
+            made.targetKind,
+            made.archiveSuccessful,
+          ],
+          [
+            planRow?.organizationId,
+            ["acme/api"],
+            AUTOMATION_SCOPE.PERSONAL,
+            AUTOMATION_TARGET.NEW_AGENT,
+            false,
+          ],
+        );
+      }),
+  );
+
   it.effect(
     "an automation is made only on a plan the account reaches, and read, changed, and deleted by its own account alone",
     () =>

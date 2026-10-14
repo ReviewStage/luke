@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { automation as automationTable } from "@sidecar/database/schemas/automation";
+import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   automationPath,
@@ -19,6 +21,8 @@ import {
   AUTOMATION_FIRING,
   AUTOMATION_PAUSE,
   AUTOMATION_RUN_STATUS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   automationAnswerSchema,
   automationListAnswerSchema,
@@ -48,7 +52,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "./support/github-app-fake";
-import { startPlan } from "./support/workspaces";
+import { openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The automation routes, answered by the group the way a function answers
@@ -491,6 +495,89 @@ it.layer(getTestDB())("the automation routes", (it) => {
           body: { idempotencyKey: "2026-10-15T09:00:00.000Z" },
         });
         assert.deepEqual(notUuid.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+      }),
+  );
+
+  it.effect(
+    "an automation keeps whose it is, where its runs land, and whether a successful run's agent is archived; a workspace scope in a personal workspace and an agent the account cannot read are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const made = (body: WireBoundaryInput) =>
+          ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* made(weekdays(plan.id)),
+        );
+        const { run } = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(automationRunPath(automation.id), owner, {
+            method: "POST",
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+        const agentId = run.agent?.id ?? "";
+
+        const continued = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(automation.id), owner, {
+            method: "PATCH",
+            body: {
+              target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId },
+              archiveSuccessful: true,
+            },
+          }),
+        ).automation;
+        const strangerAgent = yield* ask(automationPath(automation.id), owner, {
+          method: "PATCH",
+          body: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: randomUUID() } },
+        });
+        const personal = yield* openWorkspace(owner);
+        yield* Database.use((db) =>
+          db
+            .insert(personalWorkspace)
+            .values({ userId: owner, organizationId: personal, createdAt: new Date(0) }),
+        );
+        const personalPlan = yield* createPlan(owner, {
+          name: "Just mine",
+          repository: `${RELAY.owner}/${RELAY.name}`,
+          organizationId: personal,
+        });
+        const inPersonalWorkspace = yield* made({
+          ...weekdays(personalPlan.id),
+          scope: AUTOMATION_SCOPE.WORKSPACE,
+        });
+        const shared = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* made({ ...weekdays(plan.id), scope: AUTOMATION_SCOPE.WORKSPACE }),
+        ).automation;
+
+        assert.deepEqual(
+          [
+            automation.scope,
+            automation.repositories,
+            automation.target,
+            automation.archiveSuccessful,
+          ],
+          [
+            AUTOMATION_SCOPE.PERSONAL,
+            [`${RELAY.owner}/${RELAY.name}`],
+            { kind: AUTOMATION_TARGET.NEW_AGENT },
+            false,
+          ],
+          "a new automation is its owner's, on its plan's repository, a new agent each run",
+        );
+        assert.deepEqual(
+          [continued.target, continued.archiveSuccessful],
+          [{ kind: AUTOMATION_TARGET.SAME_AGENT, agentId }, true],
+        );
+        assert.deepEqual(strangerAgent.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+        assert.deepEqual(inPersonalWorkspace.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+        assert.equal(shared.scope, AUTOMATION_SCOPE.WORKSPACE);
       }),
   );
 
