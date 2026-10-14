@@ -1,6 +1,6 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/analytics";
-import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@sidecar/guide";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@sidecar/wire/app-settings";
 import { Result, Schema } from "effect";
 import {
   type AppSettingReader,

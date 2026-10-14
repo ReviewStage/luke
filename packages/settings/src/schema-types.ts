@@ -1,6 +1,6 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
-import type { AppSettingId, DescribedSetting } from "@sidecar/guide";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import type { AppSettingId, DescribedSetting } from "@sidecar/wire/app-settings";
 import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {

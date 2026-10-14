@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "@sidecar/analytics": "workspace:*",
-    "@sidecar/guide": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
