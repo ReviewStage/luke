@@ -1179,14 +1179,16 @@ the client Connect registers for it fails at the provider:
 
 Each registration names `https://connect.vercel.com/callback`, the redirect
 a connector without a `redirectUri` of its own replays, and is written under
-`umask 077`; Supabase's holds its secret and is deleted once its PATCH is in,
-as Neon's is. Granola's, for example:
+`umask 077`, and every registration file is deleted once its PATCH is in,
+as Neon's is, since nothing reads it again and Supabase's holds its secret.
+Granola's, for example:
 
 ```
 (umask 077; curl -s https://mcp-auth.granola.ai/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}' > ~/granola-client.json)
 jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256"}}' ~/granola-client.json > ~/granola-patch.json
 vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/granola-before.json   # the backup
 vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/granola-patch.json
+rm ~/granola-client.json ~/granola-patch.json
 ```
 
 A sign-in can still fail once right after a connector changes, Granola's
