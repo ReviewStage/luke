@@ -19,6 +19,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";
 import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import { mentionedContext } from "../mentioned-context.js";
 import { workspaceRepository } from "../workspace-repository.js";
 import { codingAgentStatusOf } from "./status.js";
 
@@ -31,7 +32,8 @@ import { codingAgentStatusOf } from "./status.js";
  * lock, so the turn eve opens on the line finds the row standing when its
  * own first write takes the lock, and an eve that did not take the message
  * leaves no row behind. Files the developer attached go with the words,
- * to eve and onto the row (`attached-files.ts`); the writer fences the write against the caller
+ * to eve and onto the row (`attached-files.ts`), and so does what the words
+ * mention of the plan, as it stands now (`mentioned-context.ts`); the writer fences the write against the caller
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
@@ -120,13 +122,15 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   );
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
+  // What the words mention of the plan goes with them, read off the plan this send read as its sender.
+  const mentioned = mentionedContext(line.text, held.value.plan);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const dispatch = eve
     .send(sessionId, {
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
-      message: eveContent(line.text, line.attachments ?? []),
+      message: eveContent(line.text, line.attachments ?? [], mentioned),
     })
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>
@@ -144,7 +148,9 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
       }),
     );
   const written = yield* hostedStoreOrUnavailable(
-    Effect.flatMap(writer, (write) => write.writeAwaitingLine(target, line, dispatch)),
+    Effect.flatMap(writer, (write) =>
+      write.writeAwaitingLine(target, { ...line, mentioned }, dispatch),
+    ),
   );
   if (Result.isFailure(written)) {
     return yield* Effect.fail(

@@ -1,5 +1,5 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
-import { MENTION_KIND, type Mention } from "@sidecar/hosted/mention-link";
+import { MENTION_KIND, type PlanMention } from "@sidecar/hosted/mention-link";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -285,7 +285,7 @@ function PlanDocument({
   const [revealed, setRevealed] = useState<{ planId: string; reveal: SectionReveal } | undefined>(
     undefined,
   );
-  const openMention = (mention: Mention) => {
+  const openMention = (mention: PlanMention) => {
     plans.onShowPlan(mention.planId);
     const heading = mention.kind === MENTION_KIND.SECTION ? mention.heading : undefined;
     setRevealed((last) => ({

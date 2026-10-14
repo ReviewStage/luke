@@ -3,7 +3,16 @@ import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
 } from "@sidecar/hosted/coding-agent-wire";
-import { type FileUIPart, isFileUIPart, isTextUIPart, type TextUIPart, type UIMessage } from "ai";
+import {
+  type DataUIPart,
+  type FileUIPart,
+  isFileUIPart,
+  isTextUIPart,
+  type TextUIPart,
+  type UIDataTypes,
+  type UIMessage,
+} from "ai";
+import { Schema as EffectSchema, Option } from "effect";
 
 /**
  * attached-file-parts.ts -- the files a developer attached to a coding agent's message as the journal keeps them, and as eve's receipt of them reads back for matching.
@@ -16,7 +25,44 @@ import { type FileUIPart, isFileUIPart, isTextUIPart, type TextUIPart, type UIMe
  * and its receipt lists a line's parts the way it was handed them, so a
  * line is matched by its words, each text file inlined, and each image and
  * PDF by its mark.
+ *
+ * A line that mentions what eve cannot read for itself, a section of the
+ * plan, carries one more text part after its words: what it named, as it
+ * stood when the line was sent, under a heading of its own
+ * (`apps/web/server/hosted/mentioned-context.ts`). The journal keeps it as
+ * a data part after the words, so the transcript draws only the words, and
+ * a receipt is matched by it in the place eve was handed it.
  */
+
+/** What heads the part a line's mentions are handed to eve in, which the receipt is read back by. */
+export const MENTIONED_HEADING =
+  "Mentioned in this message, as it stood when the message was sent:";
+
+/** The data part the journal keeps a line's mentioned part as. */
+const MENTIONED_PART_TYPE = "data-luke-mentioned";
+
+/** Whether a text part eve was handed is a line's mentioned part rather than its words. */
+export function isMentionedText(text: string): boolean {
+  return text.startsWith(MENTIONED_HEADING);
+}
+
+/** The data part the journal keeps a line's mentioned part as. */
+function mentionedPart(text: string): DataUIPart<UIDataTypes> {
+  return { type: MENTIONED_PART_TYPE, data: { text } };
+}
+
+/** The journal's mentioned part, read back. */
+const readMentionedPart = EffectSchema.decodeUnknownOption(
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(MENTIONED_PART_TYPE),
+    data: EffectSchema.Struct({ text: EffectSchema.String }),
+  }),
+);
+
+/** The text of the journal's mentioned part, or nothing for any other part. */
+function mentionedTextOf(part: UIMessage["parts"][number]): string | undefined {
+  return Option.getOrUndefined(Option.map(readMentionedPart(part), (read) => read.data.text));
+}
 
 /** What heads a text file inlined for the model, before its name. */
 const ATTACHED_FILE_HEADING = "Attached file: ";
@@ -52,13 +98,15 @@ export function textOf(base64: string): string {
   return Buffer.from(base64, "base64").toString("utf8");
 }
 
-/** The parts the journal keeps for a developer's line: the words, then each file it carried, in the order attached. */
+/** The parts the journal keeps for a developer's line: the words, what it mentioned where it did, then each file it carried, in the order attached. */
 export function lineParts(
   text: string,
   attachments: readonly CodingAgentAttachment[],
-): (TextUIPart | FileUIPart)[] {
+  mentioned?: string,
+): (TextUIPart | FileUIPart | DataUIPart<UIDataTypes>)[] {
   return [
     { type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE },
+    ...(mentioned === undefined ? [] : [mentionedPart(mentioned)]),
     ...attachments.map(
       (file): FileUIPart => ({
         type: "file",
@@ -72,8 +120,9 @@ export function lineParts(
 
 /**
  * A line's parts as eve's receipt lists them, in the order eve was handed
- * them: the words where there are any, each text file inlined, then each
- * image and PDF by its mark; nothing for a row with no words part.
+ * them: the words where there are any, what it mentioned, each text file
+ * inlined, then each image and PDF by its mark; nothing for a row with no
+ * words part.
  */
 export function receivedPartsOf(
   parts: readonly UIMessage["parts"][number][],
@@ -91,5 +140,6 @@ export function receivedPartsOf(
       ? []
       : [fileMark(part.filename, part.mediaType)],
   );
-  return [...(words.text === "" ? [] : [words.text]), ...texts, ...marks];
+  const mentioned = rest.flatMap((part) => mentionedTextOf(part) ?? []);
+  return [...(words.text === "" ? [] : [words.text]), ...mentioned, ...texts, ...marks];
 }
