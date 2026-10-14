@@ -17,7 +17,7 @@ export const AVATAR_STATUS = {
   ENDED: "ended",
 } as const;
 
-type AvatarStatus = (typeof AVATAR_STATUS)[keyof typeof AVATAR_STATUS];
+export type AvatarStatus = (typeof AVATAR_STATUS)[keyof typeof AVATAR_STATUS];
 
 /**
  * Why the avatar went down, as the tile says it: the developer turned video
@@ -49,6 +49,21 @@ export interface AvatarState {
 
 /** No avatar asked for: every launch's, and every call's until video is turned on. */
 export const AVATAR_OFF: AvatarState = { status: AVATAR_STATUS.OFF };
+
+/**
+ * The avatar as the call window reports it: a status, and a reason beside
+ * `ENDED` and nowhere else, so a report cannot say the avatar is live for a
+ * reason or ended for none.
+ */
+export const avatarStateSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    status: EffectSchema.Literals([AVATAR_STATUS.OFF, AVATAR_STATUS.STARTING, AVATAR_STATUS.LIVE]),
+  }),
+  EffectSchema.Struct({
+    status: EffectSchema.Literal(AVATAR_STATUS.ENDED),
+    endReason: EffectSchema.Literals(Object.values(AVATAR_END_REASON)),
+  }),
+]);
 
 /** What one feed message says: a chunk of Luke's voice, the end of his turn, or the developer cutting in. */
 export const AVATAR_FEED_KIND = {

@@ -8,6 +8,7 @@ import {
 } from "@sidecar/analytics";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
+import { type AvatarGrant, avatarGrantFromWire } from "@sidecar/hosted/avatar-grant";
 import { liveExchangeActive } from "@sidecar/live";
 import {
   EXCESS_KEYS,
@@ -20,6 +21,7 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
+import { type AvatarFeed, avatarFeedFromWire } from "./messages/avatar";
 import {
   isVoiceCommand,
   isVoiceView,
@@ -264,6 +266,31 @@ export const BRIDGE = {
     channel: "app:call-window-moved",
     args: noArgs,
     result: result<void>((v) => v === undefined),
+  }),
+  /**
+   * Keyframe's grant for the call's own avatar, sent to the floating call
+   * window alone, or nothing once the session is to close. A one-shot rather
+   * than a slice of the document, because the document reaches every window
+   * and the grant may reach this one only.
+   */
+  onAvatarSession: entry({
+    kind: "subscribe",
+    channel: "app:avatar-session",
+    args: noArgs,
+    result: result<AvatarGrant | undefined>(
+      (value) => value === undefined || avatarGrantFromWire(value) !== undefined,
+    ),
+  }),
+  /**
+   * One message of Luke's voice feed, relayed to the floating call window
+   * alone for the avatar to lip-sync. A reading that expires as the next
+   * chunk arrives, so nothing bootstraps from it.
+   */
+  onAvatarFeed: entry({
+    kind: "subscribe",
+    channel: "app:avatar-feed",
+    args: noArgs,
+    result: result<AvatarFeed>((value) => avatarFeedFromWire(value) !== undefined),
   }),
   /**
    * The call card's way back pressed, in the floating window or a panel's

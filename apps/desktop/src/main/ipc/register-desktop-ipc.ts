@@ -11,6 +11,7 @@ import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
+import { avatarActRows } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
 import { planningActRows } from "./planning-acts";
@@ -86,6 +87,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
     }),
     ...voiceRuntimeActRows(voiceRuntime),
+    ...avatarActRows({ state }),
     ...planningActRows({
       host: operator.host,
       openExternal: config.openExternal,
