@@ -1,11 +1,14 @@
 import {
+  type AutomationRun,
   type ClaimedFiring,
   claimDueAutomations,
+  expireQueuedAutomationRuns,
   queuedAutomationRuns,
 } from "@sidecar/database/models/automation-store";
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@sidecar/hosted/automation-schedule";
 import {
+  AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationRunStatus,
@@ -30,9 +33,12 @@ import type { StartServices } from "./coder-host/start.js";
  *
  * Then every run still queued from the last hour, the schedules just
  * claimed and any a trigger recorded but did not finish acting on, is acted
- * on (`automation-runs.ts`), a few at once and at most `MAX_RUNS` a sweep,
- * oldest first. A run two sweeps both act on starts one agent, since the
- * run's id is its Start's key, and settles once.
+ * on (`automation-runs.ts`), at most `MAX_RUNS` a sweep, oldest first: a few
+ * automations at once, but one automation's runs one after another, since
+ * each run's guards read what the one before it settled. A run two sweeps
+ * both act on starts one agent, since the run's id is its Start's key, and
+ * settles once. A run still queued past the hour is settled as missed, so
+ * the history never holds a run that will not come.
  */
 
 const AUTOMATION_SWEEP = {
@@ -70,6 +76,17 @@ function claimDueSchedules(now: number): PlanStoreEffect<readonly ClaimedFiring[
   });
 }
 
+/** The runs grouped by their automation, each group oldest first as the runs came. */
+function byAutomation(runs: readonly AutomationRun[]): readonly (readonly AutomationRun[])[] {
+  const groups = new Map<string, AutomationRun[]>();
+  for (const run of runs) {
+    const group = groups.get(run.automationId);
+    if (group === undefined) groups.set(run.automationId, [run]);
+    else group.push(run);
+  }
+  return [...groups.values()];
+}
+
 /** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on. */
 export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations")(function* (
   eveFor: EveForAccount,
@@ -80,9 +97,15 @@ export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations"
     new Date(now - AUTOMATION_SWEEP.QUEUED_WITHIN_MS),
     AUTOMATION_SWEEP.MAX_RUNS,
   );
-  const outcomes = yield* Effect.forEach(queued, (run) => executeAutomationRun(eveFor, run), {
-    concurrency: AUTOMATION_SWEEP.CONCURRENCY,
-  });
+  yield* expireQueuedAutomationRuns(
+    new Date(now - AUTOMATION_SWEEP.QUEUED_WITHIN_MS),
+    AUTOMATION_RUN_REASON.MISSED,
+  );
+  const outcomes = (yield* Effect.forEach(
+    byAutomation(queued),
+    (runs) => Effect.forEach(runs, (run) => executeAutomationRun(eveFor, run)),
+    { concurrency: AUTOMATION_SWEEP.CONCURRENCY },
+  )).flat();
   const counted = (status: AutomationRunStatus) =>
     outcomes.filter((outcome) => outcome?.status === status).length;
   return {

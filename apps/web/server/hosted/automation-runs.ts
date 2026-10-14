@@ -3,7 +3,7 @@ import {
   type AutomationRun,
   type AutomationRunOutcome,
   automationRunsSince,
-  latestAutomationRuns,
+  latestAutomationStarts,
   pauseAutomation,
   readAutomationToRun,
   settleAutomationRun,
@@ -46,10 +46,14 @@ import type { ModelChoiceRefused } from "./model-catalog.js";
  * hand. The run's own id is the Start's key, so a run acted on twice, by two
  * sweeps or a sweep and its trigger, starts one agent.
  *
- * Before the start, the guards: a run past the daily cap (runs started in
- * the last twenty-four hours) or past the concurrency guard (agents its
- * runs started that are still starting or running, read as each agent's tab
- * reads it) is skipped, never queued, so a noisy trigger costs nothing past
+ * Before the start, the guards: a run whose automation was paused after it
+ * was queued is skipped, but for the owner's own "Run now"; and a run past
+ * the daily cap (runs started in the last twenty-four hours) or past the
+ * concurrency guard (agents its runs started that are still starting or
+ * running, read as each agent's tab reads it) is skipped, never queued. The
+ * guards read what earlier runs settled, so the sweep acts on one
+ * automation's runs one after another (`automation-sweep.ts`); a noisy
+ * trigger costs nothing past
  * its caps. A start refused is a failed run with one fixed word for why,
  * and an automation whose last three starts all failed is paused, so a
  * lapsed GitHub sign-in or a deleted repository stops firing rather than
@@ -154,13 +158,7 @@ const heldBack = Effect.fnUntraced(function* (automation: Automation, now: numbe
 
 /** Pauses the automation where its newest starts, skips aside, all failed. */
 const pauseAfterFailures = Effect.fnUntraced(function* (automation: Automation) {
-  const latest = yield* latestAutomationRuns(automation.id, AUTOMATION_RUNS.FAILURES_TO_PAUSE * 4);
-  const starts = latest
-    .filter(
-      (run) =>
-        run.status === AUTOMATION_RUN_STATUS.STARTED || run.status === AUTOMATION_RUN_STATUS.FAILED,
-    )
-    .slice(0, AUTOMATION_RUNS.FAILURES_TO_PAUSE);
+  const starts = yield* latestAutomationStarts(automation.id, AUTOMATION_RUNS.FAILURES_TO_PAUSE);
   if (
     starts.length === AUTOMATION_RUNS.FAILURES_TO_PAUSE &&
     starts.every((run) => run.status === AUTOMATION_RUN_STATUS.FAILED)
@@ -175,6 +173,13 @@ const outcomeOf = Effect.fnUntraced(function* (
   automation: Automation,
   run: AutomationRun,
 ) {
+  // A run queued before its automation was paused starts nothing; the owner's own "Run now" still runs.
+  if (!automation.enabled && run.firing.kind !== AUTOMATION_FIRING.MANUAL) {
+    return {
+      status: AUTOMATION_RUN_STATUS.SKIPPED,
+      reason: AUTOMATION_RUN_REASON.PAUSED,
+    } satisfies AutomationRunOutcome;
+  }
   const now = yield* Clock.currentTimeMillis;
   const held = yield* heldBack(automation, now);
   if (held !== undefined) {

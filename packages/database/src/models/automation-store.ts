@@ -505,7 +505,7 @@ const findStartedAgents = SqlSchema.findAll({
     ),
 });
 
-const findLatestRuns = SqlSchema.findAll({
+const findLatestStarts = SqlSchema.findAll({
   Request: Schema.Struct({ automationId: Schema.String, limit: Schema.Int }),
   Result: RunRowSchema,
   execute: ({ automationId, limit }) =>
@@ -513,9 +513,39 @@ const findLatestRuns = SqlSchema.findAll({
       db
         .select(RUN_COLUMNS)
         .from(automationRun)
-        .where(eq(automationRun.automationId, automationId))
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            inArray(automationRun.status, [
+              AUTOMATION_RUN_STATUS.STARTED,
+              AUTOMATION_RUN_STATUS.FAILED,
+            ]),
+          ),
+        )
         .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
         .limit(limit),
+    ),
+});
+
+const writeExpired = SqlSchema.findAll({
+  Request: Schema.Struct({
+    before: Schema.Date,
+    reason: automationRunReasonSchema,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ before, reason, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ status: AUTOMATION_RUN_STATUS.FAILED, reason, settledAt: now })
+        .where(
+          and(
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED),
+            lte(automationRun.firedAt, before),
+          ),
+        )
+        .returning({ id: automationRun.id }),
     ),
 });
 
@@ -699,12 +729,22 @@ export function startedRunAgents(
   return findStartedAgents({ automationId, since });
 }
 
-/** The automation's newest runs, newest first, at most `limit`, whoever owns it. */
-export function latestAutomationRuns(
+/** The automation's newest starts, the runs that started an agent or failed to, newest first, at most `limit`, whoever owns it. */
+export function latestAutomationStarts(
   automationId: string,
   limit: number,
 ): PlanStoreEffect<readonly AutomationRun[]> {
-  return findLatestRuns({ automationId, limit });
+  return findLatestStarts({ automationId, limit });
+}
+
+/** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */
+export function expireQueuedAutomationRuns(
+  before: Date,
+  reason: AutomationRunReason,
+): PlanStoreEffect<number> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
+  );
 }
 
 /** Pauses the automation for the reason the service gives, so nothing fires it until its owner resumes it. */
