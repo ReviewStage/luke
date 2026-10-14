@@ -114,8 +114,8 @@ function usePlaceCommands(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
     pastGate
       ? () => {
-          // Arriving at Settings lands on its front page, so the page is
-          // turned after.
+          // Arriving at Settings lands on Account, so the page is turned
+          // after.
           onTabChange(PANEL_TAB.SETTINGS);
           settings.onViewChange(SETTINGS_VIEW.SHORTCUTS);
         }

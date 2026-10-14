@@ -11,12 +11,12 @@ import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { onRegistry } from "#testing/copy-feedback";
-import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW } from "../settings-views";
+import { SETTINGS_VIEW, SETTINGS_VIEW_LIST } from "../settings-views";
 import { SETTINGS_PAGE } from "./pages";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
 /**
- * Settings' General page as the panel draws it: its own groups and no list of
+ * Settings' Account page as the panel draws it: its own groups and no list of
  * the other pages, which the Settings sidebar alone lists.
  */
 
@@ -33,7 +33,7 @@ const SETTINGS: SettingsPanelProps = {
   },
   onSignOut: () => Promise.resolve(),
   onDeleteAccount: accepted,
-  view: SETTINGS_VIEW.ROOT,
+  view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
     status: MICROPHONE_STATUS.GRANTED,
@@ -83,7 +83,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the General page lists none of the other pages, which the Settings sidebar alone lists", () => {
+test("the Account page lists none of the other pages, which the Settings sidebar alone lists", () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -92,11 +92,11 @@ test("the General page lists none of the other pages, which the Settings sidebar
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(SettingsPanel, SETTINGS))));
 
   const pressed = [...container.querySelectorAll("button")].map((button) => button.textContent);
-  for (const page of SETTINGS_SUBVIEW_LIST) {
+  for (const page of SETTINGS_VIEW_LIST.filter((each) => each !== SETTINGS_VIEW.ACCOUNT)) {
     assert.equal(
       pressed.some((words) => words?.includes(SETTINGS_PAGE[page].title)),
       false,
-      `the General page offers no ${SETTINGS_PAGE[page].title} row`,
+      `the Account page offers no ${SETTINGS_PAGE[page].title} row`,
     );
   }
 });

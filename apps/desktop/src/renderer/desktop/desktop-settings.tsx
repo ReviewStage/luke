@@ -1,6 +1,6 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { BackIcon, LaptopIcon } from "@sidecar/panel";
+import { BackIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -27,31 +27,24 @@ import {
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search";
-import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { SETTINGS_VIEW, SETTINGS_VIEW_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
-/** The front page's name here, where it is one page among the others rather than their index. */
-const GENERAL_PAGE = { title: "General", icon: <LaptopIcon /> } as const;
-
-function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } {
-  return view === SETTINGS_VIEW.ROOT ? GENERAL_PAGE : SETTINGS_PAGE[view];
-}
-
 /**
  * Settings as a desktop app lays them out: the sidebar turns into the list of
  * pages, with the way back to plans at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
- * are the panel's own, drawn by `SettingsPanel`; its front-page index, with
- * the Voice row's attention mark, and its back buttons are this list's job
- * here. The page has no top bar: its title heads its column, under the
- * window's drag strip, and a page's reset ends the title's line. The plan
- * template is the one page drawn apart from the panel: it is a plan's page,
- * document and all (`../settings/plan-template-page.tsx`), and its version
- * history takes the whole window as a plan's does, Back and Escape leaving it
- * for the page.
+ * are the panel's own, drawn by `SettingsPanel`, and this list is the one
+ * index of them, the Voice row wearing its attention mark. Settings opens on
+ * Account, the list's first page. The page has no top bar: its title heads
+ * its column, under the window's drag strip, and a page's reset ends the
+ * title's line. The plan template is the one page drawn apart from the
+ * panel: it is a plan's page, document and all
+ * (`../settings/plan-template-page.tsx`), and its version history takes the
+ * whole window as a plan's does, Back and Escape leaving it for the page.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -88,8 +81,7 @@ export function DesktopSettings({
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
-  const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
-  const shown = pageOf(settings.view);
+  const shown = SETTINGS_PAGE[settings.view];
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const reset = pageResetControl(settings.view, settings.settings, writes);
@@ -98,11 +90,9 @@ export function DesktopSettings({
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
   const open = (view: SettingsView) => {
-    if (view !== SETTINGS_VIEW.ROOT) {
-      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
-        settings_view: SETTINGS_VIEW_COUNTED_AS[view],
-      });
-    }
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+      settings_view: SETTINGS_VIEW_COUNTED_AS[view],
+    });
     settings.onViewChange(view);
   };
   const changeQuery = (next: string) => {
@@ -173,8 +163,8 @@ export function DesktopSettings({
             <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
           ) : (
             <ul>
-              {pages.map((view) => {
-                const page = pageOf(view);
+              {SETTINGS_VIEW_LIST.map((view) => {
+                const page = SETTINGS_PAGE[view];
                 return (
                   <li key={view}>
                     <button

@@ -77,7 +77,7 @@ export function App(): React.JSX.Element {
   const account = state?.account;
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
-  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
   /** The workspace Settings' Workspace page shows, where a link or its picker named one; the sidebar's otherwise. */
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string>();
   /** The settings the panel is drawing: the document's own. */
@@ -113,11 +113,11 @@ export function App(): React.JSX.Element {
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);
-      // Arriving at the tab is arriving at its front page: a page left open
-      // behind a tab switch would greet the next visit with a corner of the
-      // settings rather than the settings. A flow that needs a deeper page
-      // sets it right after this reset.
-      setSettingsView(SETTINGS_VIEW.ROOT);
+      // Arriving at the tab is arriving at its first page, Account: a page
+      // left open behind a tab switch would greet the next visit with a
+      // corner of the settings rather than the settings. A flow that needs
+      // another page sets it right after this reset.
+      setSettingsView(SETTINGS_VIEW.ACCOUNT);
       // `PanelTab` and the counted tab are the same union: both are
       // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
@@ -240,7 +240,7 @@ export function App(): React.JSX.Element {
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
-    // Arriving at Settings lands on its front page, so the page is turned after.
+    // Arriving at Settings lands on Account, so the page is turned after.
     onOpenIntegrations: () => {
       changeTab(PANEL_TAB.SETTINGS);
       setSettingsView(SETTINGS_VIEW.INTEGRATIONS);
