@@ -16,6 +16,7 @@ import {
 } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
+import { TAB_WORDS } from "../planning/tab-strip-model";
 import { useInboxItems } from "../planning/use-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
@@ -29,7 +30,7 @@ import { PlanStatusMark } from "./plan-card";
  * desktop-home.tsx -- the home page: the column the window rests on with no plan open, saying what needs the developer and the plans saved latest, and offering New plan.
  *
  * It is one column at a reading measure, as a chat app's empty page is: a
- * greeting with New plan beside it, then Needs you, every Inbox item
+ * greeting with New plan beside it, then Inbox, every Inbox item
  * waiting on the developer's answer as the Inbox's own row draws it, the
  * plan it is about after its title, a press opening the Inbox on it; then
  * Recent, the plans of the workspace listed saved latest, each as the
@@ -181,8 +182,12 @@ function RecentRow({
   );
 }
 
-/** Needs you: the waiting items, or what stands in their place while they are read, failed, or none. */
-function NeedsYou({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
+/**
+ * Inbox: the waiting items, or what stands in their place while they are
+ * read, failed, or none. It is headed by the Inbox's name, the place a press
+ * on a row opens, and says it holds nothing waiting in the Inbox's own words.
+ */
+function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
   const waiting = useWaitingItems(plans);
   const { inboxView } = plans;
   const open = ({ plan, item }: InboxListed) => {
@@ -191,9 +196,9 @@ function NeedsYou({ plans, now }: { plans: PlansControl; now: number }): React.J
   };
   const empty = waiting.items.length === 0;
   return (
-    <section className="home-section" aria-labelledby="home-needs-you">
-      <h2 className="home-section-title" id="home-needs-you">
-        {NEEDS_YOU.LABEL}
+    <section className="home-section" aria-labelledby="home-inbox">
+      <h2 className="home-section-title" id="home-inbox">
+        {TAB_WORDS.INBOX}
         {empty ? null : <span className="home-section-count">{waiting.items.length}</span>}
       </h2>
       {empty ? null : (
@@ -266,7 +271,7 @@ export function DesktopHome({
           <h1 className="home-title">{greeting(accountName)}</h1>
           <NewPlanButton plans={plans} />
         </header>
-        <NeedsYou plans={plans} now={now} />
+        <HomeInbox plans={plans} now={now} />
         {recent.length === 0 ? null : (
           <section className="home-section" aria-labelledby="home-recent">
             <h2 className="home-section-title" id="home-recent">

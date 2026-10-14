@@ -190,7 +190,7 @@ test("the home page greets the account, lists what needs it with each item's pla
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
   assert.ok(button(page, "New plan"));
-  assert.deepEqual(rows(page, "home-needs-you"), [
+  assert.deepEqual(rows(page, "home-inbox"), [
     "Email the invitee when an invite is withdrawn? · Teammate invitations",
     "Which billing account does the export read? · Billing export",
   ]);
@@ -205,7 +205,7 @@ test("the home page greets the account, lists what needs it with each item's pla
   assert.ok(button(page, "Search all 8 plans"));
 });
 
-test("a Needs you row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
+test("a waiting item's row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
   const { page, opened } = mount();
   await settle();
 
@@ -218,11 +218,21 @@ test("a Needs you row opens the Inbox on its item, a recent plan opens the plan,
   assert.equal(opened.newPlans, 1);
 });
 
-test("with nothing waiting, Needs you says so in the Inbox's own words, as a line with no glyph", async () => {
+test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {
+  const { page } = mount();
+  await settle();
+
+  const heading = page.querySelector("#home-inbox");
+  assert.equal(heading?.closest("section")?.getAttribute("aria-labelledby"), "home-inbox");
+  // The heading's count follows the name in a span of its own.
+  assert.equal(heading?.firstChild?.textContent, "Inbox");
+});
+
+test("with nothing waiting, the home's Inbox says so in the Inbox's own words, as a line with no glyph", async () => {
   const { page } = mount({ inbox: [], inboxPlans: [] });
   await settle();
 
-  const section = page.querySelector('section[aria-labelledby="home-needs-you"]');
+  const section = page.querySelector('section[aria-labelledby="home-inbox"]');
   const note = section?.querySelector(".sidebar-note");
   assert.equal(note?.textContent, "Nothing needs you");
   assert.equal(section?.querySelector("svg"), null);
@@ -276,7 +286,7 @@ test("a workspace with no plan of its own, in an account with plans elsewhere, s
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
-  assert.equal(rows(page, "home-needs-you").length, 2);
+  assert.equal(rows(page, "home-inbox").length, 2);
   assert.equal(page.querySelector('section[aria-labelledby="home-recent"]'), null);
 });
 
