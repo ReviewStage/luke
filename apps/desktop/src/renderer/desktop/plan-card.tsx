@@ -1,6 +1,7 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
+import { ProviderMark } from "@luke/ui";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
@@ -9,7 +10,6 @@ import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
 import { AgentGlyph, agentEndMark } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";

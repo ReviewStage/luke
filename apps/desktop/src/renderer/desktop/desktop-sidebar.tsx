@@ -10,6 +10,7 @@ import {
   FolderIcon,
   PinIcon,
   PlusIcon,
+  ProviderMark,
   SearchIcon,
   UnpinIcon,
 } from "@luke/ui";
@@ -33,7 +34,6 @@ import { sameTab } from "../planning/tab-strip-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";
-import { ProviderMark } from "../provider-marks";
 import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";

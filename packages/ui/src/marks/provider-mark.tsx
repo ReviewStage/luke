@@ -1,28 +1,36 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "@luke/credentials/snapshot";
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
-import { useId } from "react";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import React, { useId } from "react";
+
+// `tsx` executes imported workspace-package JSX with the classic runtime.
+void React;
 
 /**
- * provider-marks.tsx -- the official mark of every provider the account signs in with or connects, as its own brand publishes it.
+ * provider-mark.tsx -- the official mark of every provider an account signs in with or connects, as its own brand publishes it.
  *
  * Brand marks, not glyphs of ours: each is the brand's own vector, verbatim
  * from the press kit cited above it, never redrawn, in the colours its usage
  * rules allow. A mark the brand shows monochrome is drawn in `currentColor`,
- * so it reads in the ink of whatever row it stands in. `ProviderMark` is the
- * one door to them, so GitHub's mark is traced once whether it stands for
- * the account's sign-in, its connected GitHub, a workspace's organization,
- * or the GitHub integration: the sign-in buttons, Settings › Account,
- * Workspace and Integrations, the composer's list of
- * servers, and anywhere else a provider is named draw it. The harnesses a
- * model runs in are not providers of this kind and have their own marks
- * (`harness-marks.tsx`). The web's pages draw the same marks in their own
- * React (`apps/web/src/account-marks.tsx`, `apps/web/src/integration-marks.tsx`).
+ * so it reads in the ink of whatever row or card it stands in; a brand that
+ * names one ink per ground wears an `integration-mark-*` class, and each app
+ * sets those inks for the grounds it draws (the desktop's `styles/desktop.css`
+ * for both of its schemes, the site's `styles.css` for its dark cards).
+ * `ProviderMark` is the one door to them, so GitHub's mark is traced once
+ * whether it stands for an account's sign-in, its connected GitHub, a
+ * workspace's organization, or the GitHub integration, in the desktop and on
+ * the site alike. The harnesses a model runs in are not providers of this kind
+ * and have their own marks (the desktop's `harness-marks.tsx`).
  */
 
-/** Every provider with a mark: the sign-in providers and the integrations, GitHub being both. */
-export type MarkedProvider = AccountProvider | IntegrationProvider;
+/**
+ * Every provider with a mark: the integrations and the two sign-in providers,
+ * GitHub being both. An app's own account-provider set names the same
+ * strings, so the compiler holds it to this one at the call site.
+ */
+export const MARK_PROVIDER = { ...INTEGRATION_PROVIDER, GOOGLE: "google" } as const;
 
-/** The class every provider mark wears, which a surface sizes it by. */
+export type MarkProvider = (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER];
+
+/** The class a mark wears when its caller names none, which the desktop sizes it by. */
 const MARK_CLASS = "provider-mark";
 
 interface MarkProps {
@@ -525,36 +533,42 @@ function YCombinatorMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/** One provider's mark, at whatever size the surface it stands in gives `.provider-mark`. */
-export function ProviderMark({ provider }: { provider: MarkedProvider }): React.JSX.Element {
+/** One provider's mark, at whatever size `className` gives it. */
+export function ProviderMark({
+  provider,
+  className = MARK_CLASS,
+}: {
+  provider: MarkProvider;
+  className?: string;
+}): React.JSX.Element {
   switch (provider) {
-    case ACCOUNT_PROVIDER.GOOGLE:
-      return <GoogleMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.EXECUTOR:
-      return <ExecutorMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.GITHUB:
-      return <GitHubMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.GRANOLA:
-      return <GranolaMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.LINEAR:
-      return <LinearMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.MERCURY:
-      return <MercuryMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.NEON:
-      return <NeonMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.NOTION:
-      return <NotionMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.POSTHOG:
-      return <PostHogMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.SENTRY:
-      return <SentryMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.SLACK:
-      return <SlackMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.SUPABASE:
-      return <SupabaseMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.VERCEL:
-      return <VercelMark className={MARK_CLASS} />;
-    case INTEGRATION_PROVIDER.YCOMBINATOR:
-      return <YCombinatorMark className={MARK_CLASS} />;
+    case MARK_PROVIDER.GOOGLE:
+      return <GoogleMark className={className} />;
+    case MARK_PROVIDER.EXECUTOR:
+      return <ExecutorMark className={className} />;
+    case MARK_PROVIDER.GITHUB:
+      return <GitHubMark className={className} />;
+    case MARK_PROVIDER.GRANOLA:
+      return <GranolaMark className={className} />;
+    case MARK_PROVIDER.LINEAR:
+      return <LinearMark className={className} />;
+    case MARK_PROVIDER.MERCURY:
+      return <MercuryMark className={className} />;
+    case MARK_PROVIDER.NEON:
+      return <NeonMark className={className} />;
+    case MARK_PROVIDER.NOTION:
+      return <NotionMark className={className} />;
+    case MARK_PROVIDER.POSTHOG:
+      return <PostHogMark className={className} />;
+    case MARK_PROVIDER.SENTRY:
+      return <SentryMark className={className} />;
+    case MARK_PROVIDER.SLACK:
+      return <SlackMark className={className} />;
+    case MARK_PROVIDER.SUPABASE:
+      return <SupabaseMark className={className} />;
+    case MARK_PROVIDER.VERCEL:
+      return <VercelMark className={className} />;
+    case MARK_PROVIDER.YCOMBINATOR:
+      return <YCombinatorMark className={className} />;
   }
 }

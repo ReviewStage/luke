@@ -1,12 +1,11 @@
 import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@luke/features/planning-view";
-import { GearIcon } from "@luke/ui";
+import { GearIcon, ProviderMark } from "@luke/ui";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
-import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";

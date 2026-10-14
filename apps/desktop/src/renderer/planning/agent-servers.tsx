@@ -3,7 +3,14 @@ import {
   INTEGRATION_STATUS,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import { ArrowLeftIcon, ChevronRightIcon, GearIcon, McpIcon, SearchIcon } from "@luke/ui";
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  GearIcon,
+  McpIcon,
+  ProviderMark,
+  SearchIcon,
+} from "@luke/ui";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
@@ -13,7 +20,6 @@ import { SIGN_IN_ACTION } from "../integration-sign-in";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
-import { ProviderMark } from "../provider-marks";
 import { Highlighted } from "../search-field";
 import { searchTokens } from "../search-tokens";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";

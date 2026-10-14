@@ -20,6 +20,7 @@ export default defineConfig({
       "apps/desktop",
       "apps/web",
       "packages/host",
+      "packages/ui",
     ],
   },
 });

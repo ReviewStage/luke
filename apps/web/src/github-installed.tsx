@@ -4,9 +4,9 @@ import {
   type GitHubInstallStatus,
   githubInstallStatusFromWire,
 } from "@luke/features";
+import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { GitHubMark } from "./account-marks";
 import { startSiteAnalytics } from "./analytics";
 import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { ConnectionGraphic } from "./connection-graphic";
@@ -94,7 +94,9 @@ function GitHubInstalled(): React.JSX.Element {
       <section className={AUTH_CARD} aria-labelledby="landing-title">
         {/* The same pairing the sign-in card draws: the provider's mark, an
             arrow, and Luke's own face. */}
-        <ConnectionGraphic mark={<GitHubMark className="size-10 shrink-0" />} />
+        <ConnectionGraphic
+          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+        />
         <div>
           <span className={AUTH_PILL} data-tone={card.settled ? "settled" : "attention"}>
             {card.badge}

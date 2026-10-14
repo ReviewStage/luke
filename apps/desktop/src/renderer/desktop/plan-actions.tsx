@@ -7,6 +7,7 @@ import {
   ExternalIcon,
   PencilIcon,
   PinIcon,
+  ProviderMark,
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
@@ -18,7 +19,6 @@ import { useAppCommand } from "../app-commands";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-model";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";

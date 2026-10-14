@@ -1,5 +1,5 @@
+import { ProviderMark } from "@luke/ui";
 import { useState } from "react";
-import { GitHubMark, GoogleMark } from "../../account-marks";
 import { AUTH_BUTTON } from "../../auth-surface";
 import { LukeMark } from "../../SiteChrome";
 import {
@@ -45,7 +45,7 @@ export function SignInCard(): React.JSX.Element {
             disabled={pending !== undefined}
             onClick={() => void begin(SOCIAL_PROVIDER.GOOGLE)}
           >
-            <GoogleMark className="size-[15px] shrink-0" />
+            <ProviderMark provider={SOCIAL_PROVIDER.GOOGLE} className="size-[15px] shrink-0" />
             {pending === SOCIAL_PROVIDER.GOOGLE
               ? "Opening…"
               : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE]}`}
@@ -56,7 +56,7 @@ export function SignInCard(): React.JSX.Element {
             disabled={pending !== undefined}
             onClick={() => void begin(SOCIAL_PROVIDER.GITHUB)}
           >
-            <GitHubMark className="size-[15px] shrink-0" />
+            <ProviderMark provider={SOCIAL_PROVIDER.GITHUB} className="size-[15px] shrink-0" />
             {pending === SOCIAL_PROVIDER.GITHUB
               ? "Opening…"
               : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB]}`}

@@ -6,7 +6,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { ChevronRightIcon, CloseIcon, SearchIcon, TrashIcon } from "@luke/ui";
+import { ChevronRightIcon, CloseIcon, ProviderMark, SearchIcon, TrashIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -29,7 +29,6 @@ import { type IntegrationStatuses, useIntegrationStatuses } from "../integration
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { serverGroups, serverRows } from "../planning/agent-servers-model";
-import { ProviderMark } from "../provider-marks";
 import { focusSearchField, Highlighted } from "../search-field";
 import { searchTokens } from "../search-tokens";
 import { Shortcut } from "../shortcut";

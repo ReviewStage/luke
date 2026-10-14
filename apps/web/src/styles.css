@@ -137,6 +137,23 @@
   --chart-1: #2f9bd8;
 }
 
+/* An integration whose brand publishes its one-colour mark in named inks
+   wears them by the ground (`@luke/ui`'s `marks/provider-mark.tsx`). The one
+   page that draws an integration's mark, its landing, is on the dark ground,
+   so these are the dark inks: Executor's, Notion's, and Sentry's white,
+   Mercury's near-white, and Neon's green for a dark ground. */
+.dark :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
+  color: #fff;
+}
+
+.dark .integration-mark-mercury {
+  color: #f4f5f9;
+}
+
+.dark .integration-mark-neon {
+  color: #34d59a;
+}
+
 @layer base {
   html {
     font-family: var(--font-page);
