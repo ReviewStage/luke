@@ -113,13 +113,6 @@ export function SettingsPanel({
   const panelView = settingsRowsInput({ settings, microphone, account });
   return (
     <div className="settings">
-      {/* Under the index, where every refusal for GitHub not connected points. */}
-      {view === SETTINGS_VIEW.ROOT &&
-      github !== undefined &&
-      account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-        <GitHubSection control={github} />
-      ) : null}
-
       {view === SETTINGS_VIEW.WORKSPACE &&
       workspace !== undefined &&
       account.status === ACCOUNT_STATUS.SIGNED_IN ? (
@@ -171,6 +164,11 @@ export function SettingsPanel({
               onSignOut={onSignOut}
               onDeleteAccount={onDeleteAccount}
             />
+          ) : null}
+
+          {/* Beside the account, where every Open Settings for GitHub not connected lands. */}
+          {github !== undefined && account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+            <GitHubSection control={github} />
           ) : null}
         </>
       )}

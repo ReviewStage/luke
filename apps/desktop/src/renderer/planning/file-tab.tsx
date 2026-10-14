@@ -1,7 +1,8 @@
-import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
+import { PLAN_FILE_REFUSAL, type PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFindOpen } from "../find-in-tab";
+import { CONNECTED_ACCOUNTS_LINK, OpenSettingsButton } from "../open-settings";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
@@ -227,7 +228,9 @@ function ReadNotice({
           ? refusalLine(read.refusal, read.branch, commit)
           : "The file could not be read."}
       </p>
-      {read.kind === FILE_READ.FAILED || refusalPasses(read.refusal) ? (
+      {read.kind === FILE_READ.REFUSED && read.refusal === PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED ? (
+        <OpenSettingsButton link={CONNECTED_ACCOUNTS_LINK} />
+      ) : read.kind === FILE_READ.FAILED || refusalPasses(read.refusal) ? (
         <RetryButton onRetry={onRetry} />
       ) : null}
     </>

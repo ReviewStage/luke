@@ -1504,7 +1504,6 @@ export function usePlansTab(input: {
       ),
       read: readRepositories,
       openGitHub,
-      connectGitHub: connectAccountGitHub,
       pictures: fixture === undefined,
       scope: repositoriesOf,
     },

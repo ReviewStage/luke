@@ -190,11 +190,11 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
    App reaches for the account (`GET /api/github/repositories`), the recent
    ones first and the rest as GitHub last saw them change, each under the
    GitHub mark or a lock where it is private, with a check on the chosen
-   one, in a list that scrolls past a bounded height; and pinned under the
-   list, `GitHub ↗`, which opens the App's installation page in the browser,
-   where the developer chooses which repositories Luke can see. With the App
-   installed nowhere for the account, the chip reads `Install Luke on GitHub
-   ↗` and opens that page directly. With no repository used before it reads
+   one, in a list that scrolls past a bounded height. The chip only chooses:
+   with GitHub not connected, or the App installed nowhere for the
+   workspace, its menu says so with one `Open Settings` row, to the
+   account's Connected accounts or to the workspace's GitHub repositories
+   in Settings, where the App is installed and its repositories chosen. With no repository used before it reads
    `Choose repository`; a plan can start without one and be given one later.
    The list is read when the chip mounts and again whenever the window takes
    focus, which is how the chip picks up an App installed in the browser
