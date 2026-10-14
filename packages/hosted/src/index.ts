@@ -115,3 +115,10 @@ export {
   type TurnEventKind,
   type TurnSlowStep,
 } from "./turn-events-wire.js";
+export {
+  HostedWorkspaceClient,
+  type HostedWorkspaceClientOptions,
+  WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
+  type WorkspaceCallResult,
+} from "./workspace-client.js";
