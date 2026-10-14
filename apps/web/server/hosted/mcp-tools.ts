@@ -70,6 +70,19 @@ const MESSAGE_MAX_CHARS = 200;
  */
 const CREDENTIAL_SHAPE = /bearer\s|xox[a-z]-|[A-Za-z0-9_+=-]{32,}/i;
 
+/** Words that name a secret, or a credential's name with a value set after it. */
+const SECRET_WORDS =
+  /secret|passw(?:or)?d|api[_-]?key|private[_ -]?key|(?:token|assertion|code|key)\s*[=:]/i;
+
+/** A run long enough to be a short key: any that mixes letters and digits is dropped. */
+const KEY_LIKE_RUN = /[A-Za-z0-9_+=.-]{16,}/g;
+
+/** Whether a line holds anything a credential could hide in, short or long. */
+function shapedLikeCredential(line: string): boolean {
+  if (CREDENTIAL_SHAPE.test(line) || SECRET_WORDS.test(line)) return true;
+  return (line.match(KEY_LIKE_RUN) ?? []).some((run) => /\d/.test(run) && /[A-Za-z]/.test(run));
+}
+
 /** The shortest run of the bearer whose echo in a server's message drops it, so a truncated token is caught too. */
 const TOKEN_ECHO_CHARS = 12;
 
@@ -192,11 +205,14 @@ function echoesToken(line: string, token: string): boolean {
 
 /**
  * A provider's message as Luke may pass it on to a window: its first line,
- * bounded, or nothing where that line is empty or shaped like a credential.
+ * bounded, or nothing where that line is empty or holds anything a
+ * credential could be: a bearer, a secret's name or a credential's name set
+ * to a value, a long run of token characters, or a short one mixing letters
+ * and digits as a key does.
  */
 export function credentialFreeLine(message: string | undefined): string | undefined {
   const line = (message ?? "").trim().split(/\r?\n/)[0] ?? "";
-  if (line === "" || CREDENTIAL_SHAPE.test(line)) return undefined;
+  if (line === "" || shapedLikeCredential(line)) return undefined;
   return firstLine(line, MESSAGE_MAX_CHARS);
 }
 

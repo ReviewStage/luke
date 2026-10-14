@@ -93,6 +93,9 @@ it.effect("a refusal whose sentence is shaped like a credential keeps none of it
     for (const message of [
       "token exchange failed: Bearer gho_abcdefghijklmnop",
       "invalid client_secret 8f3a9c2e7b1d4f6a0e5c9b8a7d6f5e4c3b2a1908",
+      "invalid_client: client_secret=hunter2",
+      "the provider echoed code: a1b2c3",
+      "rejected key sk_live_4f3a9c2e7b1d",
       "",
     ]) {
       const read = yield* resultOf({ status: 200, body: { status: "error", error: { message } } });
