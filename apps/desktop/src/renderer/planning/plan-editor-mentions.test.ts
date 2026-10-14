@@ -31,7 +31,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "sidecar", {
+  Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> =>
