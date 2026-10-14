@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "be1656d4-ebdb-4926-b2ac-377c736a2c5d",
+  "id": "4b0f319c-38c2-4008-a606-2e840cb8b280",
   "prevIds": ["be23e0a1-2505-471b-ae06-5ee9a749edf2"],
   "ddl": [
     {
@@ -4759,19 +4759,6 @@
       "table": "sandbox_terminal_lease"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "tried_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sandbox_terminal_lease"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -6849,13 +6836,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "tried_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "held_until",
           "isExpression": false,
           "asc": true,
@@ -6868,7 +6848,7 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "sandbox_terminal_lease_next",
+      "name": "sandbox_terminal_lease_held_until",
       "entityType": "indexes",
       "schema": "public",
       "table": "sandbox_terminal_lease"
