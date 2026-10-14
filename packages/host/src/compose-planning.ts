@@ -40,6 +40,7 @@ import {
   type PlanningDocument,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
+  type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
   type PlanningPageAnswer,
   type PlanningRepositoriesAnswer,
@@ -293,7 +294,7 @@ export type PlanningClient = Pick<
     | "cancelInvitation"
   >;
   /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
-  github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnectUrl">;
+  github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
 };
 
 /** The service's side of a plan's planning conversation, read as an agent's transcript is. */
@@ -1449,11 +1450,24 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
         );
       }),
+    // The view takes the connection the service answers at once, so Settings
+    // reads disconnected without waiting for the next workspaces read.
     [GATEWAY_METHOD.GITHUB_DISCONNECT]: () =>
-      Effect.sync(() => {
-        if (!gate()) return carried<PlanningGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
+      Effect.gen(function* () {
+        if (!gate()) return carried<PlanningGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
+        const disconnected = yield* Effect.provide(
+          client.github.disconnect(),
+          FetchHttpClient.layer,
+        );
         workspacesAskedAt = undefined;
-        return carried<PlanningGitHubPageAnswer>({ url: client.github.disconnectUrl() });
+        if (!disconnected.ok) {
+          return carried<PlanningGitHubDisconnectAnswer>({ failure: disconnected.failure });
+        }
+        // Note that a workspaces read started before the answer is made stale,
+        // because the GitHub status it read may predate the unlink.
+        workspacesRead += 1;
+        write({ github: disconnected.answer });
+        return carried<PlanningGitHubDisconnectAnswer>({ connection: disconnected.answer });
       }),
     [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
       Effect.gen(function* () {

@@ -210,7 +210,7 @@ export interface PlansControl {
   github: GitHubConnection | undefined;
   /** Opens the page that connects the account's own GitHub in the browser. */
   onConnectAccountGitHub: () => void;
-  /** Opens the page that disconnects the account's own GitHub in the browser. */
+  /** Disconnects the account's own GitHub, under the Mac's session; a refusal says why in a toast. */
   onDisconnectAccountGitHub: () => void;
   activePlanId: string | undefined;
   /**
@@ -1062,10 +1062,10 @@ export function usePlansTab(input: {
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
-  // A fixture's GitHub is connected nowhere. The page, to connect or to
-  // disconnect, is the service's, opened by main, and the connection arrives
-  // on the view once the panel comes forward again; one that did not open
-  // says why in a toast.
+  // A fixture's GitHub is connected nowhere. Connecting opens the service's
+  // page, and the connection arrives on the view once the panel comes forward
+  // again; disconnecting asks the service under the Mac's session, and the
+  // view takes the answer at once. A refusal of either says why in a toast.
   const accountGitHub = (
     kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
   ) => {

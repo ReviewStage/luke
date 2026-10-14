@@ -112,6 +112,12 @@ export const HOSTED_SERVICE_PATH = {
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**
+   * The account's GitHub disconnected (POST), under the Mac's Better Auth
+   * session rather than its OAuth token, answering the connection as it then
+   * stands.
+   */
+  GITHUB_DISCONNECT: "/api/github/disconnect",
+  /**
    * The workspaces the account is a member of, its personal one first and
    * the rest by name, each with its connected GitHub account (GET), or a
    * workspace created, the account its owner (POST). `workspace-wire.ts`

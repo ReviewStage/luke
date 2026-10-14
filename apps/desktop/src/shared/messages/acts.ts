@@ -227,7 +227,7 @@ export const ACT_KIND = {
   WEB_OPEN: "web.open",
   /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
   GITHUB_CONNECT: "github.connect",
-  /** The page that disconnects the account's GitHub, opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
@@ -462,6 +462,10 @@ export const WORKSPACE_NOT_PERMITTED_REFUSAL =
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 
 const workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
+
+/** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
+export const GITHUB_LAST_SIGN_IN_REFUSAL =
+  "GitHub is the only way you sign in to this Luke account, so it cannot be disconnected." as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =
@@ -731,7 +735,7 @@ export const ACT = {
     refusal: "Could not open that link on this system.",
   },
   [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
-  [ACT_KIND.GITHUB_DISCONNECT]: GITHUB_PAGE_PRESS,
+  [ACT_KIND.GITHUB_DISCONNECT]: press("Could not disconnect GitHub on this system."),
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.WORKSPACE_CREATE]: {
     payload: actSchema(planningWorkspaceCreateParamsSchema),

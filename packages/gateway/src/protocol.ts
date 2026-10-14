@@ -80,7 +80,7 @@ export const GATEWAY_METHOD = {
   WORKSPACES_INVITATION_CANCEL: "workspaces.invitationCancel",
   /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
   GITHUB_CONNECT: "github.connect",
-  /** The page that disconnects the account's GitHub, which asks the service nothing; the next workspaces read is owed at once. */
+  /** The account's GitHub disconnected on the service under the Mac's session; the view takes the connection, and the next workspaces read is owed at once. */
   GITHUB_DISCONNECT: "github.disconnect",
   /** The models a coding agent may run on, read from the service's catalog now. */
   CODING_AGENTS_MODELS: "codingAgents.models",

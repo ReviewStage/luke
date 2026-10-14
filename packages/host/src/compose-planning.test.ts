@@ -40,6 +40,7 @@ import {
   type RepositoryPin,
 } from "@sidecar/hosted/plan-wire";
 import {
+  GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanCallFailure,
@@ -164,7 +165,7 @@ interface FakeService extends PlanningClient {
   notPermitted: boolean;
   /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
   connection: GitHubConnection | undefined;
-  /** Where a GitHub connection read waits before answering, so a test can hold one on the wire. */
+  /** Where a GitHub connection read waits before answering what it read, so a test can hold one on the wire. */
   githubGate: Effect.Effect<void>;
   /** The single-use pages the service hands out to connect GitHub, the newest last. */
   connectPages: string[];
@@ -279,19 +280,32 @@ function fakeService(plans: Plan[]): FakeService {
     connectPages: [],
     // Each connect is a fresh page bound to the account, as the service mints one.
     github: {
+      // The service reads the connection when asked and answers it after the gate.
       status: () =>
-        Effect.map(service.githubGate, () =>
-          service.connection === undefined
-            ? { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED }
-            : { ok: true as const, answer: service.connection },
-        ),
+        Effect.suspend(() => {
+          const read = service.connection;
+          return Effect.map(service.githubGate, () =>
+            read === undefined
+              ? { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED }
+              : { ok: true as const, answer: read },
+          );
+        }),
       connect: () =>
         Effect.sync(() => {
           const url = `https://tryluke.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
           return { ok: true as const, answer: { url } };
         }),
-      disconnectUrl: () => "https://tryluke.dev/connect-github.html?disconnect=1",
+      // The service unlinks the session's GitHub and answers the connection as it then stands.
+      disconnect: () =>
+        Effect.sync(() => {
+          service.reads.push("github-disconnect");
+          if (service.notPermitted) {
+            return { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
+          }
+          service.connection = { connected: false, login: null };
+          return { ok: true as const, answer: service.connection };
+        }),
     },
     // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
@@ -1403,21 +1417,57 @@ it.effect(
 );
 
 it.effect(
-  "disconnecting GitHub answers the page that disconnects it, and the panel coming forward then reads the connection again at once",
+  "disconnecting GitHub asks the service, and the view reads disconnected at once without a workspaces read",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.connection = { connected: true, login: "ada" };
       const { call, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const readsBefore = service.reads.length;
 
-      const page = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
-      service.connection = { connected: false, login: null };
-      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+      const answered = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
 
-      assert.deepEqual(page, { url: "https://tryluke.dev/connect-github.html?disconnect=1" });
+      assert.deepEqual(answered, { connection: { connected: false, login: null } });
+      assert.deepEqual(last()?.github, { connected: false, login: null });
+      assert.deepEqual(service.reads.slice(readsBefore), ["github-disconnect"]);
+    }),
+);
+
+it.effect(
+  "a workspaces read that saw GitHub connected before a disconnect answered does not put it back",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.connection = { connected: true, login: "ada" };
+      const held = yield* Deferred.make<void>();
+      service.githubGate = Deferred.await(held);
+      const { call, last } = yield* subject(service);
+
+      const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.WORKSPACES_REFRESH));
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+      yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+      yield* Deferred.succeed(held, undefined);
+      yield* Fiber.join(refreshing);
+
       assert.deepEqual(last()?.github, { connected: false, login: null });
     }),
+);
+
+it.effect("GitHub as the account's only sign-in stays connected, and says so", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.connection = { connected: true, login: "ada" };
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    service.notPermitted = true;
+
+    const answered = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+
+    assert.deepEqual(answered, { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+  }),
 );
 
 it.effect("behind a closed account gate a GitHub page is never asked for", () =>

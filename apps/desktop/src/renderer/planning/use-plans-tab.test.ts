@@ -835,7 +835,7 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-test("Settings' GitHub row is the connection main's view holds, and its Connect and Disconnect ask main for their pages", async () => {
+test("Settings' GitHub row is the connection main's view holds, its Connect and Disconnect ask main, and a refused Disconnect says why", async () => {
   const tab = mount(
     { shown: true, planning: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
     { [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined) },
@@ -847,6 +847,8 @@ test("Settings' GitHub row is the connection main's view holds, and its Connect 
 
   assert.deepEqual(tab.control().github, { connected: true, login: null });
   assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
+  // The test leaves Disconnect unanswered, which the bridge refuses.
+  assert.equal(newestToastSays(), "Not answered in this test.");
 });
 
 test("the repository chooser says the account manages the workspace it owns, and not one it is a member of", () => {

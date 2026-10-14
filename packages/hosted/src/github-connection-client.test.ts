@@ -10,11 +10,22 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const CONNECT_PAGE = "https://tryluke.dev/connect-github.html?intent=opaque-intent-1";
 
-function client(): HostedGitHubConnectionClient {
+/** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
+function client(
+  session: {
+    readSessionToken: () => Effect.Effect<string | undefined>;
+    obtainSession: () => Effect.Effect<void>;
+  } = {
+    readSessionToken: () => Effect.succeed("session-1"),
+    obtainSession: () => Effect.void,
+  },
+): HostedGitHubConnectionClient {
   return new HostedGitHubConnectionClient({
     serviceBaseUrl: "https://tryluke.dev",
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
+    readAccountKey: () => Effect.succeed("ada@example.com"),
+    ...session,
   });
 }
 
@@ -68,6 +79,65 @@ it.effect("a refusal or a malformed answer is unanswered rather than a connectio
   }),
 );
 
-it("names the disconnect page on the service's own origin", () => {
-  assert.equal(client().disconnectUrl(), "https://tryluke.dev/connect-github.html?disconnect=1");
-});
+it.effect(
+  "disconnects under the Mac's session, never its OAuth token, and answers the connection as it then stands",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/github/disconnect": { answer: () => ({ connected: false, login: null }) },
+      });
+
+      const disconnected = yield* Effect.provide(client().disconnect(), api.layer);
+
+      assert.deepEqual(disconnected, { ok: true, answer: { connected: false, login: null } });
+      assert.deepEqual(api.credentials(), ["session-1"]);
+    }),
+);
+
+it.effect(
+  "with no session yet, a disconnect asks for one through the hand-off and is sent on it",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/github/disconnect": { answer: () => ({ connected: false, login: null }) },
+      });
+      let session: string | undefined;
+      const handedOff = client({
+        readSessionToken: () => Effect.sync(() => session),
+        obtainSession: () =>
+          Effect.sync(() => {
+            session = "session-2";
+          }),
+      });
+
+      yield* Effect.provide(handedOff.disconnect(), api.layer);
+
+      assert.deepEqual(api.credentials(), ["session-2"]);
+    }),
+);
+
+it.effect("GitHub as the only sign-in is named, and any other refusal is unanswered", () =>
+  Effect.gen(function* () {
+    const lastSignIn = fakeCloudApi({
+      "POST /api/github/disconnect": {
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+        status: HTTP_STATUS.FORBIDDEN,
+      },
+    });
+    const broken = fakeCloudApi({
+      "POST /api/github/disconnect": {
+        answer: () => ({ error: HOSTED_API_ERROR.UNAVAILABLE }),
+        status: HTTP_STATUS.SERVER_ERROR,
+      },
+    });
+
+    assert.deepEqual(yield* Effect.provide(client().disconnect(), lastSignIn.layer), {
+      ok: false,
+      failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED,
+    });
+    assert.deepEqual(yield* Effect.provide(client().disconnect(), broken.layer), {
+      ok: false,
+      failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED,
+    });
+  }),
+);

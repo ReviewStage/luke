@@ -5,7 +5,9 @@ import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import {
+  GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
+  type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
   type PlanningStartAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
@@ -18,6 +20,7 @@ import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   ALREADY_INVITED_REFUSAL,
+  GITHUB_LAST_SIGN_IN_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
@@ -53,7 +56,6 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
-const DISCONNECT_PAGE = `${SERVICE}/connect-github.html?disconnect=1`;
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -88,10 +90,10 @@ function fixture() {
   const host = {
     notPermitted: false,
     alreadyInvited: false,
+    lastSignIn: false,
     connectUrl: INSTALL_URL,
     githubUnanswered: false,
     connectPage: CONNECT_PAGE,
-    disconnectPage: DISCONNECT_PAGE,
   };
   const refusal = () =>
     host.notPermitted
@@ -211,9 +213,11 @@ function fixture() {
             : { url: host.connectPage };
         }),
       githubDisconnect: () =>
-        Effect.sync((): PlanningGitHubPageAnswer => {
+        Effect.sync((): PlanningGitHubDisconnectAnswer => {
           asked.push("github-disconnect");
-          return { url: host.disconnectPage };
+          return host.lastSignIn
+            ? { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED }
+            : { connection: { connected: false, login: null } };
         }),
       workspaceCreate: (params) =>
         Effect.sync(() => {
@@ -598,7 +602,7 @@ it.effect(
 );
 
 it.effect(
-  "Connect GitHub opens the page the host named in the browser, Disconnect its own, and neither from the voice window",
+  "Connect GitHub opens the page the host named in the browser, Disconnect asks the host and opens nothing, and neither from the voice window",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -616,7 +620,13 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
       });
-      assert.deepEqual(f.opened, [CONNECT_PAGE, DISCONNECT_PAGE]);
+      assert.deepEqual(f.opened, [CONNECT_PAGE]);
+      assert.equal(f.asked.includes("github-disconnect"), true);
+      f.host.lastSignIn = true;
+      assert.deepEqual(yield* f.router.performAct({ kind: ACT_KIND.GITHUB_DISCONNECT }, PANEL), {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: GITHUB_LAST_SIGN_IN_REFUSAL,
+      });
     }),
 );
 
@@ -633,19 +643,15 @@ it.effect(
 
       const refused = yield* Effect.forEach(pages, (page) => {
         f.host.connectPage = page;
-        f.host.disconnectPage = page;
-        return Effect.all([
-          f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL),
-          f.router.performAct({ kind: ACT_KIND.GITHUB_DISCONNECT }, PANEL),
-        ]);
+        return f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
       });
 
       assert.deepEqual(
-        refused.flat(),
-        pages.flatMap(() => [
-          { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal },
-          { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.GITHUB_DISCONNECT].refusal },
-        ]),
+        refused,
+        pages.map(() => ({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
+        })),
       );
       assert.deepEqual(f.opened, []);
     }),

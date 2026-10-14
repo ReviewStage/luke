@@ -5,13 +5,11 @@ import { GITHUB_CONNECT_PAGE } from "@sidecar/hosted/github-connection-wire";
  *
  * The page is opened by the Mac with an intent, by Better Auth returning
  * the browser from GitHub with `done=1` or `error=1` and its own code
- * beside it, or by the Mac with `disconnect=1`. An address naming none of
- * those asks nothing.
+ * beside it. An address naming none of those asks nothing.
  */
 
 export const CONNECT_STEP = {
   CONNECT: "connect",
-  DISCONNECT: "disconnect",
   DONE: "done",
   FAILED: "failed",
   NOTHING: "nothing",
@@ -25,18 +23,14 @@ export type ConnectStep =
       readonly retry: string | undefined;
     }
   | {
-      readonly kind:
-        | typeof CONNECT_STEP.DISCONNECT
-        | typeof CONNECT_STEP.DONE
-        | typeof CONNECT_STEP.NOTHING;
+      readonly kind: typeof CONNECT_STEP.DONE | typeof CONNECT_STEP.NOTHING;
     };
 
-/** Better Auth's codes for a link it refused, as its OAuth callback and unlink endpoint name them. */
+/** Better Auth's codes for a link it refused, as its OAuth callback names them. */
 const LINK_ERROR = {
   ACCOUNT_ALREADY_LINKED: "account_already_linked_to_different_user",
   EMAIL_MISMATCH: "email_doesn't_match",
   UNABLE_TO_LINK: "unable_to_link_account",
-  LAST_ACCOUNT: "FAILED_TO_UNLINK_LAST_ACCOUNT",
 } as const;
 
 type LinkError = (typeof LINK_ERROR)[keyof typeof LINK_ERROR];
@@ -46,8 +40,6 @@ const LINK_ERROR_WORDS = {
     "This GitHub account belongs to another Luke account. Sign in with GitHub instead.",
   [LINK_ERROR.EMAIL_MISMATCH]: "GitHub's email address does not match this Luke account's.",
   [LINK_ERROR.UNABLE_TO_LINK]: "GitHub did not confirm this account, so it was not connected.",
-  [LINK_ERROR.LAST_ACCOUNT]:
-    "GitHub is the only way you sign in to this Luke account, so it cannot be disconnected.",
 } as const satisfies Record<LinkError, string>;
 
 function isLinkError(code: string): code is LinkError {
@@ -88,9 +80,6 @@ export function connectStepFromSearch(search: string): ConnectStep {
   if (query.get(GITHUB_CONNECT_PAGE.DONE_PARAM) === GITHUB_CONNECT_PAGE.FLAG) {
     return { kind: CONNECT_STEP.DONE };
   }
-  if (query.get(GITHUB_CONNECT_PAGE.DISCONNECT_PARAM) === GITHUB_CONNECT_PAGE.FLAG) {
-    return { kind: CONNECT_STEP.DISCONNECT };
-  }
   const intent = query.get(GITHUB_CONNECT_PAGE.INTENT_PARAM);
   if (intent) return { kind: CONNECT_STEP.CONNECT, intent };
   return { kind: CONNECT_STEP.NOTHING };
@@ -99,7 +88,6 @@ export function connectStepFromSearch(search: string): ConnectStep {
 /** What failed, as the first words of a refusal Luke has no words of its own for. */
 export const LINK_FAILED = {
   CONNECT: "GitHub could not be connected",
-  DISCONNECT: "GitHub could not be disconnected",
 } as const;
 
 type LinkFailed = (typeof LINK_FAILED)[keyof typeof LINK_FAILED];

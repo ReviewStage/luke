@@ -8,6 +8,7 @@ import type {
   PlanningEditParams,
   PlanningFileAnswer,
   PlanningFileParams,
+  PlanningGitHubDisconnectAnswer,
   PlanningGitHubPageAnswer,
   PlanningMessagesParams,
   PlanningPageAnswer,
@@ -44,11 +45,13 @@ import type {
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
 } from "@sidecar/hosted/planning-view";
+import { GITHUB_DISCONNECT_FAILURE } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import {
   ACT,
   ACT_KIND,
   ALREADY_INVITED_REFUSAL,
+  GITHUB_LAST_SIGN_IN_REFUSAL,
   isGitHubAddress,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
@@ -93,7 +96,7 @@ export interface PlanningActsDependencies {
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
     planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
     githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
-    githubDisconnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+    githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: PlanningWorkspaceParams,
@@ -237,7 +240,7 @@ function isServicePage(url: string, serviceBaseUrl: string): boolean {
  * would hand a `file:` or custom-scheme address to whatever handles it.
  */
 function openedPage(
-  kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
+  kind: typeof ACT_KIND.GITHUB_CONNECT,
   page: PlanningGitHubPageAnswer,
   dependencies: Pick<PlanningActsDependencies, "openExternal" | "serviceBaseUrl">,
 ) {
@@ -325,10 +328,21 @@ export function planningActRows(
         openedPage(ACT_KIND.GITHUB_CONNECT, page, dependencies),
       );
     },
+    // Disconnecting asks the host, which asks the service under the Mac's
+    // session; no page opens, so no browser account stands in for the Mac's.
     [ACT_KIND.GITHUB_DISCONNECT]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.GITHUB_DISCONNECT, sender);
-      return Effect.flatMap(host.githubDisconnect(), (page) =>
-        openedPage(ACT_KIND.GITHUB_DISCONNECT, page, dependencies),
+      return Effect.flatMap(host.githubDisconnect(), (answer) =>
+        "connection" in answer
+          ? Effect.void
+          : Effect.fail(
+              new ActRefused({
+                message:
+                  answer.failure === GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED
+                    ? GITHUB_LAST_SIGN_IN_REFUSAL
+                    : ACT[ACT_KIND.GITHUB_DISCONNECT].refusal,
+              }),
+            ),
       );
     },
     // The address is an http or https one by the act's own schema, so it

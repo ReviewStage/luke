@@ -25,26 +25,23 @@ import { SOCIAL_PROVIDER } from "./sign-in-provider";
 import "./styles.css";
 
 /**
- * connect-github.tsx -- the page that connects or disconnects the signed-in account's GitHub, on the browser's own session.
+ * connect-github.tsx -- the page that connects the signed-in account's GitHub, on the browser's own session.
  *
  * Better Auth links a provider only for a browser session (`linkSocial`),
  * and the Mac holds an OAuth token rather than one, so the Mac opens this
  * page. With an intent, the page claims it on the browser's session, which
  * must be the account the Mac asked for, and only then asks Better Auth to
  * link GitHub; Better Auth returns the browser here with `done=1` or
- * `error=1`. With `disconnect=1`, it asks Better Auth to unlink GitHub, which
- * wants a fresh session, so a refusal for that sends the browser through
- * sign-in again. A browser with no session signs in and comes back to the
- * same address. Nothing of the address is drawn: an error is drawn by our
+ * `error=1`. Disconnecting is the Mac's own, under its Better Auth session
+ * (`POST /api/github/disconnect`), so no page acts on whichever account a
+ * browser happens to be signed in to. A browser with no session signs in and
+ * comes back to the same address. Nothing of the address is drawn: an error is drawn by our
  * words for its code, or by Better Auth's own.
  */
 
 const authClient = createAuthClient();
 
 const decodeClaim = Schema.decodeUnknownOption(githubConnectClaimAnswerSchema);
-
-/** HTTP statuses Better Auth refuses a missing or stale session with. */
-const SESSION_REFUSED = new Set([401, 403]);
 
 /** What the card shows: the work under way, a sign-in to choose, or how the work settled. */
 const VIEW = { WORKING: "working", SIGN_IN: "sign-in", SAID: "said" } as const;
@@ -127,39 +124,6 @@ async function connect(intent: string): Promise<View> {
   return WORKING;
 }
 
-/** A refusal on the way to a disconnect: a missing or stale session is sent to sign in again, and anything else is said. */
-function disconnectRefused(error: {
-  status: number;
-  code?: string | undefined;
-  message?: string | undefined;
-}): View {
-  if (SESSION_REFUSED.has(error.status)) {
-    return signIn(
-      "Sign in again to disconnect GitHub",
-      "Disconnecting GitHub needs a recent sign-in.",
-    );
-  }
-  return said(
-    "GitHub is still connected",
-    linkErrorWords(LINK_FAILED.DISCONNECT, error.code, error.message),
-  );
-}
-
-/**
- * Carries out a disconnect: Better Auth unlinks an account by its own record's
- * id, which `listAccounts` answers, so the session's GitHub account is found
- * there first; none linked is already disconnected.
- */
-async function disconnect(): Promise<View> {
-  const accounts = await authClient.listAccounts();
-  if (accounts.error) return disconnectRefused(accounts.error);
-  const github = accounts.data.find((account) => account.providerId === SOCIAL_PROVIDER.GITHUB);
-  if (github === undefined) return said("GitHub disconnected", RETURN);
-  const unlinked = await authClient.unlinkAccount({ accountId: github.id });
-  if (!unlinked.error) return said("GitHub disconnected", RETURN);
-  return disconnectRefused(unlinked.error);
-}
-
 /** What the page shows before it knows whether the browser is signed in, or with no work to do. */
 function settledView(step: ConnectStep): View | undefined {
   if (step.kind === CONNECT_STEP.DONE) return said("GitHub connected", RETURN);
@@ -179,22 +143,14 @@ function ConnectGitHub(): React.JSX.Element {
   const started = useRef(false);
 
   useEffect(() => {
-    if (settledView(step) !== undefined || session.isPending || started.current) return;
+    if (step.kind !== CONNECT_STEP.CONNECT || session.isPending || started.current) return;
     if (!session.data) {
-      setView(
-        signIn(
-          step.kind === CONNECT_STEP.CONNECT
-            ? "Sign in to connect GitHub"
-            : "Sign in to disconnect GitHub",
-          SIGN_IN_BODY,
-        ),
-      );
+      setView(signIn("Sign in to connect GitHub", SIGN_IN_BODY));
       return;
     }
     // Note that the work runs once per load: a reload claims the intent again and retries.
     started.current = true;
-    const work = step.kind === CONNECT_STEP.CONNECT ? connect(step.intent) : disconnect();
-    void work.then(setView);
+    void connect(step.intent).then(setView);
   }, [step, session.isPending, session.data]);
 
   return (
@@ -202,11 +158,7 @@ function ConnectGitHub(): React.JSX.Element {
       <section className={AUTH_CARD} aria-labelledby="connect-title">
         <ConnectionGraphic mark={<GitHubMark className="size-10 shrink-0" />} />
         <h1 id="connect-title" className={AUTH_TITLE}>
-          {view.kind !== VIEW.WORKING
-            ? view.title
-            : step.kind === CONNECT_STEP.DISCONNECT
-              ? "Disconnecting GitHub…"
-              : "Connecting GitHub…"}
+          {view.kind !== VIEW.WORKING ? view.title : "Connecting GitHub…"}
         </h1>
         {view.kind === VIEW.WORKING ? null : (
           <p className="m-0 text-muted-foreground">{view.body}</p>

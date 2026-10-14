@@ -23,7 +23,7 @@ export interface GitHubSettingsControl {
   connection: GitHubConnection | undefined;
   /** Opens the page that connects the account's GitHub in the browser. */
   onConnect: () => void;
-  /** Opens the page that disconnects the account's GitHub in the browser. */
+  /** Disconnects the account's GitHub, under the Mac's own session. */
   onDisconnect: () => void;
 }
 

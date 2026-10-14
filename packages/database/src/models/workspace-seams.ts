@@ -109,7 +109,7 @@ interface InvitationsRead {
 }
 
 /** Every way a plugin call through these seams fails: its refusal, or anything else it threw or answered. */
-type MemberFailure = OrganizationRefused | Cause.UnknownError;
+export type MemberFailure = OrganizationRefused | Cause.UnknownError;
 
 /** The plugin's member writes the routes make under the Mac's session. */
 export interface MemberSeams {
@@ -171,7 +171,7 @@ const decodeRefusal = Schema.decodeUnknownOption(
 );
 
 /** A plugin call's answer, its refusal kept by status and code and anything else an unknown failure. */
-function pluginCall(
+export function pluginCall(
   write: () => Promise<object | null>,
 ): Effect.Effect<object | null, MemberFailure> {
   return Effect.tryPromise({

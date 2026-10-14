@@ -142,6 +142,7 @@ export const hostAssemblyLayer: Layer.Layer<
           github: new HostedGitHubConnectionClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             ...account.token,
+            ...account.sessionToken,
           }),
         },
       ),
