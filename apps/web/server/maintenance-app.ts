@@ -18,6 +18,7 @@ import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "./hosted/session-sandboxes.js";
+import { sweepTerminalLeases } from "./hosted/terminal-lease-sweep.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import {
@@ -77,6 +78,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         sweepAbandonedTurns({ writer }, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
+    sweepTerminalLeases: (now) =>
+      sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     sweepVoice: (now) =>

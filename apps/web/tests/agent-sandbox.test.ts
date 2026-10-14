@@ -13,8 +13,8 @@ import { stampedEveEvent } from "./support/eve-events";
 
 /**
  * The coding agent's sandbox lifecycle as its root's store hook reads it:
- * the sandbox stopped at each turn's end and its credential renewed as it
- * ages.
+ * the sandbox stopped at each turn's end unless a developer's terminal holds
+ * it, and its credential renewed as it ages.
  */
 
 const OPENED_AT = Date.UTC(2026, 9, 13, 9);
@@ -42,10 +42,16 @@ const REFRESH_MS = Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
 
 test("a coding agent's sandbox is stopped at a turn's end however the turn ended, once a sandbox tool has opened it", () => {
   for (const end of TURN_ENDS) {
-    assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, end, OPENED), true, end.type);
-    assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, end, NEVER_OPENED), false, end.type);
+    assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, end, OPENED, false), true, end.type);
+    assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, end, NEVER_OPENED, false), false, end.type);
   }
-  assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, STEP_STARTED, OPENED), false);
+  assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, STEP_STARTED, OPENED, false), false);
+});
+
+test("a coding agent's sandbox a developer's terminal holds is left running at a turn's end", () => {
+  for (const end of TURN_ENDS) {
+    assert.equal(stopsAtTurnEnd(AGENT_ROLE.CODER, end, OPENED, true), false, end.type);
+  }
 });
 
 test("a coding agent's credential is renewed at the first step past its age, counted from the open or the last renewal", () => {

@@ -8,6 +8,7 @@ import {
   type MaintenanceSweepOptions,
 } from "../server/hosted/maintenance-sweep";
 import type { SessionSandboxSweepOutcome } from "../server/hosted/session-sandboxes";
+import type { TerminalLeaseSweepOutcome } from "../server/hosted/terminal-lease-sweep";
 import type { VoiceOrphanSweepOutcome } from "../server/voice/orphan-sweep";
 import { noDatabase } from "./support/no-database";
 
@@ -16,6 +17,8 @@ const CRON_SECRET = Redacted.make("cron-secret-1");
 const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
 /** What the sweep over the queued sessions' sandboxes answers. */
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
+/** What the sweep over the lapsed terminal leases answers. */
+const TERMINALS: TerminalLeaseSweepOutcome = { stopped: 2, released: 1, pending: 0 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
@@ -35,6 +38,7 @@ interface Recorded {
   abandoned: number[];
   voiced: number[];
   sandboxed: number[];
+  terminals: number[];
   automated: number[];
 }
 
@@ -45,6 +49,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     abandoned: [],
     voiced: [],
     sandboxed: [],
+    terminals: [],
     automated: [],
   };
   const options: MaintenanceSweepOptions = {
@@ -74,6 +79,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.sandboxed.push(now);
         return SANDBOXED;
+      }),
+    sweepTerminalLeases: (now) =>
+      Effect.sync(() => {
+        recorded.terminals.push(now);
+        return TERMINALS;
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -105,6 +115,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       abandoned: [],
       voiced: [],
       sandboxed: [],
+      terminals: [],
       automated: [],
     });
   }),
@@ -126,6 +137,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       abandoned: [],
       voiced: [],
       sandboxed: [],
+      terminals: [],
       automated: [],
     });
     assert.deepEqual(missing.recorded, {
@@ -134,7 +146,32 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       abandoned: [],
       voiced: [],
       sandboxed: [],
+      terminals: [],
       automated: [],
     });
   }),
+);
+
+it.effect(
+  "an authorized sweep runs every sweep at one instant, the lapsed terminal leases among them, and answers what each did",
+  () =>
+    Effect.gen(function* () {
+      const { options, recorded } = sweepOptions();
+      const answer = yield* sweep(options);
+
+      assert.equal(answer.status, 200);
+      assert.deepEqual(answer.body.terminals, TERMINALS);
+      assert.deepEqual(answer.body.sandboxes, SANDBOXED);
+      const [instant] = recorded.terminals;
+      assert.ok(instant !== undefined);
+      assert.deepEqual(recorded, {
+        purged: [instant],
+        purgedCalls: [instant],
+        abandoned: [instant],
+        voiced: [instant],
+        sandboxed: [instant],
+        terminals: [instant],
+        automated: [instant],
+      });
+    }),
 );

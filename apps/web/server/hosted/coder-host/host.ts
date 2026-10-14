@@ -9,6 +9,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { promptHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { sandboxHeld } from "@sidecar/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -207,6 +208,13 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
   ): Effect.Effect<void, never, DatabaseServices>;
+  /**
+   * Whether a developer's terminal holds the agent's sandbox now: a lease
+   * the terminal relay moves on as they type (`sandbox-terminal-lease.ts`),
+   * which the turn-end stop leaves running. A read that fails is logged and
+   * answers no, so the stop goes ahead as it would with no terminal.
+   */
+  sandboxHeld(admitted: AdmittedConversation): Effect.Effect<boolean, never, DatabaseServices>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -482,6 +490,18 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch((failure) =>
           Effect.logWarning(
             `The branch of conversation ${admitted.target.conversationId} was not recorded: ${describeFailure(failure)}`,
+          ),
+        ),
+      ),
+
+    sandboxHeld: (admitted) =>
+      sandboxHeld(admitted.target.conversationId, new Date(seams.now())).pipe(
+        Effect.catch((failure) =>
+          Effect.as(
+            Effect.logWarning(
+              `The terminal lease of conversation ${admitted.target.conversationId} was not read: ${failure._tag}`,
+            ),
+            false,
           ),
         ),
       ),

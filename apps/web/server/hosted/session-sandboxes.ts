@@ -42,8 +42,8 @@ const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
 
 /**
  * Vercel Sandbox's REST API, as `@vercel/sandbox` 3.3.0 (the copy eve 0.74.0
- * bundles) asks it in its `APIClient`'s `listSandboxes` and `deleteSandbox`:
- * re-read those two calls when eve's bundled copy moves.
+ * bundles) asks it in its `APIClient`'s `listSandboxes`, `deleteSandbox`, and
+ * `stopSession`: re-read those three calls when eve's bundled copy moves.
  */
 const SANDBOX_API = {
   ORIGIN: "https://vercel.com",
@@ -59,7 +59,7 @@ const SESSION_SANDBOX_SWEEP = {
 } as const;
 
 /** Vercel could not be asked, or did not confirm a delete; the status where it answered one. */
-class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
+export class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
   readonly status?: number;
 }> {
   override get message(): string {
@@ -72,6 +72,8 @@ class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
 export interface SessionSandboxesService {
   /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
+  /** Stops every running sandbox tagged with the session, keeping its filesystem for a later resume; answers how many were stopped. */
+  readonly stopFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
 }
 
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
@@ -81,10 +83,19 @@ export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionS
 /** The OIDC token's claims the API is asked under: the project and team it names. */
 const OidcClaimsSchema = Schema.Struct({ project_id: Schema.String, owner_id: Schema.String });
 
-/** A page of the sandboxes listed under a tag, read for their names alone. */
+/** A page of the sandboxes listed under a tag, read for their names, and for a stop, where each stands and its running session. */
 const ListedSandboxesSchema = Schema.Struct({
-  sandboxes: Schema.Array(Schema.Struct({ name: Schema.String })),
+  sandboxes: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      status: Schema.optional(Schema.String),
+      currentSessionId: Schema.optional(Schema.String),
+    }),
+  ),
 });
+
+/** The states a sandbox is up in, which a stop ends; any other is stopped, stopping, or never came up. */
+const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
 
 const readClaims = readEither(OidcClaimsSchema, { excess: EXCESS_KEYS.DROP });
 const readListed = readEither(ListedSandboxesSchema, { excess: EXCESS_KEYS.DROP });
@@ -131,8 +142,8 @@ function succeeded(status: number): boolean {
 }
 
 /**
- * The service over Vercel Sandbox's REST API, the two calls the SDK eve
- * opens sandboxes with makes for a list and a delete, asked directly rather
+ * The service over Vercel Sandbox's REST API, the calls the SDK eve opens
+ * sandboxes with makes for a list, a delete, and a stop, asked directly rather
  * than through the SDK, because the SDK bundled into the sweep's function
  * fails it as it loads and carries a dozen Node modules the sweep would
  * never use. A session has one sandbox, so the first page of the list is
@@ -141,43 +152,101 @@ function succeeded(status: number): boolean {
 function vercelSessionSandboxes(
   readToken: OidcTokenRead,
 ): Effect.Effect<SessionSandboxesService, never, HttpClient.HttpClient> {
-  return Effect.map(HttpClient.HttpClient, (client) => ({
-    deleteFor: (sessionId) =>
+  return Effect.map(HttpClient.HttpClient, (client) => {
+    /** The deployment's token and the project and team it names, read afresh for each call. */
+    const credentials = Effect.gen(function* () {
+      const token = yield* Effect.tryPromise({
+        try: readToken,
+        catch: () => new SandboxUnavailable({}),
+      });
+      const claims = claimsOf(token);
+      if (claims === undefined) return yield* new SandboxUnavailable({});
+      return { headers: { authorization: `Bearer ${token}` }, ...claims };
+    });
+    type Credentials = Effect.Success<typeof credentials>;
+
+    /** Every sandbox carrying the session's tag: a session has one, so the first page is all of them. */
+    const listFor = (sessionId: string, asked: Credentials) =>
       Effect.gen(function* () {
-        const token = yield* Effect.tryPromise({
-          try: readToken,
-          catch: () => new SandboxUnavailable({}),
-        });
-        const claims = claimsOf(token);
-        if (claims === undefined) return yield* new SandboxUnavailable({});
-        const headers = { authorization: `Bearer ${token}` };
         const listUrl = new URL(SANDBOX_API.PATH, SANDBOX_API.ORIGIN);
-        listUrl.searchParams.set("teamId", claims.teamId);
-        listUrl.searchParams.set("project", claims.projectId);
+        listUrl.searchParams.set("teamId", asked.teamId);
+        listUrl.searchParams.set("project", asked.projectId);
         listUrl.searchParams.set("limit", String(SANDBOX_API.PAGE));
         // The API's own filter syntax, one `key:value` pair.
         listUrl.searchParams.set("tags", `${SESSION_TAG}:${sessionId}`);
-        const listed = yield* callApi(client, HttpClientRequest.get(listUrl, { headers }));
+        const listed = yield* callApi(
+          client,
+          HttpClientRequest.get(listUrl, { headers: asked.headers }),
+        );
         const page = readListed(listed.body);
         if (!succeeded(listed.status) || Result.isFailure(page)) {
           return yield* new SandboxUnavailable({ status: listed.status });
         }
-        for (const { name } of page.success.sandboxes) {
-          const deleteUrl = new URL(
-            `${SANDBOX_API.PATH}/${encodeURIComponent(name)}`,
-            SANDBOX_API.ORIGIN,
-          );
-          deleteUrl.searchParams.set("teamId", claims.teamId);
-          deleteUrl.searchParams.set("projectId", claims.projectId);
-          deleteUrl.searchParams.set("deleteOrphanSnapshots", "true");
-          const deleted = yield* callApi(client, HttpClientRequest.delete(deleteUrl, { headers }));
-          if (!succeeded(deleted.status) && deleted.status !== NOT_FOUND_STATUS) {
-            return yield* new SandboxUnavailable({ status: deleted.status });
-          }
+        return page.success.sandboxes;
+      });
+
+    /** A sandbox's running session stopped; one already gone counts as stopped. */
+    const stopSession = (sessionId: string, asked: Credentials) =>
+      Effect.gen(function* () {
+        const stopUrl = new URL(
+          `${SANDBOX_API.PATH}/sessions/${encodeURIComponent(sessionId)}/stop`,
+          SANDBOX_API.ORIGIN,
+        );
+        stopUrl.searchParams.set("teamId", asked.teamId);
+        const stopped = yield* callApi(
+          client,
+          HttpClientRequest.post(stopUrl, { headers: asked.headers }),
+        );
+        if (!succeeded(stopped.status) && stopped.status !== NOT_FOUND_STATUS) {
+          return yield* new SandboxUnavailable({ status: stopped.status });
         }
-        return page.success.sandboxes.length;
-      }),
-  }));
+      });
+
+    return {
+      deleteFor: (sessionId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const sandboxes = yield* listFor(sessionId, asked);
+          for (const { name } of sandboxes) {
+            const deleteUrl = new URL(
+              `${SANDBOX_API.PATH}/${encodeURIComponent(name)}`,
+              SANDBOX_API.ORIGIN,
+            );
+            deleteUrl.searchParams.set("teamId", asked.teamId);
+            deleteUrl.searchParams.set("projectId", asked.projectId);
+            deleteUrl.searchParams.set("deleteOrphanSnapshots", "true");
+            const deleted = yield* callApi(
+              client,
+              HttpClientRequest.delete(deleteUrl, { headers: asked.headers }),
+            );
+            if (!succeeded(deleted.status) && deleted.status !== NOT_FOUND_STATUS) {
+              return yield* new SandboxUnavailable({ status: deleted.status });
+            }
+          }
+          return sandboxes.length;
+        }),
+      stopFor: (sessionId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const sandboxes = yield* listFor(sessionId, asked);
+          let stopped = 0;
+          for (const sandbox of sandboxes) {
+            const running = sandbox.currentSessionId;
+            // A sandbox already stopped, or one with no session up, has nothing to stop.
+            if (
+              running === undefined ||
+              sandbox.status === undefined ||
+              !UP_STATUSES.has(sandbox.status)
+            ) {
+              continue;
+            }
+            yield* stopSession(running, asked);
+            stopped += 1;
+          }
+          return stopped;
+        }),
+    };
+  });
 }
 
 /** The service as the deployment runs it, on the function's own OIDC token. */
