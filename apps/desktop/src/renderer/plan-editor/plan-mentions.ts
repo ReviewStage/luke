@@ -41,11 +41,11 @@ const RETARGETED_META = "luke-plan-retargeted";
 /** The `@` word the caret ends: `@`, at the start of a word, then up to four words with no bracket, parenthesis, or `@` in them. */
 const MENTION_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,3})?)$/u;
 
-/** The rest of an `@` word after the caret, which a pick replaces too. */
-const WORD_REST = /^[^\s@[\]()]*/u;
-
 /** The character an inline node that is no text stands for in its block's words, one position wide as the node is. */
 const LEAF_CHARACTER = "￼";
+
+/** The rest of an `@` word after the caret, which a pick replaces too: up to a space, a bracket, a parenthesis, an `@`, or a chip, which is no word's. */
+const WORD_REST = /^[^\s@[\]()\uFFFC]*/u;
 
 const SPACE = " ";
 

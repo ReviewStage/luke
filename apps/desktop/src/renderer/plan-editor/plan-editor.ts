@@ -152,11 +152,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-label": label,
       },
       handleKeyDown: (view, event) => {
-        // The keys a mention's list takes are its own first, Escape among them, which closes it,
-        // but for a key an input method is composing with, whose Enter confirms its words.
-        const composing =
-          event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE;
-        if (!composing && mentions?.onKey(event) === true) return true;
+        // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
+        if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {
+          return false;
+        }
+        // The keys a mention's list takes are its own first, Escape among them, which closes it.
+        if (mentions?.onKey(event) === true) return true;
         if (event.key === "Escape" || (event.key === "Enter" && event.metaKey)) {
           onFinish(caretSection(editor));
           return true;

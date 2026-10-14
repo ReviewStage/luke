@@ -41,6 +41,7 @@ function mounted(markdown: string) {
   const drafts: string[] = [];
   const triggers: (ComposerTrigger | undefined)[] = [];
   const drawn: MentionNode[] = [];
+  let finished = 0;
   const host = document.createElement("div");
   document.body.append(host);
   const handle = mountPlanEditor(host, {
@@ -50,7 +51,9 @@ function mounted(markdown: string) {
     label: "Plan",
     className: "markdown plan-unit",
     onDraft: (draft) => drafts.push(draft),
-    onFinish: () => undefined,
+    onFinish: () => {
+      finished += 1;
+    },
     onLeaveUp: () => undefined,
     mentions: {
       onTrigger: (trigger) => triggers.push(trigger),
@@ -105,6 +108,7 @@ function mounted(markdown: string) {
     press,
     back,
     last: () => drafts.at(-1) ?? "",
+    finished: () => finished,
   };
 }
 
@@ -170,15 +174,18 @@ test("renaming a heading written with its own formatting still renames its menti
   );
 });
 
-test("a key an input method is composing with goes to the input method, never to the list", () => {
+test("a key an input method is composing with goes to the input method, never to the list or the editor's own keys", () => {
   const plan = mounted(TEXT);
   plan.typeAfter("Store first.", " See @go");
   plan.offered.length = 0;
 
   plan.press({ key: "Enter", isComposing: true });
   plan.press({ key: "Enter", keyCode: 229 });
+  plan.press({ key: "Escape", isComposing: true });
+  plan.press({ key: "Enter", metaKey: true, keyCode: 229 });
 
   assert.deepEqual(plan.offered, []);
+  assert.equal(plan.finished(), 0);
 });
 
 test("a pick with the caret inside the word replaces the word through its end", () => {
@@ -189,4 +196,13 @@ test("a pick with the caret inside the word replaces the word through its end", 
   plan.handle.chooseMention({ name: "Goal", target: `luke://plan/${PLAN_ID}#Goal` });
 
   assert.ok(plan.last().endsWith(`Store first. See ${section("Goal")}\n`), plan.last());
+});
+
+test("a pick right before a chip replaces the word alone, and the chip stays", () => {
+  const plan = mounted(`## Goal\n\nSee ${section("Rollout")}\n\n## Rollout\n\nStore first.\n`);
+
+  plan.typeAfter("See ", "@go");
+  plan.handle.chooseMention({ name: "Goal", target: `luke://plan/${PLAN_ID}#Goal` });
+
+  assert.ok(plan.last().includes(`See ${section("Goal")} ${section("Rollout")}`), plan.last());
 });
