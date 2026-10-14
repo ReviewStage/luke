@@ -11,7 +11,6 @@ import { connectionHealth, type IntegrationTool, toolsCount } from "../integrati
 import { IntegrationMark } from "../integration-marks";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
-import { GITHUB_REMEDY_TITLE, OPEN_SETTINGS_LABEL } from "../open-settings";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
@@ -150,13 +149,8 @@ function ServersPopover({
     onClose();
   };
 
-  /**
-   * A grant begun from the row: a Connect sign-in opens the browser, and the
-   * row waits on the window's return to read it; GitHub's opens Settings ›
-   * Connected accounts, so the popover gives way first.
-   */
+  /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (provider: IntegrationProvider) => {
-    if (grantedBySignIn(provider)) onClose();
     setConnecting(provider);
     void grant.begin(provider).then(() => setConnecting(undefined));
   };
@@ -192,16 +186,12 @@ function ServersPopover({
             disabled={connecting === row.provider}
             title={
               grantedBySignIn(row.provider)
-                ? GITHUB_REMEDY_TITLE
+                ? "Connect GitHub in your browser"
                 : `Sign in to ${row.name} in your browser`
             }
             onClick={() => connect(row.provider)}
           >
-            {grantedBySignIn(row.provider)
-              ? OPEN_SETTINGS_LABEL
-              : row.kind === SERVER_ROW.CONNECT
-                ? SERVER_ACTION.CONNECT
-                : SERVER_ACTION.RECONNECT}
+            {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
           </button>
         );
       case SERVER_ROW.RETRY:

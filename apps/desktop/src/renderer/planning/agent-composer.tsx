@@ -8,7 +8,7 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INTEGRATION_NAME } from "@sidecar/hosted/integration-wire";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import {
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { imageFiles } from "../feedback-images";
+import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
@@ -65,12 +66,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * one Stop the tab has. A message that did not go stays in the box with why under the card
  * and what mends it (`../failure-note.tsx`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
- * once, or the GitHub sign-in a refusal needs, after which it is sent again
+ * once, or the GitHub connect a refusal needs, after which it is sent again
  * by itself; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
- * the agent has on whose sign-in expired offers Settings › Integrations, the
- * one place a server is reconnected. The box takes
+ * the agent has on whose sign-in expired is offered to reconnect, in place, as
+ * the MCP popover reconnects it. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
@@ -191,6 +192,19 @@ export function AgentComposer({
   const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const statuses = useIntegrationStatuses();
+  const grant = useIntegrationGrant(statuses);
+  // A reconnect that could not begin says so in the note, as Settings' row does.
+  const [reconnectFailed, setReconnectFailed] = useState<IntegrationProvider | undefined>(
+    undefined,
+  );
+  const reconnect = (provider: IntegrationProvider) => {
+    setReconnectFailed(undefined);
+    void grant.begin(provider).then((outcome) => {
+      if (outcome === GRANT_OUTCOME.NOT_OPENED || outcome === GRANT_OUTCOME.REFUSED) {
+        setReconnectFailed(provider);
+      }
+    });
+  };
   const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
   const words =
     composer.closed ?? refusal ?? (composer.note === undefined ? model?.note : undefined);
@@ -202,7 +216,11 @@ export function AgentComposer({
           ? undefined
           : {
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
-              text: `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
+              text:
+                reconnectFailed === lapsed
+                  ? `${INTEGRATION_NAME[lapsed]}'s sign-in expired, and Luke could not start reconnecting it. Try again in a moment.`
+                  : `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
+              provider: lapsed,
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === composer.note;
@@ -409,7 +427,7 @@ export function AgentComposer({
           failure={note}
           className="agent-note agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
-          onRemedy={lapsed === undefined ? undefined : servers.onOpenSettings}
+          onRemedy={lapsed === undefined ? undefined : () => reconnect(lapsed)}
         />
       ) : null}
     </div>

@@ -208,8 +208,8 @@ export interface PlansControl {
   onOpenWorkspaceSettings: () => void;
   /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
   github: GitHubConnection | undefined;
-  /** Opens the page that connects the account's own GitHub in the browser. */
-  onConnectAccountGitHub: () => void;
+  /** Opens the page that connects the account's own GitHub in the browser; answers whether it opened, a refusal saying why in a toast. */
+  onConnectAccountGitHub: () => Promise<boolean>;
   /** Disconnects the account's own GitHub, under the Mac's session; a refusal says why in a toast. */
   onDisconnectAccountGitHub: () => void;
   activePlanId: string | undefined;
@@ -1068,10 +1068,14 @@ export function usePlansTab(input: {
   // view takes the answer at once. A refusal of either says why in a toast.
   const accountGitHub = (
     kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
-  ) => {
-    if (fixture !== undefined) return;
-    act(kind).catch((refused: Error) =>
-      toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+  ): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
+    return act(kind).then(
+      () => true,
+      (refused: Error) => {
+        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        return false;
+      },
     );
   };
   // A fixture's workspaces are made, shared, and connected nowhere. A
@@ -1370,7 +1374,9 @@ export function usePlansTab(input: {
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
-    onDisconnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_DISCONNECT),
+    onDisconnectAccountGitHub: () => {
+      void accountGitHub(ACT_KIND.GITHUB_DISCONNECT);
+    },
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,

@@ -13,8 +13,9 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { GitHubConnectProvider } from "../github-connect";
 import { OpenSettingsProvider } from "../open-settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
+import type { SettingsLink } from "../settings-views";
 import { IntegrationsSection } from "./integrations-page";
 
 /**
@@ -23,7 +24,7 @@ import { IntegrationsSection } from "./integrations-page";
  * account has a row, and one it does not, which the service answers as
  * unavailable, has none; an account offered none is told so, and a read
  * that fails still offers to read again. GitHub, which the account's own
- * GitHub grants, is connected in Settings › Connected accounts.
+ * GitHub grants, is connected in place through the account's GitHub connect.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
@@ -36,6 +37,8 @@ let githubConnected = false;
 let sent: Act[] = [];
 /** Every Settings link the page's presses followed. */
 let links: SettingsLink[] = [];
+/** How many times the account's GitHub connect was begun. */
+let githubConnects = 0;
 
 const roots: Root[] = [];
 
@@ -60,6 +63,7 @@ beforeEach(() => {
   githubConnected = false;
   sent = [];
   links = [];
+  githubConnects = 0;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -97,7 +101,19 @@ async function mount(): Promise<HTMLElement> {
       createElement(
         OpenSettingsProvider,
         { value: (link: SettingsLink) => links.push(link) },
-        createElement(IntegrationsSection, { signedIn: true }),
+        createElement(
+          GitHubConnectProvider,
+          {
+            value: {
+              connection: { connected: githubConnected, login: null },
+              connect: () => {
+                githubConnects += 1;
+                return Promise.resolve(true);
+              },
+            },
+          },
+          createElement(IntegrationsSection, { signedIn: true }),
+        ),
       ),
     ),
   );
@@ -160,7 +176,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which opens Settings at Connected accounts and signs nothing in", async () => {
+test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and stands pending", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -175,13 +191,9 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 
-  assert.deepEqual(links, [
-    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
-  ]);
-  assert.equal(
-    sent.some((request) => request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN),
-    false,
-  );
+  assert.equal(githubConnects, 1);
+  assert.deepEqual(links, [], "nothing leaves the page");
+  assert.match(page.textContent ?? "", /Finish signing in to GitHub in your browser\./u);
 });
 
 test("GitHub connected stands connected with no Disconnect, whose way out is Settings › Connected accounts", async () => {

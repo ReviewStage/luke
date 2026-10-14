@@ -564,6 +564,7 @@ export function DesktopSidebar({
   onTabChange,
   account,
   updates,
+  onSignOut,
   call,
 }: {
   sidebar: SidebarCollapse;
@@ -573,6 +574,8 @@ export function DesktopSidebar({
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
+  /** Signs the account out, once the account menu's Log out is answered. */
+  onSignOut: () => Promise<void>;
   /** The call card, at the column's foot above the account row, while one is to be drawn here. */
   call: CallCardInput | undefined;
 }): React.JSX.Element {
@@ -776,6 +779,7 @@ export function DesktopSidebar({
           shown={!sidebar.collapsed}
           settingsOpen={tab === PANEL_TAB.SETTINGS}
           onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
+          onSignOut={onSignOut}
         />
       </div>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}

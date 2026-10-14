@@ -267,7 +267,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
       return START_NEEDS_REPOSITORY;
     case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
-      return "Connect GitHub in Settings to start an agent.";
+      return "Connect GitHub to start an agent.";
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
@@ -294,7 +294,7 @@ function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
     case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
-      return "Connect GitHub in Settings to message the agent.";
+      return "Connect GitHub to message the agent.";
     // A message names no repository and no model, so neither refusal is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:

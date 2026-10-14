@@ -304,6 +304,7 @@ export function DesktopShell({
         onTabChange={onTabChange}
         account={account}
         updates={settings.updates}
+        onSignOut={settings.onSignOut}
         call={sidebar.collapsed ? undefined : call}
       />
       <main className="desktop-main">

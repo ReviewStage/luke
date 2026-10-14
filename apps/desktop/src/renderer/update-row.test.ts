@@ -5,6 +5,14 @@ import { UPDATE_ROW_ACTION, updateInSidebar, updateRow } from "./update-row";
 
 const RELEASE: RunningBuild = { packaged: true };
 
+/** What `run.sh` launches: unpackaged, so no updater stands behind it. */
+const UNINSTALLABLE_IDLE: UpdateSnapshot = {
+  status: UPDATE_STATUS.IDLE,
+  currentVersion: "0.11.0",
+  installSupported: false,
+  upToDate: false,
+};
+
 function supported(update: Partial<UpdateSnapshot> & Pick<UpdateSnapshot, "status">) {
   // SAFETY: every call site passes the fields its status's snapshot variant
   // requires; the assertion only spares each test restating the two constants.
@@ -110,4 +118,47 @@ test("the sidebar carries a release only while it has something to press: its re
   assert.equal(updateInSidebar(supported({ status: UPDATE_STATUS.ERROR })), false);
   assert.equal(updateInSidebar(supported({ status: UPDATE_STATUS.IDLE, upToDate: true })), false);
   assert.equal(updateInSidebar({ ...ready, installSupported: false }), false);
+});
+
+test("a development build names its branch and commit and offers nothing to press", () => {
+  const row = updateRow(UNINSTALLABLE_IDLE, {
+    packaged: false,
+    commit: { sha: "a1b2c3d", dirty: false, branch: "main" },
+  });
+  assert.equal(row.title, "Development build");
+  assert.equal(row.detail, "main @ a1b2c3d");
+  assert.equal(row.action, UPDATE_ROW_ACTION.NONE);
+  assert.equal(row.current, false);
+});
+
+test("a development build cut from a dirty tree or a detached head says so, and one with no commit says it runs from source", () => {
+  const dirty = updateRow(UNINSTALLABLE_IDLE, {
+    packaged: false,
+    commit: { sha: "a1b2c3d", dirty: true },
+  });
+  assert.equal(dirty.detail, "a1b2c3d-dirty");
+
+  const unstamped = updateRow(UNINSTALLABLE_IDLE, { packaged: false });
+  assert.equal(unstamped.title, "Development build");
+  assert.equal(unstamped.detail, "Run from source.");
+  assert.equal(unstamped.action, UPDATE_ROW_ACTION.NONE);
+});
+
+test("a release shows its version with its commit beside it, and its version alone when unstamped", () => {
+  const live = supported({ status: UPDATE_STATUS.IDLE, upToDate: true });
+  const stamped = updateRow(live, {
+    packaged: true,
+    commit: { sha: "a1b2c3d", dirty: false },
+  });
+  assert.equal(stamped.title, "Version 0.1.0 (a1b2c3d)");
+  assert.equal(stamped.action, UPDATE_ROW_ACTION.CHECK);
+
+  assert.equal(updateRow(live, RELEASE).title, "Version 0.1.0");
+});
+
+test("a packaged build that cannot install itself keeps the way to the releases page", () => {
+  const row = updateRow(UNINSTALLABLE_IDLE, RELEASE);
+  assert.equal(row.title, "Version 0.11.0");
+  assert.equal(row.action, UPDATE_ROW_ACTION.GET);
+  assert.equal(row.current, false);
 });

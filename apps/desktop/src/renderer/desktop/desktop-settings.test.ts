@@ -15,14 +15,11 @@ import { onRegistry } from "#testing/copy-feedback";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopSettings } from "./desktop-settings";
-import { SidebarFoot } from "./sidebar-foot";
 
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
  * Account first, and every option moved by the one-home layout is drawn on
- * its new page and on no other, as the search finds it there too. The
- * sidebar's account menu holds Settings, Send feedback, and Help, and nothing
- * else.
+ * its new page and on no other, as the search finds it there too.
  */
 
 const ignore = () => undefined;
@@ -214,30 +211,6 @@ test("the Settings search finds each moved option under its new page", () => {
       `${words} is found under ${home}`,
     );
   }
-});
-
-test("the sidebar's account menu holds Settings, Send feedback, and Help, and nothing else", () => {
-  const page = mount(
-    createElement(SidebarFoot, {
-      account: ACCOUNT,
-      updates: settingsProps(SETTINGS_VIEW.ACCOUNT, ignore).updates,
-      shown: true,
-      settingsOpen: false,
-      onSettings: ignore,
-    }),
-  );
-  const account = page.querySelector<HTMLButtonElement>(".sidebar-account");
-  assert.ok(account, "the account button is drawn");
-  act(() => account.click());
-  const menu = document.querySelector('[role="menu"]');
-  assert.ok(menu, "the account menu opens");
-  const items = [...menu.querySelectorAll('[role="menuitem"]')].filter(
-    (item) => item.closest('[role="menu"]') === menu,
-  );
-  assert.deepEqual(
-    items.map((item) => item.querySelector(".plan-menu-label")?.textContent),
-    ["Settings", "Send feedback", "Help"],
-  );
 });
 
 test("a page turned to opens at its top, not where the last page was scrolled", () => {

@@ -21,7 +21,6 @@ import {
 import { IntegrationMark } from "../integration-marks";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
-import { GITHUB_REMEDY_TITLE } from "../open-settings";
 import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
@@ -205,17 +204,15 @@ function IntegrationRow({
         {status === undefined ||
         status === INTEGRATION_STATUS.UNAVAILABLE ||
         (connected && !broken) ? null : (
-          <>
-            <button
-              type="button"
-              className="toolbar-button bordered-button"
-              disabled={connecting}
-              title={signIn ? GITHUB_REMEDY_TITLE : `Sign in to ${name} in your browser`}
-              onClick={connect}
-            >
-              {grantLabel(signIn, status, broken)}
-            </button>
-          </>
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={connecting}
+            title={signIn ? "Connect GitHub in your browser" : `Sign in to ${name} in your browser`}
+            onClick={connect}
+          >
+            {grantLabel(signIn, status, broken)}
+          </button>
         )}
       </MenuRow>
       {rejection === undefined ? null : (

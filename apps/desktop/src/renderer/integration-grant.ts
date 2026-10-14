@@ -7,8 +7,8 @@ import {
 import { useCallback } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
+import { useGitHubConnection } from "./github-connect";
 import type { IntegrationStatuses } from "./integration-statuses";
-import { CONNECTED_ACCOUNTS_LINK, useOpenSettings } from "./open-settings";
 
 /**
  * integration-grant.ts -- begins the account's grant of one integration, however the provider is granted.
@@ -16,18 +16,16 @@ import { CONNECTED_ACCOUNTS_LINK, useOpenSettings } from "./open-settings";
  * A provider granted through Vercel Connect begins a browser sign-in there:
  * the host opens it, the provider stands pending, and the window reads it
  * again on its return (`integration-statuses.ts`). GitHub is granted by the
- * account's own GitHub (`INTEGRATION_GRANT_OF`), which is connected in
- * Settings › Connected accounts, so its grant opens Settings there, as every
- * other GitHub remedy does (`open-settings.tsx`): signing in again with
- * GitHub would not link GitHub to an account made with Google.
+ * account's own GitHub (`INTEGRATION_GRANT_OF`), so its grant is the connect
+ * Settings › Connected accounts runs, begun in place (`github-connect.tsx`),
+ * which links GitHub to an account made with Google too, and is read again
+ * on the window's return in the same way.
  */
 
 /** How a grant begun went, as the surface that began it says. */
 export const GRANT_OUTCOME = {
   /** A Connect sign-in is under way in the browser. */
   BEGUN: "begun",
-  /** Settings opened at Connected accounts, where GitHub is connected. */
-  SETTINGS_OPENED: "settings-opened",
   /** The browser could not be opened. */
   NOT_OPENED: "not-opened",
   /** The service or the host refused to begin it. */
@@ -46,17 +44,18 @@ export function grantedBySignIn(provider: IntegrationProvider): boolean {
   return INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN;
 }
 
-/** Begins a grant: GitHub's in Settings › Connected accounts, any other's through Vercel Connect. */
+/** Begins a grant: GitHub's through the account's GitHub connect, any other's through Vercel Connect. */
 export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationGrant {
   const { act } = useAct();
-  const openSettings = useOpenSettings();
+  const { connect } = useGitHubConnection();
   const { signInBegun } = statuses;
 
   const begin = useCallback(
     async (provider: IntegrationProvider): Promise<GrantOutcome> => {
       if (grantedBySignIn(provider)) {
-        openSettings(CONNECTED_ACCOUNTS_LINK);
-        return GRANT_OUTCOME.SETTINGS_OPENED;
+        if (!(await connect())) return GRANT_OUTCOME.NOT_OPENED;
+        signInBegun(provider);
+        return GRANT_OUTCOME.BEGUN;
       }
       const answer = await act(ACT_KIND.INTEGRATIONS_CONNECT, { provider }).catch(() => undefined);
       if (answer === undefined) return GRANT_OUTCOME.REFUSED;
@@ -68,7 +67,7 @@ export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationG
       signInBegun(provider);
       return GRANT_OUTCOME.BEGUN;
     },
-    [act, openSettings, signInBegun],
+    [act, connect, signInBegun],
   );
 
   return { begin };
