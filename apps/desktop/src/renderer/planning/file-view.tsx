@@ -1,6 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
-import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@luke/panel";
+import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@luke/ui";
 import {
   Fragment,
   type ReactNode,

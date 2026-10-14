@@ -141,15 +141,15 @@ importers:
       '@luke/live':
         specifier: workspace:*
         version: link:../../packages/live
-      '@luke/panel':
-        specifier: workspace:*
-        version: link:../../packages/panel
       '@luke/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
       '@luke/settings':
         specifier: workspace:*
         version: link:../../packages/settings
+      '@luke/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@luke/voice':
         specifier: workspace:*
         version: link:../../packages/voice
@@ -484,9 +484,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -722,25 +719,6 @@ importers:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/panel:
-    dependencies:
-      '@luke/brand':
-        specifier: workspace:*
-        version: link:../brand
-      react:
-        specifier: 'catalog:'
-        version: 19.2.8
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
   packages/runtime:
     dependencies:
       '@luke/wire':
@@ -787,6 +765,25 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/ui:
+    dependencies:
+      '@luke/brand':
+        specifier: workspace:*
+        version: link:../brand
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/voice:
     dependencies:

@@ -1,5 +1,5 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { CloseIcon, CopyIcon, PencilIcon, PinIcon, PlusIcon, UnpinIcon } from "@luke/panel";
+import { CloseIcon, CopyIcon, PencilIcon, PinIcon, PlusIcon, UnpinIcon } from "@luke/ui";
 import { ListXIcon, ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";

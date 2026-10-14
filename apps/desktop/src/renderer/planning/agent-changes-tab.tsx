@@ -8,7 +8,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { CopyIcon, DownloadIcon } from "@luke/panel";
+import { CopyIcon, DownloadIcon } from "@luke/ui";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { PlanningTreeAnswer } from "@luke/features/planning-view";
-import { CloseIcon, SearchIcon } from "@luke/panel";
+import { CloseIcon, SearchIcon } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";

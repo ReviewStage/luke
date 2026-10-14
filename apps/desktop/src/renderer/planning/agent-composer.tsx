@@ -11,7 +11,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { PlusIcon } from "@luke/panel";
+import { PlusIcon } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";
 import {

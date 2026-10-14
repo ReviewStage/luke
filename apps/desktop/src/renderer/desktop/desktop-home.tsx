@@ -1,6 +1,6 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import { FolderIcon, SearchIcon, WingFace } from "@luke/panel";
+import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";

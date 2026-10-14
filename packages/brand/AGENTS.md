@@ -16,6 +16,6 @@ drift in any generated file (under `src/generated/`, `assets/`, and the
 renderer's `styles/generated/`), so regenerate from the sources rather than
 hand-editing.
 
-This package draws nothing itself. `@luke/panel` is the shared React layer
+This package draws nothing itself. `@luke/ui` is the shared React layer
 that traces the generated artwork into the desktop window, so the face and the
 glyphs have one implementation.

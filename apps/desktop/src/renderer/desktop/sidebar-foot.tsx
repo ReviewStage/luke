@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@luke/panel";
+import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   LifeBuoyIcon,

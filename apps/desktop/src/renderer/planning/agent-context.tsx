@@ -1,5 +1,5 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
-import { CloseIcon } from "@luke/panel";
+import { CloseIcon } from "@luke/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { Tooltip } from "../tooltip";

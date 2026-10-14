@@ -10,7 +10,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
-import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/panel";
+import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";

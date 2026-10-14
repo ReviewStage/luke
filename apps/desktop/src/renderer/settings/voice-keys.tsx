@@ -2,7 +2,6 @@
  * voice-keys.tsx -- the Voice page's Keys group: Luke's two system-wide keys, talk and stop, each a chord that can be changed.
  */
 
-import { PencilIcon, ResetIcon, TrashIcon } from "@luke/panel";
 import {
   capturedVoiceHotkey,
   DEFAULT_STOP_HOTKEYS,
@@ -11,6 +10,7 @@ import {
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
 } from "@luke/settings";
+import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
 import type { ActionResult } from "@luke/wire";
 import { useEffect, useId, useRef, useState } from "react";
 import {

@@ -31,7 +31,7 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@luke/features/feedback";
-import { ImageIcon, RemoveIcon } from "@luke/panel";
+import { ImageIcon, RemoveIcon } from "@luke/ui";
 import { Duration } from "effect";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

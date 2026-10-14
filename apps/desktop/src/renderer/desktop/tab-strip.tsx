@@ -1,4 +1,4 @@
-import { CloseIcon } from "@luke/panel";
+import { CloseIcon } from "@luke/ui";
 import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";

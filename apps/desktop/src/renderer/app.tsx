@@ -1,10 +1,10 @@
-import { cssCustomProperties } from "@luke/brand/react-css";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { appSettingsView } from "@luke/settings/wire";
+import { cssCustomProperties } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

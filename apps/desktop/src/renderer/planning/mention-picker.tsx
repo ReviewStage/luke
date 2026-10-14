@@ -1,7 +1,7 @@
 import { encodeMention, MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
-import { DocumentIcon } from "@luke/panel";
+import { DocumentIcon } from "@luke/ui";
 import { defaultFilter } from "cmdk";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";

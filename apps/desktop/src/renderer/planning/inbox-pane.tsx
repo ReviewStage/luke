@@ -18,7 +18,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef, PlanSummary } from "@luke/features/plan-wire";
-import { ChevronRightIcon } from "@luke/panel";
+import { ChevronRightIcon } from "@luke/ui";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Message, MessageContent } from "../ai-elements/message";

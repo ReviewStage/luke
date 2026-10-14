@@ -3,7 +3,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
-import { CopyIcon } from "@luke/panel";
+import { CopyIcon } from "@luke/ui";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
