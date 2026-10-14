@@ -2945,8 +2945,9 @@ automation's prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
 A refused start is a failed run with one fixed word
-(`AUTOMATION_RUN_REASON`), and three failed starts in a row pause the
-automation (`paused_reason` `failures`, `next_run_at` cleared). The agent's
+(`AUTOMATION_RUN_REASON`), and nothing pauses an automation for failing:
+the next firing tries again. A `paused_reason` an older build wrote still
+reads, and a resume clears it. The agent's
 questions reach the Inbox and its end the finished-agent notification as
 any agent's do.
 
@@ -2974,8 +2975,8 @@ workspace the account left, is `not-found`:
   once as `webhookSecret`, and kept only as its SHA-256.
 - `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
   delete one. A resume, or a new trigger, computes a schedule's next due
-  instant afresh, a pause clears it, and a resume clears why the service
-  paused it.
+  instant afresh, a pause clears it, and a resume clears any reason an
+  older build paused it for.
 - `POST /api/automations/{id}/run` takes `{ idempotencyKey }`, records a
   manual firing under it, and acts on it at once through the same guards
   and start a scheduled run takes, reaching eve as the developer under the

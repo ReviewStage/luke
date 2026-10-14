@@ -9,7 +9,6 @@ import {
   listAutomationRuns,
   readAutomation,
   recordAutomationRun,
-  settleAutomationRun,
   updateAutomation,
 } from "@sidecar/database/models/automation-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
@@ -20,7 +19,6 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
-  AUTOMATION_PAUSE,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
@@ -57,8 +55,8 @@ import { startPlan } from "./support/workspaces";
  * starts nothing, as is a run queued before its automation was paused; one
  * automation's runs queued together are acted on one after another, so its
  * guards hold across them; a run left queued past the hour is settled as
- * missed; and three failed starts in a row pause the automation, however
- * many skipped runs stand between them. eve
+ * missed; and a failed start records its failure and pauses nothing, so
+ * the next firing tries again. eve
  * is a fake at the client's boundary, GitHub a script, the catalog fixed,
  * and the store PGlite. Synthetic accounts, plans, and words throughout.
  */
@@ -230,14 +228,14 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "three failed starts in a row pause the automation, each failure named in one fixed word",
+    "a failed start records its failure in one fixed word and pauses nothing, so the next firing tries again",
     () =>
       Effect.gen(function* () {
         const { owner, automation } = yield* openAutomation({ repository: null });
         const eve = fakeEve();
 
         const outcomes = [];
-        for (let attempt = 0; attempt < 3; attempt += 1) {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
           const run = yield* runNow(automation);
           outcomes.push(
             yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
@@ -248,16 +246,12 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           outcomes.map(
             (outcome) => outcome?.status === AUTOMATION_RUN_STATUS.FAILED && outcome.reason,
           ),
-          [
-            AUTOMATION_RUN_REASON.NO_REPOSITORY,
-            AUTOMATION_RUN_REASON.NO_REPOSITORY,
-            AUTOMATION_RUN_REASON.NO_REPOSITORY,
-          ],
+          Array.from({ length: 4 }, () => AUTOMATION_RUN_REASON.NO_REPOSITORY),
+          "each firing is tried, the fourth after three failures as the first",
         );
-        const paused = Option.getOrThrow(yield* readAutomation(owner, automation.id));
-        assert.equal(paused.enabled, false);
-        assert.equal(paused.pausedReason, AUTOMATION_PAUSE.FAILURES);
-        assert.equal(paused.nextRunAt, null);
+        const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
+        assert.equal(standing.enabled, true);
+        assert.equal(standing.pausedReason, null);
         assert.deepEqual(eve.opened, []);
       }),
   );
@@ -326,52 +320,6 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         ]);
         assert.equal(eve.opened.filter((each) => each.account === owner).length, 1);
       }),
-  );
-
-  it.effect(
-    "three failed starts pause the automation however many skipped runs stand between them",
-    () =>
-      Effect.gen(function* () {
-        const { owner, automation } = yield* openAutomation({ repository: null });
-        const eve = fakeEve();
-
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
-            Effect.provide(services),
-          );
-          for (let skip = 0; skip < 12; skip += 1) {
-            const skipped = yield* runNow(automation);
-            yield* settleAutomationRun(skipped.id, {
-              status: AUTOMATION_RUN_STATUS.SKIPPED,
-              reason: AUTOMATION_RUN_REASON.CONCURRENCY,
-            });
-          }
-        }
-
-        const paused = Option.getOrThrow(yield* readAutomation(owner, automation.id));
-        assert.equal(paused.pausedReason, AUTOMATION_PAUSE.FAILURES);
-      }),
-  );
-
-  it.effect("missed runs never count as failed starts toward a pause", () =>
-    Effect.gen(function* () {
-      const { owner, automation } = yield* openAutomation({ repository: null });
-      const eve = fakeEve();
-      for (let missed = 0; missed < 2; missed += 1) {
-        const run = yield* runNow(automation);
-        yield* settleAutomationRun(run.id, {
-          status: AUTOMATION_RUN_STATUS.FAILED,
-          reason: AUTOMATION_RUN_REASON.MISSED,
-        });
-      }
-
-      yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
-        Effect.provide(services),
-      );
-
-      const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
-      assert.equal(standing.enabled, true, "one failed start after two missed runs pauses nothing");
-    }),
   );
 
   it.effect(
