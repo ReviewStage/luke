@@ -15,7 +15,11 @@ import { useLayoutEffect, useRef, useState } from "react";
  * the nearest box marked `data-popover-room`, the side panel, cut to the
  * window, or else the window, measured as the layer opens, before it is
  * painted, and again whenever the layer, its anchor, its room, or the
- * window resizes.
+ * window resizes. The layer is held by the anchor's edge it was asked to
+ * line up with, so a button that grows or shrinks from its other edge, as
+ * the model chip does when Fast comes on, leaves its open menu where it
+ * stood rather than throwing it sideways for a frame until the resize is
+ * measured.
  */
 
 /** Which side of its anchor a popover hangs on. */
@@ -54,10 +58,10 @@ interface Box {
   bottom: number;
 }
 
-/** Where a popover stands: its side, its left edge from its anchor's, and its width. */
+/** Where a popover stands: its side, how far its asked edge stands in from its anchor's, and its width. */
 interface PopoverPlace {
   side: PopoverSide;
-  left: number;
+  inset: number;
   width: number;
 }
 
@@ -91,7 +95,13 @@ function popoverPlace(input: {
   const below = room.bottom - anchor.bottom - POPOVER_GAP - POPOVER_MARGIN;
   const side =
     above < input.height && below >= input.height ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
-  return { side, left: left - anchor.left, width };
+  const inset = align === POPOVER_ALIGN.START ? left - anchor.left : anchor.right - left - width;
+  return { side, inset, width };
+}
+
+/** The layer's inline place: its asked edge's inset, as `left` or `right`, and its width. */
+function placeStyle(align: PopoverAlign, inset: number, width: number): React.CSSProperties {
+  return align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
 }
 
 /** The room a popover inside `element` may fill: its marked room cut to the window, or the window. */
@@ -157,7 +167,9 @@ export function AnchoredPopover({
       className="anchored-popover"
       data-side={place?.side ?? POPOVER_SIDE.ABOVE}
       style={
-        place === undefined ? { width: POPOVER_WIDTH } : { left: place.left, width: place.width }
+        place === undefined
+          ? placeStyle(align, 0, POPOVER_WIDTH)
+          : placeStyle(align, place.inset, place.width)
       }
     >
       {children}
