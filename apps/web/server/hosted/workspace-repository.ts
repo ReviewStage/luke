@@ -23,7 +23,7 @@ import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubRepository } from "../core.js";
 import { GitHubApp } from "../github/github-app.js";
-import { githubReachOrRefusal } from "../github/github-refusal.js";
+import { githubReachOrRefusal, logWorkspaceReadFailure } from "../github/github-refusal.js";
 import { memberWorkspaceOnOwner } from "./github-installations.js";
 import {
   type HostedRefusal,
@@ -77,11 +77,21 @@ export const workspaceRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   const elsewhere = yield* hostedStoreOrUnavailable(
     memberWorkspaceOnOwner(mover, owner, organizationId),
   );
+  // Note that the other workspace is named only where its installation lists the repository,
+  // because one on the owner may not have been given it, and a GitHub that does not say names none.
+  const reachedThere =
+    Option.isSome(elsewhere) &&
+    Result.isSuccess(
+      yield* app.repositoryReach(elsewhere.value.id, repository).pipe(
+        Effect.tapError(logWorkspaceReadFailure),
+        Effect.orElseSucceed(() => reach),
+      ),
+    );
   return yield* Effect.fail(
     repositoryNotReachable(
-      Option.isNone(elsewhere)
-        ? unreached
-        : { reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE, repository, workspace: elsewhere.value },
+      reachedThere && Option.isSome(elsewhere)
+        ? { reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE, repository, workspace: elsewhere.value }
+        : unreached,
     ),
   );
 });

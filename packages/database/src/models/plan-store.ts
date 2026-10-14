@@ -67,6 +67,15 @@ export interface PlanDeleteGuard<R> {
   ) => Effect.Effect<void, QueryError | Schema.SchemaError, R>;
 }
 
+/**
+ * What a change that moves a plan runs first: given the repository the row
+ * names under its lock, the caller's confirmation that the workspace it moves
+ * to reaches it, so a repository changed while the move was asked cannot
+ * ride into a workspace that does not reach it. Its failure leaves the plan
+ * unchanged.
+ */
+export type PlanMoveGuard<E, R> = (repository: string | null) => Effect.Effect<void, E, R>;
+
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
   readonly label: string;
@@ -679,20 +688,23 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
 
 /**
  * Changes the plan, a new name with its document's heading, a repository or
- * none, pinned or not, archived or not, and answers it as changed, or nothing
- * where the account reaches no such plan. The changes arrive already read under
- * the wire's rules, and a repository already confirmed reachable. A change is
+ * none, pinned or not, archived or not, its workspace, and answers it as
+ * changed, or nothing where the account reaches no such plan. The changes
+ * arrive already read under the wire's rules, and a repository already
+ * confirmed reachable; a move runs the caller's guard under the row's lock
+ * on the repository the plan will name once it lands. A change is
  * not a save: the document's `updatedAt` and the list's order stand. A pin
  * and an archive are kept apart, so a pinned plan archived and brought back
  * is pinned again. An archived plan is neither renamed nor given another
  * repository, read under the same lock, unless the same change brings it
  * back; its pin and its archive still change.
  */
-export function updatePlan(
+export function updatePlan<E = never, R = never>(
   userId: string,
   planId: string,
   changes: PlanChanges,
-): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived, DatabaseServices> {
+  moveGuard?: PlanMoveGuard<E, R>,
+): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived | E, DatabaseServices | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -704,6 +716,11 @@ export function updatePlan(
           changes.repository !== undefined ||
           changes.organizationId !== undefined;
         if (stillArchived && reworded) return yield* new PlanArchived();
+        if (changes.organizationId !== undefined && moveGuard !== undefined) {
+          yield* moveGuard(
+            changes.repository === undefined ? locked.value.repository : changes.repository,
+          );
+        }
         const now = yield* DateTime.nowAsDate;
         const row = yield* applyChanges({
           userId,

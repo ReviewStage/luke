@@ -334,6 +334,33 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     }),
   );
 
+  it.effect(
+    "a move's guard is handed the repository the plan names as the move lands, and one that refuses leaves the plan where it was",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const started = yield* startPlan(userId, { name: "Relay", repository: "acme/relay" });
+        const team = yield* openWorkspace(userId);
+        // A change of repository lands while the move is asked for.
+        yield* updatePlan(userId, started.id, { repository: "octocat/dotfiles" });
+        const seen: (string | null)[] = [];
+
+        const refused = yield* updatePlan(userId, started.id, { organizationId: team }, (named) => {
+          seen.push(named);
+          return Effect.fail("not reached" as const);
+        }).pipe(Effect.flip);
+        const stood = Option.getOrThrow(yield* readPlan(userId, started.id)).plan.workspaceId;
+        const moved = yield* updatePlan(userId, started.id, { organizationId: team }, (named) =>
+          Effect.sync(() => seen.push(named)),
+        );
+
+        assert.equal(refused, "not reached");
+        assert.equal(stood, started.workspaceId);
+        assert.equal(Option.getOrThrow(moved).workspaceId, team);
+        assert.deepEqual(seen, ["octocat/dotfiles", "octocat/dotfiles"]);
+      }),
+  );
+
   it.effect("a second account cannot rename another's plan", () =>
     Effect.gen(function* () {
       const owner = yield* openUser;

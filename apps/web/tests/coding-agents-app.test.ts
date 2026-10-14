@@ -593,6 +593,44 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a Start names no other workspace whose installation on the repository's owner was not given the repository",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const plan = yield* startPlan(owner, {
+          name: "Teammate invitations",
+          repository: RELAY_FULL_NAME,
+        });
+        const team = yield* openWorkspace(owner);
+        installationsConnected += 1;
+        const ledgerOnly: InstallationFixture = {
+          id: 7 + installationsConnected,
+          login: RELAY.owner,
+          repositories: [{ owner: RELAY.owner, name: "Ledger" }],
+        };
+        assert.equal(yield* connectWorkspaceGitHub(team, ledgerOnly), LINK_OUTCOME.LINKED);
+        const eve = fakeEve();
+        const { ask } = yield* standing(
+          new Map([[`Bearer ${owner}`, owner]]),
+          githubReaching([ledgerOnly]),
+          eve,
+          false,
+        );
+
+        const started = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+
+        assert.deepEqual(started, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY_FULL_NAME },
+          },
+        });
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
     "a Start while GitHub does not answer is refused as GitHub unanswered, which a retry may get past, and opens nothing",
     () =>
       Effect.gen(function* () {
