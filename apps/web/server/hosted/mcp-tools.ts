@@ -191,15 +191,24 @@ function echoesToken(line: string, token: string): boolean {
 }
 
 /**
+ * A provider's message as Luke may pass it on to a window: its first line,
+ * bounded, or nothing where that line is empty or shaped like a credential.
+ */
+export function credentialFreeLine(message: string | undefined): string | undefined {
+  const line = (message ?? "").trim().split(/\r?\n/)[0] ?? "";
+  if (line === "" || CREDENTIAL_SHAPE.test(line)) return undefined;
+  return firstLine(line, MESSAGE_MAX_CHARS);
+}
+
+/**
  * A server's error message as a failure may keep it: its first line, or
  * nothing where that could carry a credential, which is any run of the
  * bearer the server was sent, the only account secret it holds of ours,
  * or anything shaped like one.
  */
 function keptMessage(message: string | undefined, token: string): string | undefined {
-  const line = (message ?? "").trim().split(/\r?\n/)[0] ?? "";
-  if (line === "" || echoesToken(line, token) || CREDENTIAL_SHAPE.test(line)) return undefined;
-  return firstLine(line, MESSAGE_MAX_CHARS);
+  const kept = credentialFreeLine(message);
+  return kept === undefined || echoesToken(kept, token) ? undefined : kept;
 }
 
 /** The failure a JSON-RPC error amounts to: a refusal of the bearer, or the server's own error with what was safe to keep of it. */

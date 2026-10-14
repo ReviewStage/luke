@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "github",
+        "granola",
+        "linear",
+        "mercury",
+        "neon",
+        "notion",
+        "posthog",
+        "sentry",
+        "slack",
+        "supabase",
+        "vercel",
+        "ycombinator"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "canceled",
+        "error"
+      ]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider",
+    "reason"
+  ],
+  "additionalProperties": false
+}

@@ -120,9 +120,33 @@ export type IntegrationStatus = (typeof INTEGRATION_STATUS)[keyof typeof INTEGRA
 
 const integrationStatusSchema = EffectSchema.Literals(Object.values(INTEGRATION_STATUS));
 
-/** Where every provider's connection stands (GET). */
+/** How a sign-in the browser never brought back to Luke ended, as Vercel Connect tells it. */
+export const INTEGRATION_SIGN_IN_FAILURE = {
+  /** The developer cancelled it on Connect's own page. */
+  CANCELED: "canceled",
+  /** Connect or the provider refused it; Connect's own line says why where it is safe to keep. */
+  ERROR: "error",
+} as const;
+
+export type IntegrationSignInFailureReason =
+  (typeof INTEGRATION_SIGN_IN_FAILURE)[keyof typeof INTEGRATION_SIGN_IN_FAILURE];
+
+/** One provider's sign-in that ended without a grant, and why, with Connect's own line where it carried no credential. */
+export const integrationSignInFailureSchema = EffectSchema.Struct({
+  provider: integrationProviderSchema,
+  reason: EffectSchema.Literals(Object.values(INTEGRATION_SIGN_IN_FAILURE)),
+  message: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type IntegrationSignInFailure = typeof integrationSignInFailureSchema.Type;
+
+/**
+ * Where every provider's connection stands (GET), and each sign-in this
+ * read found ended without a grant: a read says so once, as it ends it.
+ */
 export const integrationStatusesAnswerSchema = EffectSchema.Struct({
   integrations: EffectSchema.Record(integrationProviderSchema, integrationStatusSchema),
+  signInFailures: EffectSchema.optionalKey(EffectSchema.Array(integrationSignInFailureSchema)),
 });
 
 /** What a Disconnect leaves of the one provider it ended (POST). */

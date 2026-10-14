@@ -74,7 +74,12 @@ interface FakeGrant {
 function fakeConnect(grants: Map<string, FakeGrant>): ConnectorService {
   return {
     configured: true,
-    authorize: () => Effect.succeed("https://vercel.com/connect/authorize/fixture"),
+    authorize: () =>
+      Effect.succeed({
+        url: "https://vercel.com/connect/authorize/fixture",
+        verifier: Redacted.make("connect-verifier"),
+      }),
+    signInResult: () => Effect.die(new Error("this suite never asks how a sign-in stands")),
     token: (userId) =>
       Effect.gen(function* () {
         const grant = grants.get(userId);
@@ -163,7 +168,12 @@ const plannedSession = (
 /** The account connected, as a completed sign-in leaves it. */
 const connected = (userId: string) =>
   Effect.gen(function* () {
-    yield* beginIntegrationSignIn(userId, LINEAR, `state-${userId}`);
+    yield* beginIntegrationSignIn(
+      userId,
+      LINEAR,
+      `state-${userId}`,
+      Redacted.make("connect-verifier"),
+    );
     assert.equal(yield* completeIntegrationSignIn(userId, LINEAR, `state-${userId}`), true);
   });
 
@@ -241,6 +251,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           getTokenResponse: () =>
             Promise.reject(new ConnectError(`upstream said Bearer ${secret}`, { status: 502 })),
           revokeToken: () => Promise.reject(new Error(secret)),
+          readAuthorizationResult: () => Promise.reject(new Error(secret)),
         });
         const logged: string[] = [];
         const capture = Logger.make((options) => {

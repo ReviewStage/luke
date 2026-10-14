@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@sidecar/database/testing";
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -19,19 +19,53 @@ import { noNetwork } from "./support/no-network";
  * An account's integration rows over the real migration on PGlite: a
  * sign-in is found by its state alone and by no other account's, it settles
  * once, whether with a grant or without one, an account reads only its own rows, and the rows go with the account
- * that owns them.
+ * that owns them. Connect's handle on a sign-in stands and goes with its state.
  */
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection rows", (it) => {
+  it.effect("Connect's handle on a sign-in stands while it is under way and goes with it", () =>
+    Effect.gen(function* () {
+      const completing = yield* openGithubUser();
+      const reconnecting = yield* openGithubUser();
+      yield* beginIntegrationSignIn(completing, LINEAR, "state-h1", Redacted.make("verifier-1"));
+      yield* beginIntegrationSignIn(reconnecting, LINEAR, "state-h2", Redacted.make("verifier-2"));
+      yield* completeIntegrationSignIn(reconnecting, LINEAR, "state-h2");
+      yield* beginIntegrationSignIn(reconnecting, LINEAR, "state-h3", Redacted.make("verifier-3"));
+
+      const verifierOf = (userId: string) =>
+        Effect.map(readIntegrationConnection(userId, LINEAR), (row) =>
+          row?.verifier === undefined ? undefined : Redacted.value(row.verifier),
+        );
+      assert.equal(yield* verifierOf(completing), "verifier-1");
+      // A sign-in begun again holds its own handle.
+      assert.equal(yield* verifierOf(reconnecting), "verifier-3");
+
+      yield* completeIntegrationSignIn(completing, LINEAR, "state-h1");
+      yield* endIntegrationSignIn(reconnecting, LINEAR, "state-h3");
+      assert.equal(yield* verifierOf(completing), undefined);
+      // The connected row it ended over stands, without the handle.
+      const standing = yield* readIntegrationConnection(reconnecting, LINEAR);
+      assert.deepEqual(
+        [standing?.status, standing?.verifier],
+        [INTEGRATION_ROW_STATUS.CONNECTED, undefined],
+      );
+    }),
+  );
+
   it.effect("an account reads its own rows and never another account's", () =>
     Effect.gen(function* () {
       const mine = yield* openGithubUser();
       const theirs = yield* openGithubUser();
-      yield* beginIntegrationSignIn(mine, LINEAR, "state-own");
+      yield* beginIntegrationSignIn(mine, LINEAR, "state-own", Redacted.make("connect-verifier"));
       yield* completeIntegrationSignIn(mine, LINEAR, "state-own");
-      yield* beginIntegrationSignIn(theirs, LINEAR, "state-other");
+      yield* beginIntegrationSignIn(
+        theirs,
+        LINEAR,
+        "state-other",
+        Redacted.make("connect-verifier"),
+      );
 
       const mineRows = yield* readIntegrationConnections(mine);
       assert.deepEqual(
@@ -64,11 +98,31 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
       Effect.gen(function* () {
         const again = yield* openGithubUser();
         const connected = yield* openGithubUser();
-        yield* beginIntegrationSignIn(again, LINEAR, "state-first");
-        yield* beginIntegrationSignIn(again, LINEAR, "state-again");
-        yield* beginIntegrationSignIn(connected, LINEAR, "state-connected");
+        yield* beginIntegrationSignIn(
+          again,
+          LINEAR,
+          "state-first",
+          Redacted.make("connect-verifier"),
+        );
+        yield* beginIntegrationSignIn(
+          again,
+          LINEAR,
+          "state-again",
+          Redacted.make("connect-verifier"),
+        );
+        yield* beginIntegrationSignIn(
+          connected,
+          LINEAR,
+          "state-connected",
+          Redacted.make("connect-verifier"),
+        );
         yield* completeIntegrationSignIn(connected, LINEAR, "state-connected");
-        yield* beginIntegrationSignIn(connected, LINEAR, "state-reconnect");
+        yield* beginIntegrationSignIn(
+          connected,
+          LINEAR,
+          "state-reconnect",
+          Redacted.make("connect-verifier"),
+        );
 
         yield* endIntegrationSignIn(again, LINEAR, "state-first");
         yield* endIntegrationSignIn(connected, LINEAR, "state-reconnect");

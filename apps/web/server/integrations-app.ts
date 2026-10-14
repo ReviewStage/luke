@@ -8,7 +8,11 @@
  *   connection stands. A sign-in still under way is settled here too, by
  *   asking Connect for a token afresh, so a desktop that reads again after
  *   the browser closed learns the outcome whatever address the browser was
- *   returned to. A provider the deployment does not offer the account
+ *   returned to; one with no token yet is asked after by the handle Connect
+ *   began it with, and one Connect says was cancelled or refused is ended
+ *   here and answered once among the read's `signInFailures`, with
+ *   Connect's own line where it is shaped like no credential, since a
+ *   sign-in that failed on Connect's own page never returns to Luke. A provider the deployment does not offer the account
  *   (`accountIntegrationConnect`) stands unavailable, and every route below
  *   refuses it as one with no connector here.
  * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
@@ -38,15 +42,17 @@
  *   provider, Connect is asked for a token afresh, and the browser is sent
  *   on to the landing page with the provider and one word. A browser back
  *   without a grant ends the sign-in, so the provider no longer stands
- *   pending. Connect sends nothing else back, no error and no reason, and a
- *   sign-in that failed on Connect's own page never returns here at all.
+ *   pending, unless Connect's result names a cancel or a refusal: that one
+ *   is left for the statuses read, which says why as it ends it. Connect
+ *   sends nothing back on the address, no error and no reason.
  *
  * The rewrite moves a provider's path segment into the `provider` query, so
  * the two provider routes read it there. Root AGENTS.md pins that no
  * credential travels in an answer: what each endpoint answers is status
- * words, a server's credential-free message, or the sign-in address, never
- * a token. The sign-in address is not
- * logged either, since it begins a grant for the account it was issued for.
+ * words, a server's or Connect's credential-free line, or the sign-in
+ * address, never a token. The sign-in address is not logged either, since
+ * it begins a grant for the account it was issued for, and neither is the
+ * handle Connect answers a sign-in with, which is never answered at all.
  */
 
 import { randomBytes } from "node:crypto";
@@ -58,10 +64,12 @@ import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationLandingStatus,
   type IntegrationProvider,
+  type IntegrationSignInFailure,
   type IntegrationStatus,
   type IntegrationToolsProblemReason,
   integrationLandingPath,
@@ -90,6 +98,7 @@ import {
 } from "./hosted/http-effect.js";
 import {
   accountIntegrationConnect,
+  CONNECT_SIGN_IN_RESULT,
   type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
   type IntegrationConnect,
@@ -176,6 +185,7 @@ export interface IntegrationsAppSeams {
     userId: string,
     provider: IntegrationProvider,
     state: string,
+    verifier: Redacted.Redacted,
   ) => IntegrationStoreEffect<void>;
   completeSignIn: (
     userId: string,
@@ -257,25 +267,78 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider, state));
 });
 
-/** The status a stored row stands for, settling a sign-in still under way with the provider's connector. */
+/** Why a sign-in ended without a grant, as the statuses read answers it: the provider aside. */
+type SignInFailure = Omit<IntegrationSignInFailure, "provider">;
+
+/**
+ * Asks Connect how the sign-in it answered this row's handle for stands,
+ * and answers why it ended where Connect says it was cancelled or
+ * refused; nothing while it is under way, succeeded, or Connect could not
+ * be asked, which the next read asks again.
+ */
+const connectSignInFailure = /* @__PURE__ */ Effect.fnUntraced(function* (
+  connector: ConnectorService,
+  row: IntegrationConnectionRow,
+): Effect.fn.Return<SignInFailure | undefined> {
+  if (row.verifier === undefined) return undefined;
+  const result = yield* Effect.result(connector.signInResult(row.verifier));
+  if (Result.isFailure(result)) {
+    yield* Effect.logWarning(
+      `Vercel Connect could not say how a ${INTEGRATION_NAME[row.provider]} sign-in stands`,
+      result.failure.message,
+    );
+    return undefined;
+  }
+  const ended = result.success;
+  if (ended.kind === CONNECT_SIGN_IN_RESULT.CANCELED) {
+    return { reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED };
+  }
+  if (ended.kind !== CONNECT_SIGN_IN_RESULT.FAILED) return undefined;
+  return {
+    reason: INTEGRATION_SIGN_IN_FAILURE.ERROR,
+    ...(ended.message !== undefined ? { message: ended.message } : undefined),
+  };
+});
+
+/** Where one provider stands for the statuses read, and why a sign-in this read ended failed. */
+interface Standing {
+  readonly status: IntegrationStatus;
+  readonly failure?: SignInFailure;
+}
+
+/** Where a row stands once its sign-in is over without a grant: expired where it was, else disconnected. */
+function standingWithoutSignIn(row: IntegrationConnectionRow): IntegrationStatus {
+  return row.status === INTEGRATION_ROW_STATUS.EXPIRED
+    ? INTEGRATION_STATUS.EXPIRED
+    : INTEGRATION_STATUS.DISCONNECTED;
+}
+
+/**
+ * Where a stored row stands, settling a sign-in still under way with the
+ * provider's connector: connected where Connect now holds a grant, ended
+ * with its reason where Connect says it was cancelled or refused, and
+ * pending otherwise.
+ */
 const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   connector: ConnectorService,
   row: IntegrationConnectionRow | undefined,
-): Effect.fn.Return<IntegrationStatus, HostedRefusal, DatabaseServices> {
-  if (row === undefined) return INTEGRATION_STATUS.DISCONNECTED;
-  if (row.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
+): Effect.fn.Return<Standing, HostedRefusal, DatabaseServices> {
+  if (row === undefined) return { status: INTEGRATION_STATUS.DISCONNECTED };
+  if (row.status === INTEGRATION_ROW_STATUS.CONNECTED)
+    return { status: INTEGRATION_STATUS.CONNECTED };
   // The state of a sign-in still under way, which is the one a settlement may complete.
   const underWay = signInStands(seams, row.stateIssuedAt) ? row.state : undefined;
-  // Note that a sign-in under way stands pending even over an expired row, because the window waits on its end either way.
-  if (underWay !== undefined) {
-    const settled = yield* settledSignIn(seams, connector, row, underWay);
-    return settled ? INTEGRATION_STATUS.CONNECTED : INTEGRATION_STATUS.PENDING;
-  }
   // A first sign-in that ran out of time never connected anything.
-  return row.status === INTEGRATION_ROW_STATUS.EXPIRED
-    ? INTEGRATION_STATUS.EXPIRED
-    : INTEGRATION_STATUS.DISCONNECTED;
+  if (underWay === undefined) return { status: standingWithoutSignIn(row) };
+  // Note that a sign-in under way stands pending even over an expired row, because the window waits on its end either way.
+  if (yield* settledSignIn(seams, connector, row, underWay)) {
+    return { status: INTEGRATION_STATUS.CONNECTED };
+  }
+  const failure = yield* connectSignInFailure(connector, row);
+  if (failure === undefined) return { status: INTEGRATION_STATUS.PENDING };
+  yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.provider, underWay));
+  return { status: standingWithoutSignIn(row), failure };
 });
 
 /**
@@ -300,23 +363,30 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
   // A deployment with no connector at all answers from its configuration alone, whatever the store.
   const anyConfigured = INTEGRATION_PROVIDER_LIST.some((provider) => connect[provider].configured);
   const rows = anyConfigured ? yield* hostedStoreOrUnavailable(seams.readConnections(userId)) : [];
-  const integrations = Object.fromEntries(
-    yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
-      Effect.map(
-        INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
-          ? githubIntegrationStatus(userId)
-          : connect[provider].configured
-            ? standingStatus(
-                seams,
-                connect[provider],
-                rows.find((row) => row.provider === provider),
-              )
-            : Effect.succeed(INTEGRATION_STATUS.UNAVAILABLE),
-        (status) => [provider, status] as const,
-      ),
+  const standings = yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
+    Effect.map(
+      INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
+        ? Effect.map(githubIntegrationStatus(userId), (status): Standing => ({ status }))
+        : connect[provider].configured
+          ? standingStatus(
+              seams,
+              connect[provider],
+              rows.find((row) => row.provider === provider),
+            )
+          : Effect.succeed<Standing>({ status: INTEGRATION_STATUS.UNAVAILABLE }),
+      (standing) => ({ provider, ...standing }),
     ),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { integrations });
+  const integrations = Object.fromEntries(
+    standings.map(({ provider, status }) => [provider, status]),
+  );
+  const signInFailures = standings.flatMap(({ provider, failure }) =>
+    failure === undefined ? [] : [{ provider, ...failure }],
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    integrations,
+    ...(signInFailures.length > 0 ? { signInFailures } : undefined),
+  });
 });
 
 /** The wire's word for each way a server's tools read can fail. */
@@ -497,16 +567,18 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const state = seams.mintState();
-  const url = yield* connector.authorize(userId, callbackUrl(request.url, state)).pipe(
-    Effect.tapError((failure) =>
-      Effect.logWarning(
-        `Vercel Connect could not begin a ${INTEGRATION_NAME[provider]} sign-in`,
-        failure.message,
+  const { url, verifier } = yield* connector
+    .authorize(userId, callbackUrl(request.url, state))
+    .pipe(
+      Effect.tapError((failure) =>
+        Effect.logWarning(
+          `Vercel Connect could not begin a ${INTEGRATION_NAME[provider]} sign-in`,
+          failure.message,
+        ),
       ),
-    ),
-    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-  );
-  yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, provider, state));
+      Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+    );
+  yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, provider, state, verifier));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url });
 });
 
@@ -623,7 +695,10 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(issued)) {
     // Back without a grant: the sign-in is over, so the window waiting on it hears so at its next read.
     if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
-      yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.provider, state));
+      // Note that one Connect says was cancelled or refused is left standing, because the statuses read says why as it ends it.
+      if ((yield* connectSignInFailure(connector, row)) === undefined) {
+        yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.provider, state));
+      }
       return landed(INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
     }
     yield* Effect.logWarning(

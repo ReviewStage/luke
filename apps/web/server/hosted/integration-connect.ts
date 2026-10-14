@@ -3,13 +3,16 @@
  *
  * Vercel Connect holds every account's grant at every provider, encrypted,
  * and refreshes it; Luke names the account by its own user id as the
- * grant's subject and never stores a token. Three things are ever asked of
- * a provider's connector: a browser sign-in for the account to begin, the
- * account's token now, and the grant revoked. Each answers either what was
- * asked or one of three fixed words, never Connect's own message: an error's
- * message is Connect's or the provider's words, which nothing here can vouch
- * for holding no credential, so what a failure keeps is its word and, where
- * it carries them, Connect's machine code and status.
+ * grant's subject and never stores a token. Four things are ever asked of
+ * a provider's connector: a browser sign-in for the account to begin, how
+ * a sign-in it began stands, the account's token now, and the grant
+ * revoked. Each answers either what was asked or one of three fixed words,
+ * never Connect's own message: an error's message is Connect's or the
+ * provider's words, which nothing here can vouch for holding no
+ * credential, so what a failure keeps is its word and, where it carries
+ * them, Connect's machine code and status. The one sentence kept is a
+ * failed sign-in's own line, and only where it is shaped like no
+ * credential, because it is what tells the developer why.
  *
  * Asking Connect for another user's token needs the deployment's own Vercel
  * OIDC token, which the SDK reads from the request or the environment
@@ -37,10 +40,12 @@ import {
   startAuthorization,
   UserAuthorizationRequiredError,
 } from "@vercel/connect";
-import { Config, Context, Data, Effect, Layer, Option, Redacted, type Schema } from "effect";
+import { getVercelOidcToken } from "@vercel/oidc";
+import { Config, Context, Data, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { text } from "../core.js";
 import { readAccountPerson } from "./account-person.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
+import { credentialFreeLine } from "./mcp-tools.js";
 
 /** Why Connect answered nothing usable. */
 export const INTEGRATION_CONNECT_FAILURE = {
@@ -79,6 +84,37 @@ export interface IntegrationToken {
   readonly expiresAt: number;
 }
 
+/** A browser sign-in Connect began: the address the browser opens, and the handle that asks Connect how it ended. */
+export interface IntegrationAuthorization {
+  readonly url: string;
+  readonly verifier: Redacted.Redacted;
+}
+
+/** Where a sign-in Connect began stands, as Connect itself answers it. */
+export const CONNECT_SIGN_IN_RESULT = {
+  /** Still under way, or no word yet. */
+  PENDING: "pending",
+  /** Connect holds a grant from it. */
+  SUCCEEDED: "succeeded",
+  /** The developer cancelled it on Connect's own page. */
+  CANCELED: "canceled",
+  /** Connect or the provider refused it. */
+  FAILED: "failed",
+} as const;
+
+export type ConnectSignInResult =
+  | {
+      readonly kind:
+        | typeof CONNECT_SIGN_IN_RESULT.PENDING
+        | typeof CONNECT_SIGN_IN_RESULT.SUCCEEDED
+        | typeof CONNECT_SIGN_IN_RESULT.CANCELED;
+    }
+  | {
+      readonly kind: typeof CONNECT_SIGN_IN_RESULT.FAILED;
+      /** Connect's own line on why, where it carried nothing shaped like a credential. */
+      readonly message?: string;
+    };
+
 /** The accounts a provider is offered to, each entry lower-cased: whole email domains, each with its `@`, and single emails. */
 interface AllowedAccounts {
   readonly domains: readonly string[];
@@ -91,11 +127,15 @@ export interface ConnectorService {
   readonly configured: boolean;
   /** The accounts the deployment offers this provider to; absent, it is offered to every account. */
   readonly allowedAccounts?: AllowedAccounts;
-  /** Begins a browser sign-in for the account, which Connect returns to `callbackUrl`; answers the address the browser opens. */
+  /** Begins a browser sign-in for the account, which Connect returns to `callbackUrl`; answers the address the browser opens and Connect's handle on it. */
   readonly authorize: (
     userId: string,
     callbackUrl: string,
-  ) => Effect.Effect<string, IntegrationConnectFailure>;
+  ) => Effect.Effect<IntegrationAuthorization, IntegrationConnectFailure>;
+  /** How the sign-in Connect answered this handle for stands now, which is all Luke hears of one that never came back. */
+  readonly signInResult: (
+    verifier: Redacted.Redacted,
+  ) => Effect.Effect<ConnectSignInResult, IntegrationConnectFailure>;
   /** The account's token now; `fresh` asks Connect itself rather than the SDK's in-process cache. */
   readonly token: (
     userId: string,
@@ -155,18 +195,103 @@ const NOT_CONFIGURED = new IntegrationConnectFailure({
 const UNCONFIGURED_CONNECTOR: ConnectorService = {
   configured: false,
   authorize: () => Effect.fail(NOT_CONFIGURED),
+  signInResult: () => Effect.fail(NOT_CONFIGURED),
   token: () => Effect.fail(NOT_CONFIGURED),
   revoke: () => Effect.fail(NOT_CONFIGURED),
 };
 
-/** The three calls of Vercel Connect's SDK a connector makes, which a test hands a fake Connect for. */
+/** What Connect answered a result read: its HTTP status, and its body where it was JSON. */
+export interface ConnectResultAnswer {
+  readonly status: number;
+  readonly body: unknown;
+}
+
+/**
+ * The calls of Vercel Connect a connector makes, which a test hands a fake
+ * Connect for: three of its SDK, and the result read its CLI polls, which
+ * the SDK does not wrap.
+ */
 export interface ConnectSdk {
   readonly startAuthorization: typeof startAuthorization;
   readonly getTokenResponse: typeof getTokenResponse;
   readonly revokeToken: typeof revokeToken;
+  readonly readAuthorizationResult: (verifier: string) => Promise<ConnectResultAnswer>;
 }
 
-const VERCEL_CONNECT_SDK: ConnectSdk = { startAuthorization, getTokenResponse, revokeToken };
+/** The Vercel API, as the SDK reaches it from a deployment with no region pinned. */
+const VERCEL_API = "https://api.vercel.com";
+
+/**
+ * GET /v1/connect/result/{verifier}, under the deployment's own OIDC token
+ * as every SDK call is: Connect's word on a sign-in it began, which its
+ * CLI polls for its own setup flows. Note that the verifier travels in the
+ * path, so the address is never logged.
+ */
+async function readAuthorizationResult(verifier: string): Promise<ConnectResultAnswer> {
+  const token = await getVercelOidcToken();
+  const response = await fetch(`${VERCEL_API}/v1/connect/result/${encodeURIComponent(verifier)}`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+  });
+  return { status: response.status, body: await response.json().catch(() => undefined) };
+}
+
+const VERCEL_CONNECT_SDK: ConnectSdk = {
+  startAuthorization,
+  getTokenResponse,
+  revokeToken,
+  readAuthorizationResult,
+};
+
+/** Connect's result answer, as much of it as a sign-in's end needs: its status word, and its error's own line. */
+const ConnectResultSchema = Schema.Struct({
+  status: Schema.String,
+  error: Schema.optionalKey(
+    Schema.NullOr(Schema.Struct({ message: Schema.optionalKey(Schema.String) })),
+  ),
+});
+
+/** Connect's status words for a request that ended, as its CLI reads them; any other is still under way. */
+const CONNECT_RESULT_STATUS = {
+  SUCCESS: "success",
+  CANCELED: "canceled",
+  ERROR: "error",
+} as const;
+
+/** HTTP 404: Connect knows no request by the handle yet, or no longer; either way nothing ended that Luke can say. */
+const CONNECT_RESULT_UNKNOWN = 404;
+
+const PENDING_RESULT: ConnectSignInResult = { kind: CONNECT_SIGN_IN_RESULT.PENDING };
+
+/** A result answer as the sign-in's end it names, with nothing of Connect's sentence kept that could carry a credential. */
+function signInResultOf(
+  answer: ConnectResultAnswer,
+): Effect.Effect<ConnectSignInResult, IntegrationConnectFailure> {
+  if (answer.status === CONNECT_RESULT_UNKNOWN) return Effect.succeed(PENDING_RESULT);
+  const read = Schema.decodeUnknownOption(ConnectResultSchema)(answer.body);
+  if (answer.status < 200 || answer.status >= 300 || Option.isNone(read)) {
+    return Effect.fail(
+      new IntegrationConnectFailure({
+        reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE,
+        status: answer.status,
+      }),
+    );
+  }
+  switch (read.value.status) {
+    case CONNECT_RESULT_STATUS.SUCCESS:
+      return Effect.succeed({ kind: CONNECT_SIGN_IN_RESULT.SUCCEEDED });
+    case CONNECT_RESULT_STATUS.CANCELED:
+      return Effect.succeed({ kind: CONNECT_SIGN_IN_RESULT.CANCELED });
+    case CONNECT_RESULT_STATUS.ERROR: {
+      const message = credentialFreeLine(read.value.error?.message);
+      return Effect.succeed({
+        kind: CONNECT_SIGN_IN_RESULT.FAILED,
+        ...(message !== undefined ? { message } : undefined),
+      });
+    }
+    default:
+      return Effect.succeed(PENDING_RESULT);
+  }
+}
 
 /** One connector, asking Vercel Connect itself, or the SDK a test hands it. */
 export function vercelConnector(
@@ -180,14 +305,19 @@ export function vercelConnector(
         try: () => sdk.startAuthorization(connector, subjectOf(userId), { callbackUrl }),
         catch: failureOf,
       }).pipe(
-        Effect.flatMap(({ url }) =>
+        Effect.flatMap(({ url, verifier }) =>
           isBrowserAddress(url)
-            ? Effect.succeed(url)
+            ? Effect.succeed({ url, verifier: Redacted.make(verifier) })
             : Effect.fail(
                 new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE }),
               ),
         ),
       ),
+    signInResult: (verifier) =>
+      Effect.tryPromise({
+        try: () => sdk.readAuthorizationResult(Redacted.value(verifier)),
+        catch: failureOf,
+      }).pipe(Effect.flatMap(signInResultOf)),
     token: (userId, { fresh }) =>
       Effect.tryPromise({
         try: () => sdk.getTokenResponse(connector, subjectOf(userId), { forceRefresh: fresh }),

@@ -16,6 +16,7 @@ import { user } from "./auth.js";
  * carries back to the callback, unique across every provider so the callback
  * finds the row by it alone; it stands only while a sign-in is under way, and
  * a connected row keeps its status while the account signs in again.
+ * `connectVerifier` stands and goes with it.
  */
 export const integrationConnection = pgTable(
   "integration_connection",
@@ -30,6 +31,12 @@ export const integrationConnection = pgTable(
     state: text("state"),
     /** When the sign-in under way began; null when none is. */
     stateIssuedAt: timestamptz("state_issued_at"),
+    /**
+     * The handle Connect answered the sign-in under way with, which asks it
+     * how that sign-in ended when the browser never comes back; null when
+     * none is. Never logged, and never answered to a window.
+     */
+    connectVerifier: text("connect_verifier"),
     /** When a sign-in last completed; null until one has. */
     connectedAt: timestamptz("connected_at"),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
