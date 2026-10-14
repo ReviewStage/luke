@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import type { IntegrationTool } from "@luke/features/integration-health";
+import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@luke/features/integration-sign-in";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
@@ -16,6 +18,7 @@ import {
   type IntegrationSignInFailure,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import type { SettingsLink } from "@luke/settings/settings-views";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -28,11 +31,8 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
-import type { IntegrationTool } from "../integration-health";
-import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "../integration-sign-in";
 import { OpenSettingsProvider } from "../open-settings";
 import { rendererRuntime } from "../renderer-runtime";
-import type { SettingsLink } from "../settings-views";
 import { IntegrationsSection } from "./integrations-page";
 
 /**

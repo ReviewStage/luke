@@ -2,20 +2,20 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
+import { UPDATE_STATUS } from "@luke/settings/update";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import type { SettingsPanelProps } from "../settings/settings-panel";
-import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopSettings } from "./desktop-settings";
 
 /**

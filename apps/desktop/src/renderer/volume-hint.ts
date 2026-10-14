@@ -1,4 +1,4 @@
-import type { OutputAudioState } from "#shared/messages/audio";
+import type { OutputAudioState } from "@luke/voice/audio";
 
 /**
  * The decisions behind the volume hint, kept pure so they can be tested: when

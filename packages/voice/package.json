@@ -9,7 +9,10 @@
     "./effect": "./src/effect/index.js",
     "./live-session": "./src/live-session/index.js",
     "./orchestrator": "./src/orchestrator/index.js",
-    "./testing": "./src/testing.js"
+    "./testing": "./src/testing.js",
+    "./live-captions": "./src/live-captions.js",
+    "./audio": "./src/audio.js",
+    "./voice-view": "./src/voice-view.js"
   },
   "types": "./src/index.ts",
   "scripts": {

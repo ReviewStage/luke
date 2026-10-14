@@ -1,4 +1,4 @@
-import { searchAnchorProps } from "./settings-anchors";
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 
 /**
  * switch.tsx -- the app's one on/off switch: a pill whose thumb slides right and takes the accent while on.

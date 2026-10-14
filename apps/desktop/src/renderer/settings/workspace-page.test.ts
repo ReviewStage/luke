@@ -8,6 +8,8 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,8 +27,6 @@ import {
 } from "#shared/messages/acts";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "../settings-anchors";
-import { SETTINGS_SECTION } from "../settings-views";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**

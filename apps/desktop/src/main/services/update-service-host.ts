@@ -4,9 +4,9 @@ import {
   type RecordProductEvent,
 } from "@luke/features/analytics";
 import { jsonStateFile } from "@luke/host";
+import type { UpdateSnapshot } from "@luke/settings/update";
 import { text } from "@luke/wire";
 import { Effect, type Scope } from "effect";
-import type { UpdateSnapshot } from "#shared/messages/update";
 import { type UpdateMenuAct, updateMenuAct } from "../app-menu";
 import type { AppStateStore } from "../app-state";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-service";

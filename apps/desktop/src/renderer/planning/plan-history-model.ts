@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
+import { type WordChange, wordChanges } from "@luke/features/plan-diff";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
   PLAN_ACTOR,
@@ -7,12 +8,11 @@ import {
   type PlanEditor,
   type PlanRevisionLine,
 } from "@luke/features/plan-wire";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
-import { type WordChange, wordChanges } from "./plan-diff";
 import { dayAndTimeText } from "./plan-time";
-import { TAB_WORDS } from "./tab-strip-model";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.

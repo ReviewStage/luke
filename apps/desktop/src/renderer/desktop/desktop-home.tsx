@@ -1,6 +1,7 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -16,7 +17,6 @@ import {
 } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
-import { TAB_WORDS } from "../planning/tab-strip-model";
 import { useInboxItems } from "../planning/use-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";

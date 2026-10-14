@@ -10,6 +10,12 @@ import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@lu
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import { liveExchangeActive } from "@luke/live";
 import {
+  isVoiceCommand,
+  isVoiceView,
+  type VoiceCommand,
+  type VoiceView,
+} from "@luke/voice/voice-view";
+import {
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
@@ -17,16 +23,10 @@ import {
   type UnparsedWireValue,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
-import {
-  isVoiceCommand,
-  isVoiceView,
-  type VoiceCommand,
-  type VoiceView,
-} from "./messages/voice-view";
-import { wireResult as result, type WireGuard } from "./messages/wire-guard";
 import { type AppCommand, isAppCommand } from "./shortcuts";
 
 type BridgeArguments = readonly unknown[];

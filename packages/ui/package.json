@@ -12,7 +12,10 @@
     "./auth-surface": "./src/auth-surface.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
-    "./theme.css": "./src/theme.css"
+    "./theme.css": "./src/theme.css",
+    "./search-tokens": "./src/search-tokens.js",
+    "./skill-mention": "./src/skill-mention.js",
+    "./tab-strip-model": "./src/tab-strip-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {

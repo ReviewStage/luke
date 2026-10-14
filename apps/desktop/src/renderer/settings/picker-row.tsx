@@ -1,8 +1,8 @@
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { cssCustomProperties } from "@luke/ui";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
-import { searchAnchorProps } from "../settings-anchors";
 import { useDisclosure } from "../use-disclosure";
 
 /**

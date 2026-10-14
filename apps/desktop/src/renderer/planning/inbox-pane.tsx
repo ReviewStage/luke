@@ -1,3 +1,4 @@
+import type { FileChip } from "@luke/features/attachment-model";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -38,7 +39,6 @@ import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
-import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import { copiedLines, fileRefText } from "./code-pane-model";

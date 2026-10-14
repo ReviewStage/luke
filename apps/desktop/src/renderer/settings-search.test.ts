@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import { type SettingsSearchInput, searchSettings, settingsSearchEntries } from "./settings-search";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";
 
 /**
  * Settings search over what the pages draw: a Workspace group is found only where

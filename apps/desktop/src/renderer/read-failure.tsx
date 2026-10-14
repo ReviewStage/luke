@@ -1,5 +1,5 @@
+import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { FailureNote } from "./failure-note";
-import { FAILURE_REASON } from "./failure-remedy";
 
 /**
  * read-failure.tsx -- a read that did not land: its sentence in the fault's red, then Retry, where the rows or the region it would have drawn stand.

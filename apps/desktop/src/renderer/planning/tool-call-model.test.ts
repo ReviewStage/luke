@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { CALL_KIND } from "@luke/features/turn-rows";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { cardTitle, toolCallView } from "./tool-call-model";
-import { CALL_KIND } from "./turn-rows";
 
 const ESCAPE = String.fromCharCode(27);
 

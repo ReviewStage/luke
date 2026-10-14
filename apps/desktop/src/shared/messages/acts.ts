@@ -145,7 +145,10 @@ import {
   isAppSettingField,
   SETTINGS_RESET_SCOPE,
 } from "@luke/settings";
+import type { UpdateSnapshot } from "@luke/settings/update";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
+import type { MicrophoneRoute, MicrophoneStatus } from "@luke/voice/audio";
+import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -157,8 +160,13 @@ import {
   type UnparsedWireValue,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import {
+  isWireValue,
+  type WireGuard,
+  type WireGuardValue,
+  wireResult,
+} from "@luke/wire/wire-guard";
 import { Schema as EffectSchema, Result } from "effect";
-import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -172,9 +180,6 @@ import {
   terminalShellParamsSchema,
   terminalsActAnswerSchema,
 } from "./terminal";
-import type { UpdateSnapshot } from "./update";
-import { VOICE_COMMAND } from "./voice-view";
-import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./wire-guard";
 
 /**
  * Every effect a window may ask this build's main process for, named once.

@@ -1,3 +1,10 @@
+import {
+  insideCode,
+  mentionAt,
+  skillTokens,
+  skillWord,
+  type TextRange,
+} from "@luke/ui/skill-mention";
 import { type AnyExtension, Editor, Extension, Node } from "@tiptap/core";
 import { type Fragment, type Node as PmNode, type Schema, Slice } from "@tiptap/pm/model";
 import {
@@ -9,13 +16,6 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  insideCode,
-  mentionAt,
-  skillTokens,
-  skillWord,
-  type TextRange,
-} from "../planning/skill-mention";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,

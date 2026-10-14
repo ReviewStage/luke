@@ -1,8 +1,8 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { HostOperator } from "@luke/host/host-operator";
 import { Effect } from "effect";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
-import type { HostOperator } from "../gateway/host-operator";
 
 /**
  * The account rows, proxied to the host that owns the account: the sign-in

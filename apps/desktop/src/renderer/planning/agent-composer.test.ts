@@ -6,11 +6,12 @@ import {
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import type { SkillOption } from "@luke/ui/skill-mention";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   composerEditor,
   installEditorBundle,
@@ -22,7 +23,6 @@ import {
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
-import type { SkillOption } from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 

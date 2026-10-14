@@ -8,22 +8,25 @@ import {
   settingFieldForId,
   settingIdVisible,
 } from "@luke/settings";
+import {
+  SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
+  SETTINGS_SEARCH_ROW,
+} from "@luke/settings/settings-anchors";
+import {
+  SETTINGS_PAGE_LIST,
+  SETTINGS_SECTION,
+  SETTINGS_VIEW,
+  type SettingsView,
+} from "@luke/settings/settings-views";
 import { CloseIcon, SearchIcon } from "@luke/ui";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { integrationLines } from "./integration-search";
 import { focusSearchField, Highlighted } from "./search-field";
-import { matchesTokens, searchTokens } from "./search-tokens";
 import { settingsPageOf } from "./settings/pages";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
-import {
-  SETTINGS_PAGE_LIST,
-  SETTINGS_SECTION,
-  SETTINGS_VIEW,
-  type SettingsView,
-} from "./settings-views";
 import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 

@@ -1,9 +1,9 @@
 import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
+import type { Failure } from "@luke/features/failure-remedy";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
-import type { Failure } from "../failure-remedy";
 import { AgentComposer } from "./agent-composer";
 import { ArchivedComposerNote } from "./archived-plan";
-import { TAB_WORDS } from "./tab-strip-model";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 

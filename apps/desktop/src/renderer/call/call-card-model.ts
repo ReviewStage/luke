@@ -9,7 +9,7 @@
 
 import type { PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
-import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
+import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "../planning/planning-model";
 
 /** The plan's name where the document has none to give, which a plan just started can briefly be. */

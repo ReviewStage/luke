@@ -10,6 +10,7 @@ import {
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
 } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
 import type { ActionResult } from "@luke/wire";
 import { useEffect, useId, useRef, useState } from "react";
@@ -22,7 +23,6 @@ import {
   shortcutLabel,
 } from "#shared/shortcuts";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
-import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { Shortcut } from "../shortcut";
 import type { ShortcutControl } from "./controls";
 import { AttentionMark, ChangedMark } from "./marks";

@@ -60,7 +60,7 @@ luke_wait_for_exit() {
 # The app chooses its own name at launch — the product name for a Developer ID
 # release, "<product name> Dev" for an unpackaged run, and "<product name> Test"
 # for an ad-hoc package, so differently signed builds never share a Keychain
-# entry (see apps/desktop/src/main/app-identity.ts). Each name keeps a lock of its own,
+# entry (see packages/host/src/app-identity.ts). Each name keeps a lock of its own,
 # so a caller replacing "the running instance" asks about all three. The product
 # name is still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.

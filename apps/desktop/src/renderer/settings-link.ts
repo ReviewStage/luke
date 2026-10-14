@@ -1,6 +1,6 @@
+import type { SettingsLink, SettingsView } from "@luke/settings/settings-views";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { landOnSettingsRow } from "./settings-search";
-import type { SettingsLink, SettingsView } from "./settings-views";
 
 /**
  * settings-link.ts -- following a Settings link: the tab, the page, the workspace it shows, and the section landed on.

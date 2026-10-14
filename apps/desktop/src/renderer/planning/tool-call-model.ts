@@ -15,13 +15,13 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanNote } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/plan-wire";
+import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
+import { skillWord } from "@luke/ui/skill-mention";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { fileRefText } from "./code-pane-model";
 import { shortCommit } from "./file-tab-model";
-import { skillWord } from "./skill-mention";
-import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.

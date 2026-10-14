@@ -1,5 +1,5 @@
+import { matchRanges } from "@luke/ui/search-tokens";
 import { focusSeek } from "./focus-seek";
-import { matchRanges } from "./search-tokens";
 
 /**
  * search-field.tsx -- the settings search's caret seek and the marks on the words a query found.

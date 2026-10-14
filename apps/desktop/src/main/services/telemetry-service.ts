@@ -6,10 +6,10 @@ import {
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
+import type { EffectDesktopService } from "@luke/host/desktop-service";
 import * as Sentry from "@sentry/electron/main";
 import { Effect } from "effect";
 import type { DesktopConfig } from "./desktop-config";
-import type { EffectDesktopService } from "./service";
 
 /** How long the quit waits for a queued crash report to leave; a flush must not hold a quit. */
 const CRASH_REPORT_FLUSH_MS = 2_000;

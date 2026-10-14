@@ -1,3 +1,16 @@
+import {
+  CONNECTION_HEALTH,
+  type ConnectionHealth,
+  connectionHealth,
+  type IntegrationTool,
+  toolsCount,
+} from "@luke/features/integration-health";
+import {
+  SIGN_IN,
+  SIGN_IN_ACTION,
+  type SignIn,
+  signInLine,
+} from "@luke/features/integration-sign-in";
 import type { IntegrationStatusView } from "@luke/features/integration-view";
 import {
   INTEGRATION_NAME,
@@ -7,6 +20,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ChevronRightIcon, CloseIcon, ProviderMark, SearchIcon, TrashIcon } from "@luke/ui";
+import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -16,21 +30,12 @@ import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
-import {
-  CONNECTION_HEALTH,
-  type ConnectionHealth,
-  connectionHealth,
-  type IntegrationTool,
-  toolsCount,
-} from "../integration-health";
 import { matchIntegration, shownTools } from "../integration-search";
-import { SIGN_IN, SIGN_IN_ACTION, type SignIn, signInLine } from "../integration-sign-in";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { serverGroups, serverRows } from "../planning/agent-servers-model";
 import { focusSearchField, Highlighted } from "../search-field";
-import { searchTokens } from "../search-tokens";
 import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";

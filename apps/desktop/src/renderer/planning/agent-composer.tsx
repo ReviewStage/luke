@@ -9,6 +9,7 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { PlusIcon } from "@luke/ui";
@@ -24,7 +25,6 @@ import {
 } from "../ai-elements/prompt-input";
 import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
-import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { imageFiles } from "../feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
 import { useIntegrationStatuses } from "../integration-statuses";

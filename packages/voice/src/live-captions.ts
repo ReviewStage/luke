@@ -4,8 +4,8 @@ import {
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
 } from "@luke/live";
-import type { LiveCaptionRow } from "@luke/voice/orchestrator";
 import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@luke/wire/conversation";
+import type { LiveCaptionRow } from "./orchestrator/index.js";
 
 const ENTRY_KIND_OF = {
   [TRANSCRIPT_SPEAKER.USER]: CONVERSATION_ENTRY_KIND.ASK,

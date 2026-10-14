@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -8,7 +9,6 @@ import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenSettingsProvider } from "../open-settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { NewPlanDialog } from "./new-plan-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 

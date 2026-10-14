@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { Duration, Effect } from "effect";
@@ -15,7 +16,6 @@ import {
   type WhiteboardHandle,
   type WhiteboardModule,
 } from "../whiteboard/contract";
-import { admittedElements } from "./board-scene";
 
 /**
  * plan-board.tsx -- the open plan's whiteboard in the Plans tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.

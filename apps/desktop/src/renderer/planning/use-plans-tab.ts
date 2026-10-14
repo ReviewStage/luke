@@ -1,4 +1,5 @@
 import type { Board } from "@luke/features/board-wire";
+import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -9,13 +10,25 @@ import {
   type PlanningEditAnswer,
   type PlanningView,
 } from "@luke/features/planning-view";
+import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import {
+  isAgentTab,
+  isChangesTab,
+  isDraftTab,
+  isFileTab,
+  isPageTab,
+  isSubagentTab,
+  type StripTab,
+  sameTab,
+} from "@luke/ui/tab-strip-model";
+import type { MicrophoneStatus } from "@luke/voice/audio";
+import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
-import type { MicrophoneStatus } from "#shared/messages/audio";
-import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
@@ -26,10 +39,8 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useStateWithRef } from "../use-state-with-ref";
-import { managesWorkspace } from "../workspace-role";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -39,7 +50,6 @@ import {
 } from "./closed-tabs";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
-import { dictationKeywords } from "./dictation-keywords";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
 import {
   FIXTURE_PLANNING_CALL,
@@ -82,16 +92,6 @@ import {
   unsettledRepositoryPins,
 } from "./planning-model";
 import type { RepositoryChooser } from "./repository-chip";
-import {
-  isAgentTab,
-  isChangesTab,
-  isDraftTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  type StripTab,
-  sameTab,
-} from "./tab-strip-model";
 import {
   type HeardCall,
   heardCalls,

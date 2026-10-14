@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
+import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Effect, Exit, Scope } from "effect";
@@ -22,7 +24,6 @@ import { PAGE_SCHEME } from "#shared/page-frame";
 import { APP_COMMAND } from "#shared/shortcuts";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
-import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -35,7 +36,6 @@ import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom"
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
 import type { OperatorClient } from "./operator-client";
-import type { DesktopService } from "./service";
 
 /** How long a display change is let settle before the panels are laid out over it. */
 const DISPLAY_SETTLE_MS = 100;

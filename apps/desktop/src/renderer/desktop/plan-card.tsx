@@ -1,10 +1,10 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { moreText, PLAN_ROW_MARK, planRowMark } from "@luke/features/plan-agents-model";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import { ProviderMark } from "@luke/ui";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
-import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
 import { repositoryPageUrl } from "../planning/planning-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";

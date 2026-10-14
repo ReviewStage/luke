@@ -2,6 +2,11 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import {
+  SETTINGS_PAGE_LIST,
+  SETTINGS_VIEW,
+  type SettingsView,
+} from "@luke/settings/settings-views";
 import { BackIcon } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -29,7 +34,6 @@ import {
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search";
-import { SETTINGS_PAGE_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";

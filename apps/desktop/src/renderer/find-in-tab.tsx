@@ -1,4 +1,5 @@
 import { CloseIcon, SearchIcon } from "@luke/ui";
+import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -22,7 +23,6 @@ import {
   reveal,
   selectedWords,
 } from "./find-matches";
-import { type StripTab, sameTab } from "./planning/tab-strip-model";
 import { Tooltip } from "./tooltip";
 
 /**

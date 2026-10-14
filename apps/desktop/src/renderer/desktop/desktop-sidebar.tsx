@@ -14,6 +14,7 @@ import {
   SearchIcon,
   UnpinIcon,
 } from "@luke/ui";
+import { sameTab } from "@luke/ui/tab-strip-model";
 import { HouseIcon, InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -30,7 +31,6 @@ import {
   repositoryLabel,
   repositoryPageUrl,
 } from "../planning/planning-model";
-import { sameTab } from "../planning/tab-strip-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";

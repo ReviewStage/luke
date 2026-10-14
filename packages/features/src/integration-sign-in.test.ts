@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
+import { test } from "vitest";
+import { SIGN_IN, signInAfterRead, signInBegun, signInLine } from "./integration-sign-in.js";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
-} from "@luke/features/integration-wire";
-import { test } from "vitest";
-import { SIGN_IN, signInAfterRead, signInBegun, signInLine } from "./integration-sign-in";
+} from "./integration-wire.js";
 
 /**
  * A sign-in as the window's reads end it, read through its line: a read

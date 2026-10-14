@@ -1,8 +1,8 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { ProviderMark, UserIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";
 import { SettingsGroup } from "./settings-group";
 

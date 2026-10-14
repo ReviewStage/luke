@@ -1,5 +1,5 @@
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { createContext, useContext } from "react";
-import { FAILURE_REASON, type Failure } from "../failure-remedy";
 
 /**
  * repository-remedy.tsx -- what the press under a refused start or message does when the plan's repository is out of reach.

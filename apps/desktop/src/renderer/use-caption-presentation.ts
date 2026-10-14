@@ -1,5 +1,5 @@
+import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import { useEffect, useRef, useState } from "react";
-import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
 
 /**

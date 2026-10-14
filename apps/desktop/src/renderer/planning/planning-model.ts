@@ -9,8 +9,8 @@ import {
   type VoicePhase,
 } from "@luke/features/planning-view";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
-import type { VoiceView } from "#shared/messages/voice-view";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
+import type { VoiceView } from "@luke/voice/voice-view";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
 
 /**

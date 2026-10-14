@@ -1,7 +1,7 @@
+import { diffHunks, type Hunk } from "@luke/features/plan-diff";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
 import { diffArrays } from "diff";
 import type { MarkdownEdit } from "../markdown-message";
-import { diffHunks, type Hunk } from "./plan-diff";
 
 /**
  * plan-reveal.ts -- how the open plan writes itself in: one caret taking each note down where it lands, as a person taking notes on a call would.

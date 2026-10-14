@@ -1,6 +1,6 @@
+import type { RunningBuild, UpdateSnapshot } from "@luke/settings/update";
+import type { MicrophoneStatus } from "@luke/voice/audio";
 import type { ActionResult } from "@luke/wire";
-import type { MicrophoneStatus } from "#shared/messages/audio";
-import type { RunningBuild, UpdateSnapshot } from "#shared/messages/update";
 
 /**
  * Whether Luke may open the microphone, and the two things that can be done

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { IntegrationTool } from "@luke/features/integration-health";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
@@ -11,7 +12,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import type { IntegrationTool } from "../integration-health";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { AgentServersButton } from "./agent-servers";
 

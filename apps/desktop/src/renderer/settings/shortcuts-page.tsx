@@ -1,5 +1,5 @@
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
-import { searchAnchorProps } from "../settings-anchors";
 import { Shortcut } from "../shortcut";
 import { SettingsGroup } from "./settings-group";
 

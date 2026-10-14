@@ -1,5 +1,3 @@
-import { Option, Schema } from "effect";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AgentStripTab,
   type DraftStripTab,
@@ -10,7 +8,9 @@ import {
   replacementOf,
   sameTab,
   viewedLast,
-} from "./tab-strip-model";
+} from "@luke/ui/tab-strip-model";
+import { Option, Schema } from "effect";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * use-main-tabs.ts -- the plan's column's tabs: the plan's own, then each of its coding agents and its draft agent, which is chosen, and the order they stand in, kept per plan across launches.

@@ -6,6 +6,7 @@ import {
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@luke/features/planning-view";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { ResetIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
@@ -15,7 +16,6 @@ import { type ActHandle, useAct } from "../act";
 import { type EditReader, PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";

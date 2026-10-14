@@ -3,13 +3,13 @@ import {
   SETTING_SECTION,
   type SettingsRowsInput,
 } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { CheckIcon, ExternalIcon } from "@luke/ui";
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
   VOICE_KEYLESS_NOTE,
 } from "../microphone-access";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { Tooltip } from "../tooltip";
 import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";

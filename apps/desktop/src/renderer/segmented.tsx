@@ -1,4 +1,4 @@
-import { searchAnchorProps } from "./settings-anchors";
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 
 /**
  * segmented.tsx -- the app's one segmented control: a pick-one of a few short options in a trough, the chosen one filled.

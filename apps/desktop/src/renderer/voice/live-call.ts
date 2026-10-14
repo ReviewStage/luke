@@ -24,6 +24,7 @@ import {
   TRANSCRIPT_SPEAKER,
   unmuteEvent,
 } from "@luke/live";
+import { LiveCaptions } from "@luke/voice/live-captions";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -44,7 +45,6 @@ import {
   Result,
   type Scope,
 } from "effect";
-import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
   LIVE_PEER_OUTCOME,

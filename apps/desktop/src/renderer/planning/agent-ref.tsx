@@ -1,6 +1,7 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanAgentLine } from "@luke/features/plan-wire";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
 import { Tooltip } from "../tooltip";
 import {
@@ -11,7 +12,6 @@ import {
   lastFinished,
 } from "./agent-tab-card";
 import { agentStateWords, agentStillWriting, agentTabLabel } from "./coding-agent-model";
-import { TAB_WORDS } from "./tab-strip-model";
 import { agentTranscript } from "./transcript-copy";
 import type { CodingAgentsControl } from "./use-coding-agents";
 

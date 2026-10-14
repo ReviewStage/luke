@@ -7,12 +7,8 @@ import {
   productEventFromWire,
   type RecordProductEvent,
 } from "@luke/features/analytics";
+import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
-import {
-  MICROPHONE_STATUS,
-  type MicrophoneRoute,
-  type MicrophoneStatus,
-} from "#shared/messages/audio";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 import type { ReportHandlers } from "../bridge-host";
 import type { MicrophoneRouteWatch } from "../native/microphone-route";

@@ -61,11 +61,11 @@ export function resolveSigningMode(env) {
 
 /**
  * The esbuild define telling the bundle whether it was built alongside
- * Developer ID packaging, read by app-identity.ts to decide which name — and
- * so which state directory and Keychain entry — the run answers to. Derived
- * from the same environment `resolveSigningMode` reads so the flag and the
- * signature it stands for come from one place; only the fact travels, never
- * the identity's name.
+ * Developer ID packaging, read by `@luke/host`'s app-identity.ts to decide
+ * which name — and so which state directory and Keychain entry — the run
+ * answers to. Derived from the same environment `resolveSigningMode` reads so
+ * the flag and the signature it stands for come from one place; only the fact
+ * travels, never the identity's name.
  */
 export function signingModeDefine(env) {
   return {
