@@ -26,7 +26,7 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
-import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useStateWithRef } from "../use-state-with-ref";
 import { managesWorkspace } from "../workspace-role";
@@ -314,6 +314,14 @@ export interface PlansControl {
   onSetRepository: (planId: string, repository: string | null) => Promise<string | undefined>;
   /** Opens a plan's repository on GitHub in the browser. */
   onOpenOnGitHub: (planId: string) => void;
+  /** Opens Settings › Workspace at its GitHub, for the workspace the plan belongs to. */
+  onOpenWorkspaceGitHub: (planId: string) => void;
+  /**
+   * Moves a plan to another of the account's workspaces, whose GitHub
+   * reaches its repository, and lists that workspace so the plan stays in
+   * sight; answers whether it moved, a refusal saying why in a toast.
+   */
+  onMovePlan: (planId: string, workspaceId: string) => Promise<boolean>;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Opens the New plan dialog over whatever stands open, which it leaves standing. */
@@ -421,6 +429,9 @@ const PLAN_COPIED_NOTE = "Plan copied";
 
 /** What the toast says once a plan is deleted. */
 const PLAN_DELETED_NOTE = "Plan deleted";
+
+/** What the toast says when the service did not move a plan, which stays where it was. */
+const MOVE_REFUSED_NOTE = "The plan could not be moved. Try again.";
 
 /** Why a delete the service did not carry was refused. */
 const DELETE_REFUSED_NOTE = "The plan could not be deleted. Try again.";
@@ -1121,6 +1132,23 @@ export function usePlansTab(input: {
     );
   };
 
+  // A fixture's plans move nowhere, as they are read from nowhere. Note that
+  // the workspace moves with the plan, because the sidebar lists one
+  // workspace's plans and the open plan must not drop out of it.
+  const movePlan = (planId: string, workspaceId: string): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
+    return act(ACT_KIND.PLANNING_MOVE, { planId, workspaceId })
+      .catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }) as const)
+      .then((answer) => {
+        if (!("failure" in answer)) {
+          workspace.choose(answer.workspaceId);
+          return true;
+        }
+        toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        return false;
+      });
+  };
+
   // A fixture's plans are read from nowhere, so an edit of one is never saved.
   const edit = (planId: string, request: PlanEditRequest): Promise<PlanningEditAnswer> => {
     if (fixture !== undefined) return Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED });
@@ -1532,6 +1560,15 @@ export function usePlansTab(input: {
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
+    onMovePlan: movePlan,
+    onOpenWorkspaceGitHub: (planId) => {
+      const workspaceId = planning.plans.find((plan) => plan.id === planId)?.workspaceId;
+      input.onOpenSettings({
+        page: SETTINGS_VIEW.WORKSPACE,
+        section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+        ...(workspaceId === undefined ? undefined : { workspaceId }),
+      });
+    },
     onOpenOnGitHub: (planId) => {
       const repository = repositoryOf(planId);
       if (repository !== null) openGitHub(repositoryPageUrl(repository));

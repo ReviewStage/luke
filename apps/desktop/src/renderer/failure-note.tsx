@@ -1,10 +1,12 @@
-import { type Failure, remedyLabel } from "./failure-remedy";
+import { type Failure, remedyLabel, retriesBesideRemedy } from "./failure-remedy";
 import { RetryButton } from "./retry-button";
 
 /**
  * failure-note.tsx -- a failure's sentence, then the press that mends it, or Retry where trying again is all that can.
  *
- * A remedy is the surface's own (`onRemedy`).
+ * A remedy is the surface's own (`onRemedy`). One finished where Luke
+ * cannot watch, on GitHub or in Settings, keeps Retry beside it
+ * (`retriesBesideRemedy`), since the same send is what goes once it is done.
  */
 export function FailureNote({
   failure,
@@ -16,7 +18,7 @@ export function FailureNote({
   className: string;
   /** Retry's press. */
   onRetry?: (() => void) | undefined;
-  /** Opens the API keys or reconnects the integration, as the reason says. */
+  /** Opens the API keys, reconnects the integration, or mends the plan's repository, as the reason says. */
   onRemedy?: (() => void) | undefined;
 }): React.JSX.Element {
   const label = remedyLabel(failure);
@@ -32,7 +34,9 @@ export function FailureNote({
           {label}
         </button>
       )}
-      {label === undefined && onRetry !== undefined ? <RetryButton onRetry={onRetry} /> : null}
+      {onRetry !== undefined && (label === undefined || retriesBesideRemedy(failure)) ? (
+        <RetryButton onRetry={onRetry} />
+      ) : null}
     </p>
   );
 }

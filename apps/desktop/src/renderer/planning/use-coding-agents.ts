@@ -402,7 +402,7 @@ export function useCodingAgents(input: {
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-        setNote({ planId, note: startFailureNote(answer.failure) });
+        setNote({ planId, note: startFailureNote(answer, planId) });
         // The note waits beside the plan's Start; a developer who left the
         // plan while it was out hears of it now.
         if (latest.current.planId !== planId) failed(START_FAILED_AWAY);
@@ -474,7 +474,7 @@ export function useCodingAgents(input: {
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
-    if ("failure" in answer) return startFailureNote(answer.failure);
+    if ("failure" in answer) return startFailureNote(answer, planId);
     withDraft(planId, undefined);
     landed(planId, answer.agent);
     return undefined;

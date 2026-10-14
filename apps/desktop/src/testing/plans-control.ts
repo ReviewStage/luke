@@ -122,6 +122,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onLeftWorkspace: ignore,
     onCreateWorkspace: () => Promise.resolve(undefined),
     onOpenWorkspaceSettings: ignore,
+    onOpenWorkspaceGitHub: ignore,
+    onMovePlan: () => Promise.resolve(false),
     github: undefined,
     onConnectAccountGitHub: () => Promise.resolve(false),
     onDisconnectAccountGitHub: () => Promise.resolve(false),

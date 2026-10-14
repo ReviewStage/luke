@@ -96,6 +96,8 @@ import {
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
   type PlanningMessagesParams,
+  type PlanningMoveAnswer,
+  type PlanningMoveParams,
   type PlanningPageAnswer,
   type PlanningPageParams,
   type PlanningPinParams,
@@ -133,6 +135,7 @@ import {
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
   planningGitHubPageAnswerSchema,
+  planningMoveAnswerSchema,
   planningPageAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
@@ -267,6 +270,8 @@ export interface HostOperator {
   planningSetRepository(
     params: PlanningSetRepositoryParams,
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
+  /** One plan moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
+  planningMove(params: PlanningMoveParams): Effect.Effect<PlanningMoveAnswer>;
   /** The developer's edit of a plan's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -873,6 +878,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningMove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_MOVE, {
+          planId: params.planId,
+          workspaceId: params.workspaceId,
+        }),
+        (answer): PlanningMoveAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningMoveAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

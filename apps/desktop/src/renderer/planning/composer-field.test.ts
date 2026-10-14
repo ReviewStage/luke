@@ -44,6 +44,7 @@ async function settle(): Promise<void> {
 function Box(): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
+    planId: "plan-1",
     messages: [],
     send: () => new Promise(() => undefined),
     onStatus: () => undefined,

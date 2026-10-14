@@ -865,6 +865,7 @@ export function AgentTab({
   }, [settledEdits, tell]);
   const composer = useAgentComposer({
     agentId: agent.id,
+    planId: agent.planId,
     messages: transcript.messages,
     send: control.onMessage,
     onStatus: control.onStatus,

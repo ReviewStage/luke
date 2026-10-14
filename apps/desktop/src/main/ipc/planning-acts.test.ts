@@ -159,6 +159,11 @@ function fixture() {
           asked.push(`repository:${params.planId}:${params.repository}`);
           return { repository: params.repository };
         }),
+      planningMove: (params) =>
+        Effect.sync(() => {
+          asked.push(`move:${params.planId}:${params.workspaceId}`);
+          return { workspaceId: params.workspaceId };
+        }),
       planningEdit: (params) =>
         Effect.sync(() => {
           const value = "document" in params.edit ? params.edit.document.value : "";

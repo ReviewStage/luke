@@ -82,6 +82,7 @@ import {
   codeLinesSchema,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
+  type PlanningMoveAnswer,
   type PlanningPageSourceAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -97,6 +98,8 @@ import {
   planningFileAnswerSchema,
   planningFileParamsSchema,
   planningMessagesParamsSchema,
+  planningMoveAnswerSchema,
+  planningMoveParamsSchema,
   planningPageParamsSchema,
   planningPageSourceAnswerSchema,
   planningPinParamsSchema,
@@ -220,6 +223,8 @@ export const ACT_KIND = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
+  /** A plan moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
+  PLANNING_MOVE: "planning.move",
   /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   PLANNING_EDIT: "planning.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
@@ -719,6 +724,11 @@ export const ACT = {
     payload: actSchema(planningSetRepositoryParamsSchema),
     result: wireResult<PlanningSetRepositoryAnswer>(isReadable(planningSetRepositoryAnswerSchema)),
     refusal: "Could not change that plan's repository on this system.",
+  },
+  [ACT_KIND.PLANNING_MOVE]: {
+    payload: actSchema(planningMoveParamsSchema),
+    result: wireResult<PlanningMoveAnswer>(isReadable(planningMoveAnswerSchema)),
+    refusal: "Could not move that plan on this system.",
   },
   [ACT_KIND.PLANNING_EDIT]: {
     payload: actSchema(planningEditParamsSchema),

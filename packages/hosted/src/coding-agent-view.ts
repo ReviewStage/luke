@@ -32,6 +32,7 @@ import {
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
+import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 
 /**
  * coding-agent-view.ts -- a plan's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -69,8 +70,10 @@ export const CODING_AGENT_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The plan names no repository, so there is nothing for an agent to check out. */
   NO_REPOSITORY: "no-repository",
-  /** The plan's repository is not one the Luke GitHub App reaches for the account. */
+  /** The plan's workspace's GitHub installation does not reach the plan's repository; why travels beside it where the service said. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
+  /** GitHub did not answer whether the workspace reaches the repository; the same call a moment later may be taken. */
+  GITHUB_UNANSWERED: "github-unanswered",
   /** The model or effort named is not one the service offers now. */
   INVALID_CHOICE: "invalid-choice",
   /** The message spells more characters than one message to an agent may; shortened, it is taken. */
@@ -90,6 +93,12 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
+
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`). */
+const failedReaching = EffectSchema.Struct({
+  failure: failureSchema,
+  unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
+});
 
 /** The models the service offers, as the window hears them: the list, or why there is none. */
 export const codingAgentModelsAnswerSchema = EffectSchema.Union([
@@ -189,10 +198,10 @@ export const codingAgentStartParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
 
-/** An agent started or stopped, as the window hears it: the agent as it then stands, or why it was not. */
+/** An agent started, messaged, or stopped, as the window hears it: the agent as it then stands, or why it was not. */
 export const codingAgentAgentAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ agent: codingAgentSummarySchema }),
-  failed,
+  failedReaching,
 ]);
 
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;

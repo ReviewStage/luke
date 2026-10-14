@@ -113,6 +113,8 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 export function useAgentComposer(input: {
   agentId: string;
+  /** The agent's plan, whose repository a refusal's remedy mends. */
+  planId: string;
   /** The transcript as the tab holds it, which a sent line is read back from. */
   messages: readonly CodingAgentMessage[];
   send: MessageSender;
@@ -165,7 +167,7 @@ export function useAgentComposer(input: {
         // An answer to another agent's tab, or to a tab since remounted, is nobody's.
         if (latest.current.agentId !== agentId) return;
         if ("failure" in answer) {
-          const note = messageFailureNote(answer.failure);
+          const note = messageFailureNote(answer, latest.current.planId);
           setHeld((was) => {
             // A line a row has already read back reached the agent whatever the answer said: the
             // row stands, so there is nothing to send again and nothing to put back in the box.
