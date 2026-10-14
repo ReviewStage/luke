@@ -13,23 +13,10 @@
  */
 
 import { CloseIcon, ResetIcon, VideoOffIcon, WingFace } from "@sidecar/panel";
-import { type MouseEvent, useEffect, useRef } from "react";
+import { type MouseEvent, useCallback, useEffect, useRef } from "react";
+import { AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
 import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
 import { ThinkingDots } from "../thinking-dots";
-
-/**
- * The avatar's status, in the shape #1 pins for `state.voice.avatar`. Note
- * that it is declared here because #1 is not yet on main: #9b, which mounts
- * the tile, replaces it with #1's `AVATAR_STATUS` from `#shared/messages/`.
- */
-export const AVATAR_STATUS = {
-  OFF: "off",
-  STARTING: "starting",
-  LIVE: "live",
-  ENDED: "ended",
-} as const;
-
-type AvatarStatus = (typeof AVATAR_STATUS)[keyof typeof AVATAR_STATUS];
 
 /** What the tile says, for a reader and on screen. */
 export const CALL_VIDEO_LABEL = {
@@ -124,6 +111,7 @@ export function CallVideoTile({
   onVideoOff,
   onRestart,
   onHangUp,
+  onAudioElement,
 }: {
   video: MediaStreamTrack | undefined;
   audio: MediaStreamTrack | undefined;
@@ -132,8 +120,17 @@ export function CallVideoTile({
   onVideoOff: () => void;
   onRestart: () => void;
   onHangUp: () => void;
+  /** The audio element, once drawn and once gone, for whoever retries a refused play. */
+  onAudioElement: (element: HTMLAudioElement | null) => void;
 }): React.JSX.Element {
-  const sound = useRef<HTMLAudioElement>(null);
+  const sound = useRef<HTMLAudioElement | null>(null);
+  const soundElement = useCallback(
+    (element: HTMLAudioElement | null) => {
+      sound.current = element;
+      onAudioElement(element);
+    },
+    [onAudioElement],
+  );
   useTrack(sound, audio);
   // Note that the property is set rather than the attribute, because the
   // attribute is only the element's default and the property is what plays.
@@ -146,7 +143,7 @@ export function CallVideoTile({
   return (
     <>
       {/* biome-ignore lint/a11y/useMediaCaption: the avatar's voice is captioned in the panel, not here. */}
-      <audio ref={sound} autoPlay hidden />
+      <audio ref={soundElement} autoPlay hidden />
       {status === AVATAR_STATUS.OFF ? null : (
         <section
           className="call-video-tile"

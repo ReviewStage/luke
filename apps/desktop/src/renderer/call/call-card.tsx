@@ -10,10 +10,14 @@
  * holds the call.
  */
 
+import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
 import { ReturnIcon } from "@sidecar/panel";
+import { Option } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
+import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
@@ -22,7 +26,14 @@ import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
+import {
+  callAvatarAtom,
+  callAvatarAudioElementAtom,
+  callAvatarPlaybackAtom,
+  NO_AVATAR_TRACKS,
+} from "./call-avatar";
 import { type CallCardModel, callCard } from "./call-card-model";
+import { CallVideoTile } from "./call-video-tile";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
@@ -188,19 +199,54 @@ export function CallCardDock({
   );
 }
 
-/** The floating window's root: the card over the document it is handed. */
+/** The statuses main stands the window at the tile's size for, which is where the tile is drawn. */
+function videoUp(status: AvatarStatus): boolean {
+  return status === AVATAR_STATUS.STARTING || status === AVATAR_STATUS.LIVE;
+}
+
+/**
+ * The floating window's root: the card over the document it is handed, or
+ * Luke's avatar in its place while the avatar is starting or live. The tile
+ * is drawn in every state, off included, so the avatar's voice element
+ * stands for as long as the window does. Video off and Restart video are the
+ * call's own setting to change, which no act carries yet (#11 adds it), so
+ * here they do nothing.
+ */
 export function CallWindowCard(): React.JSX.Element {
   useKeyboardModality();
   useStaleHoverAfterMove();
+  useAtomMount(callAvatarPlaybackAtom);
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();
+  const tracks = Option.getOrElse(
+    AsyncResult.value(useAtomValue(callAvatarAtom)),
+    () => NO_AVATAR_TRACKS,
+  );
+  const setAudioElement = useAtomSet(callAvatarAudioElementAtom);
+  const controls = callControls(tell, view.speakerMuted);
+  const avatar = state?.voice.avatar ?? AVATAR_OFF;
+  const tiled = videoUp(avatar.status);
   return (
-    <CallCard
-      card={callCard({ view, planning: state?.planning ?? IDLE_PLANNING_VIEW })}
-      speakerMuted={view.speakerMuted}
-      controls={callControls(tell, view.speakerMuted)}
-      surface={CALL_CARD_SURFACE.WINDOW}
-    />
+    <>
+      <CallVideoTile
+        video={tracks.video}
+        audio={tracks.audio}
+        status={tiled ? avatar.status : AVATAR_STATUS.OFF}
+        speakerMuted={view.speakerMuted}
+        onVideoOff={() => undefined}
+        onRestart={() => undefined}
+        onHangUp={controls.onEnd}
+        onAudioElement={setAudioElement}
+      />
+      {tiled ? null : (
+        <CallCard
+          card={callCard({ view, planning: state?.planning ?? IDLE_PLANNING_VIEW })}
+          speakerMuted={view.speakerMuted}
+          controls={controls}
+          surface={CALL_CARD_SURFACE.WINDOW}
+        />
+      )}
+    </>
   );
 }

@@ -6,7 +6,7 @@ import { bundleAtom } from "../bundle-loader";
  */
 
 /** Why the avatar could not be shown where its bundle failed to load. */
-export const AVATAR_SESSION_LOAD_FAILED = "The video could not be started.";
+const AVATAR_SESSION_LOAD_FAILED = "The video could not be started.";
 
 export const avatarSessionModuleAtom = bundleAtom(
   { script: AVATAR_SESSION_ASSET.SCRIPT },

@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { AVATAR_STATUS } from "#shared/messages/avatar";
 import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
-import { AVATAR_STATUS, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile";
+import { CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile";
 
 type TileProps = Parameters<typeof CallVideoTile>[0];
 
@@ -42,6 +43,7 @@ function tile(props: Partial<TileProps> = {}): React.ReactElement<TileProps> {
     onVideoOff: () => undefined,
     onRestart: () => undefined,
     onHangUp: () => undefined,
+    onAudioElement: () => undefined,
     ...props,
   });
 }
