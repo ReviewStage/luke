@@ -1,3 +1,4 @@
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
@@ -23,6 +24,7 @@ export default defineTool({
     const opened = pinnedState(sandboxRecord).get().openedAt !== undefined;
     return reportToLuke(ctx.session.auth, ctx.session.id, {
       callId: ctx.callId,
+      turnId: hostTurnId(ctx.session.id, ctx.session.turn.id),
       // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
       input: unparsedWire(input as WireBoundaryInput),
       sandbox: opened ? () => ctx.getSandbox() : undefined,

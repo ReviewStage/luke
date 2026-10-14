@@ -2,11 +2,13 @@ import type {
   CodingAgent,
   CodingAgentLatestTurn,
 } from "@sidecar/database/models/coding-agent-store";
+import type { StoredAgentReport } from "@sidecar/database/schemas/coding-agent";
 import {
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentFailure,
+  type CodingAgentLastReport,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -146,6 +148,14 @@ export function codingAgentRunStartedAt(
   return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
+/** The agent's last report while it stands: the one made in its newest turn, which the next turn's start takes away; null where none stands. */
+export function standingReportOf(
+  stored: StoredAgentReport | null,
+  turn: CodingAgentLatestTurn | undefined,
+): CodingAgentLastReport | null {
+  return stored !== null && stored.turnId === turn?.id ? stored.report : null;
+}
+
 /** One agent as the tabs draw it, its status read at `now`. */
 export function codingAgentSummary(
   agent: CodingAgent,
@@ -180,5 +190,7 @@ export function codingAgentSummary(
     createdAt: agent.createdAt,
     lineAwaits: standing.lineAwaits,
   });
-  return started === undefined ? summary : { ...summary, runStartedAt: started };
+  const lastReport = standingReportOf(agent.lastReport, standing.turn);
+  const reported = lastReport === null ? summary : { ...summary, lastReport };
+  return started === undefined ? reported : { ...reported, runStartedAt: started };
 }

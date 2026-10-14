@@ -5,6 +5,7 @@ import {
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
+  recordCodingAgentReport,
   recordCodingAgentStep,
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
@@ -14,7 +15,7 @@ import { turnEndingOf } from "@sidecar/database/models/message-reads";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { WORKER_REPORT_KIND } from "@sidecar/hosted/rollout-wire";
+import { WORKER_REPORT_KIND, type WorkerReportInput } from "@sidecar/hosted/rollout-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -84,6 +85,7 @@ import {
 } from "./plan-read.js";
 import type { CoderHostSeams } from "./production.js";
 import {
+  lastReportOf,
   REPORT_REFUSAL,
   type ReportToolResult,
   reportBy,
@@ -283,7 +285,8 @@ export interface CoderHost extends HostAdmission {
    * started outside a rollout is refused. A pull request reported opened has
    * the branch checked out in the sandbox written on the row first, where
    * the session opened one, so its pull request reads at once rather than
-   * at the turn's end.
+   * at the turn's end. A report Luke was handed is kept on the row as the
+   * agent's last, standing until its next turn starts (`keepReport`).
    */
   report(
     admitted: AdmittedConversation,
@@ -327,6 +330,8 @@ export type InboxCall =
 /** One `report` call: eve's id for it, the input eve held to its schema, and the session's sandbox, where one was opened, to read the branch from. */
 export interface ReportCall {
   readonly callId: string;
+  /** The service's id for the turn the call was made in (`hostTurnId`), which eve keeps for a call it replays, so a report stands for the turn that made it. */
+  readonly turnId: string;
   readonly input: UnparsedWireValue;
   readonly sandbox: (() => Promise<RepositorySandbox>) | undefined;
 }
@@ -428,6 +433,26 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     });
     return written.pipe(Effect.catch(logStoreFailure));
   };
+
+  /**
+   * A report Luke took, kept on the agent's row with the turn its call was
+   * made in. Note that only the call that handed the report to eve
+   * writes it, because eve may replay a call, later and in any order: a
+   * replay is the report Luke already has, so it never moves the row, and a
+   * report whose first write failed is not kept, though Luke still heard it.
+   */
+  const keepReport = (
+    admitted: AdmittedConversation,
+    agent: CodingAgent,
+    call: ReportCall,
+    taken: { readonly input: WorkerReportInput; readonly at: number; readonly dispatched: boolean },
+  ) =>
+    taken.dispatched
+      ? recordCodingAgentReport(admitted.target.userId, agent.id, {
+          report: lastReportOf(taken.input, taken.at),
+          turnId: call.turnId,
+        })
+      : Effect.void;
 
   /** The branch checked out in the sandbox written on the agent's row; a read or write that fails is logged and writes nothing. */
   const writeBranch = (
@@ -662,6 +687,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           { asks: askRecord(), eve },
           { userId, planId, report, clientKey: call.callId },
         );
+        if (Result.isSuccess(reported)) {
+          yield* keepReport(admitted, found.success, call, {
+            input: read.success,
+            at: reported.success.queuedAt,
+            dispatched: reported.success.dispatched,
+          });
+        }
         return Result.isSuccess(reported)
           ? reportTaken(report)
           : reportRejected(REPORT_REFUSAL.UNAVAILABLE);

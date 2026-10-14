@@ -6,6 +6,7 @@ import {
   type IntegrationProvider,
   integrationProviderFromWire,
 } from "./integration-wire.js";
+import { reportOptionsSchema, reportTextSchema, WORKER_REPORT_KIND } from "./report-vocabulary.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -413,6 +414,26 @@ export const CODING_AGENT_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
+/**
+ * What a rollout agent last reported of itself in its newest turn: the
+ * kind, the pull request it names, where it names one, its own words, the
+ * answers a question offered, and the epoch milliseconds Luke took it. A
+ * question, a block, or a conflict stands here while the agent waits on
+ * Luke, and the answer, which reaches the agent as its next turn, takes it
+ * away.
+ */
+export const codingAgentLastReportSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(WORKER_REPORT_KIND)),
+  pullRequest: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  text: reportTextSchema,
+  options: EffectSchema.optionalKey(reportOptionsSchema),
+  at: countedNumber,
+});
+
+export type CodingAgentLastReport = typeof codingAgentLastReportSchema.Type;
+
 /** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, which turn that is, and when that run began. */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -466,6 +487,12 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   ),
   /** What the agent does for the plan's rollout; absent for an agent started outside one. */
   role: EffectSchema.optionalKey(rolloutRoleSchema),
+  /**
+   * What the agent last reported of itself in its newest turn. Absent before
+   * a report, once its next turn starts, for an agent outside a rollout, and
+   * from a service older than it.
+   */
+  lastReport: EffectSchema.optionalKey(codingAgentLastReportSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
