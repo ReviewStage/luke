@@ -18,8 +18,9 @@ import { GitHubSection, type GitHubSettingsControl } from "./github-section";
 import { IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
-import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
+import { WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
+import { ShortcutSection } from "./voice-keys";
 import { VoiceSection } from "./voice-page";
 import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 import { useSettingsWrites } from "./writes";
@@ -38,9 +39,8 @@ export interface SettingsPanelProps {
    */
   onDeleteAccount: () => Promise<ActionResult>;
   /**
-   * Which settings page is showing: the front page, or one of the pages a
-   * front-page row opens. Held by the app rather than here because Escape
-   * unwinds it.
+   * Which settings page is showing. Held by the app rather than here because
+   * a shortcut, a voice request, or a button elsewhere in the window turns it.
    */
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
@@ -91,8 +91,8 @@ export function settingsRowsInput({
  * page because the mark has to stand while that page is not drawn: it is the
  * list saying a page one press away still needs a hand. The keyless half moved
  * to the Account and usage heading with the ways in, so the row marks only a
- * microphone still ungranted for a voice that can run. The panel's front page
- * and the desktop's list of pages both read it, so the two never disagree.
+ * microphone still ungranted for a voice that can run. The Settings sidebar
+ * reads it, and the Voice page wears the same mark on the row it means.
  */
 export function voicePageAttention(microphone: MicrophoneControl): string | undefined {
   return microphone.voiceAvailable
@@ -100,6 +100,11 @@ export function voicePageAttention(microphone: MicrophoneControl): string | unde
     : undefined;
 }
 
+/**
+ * The page the Settings sidebar has chosen, as the groups that draw it. Every
+ * option has one home: a page draws only its own groups, and the sidebar is
+ * the one list of pages, so no page repeats another's rows.
+ */
 export function SettingsPanel({
   account,
   onSignOut,
@@ -115,67 +120,62 @@ export function SettingsPanel({
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, microphone, account });
+  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   return (
     <div className="settings">
-      {view !== SETTINGS_VIEW.WORKSPACE ? null : account.status !== ACCOUNT_STATUS.SIGNED_IN ? (
+      {view === SETTINGS_VIEW.ACCOUNT ? (
+        signedIn ? (
+          <>
+            <AccountSection
+              account={account}
+              onSignOut={onSignOut}
+              onDeleteAccount={onDeleteAccount}
+            />
+            {github !== undefined ? <GitHubSection control={github} /> : null}
+          </>
+        ) : (
+          <p className="settings-note">Not signed in.</p>
+        )
+      ) : null}
+
+      {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
         <p className="settings-note">Sign in to see your workspaces.</p>
       ) : workspace ? (
         <WorkspacePage control={workspace} />
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && panelView ? (
-        <VoiceSection view={panelView} writes={writes} microphone={microphone} />
+      {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
+
+      {view === SETTINGS_VIEW.INTEGRATIONS ? <IntegrationsSection signedIn={signedIn} /> : null}
+
+      {view === SETTINGS_VIEW.VOICE ? (
+        <>
+          {panelView ? (
+            <VoiceSection view={panelView} writes={writes} microphone={microphone} />
+          ) : null}
+          <ShortcutSection
+            shortcuts={shortcuts}
+            {...(panelView ? { view: panelView } : undefined)}
+            voiceAvailable={microphone.voiceAvailable}
+          />
+        </>
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView ? (
         <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.CODING_AGENTS ? (
-        <>
-          <CodingAgentsPage signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
-          {panelView ? (
-            <NotificationsSection view={panelView} writes={writes} control={notifications} />
-          ) : null}
-        </>
+      {view === SETTINGS_VIEW.NOTIFICATIONS && panelView ? (
+        <NotificationsSection view={panelView} writes={writes} control={notifications} />
       ) : null}
 
-      {view === SETTINGS_VIEW.INTEGRATIONS ? (
-        <IntegrationsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
+        <MacCommandsSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? (
-        <>
-          <ShortcutSection
-            shortcuts={shortcuts}
-            writes={writes}
-            {...(panelView ? { view: panelView } : undefined)}
-            voiceAvailable={microphone.voiceAvailable}
-          />
-          <WindowShortcutSections />
-        </>
-      ) : null}
+      {view === SETTINGS_VIEW.ABOUT ? <UpdatesSection control={updates} /> : null}
 
-      {view !== SETTINGS_VIEW.ROOT ? null : (
-        <>
-          {panelView ? <MacCommandsSection view={panelView} writes={writes} /> : null}
-
-          <UpdatesSection control={updates} />
-
-          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <AccountSection
-              account={account}
-              onSignOut={onSignOut}
-              onDeleteAccount={onDeleteAccount}
-            />
-          ) : null}
-
-          {/* Beside the account, where every Open Settings for GitHub not connected lands. */}
-          {github !== undefined && account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <GitHubSection control={github} />
-          ) : null}
-        </>
-      )}
+      {view === SETTINGS_VIEW.SHORTCUTS ? <WindowShortcutSections /> : null}
     </div>
   );
 }

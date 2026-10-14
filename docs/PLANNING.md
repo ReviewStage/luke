@@ -967,7 +967,7 @@ cannot be reached, answer `rejected` with why, and nothing goes on screen.
 command on the developer's own Mac and answers its exit code and output, for
 the planning model, its worker, coding agents, and their workers alike, with
 no approval: Dean's ruling of 2026-10-13. The call is queued under the
-account; a signed-in Mac with Settings › General's "Let agents run commands
+account; a signed-in Mac with Settings › This Mac's "Let agents run commands
 on this Mac" on (the default) holds `GET /api/mac-commands` open, takes it,
 runs it in the login shell from the home folder
 (`packages/host/src/mac-command-runner.ts`), and posts the result back. A

@@ -20,6 +20,7 @@ import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
+import { settingsPageOf } from "./settings/pages";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
 import {
   SETTINGS_PAGE_LIST,
@@ -87,16 +88,9 @@ export type SettingsSearchInput = SettingsRowsInput & { workspace?: Workspace | 
  * list of pages uses, so a result's group and the row it opens agree. The
  * command palette names a setting's page beside it in the same words.
  */
-export const RESULT_PAGE_WORD = {
-  [SETTINGS_VIEW.ROOT]: "General",
-  [SETTINGS_VIEW.VOICE]: "Voice",
-  [SETTINGS_VIEW.APPEARANCE]: "Appearance",
-  [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
-  [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
-  [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
-  [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
-  [SETTINGS_VIEW.WORKSPACE]: "Workspace",
-} satisfies Record<SettingsView, string>;
+export function resultPageWord(page: SettingsView): string {
+  return settingsPageOf(page).title;
+}
 
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
@@ -133,20 +127,20 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     {
       id: SETTINGS_SEARCH_ROW.UPDATES,
       label: "Updates",
-      page: SETTINGS_VIEW.ROOT,
+      page: SETTINGS_VIEW.ABOUT,
       haystack: ["Updates", "version release download check for updates build commit development"],
     },
     {
       id: SETTINGS_SEARCH_ROW.CHANGELOG,
       label: "Changelog",
-      page: SETTINGS_VIEW.ROOT,
+      page: SETTINGS_VIEW.ABOUT,
       haystack: ["Changelog", "release notes version history what's new what changed"],
     },
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.SIGN_OUT,
           label: "Sign out",
-          page: SETTINGS_VIEW.ROOT,
+          page: SETTINGS_VIEW.ACCOUNT,
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
@@ -155,7 +149,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SECTION.CONNECTED_ACCOUNTS,
           label: "GitHub",
-          page: SETTINGS_VIEW.ROOT,
+          page: SETTINGS_VIEW.ACCOUNT,
           haystack: ["GitHub", "connected accounts connect disconnect reconnect"],
         }
       : undefined,
@@ -178,7 +172,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,
           label: "Delete account",
-          page: SETTINGS_VIEW.ROOT,
+          page: SETTINGS_VIEW.ACCOUNT,
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
@@ -196,13 +190,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     {
       id: SETTINGS_SEARCH_ROW.TALK_KEY,
       label: "Talk to Luke",
-      page: SETTINGS_VIEW.SHORTCUTS,
+      page: SETTINGS_VIEW.VOICE,
       haystack: ["Talk to Luke", SHORTCUT_WORDS, "talk speak hold microphone hold to talk"],
     },
     {
       id: SETTINGS_SEARCH_ROW.STOP_KEY,
       label: "Stop Luke",
-      page: SETTINGS_VIEW.SHORTCUTS,
+      page: SETTINGS_VIEW.VOICE,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
     // The account's plan template, which is the account's on the service: drawn once an account is signed in.
@@ -328,7 +322,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     ...fixed.filter((entry) => entry.page === page),
   ]).map((entry) => ({
     ...entry,
-    haystack: [...entry.haystack, RESULT_PAGE_WORD[entry.page]],
+    haystack: [...entry.haystack, resultPageWord(entry.page)],
   }));
 }
 
@@ -342,7 +336,7 @@ interface SettingsSearchGroup {
 export interface SettingsSearchOutcome {
   /** The query's words, lowercased — what each entry was actually read against. */
   tokens: readonly string[];
-  /** The kept rows grouped under their pages, in the front page's own order. */
+  /** The kept rows grouped under their pages, in the Settings sidebar's own order. */
   groups: readonly SettingsSearchGroup[];
   /** How many rows the query kept, across every group. */
   matched: number;
@@ -524,8 +518,8 @@ export function SettingsSearchResults({
   return (
     <div className="settings-search-results">
       {search.groups.map((group) => (
-        <section key={group.page} aria-label={RESULT_PAGE_WORD[group.page]}>
-          <h2 className="sidebar-heading">{RESULT_PAGE_WORD[group.page]}</h2>
+        <section key={group.page} aria-label={resultPageWord(group.page)}>
+          <h2 className="sidebar-heading">{resultPageWord(group.page)}</h2>
           <ul>
             {group.items.map((entry) => (
               <li key={entry.id}>

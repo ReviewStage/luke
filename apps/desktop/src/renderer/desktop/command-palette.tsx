@@ -73,7 +73,7 @@ import { matchesTokens, searchTokens } from "../search-tokens";
 import { settingsPageOf } from "../settings/pages";
 import {
   landOnSettingsRow,
-  RESULT_PAGE_WORD,
+  resultPageWord,
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search";
@@ -475,7 +475,7 @@ function settingRows(
   return settingsSearchEntries(rows).map((entry) => ({
     icon: <GearIcon />,
     label: entry.label,
-    detail: RESULT_PAGE_WORD[entry.page],
+    detail: resultPageWord(entry.page),
     terms: [entry.label],
     keywords: entry.haystack,
     onChoose: () => land(entry.page, entry.id),

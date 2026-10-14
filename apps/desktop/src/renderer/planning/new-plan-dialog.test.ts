@@ -278,7 +278,7 @@ test("a list refused for GitHub not connected points to Settings, and the menu's
     false,
   );
   assert.deepEqual(dialog.links, [
-    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
   ]);
 });
 

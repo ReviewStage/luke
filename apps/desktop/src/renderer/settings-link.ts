@@ -7,7 +7,7 @@ import type { SettingsLink, SettingsView } from "./settings-views";
  *
  * Every Open Settings press names where it leads as a `SettingsLink`, and
  * this is the one place that turns it into the window's state, in the order
- * the window needs: Settings first, which lands on its front page, then the
+ * the window needs: Settings first, which lands on Account, then the
  * page, the workspace the Workspace page shows, and last the section, which
  * is looked for once the page is drawn and given up on quietly where it is
  * not.

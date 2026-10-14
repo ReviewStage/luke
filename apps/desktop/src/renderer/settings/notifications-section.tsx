@@ -10,8 +10,7 @@ const NOTIFICATIONS_REFUSED_NOTE = "Notifications are off for Luke in System Set
 
 /**
  * Whether Luke posts a notification as a coding agent ends behind his
- * window, the last group of the Coding agents page, since it is the agents'
- * ends it announces. While macOS refuses them the switch
+ * window, the Notifications page's one group. While macOS refuses them the switch
  * alone would be a promise nothing keeps, so a quiet line under it says
  * where they are turned back on, and takes the developer there; it stands
  * only while the switch is on, as off needs nothing from macOS.
@@ -26,8 +25,8 @@ export function NotificationsSection({
   control: NotificationsControl;
 }): React.JSX.Element {
   return (
-    <SettingsGroup title="Notifications">
-      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.CODING_AGENTS} view={view} writes={writes} />
+    <SettingsGroup>
+      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.NOTIFICATIONS} view={view} writes={writes} />
       {control.refused && view.settings.agentNotifications ? (
         <div className="settings-row">
           <span className="settings-copy">
