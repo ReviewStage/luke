@@ -8,8 +8,6 @@ import {
   claimAutomationRun,
   claimedRunsStarting,
   failClaimedRun,
-  latestAutomationStarts,
-  pauseAutomation,
   readAutomationToRun,
   type StrandedRun,
   settleAutomationRun,
@@ -24,7 +22,6 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import {
   AUTOMATION_FIRING,
-  AUTOMATION_PAUSE,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
@@ -77,8 +74,6 @@ const CLAIM_WINDOW_MS = 10 * 60_000;
 const AUTOMATION_RUNS = {
   /** The window the daily cap counts started runs over. */
   CAP_WINDOW: Duration.days(1),
-  /** How many failed starts in a row pause an automation. */
-  FAILURES_TO_PAUSE: 3,
 } as const;
 
 /** The statuses under which an agent counts against the concurrency guard. */
@@ -220,17 +215,6 @@ const heldBack = Effect.fnUntraced(function* (automation: Automation, now: numbe
   return undefined;
 });
 
-/** Pauses the automation where its newest starts, skips aside, all failed. */
-const pauseAfterFailures = Effect.fnUntraced(function* (automation: Automation) {
-  const starts = yield* latestAutomationStarts(automation.id, AUTOMATION_RUNS.FAILURES_TO_PAUSE);
-  if (
-    starts.length === AUTOMATION_RUNS.FAILURES_TO_PAUSE &&
-    starts.every((run) => run.status === AUTOMATION_RUN_STATUS.FAILED)
-  ) {
-    yield* pauseAutomation(automation.id, AUTOMATION_PAUSE.FAILURES);
-  }
-});
-
 /** What the locked look at a run came to: held back by a guard, claimed for its start, or settled by another act already. */
 const DECISION = {
   HELD: "held",
@@ -362,9 +346,6 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
   ): Effect.fn.Return<AutomationRunOutcome | undefined, never, StartServices> {
     return yield* Effect.gen(function* () {
       const acted = yield* outcomeOf(eveFor, run);
-      if (acted?.outcome.status === AUTOMATION_RUN_STATUS.FAILED) {
-        yield* pauseAfterFailures(acted.automation);
-      }
       return acted?.outcome;
     }).pipe(
       Effect.catch((failure) =>

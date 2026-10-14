@@ -1,6 +1,5 @@
 import {
   AUTOMATION_FIRING,
-  AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
   type AutomationAction,
@@ -29,7 +28,6 @@ import {
   inArray,
   isNull,
   lte,
-  ne,
   or,
   type SQL,
   sql,
@@ -562,32 +560,6 @@ const findStartedAgents = SqlSchema.findAll({
     ),
 });
 
-const findLatestStarts = SqlSchema.findAll({
-  Request: Schema.Struct({ automationId: Schema.String, limit: Schema.Int }),
-  Result: RunRowSchema,
-  execute: ({ automationId, limit }) =>
-    Database.use((db) =>
-      db
-        .select(RUN_COLUMNS)
-        .from(automationRun)
-        .where(
-          and(
-            eq(automationRun.automationId, automationId),
-            // A run that never tried, missed past its hour, is no failed start.
-            or(
-              eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
-              and(
-                eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
-                ne(automationRun.reason, AUTOMATION_RUN_REASON.MISSED),
-              ),
-            ),
-          ),
-        )
-        .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
-        .limit(limit),
-    ),
-});
-
 const writeExpired = SqlSchema.findAll({
   Request: Schema.Struct({
     before: Schema.Date,
@@ -741,17 +713,6 @@ const findGithubAutomations = SqlSchema.findAll({
         )
         .orderBy(asc(automation.createdAt), asc(automation.id))
         .limit(limit),
-    ),
-});
-
-const writePause = SqlSchema.void({
-  Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
-  execute: ({ id, reason, now }) =>
-    Database.use((db) =>
-      db
-        .update(automation)
-        .set({ enabled: false, pausedReason: reason, nextRunAt: null, updatedAt: now })
-        .where(eq(automation.id, id)),
     ),
 });
 
@@ -933,14 +894,6 @@ export function startedRunAgents(
   return findStartedAgents({ automationId, since });
 }
 
-/** The automation's newest starts, the runs that started an agent or tried and failed to, newest first, at most `limit`, whoever owns it. */
-export function latestAutomationStarts(
-  automationId: string,
-  limit: number,
-): PlanStoreEffect<readonly AutomationRun[]> {
-  return findLatestStarts({ automationId, limit });
-}
-
 /** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */
 export function expireQueuedAutomationRuns(
   before: Date,
@@ -949,11 +902,6 @@ export function expireQueuedAutomationRuns(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
   );
-}
-
-/** Pauses the automation for the reason the service gives, so nothing fires it until its owner resumes it. */
-export function pauseAutomation(id: string, reason: AutomationPause): PlanStoreEffect<void> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) => writePause({ id, reason, now }));
 }
 
 /**

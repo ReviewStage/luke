@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
-import { pauseAutomation } from "@sidecar/database/models/automation-store";
 import { automation as automationTable } from "@sidecar/database/schemas/automation";
 import { getTestDB } from "@sidecar/database/testing";
 import {
@@ -200,6 +199,15 @@ const weekdays = (planId: string) => ({
   action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: PROMPT },
 });
 
+/** A row an older build paused after its failed starts, as one may still stand; nothing pauses an automation now. */
+const pausedByAnOlderBuild = (id: string) =>
+  Database.use((db) =>
+    db
+      .update(automationTable)
+      .set({ enabled: false, pausedReason: AUTOMATION_PAUSE.FAILURES, nextRunAt: null })
+      .where(eq(automationTable.id, id)),
+  );
+
 it.layer(getTestDB())("the automation routes", (it) => {
   it.effect(
     "an automation is made with its schedule's first due instant and read, changed, and deleted by its own account alone",
@@ -350,7 +358,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             body: weekdays(plan.id),
           }),
         ).automation;
-        yield* pauseAutomation(scheduled.id, AUTOMATION_PAUSE.FAILURES);
+        yield* pausedByAnOlderBuild(scheduled.id);
         const paused = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -455,7 +463,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(resent.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(yield* hashOf(hooked.id), before, "the secret stands");
 
-        yield* pauseAutomation(hooked.id, AUTOMATION_PAUSE.FAILURES);
+        yield* pausedByAnOlderBuild(hooked.id);
         const pausedByOwner = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
