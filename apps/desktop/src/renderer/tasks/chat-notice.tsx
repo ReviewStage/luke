@@ -74,7 +74,9 @@ export function ChatNoticeCard({
       : channel.kind === CHANNEL_KIND.DM
         ? "direct message"
         : `in #${channelLabel(doors.chat, doors.names, channel)}`;
-  const shownWords = held === undefined ? words : heldWords(held);
+  // Note that a message of no Markdown, a link or a picture alone, keeps the notice's own words.
+  const fromChat = held === undefined ? "" : heldWords(held);
+  const shownWords = fromChat === "" ? words : fromChat;
   return (
     <section className="chat-notice" data-chat-notice="" data-author={notice.author}>
       <header className="chat-notice-head">
