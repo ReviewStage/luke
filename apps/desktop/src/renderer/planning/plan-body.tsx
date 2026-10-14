@@ -17,7 +17,7 @@ import {
   chaseView,
   type UnitView,
 } from "./plan-reveal";
-import { useMinute } from "./plan-time";
+import { agoText, useMinute } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
@@ -59,20 +59,6 @@ interface PlanChase {
   readonly behind: boolean;
   /** How many times the caret has jumped, so the view can bring a jump to the middle. */
   readonly jumps: number;
-}
-
-/** The units "ago" is said in, longest first, each with its letter. */
-const AGO_UNITS = [
-  [86_400_000, "d"],
-  [3_600_000, "h"],
-  [60_000, "m"],
-] as const;
-
-/** How long ago a save was, in the shortest words: "just now", "3m ago", "2h ago", "5d ago". */
-function agoText(at: number, now: number): string {
-  const elapsed = Math.max(0, now - at);
-  const unit = AGO_UNITS.find(([span]) => elapsed >= span);
-  return unit === undefined ? "just now" : `${Math.floor(elapsed / unit[0])}${unit[1]} ago`;
 }
 
 /**

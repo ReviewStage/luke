@@ -27,8 +27,9 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../planning/plan-history-model";
-import { momentText, sinceText, useMinute } from "../planning/plan-time";
+import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION } from "../planning/planning-model";
+import { RelativeTime } from "../planning/relative-time";
 import {
   HISTORY_READ,
   type OpenedSections,
@@ -259,13 +260,7 @@ function RevisionRow({
             <span className="version-row-author" data-author={author.kind}>
               {authorName(author)}
             </span>
-            <time
-              className="version-row-time"
-              dateTime={new Date(lastEdit.at).toISOString()}
-              title={momentText(lastEdit.at)}
-            >
-              {sinceText(lastEdit.at, now)}
-            </time>
+            <RelativeTime className="version-row-time" at={lastEdit.at} now={now} />
           </span>
           <span className="version-row-summary">{summary}</span>
         </span>

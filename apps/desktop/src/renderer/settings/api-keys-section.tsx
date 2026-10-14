@@ -12,6 +12,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { dayText } from "../planning/plan-time";
 import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { BusyLabel, SpinnerRegion } from "../spinner";
@@ -64,12 +65,6 @@ const PROVIDERS: readonly ProviderKeyProvider[] = [
   PROVIDER_KEY_PROVIDER.ANTHROPIC,
   PROVIDER_KEY_PROVIDER.OPENAI,
 ];
-
-const ADDED_FORMAT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
 
 /** What a key's status says on its row, by the provider it names. */
 function keyStatusWords(provider: ProviderKeyProvider, status: ProviderKeyStatus): string {
@@ -195,7 +190,7 @@ function ProviderKeyRow({
               </span>
               {" · "}
               <code className="api-key-hint">{stored.hint}</code>
-              {` · Added ${ADDED_FORMAT.format(stored.addedAt)}`}
+              {` · Added ${dayText(stored.addedAt)}`}
             </small>
           )}
         </span>

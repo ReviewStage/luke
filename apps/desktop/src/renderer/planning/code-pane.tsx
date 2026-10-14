@@ -22,7 +22,7 @@ import {
   rangeLabel,
 } from "./code-pane-model";
 import { FileTypeIcon } from "./file-type-icon";
-import { callHeading } from "./transcript-model";
+import { callHeading } from "./plan-time";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.

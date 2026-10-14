@@ -10,8 +10,8 @@ import {
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
-import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
-import { momentText } from "./plan-time";
+import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
+import { dayAndTimeText, momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
@@ -63,7 +63,7 @@ const CURRENT_HINT = "This version is already current";
 function restoreQuestion(at: number, noun: string): DialogQuestion {
   return {
     title: "Restore this version?",
-    body: `The ${noun} will go back to the version from ${versionMoment(at)}. The ${noun} as it stands now stays in the history, so you can restore it again.`,
+    body: `The ${noun} will go back to the version from ${dayAndTimeText(at)}. The ${noun} as it stands now stays in the history, so you can restore it again.`,
     verb: "Restore",
     running: "Restoring",
     tone: DIALOG_TONE.PRIMARY,
@@ -239,8 +239,12 @@ export function VersionView({
     <>
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title" title={momentText(line.lastEdit.at)}>
-            {versionMoment(line.lastEdit.at)}
+          <h1 className="desktop-toolbar-title">
+            <Tooltip label={momentText(line.lastEdit.at)}>
+              <time dateTime={new Date(line.lastEdit.at).toISOString()}>
+                {dayAndTimeText(line.lastEdit.at)}
+              </time>
+            </Tooltip>
           </h1>
         </div>
         {restorable ? (

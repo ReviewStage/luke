@@ -4,9 +4,9 @@ import { GitHubMark } from "../account-marks";
 import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
-import { sinceText } from "../planning/plan-time";
 import { repositoryPageUrl } from "../planning/planning-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
+import { RelativeTime } from "../planning/relative-time";
 import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 
@@ -223,9 +223,7 @@ export function PlanCard({
       <div className="plan-card-heading">
         <div className="plan-card-head">
           <span className="plan-card-name">{plan.name}</span>
-          <time className="plan-card-time" dateTime={new Date(plan.updatedAt).toISOString()}>
-            {sinceText(plan.updatedAt, now)}
-          </time>
+          <RelativeTime className="plan-card-time" at={plan.updatedAt} now={now} hint={false} />
         </div>
         {repository === null ? null : (
           <RepositoryDetail

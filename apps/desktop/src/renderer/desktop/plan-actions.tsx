@@ -15,8 +15,8 @@ import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
-import { sinceText } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-model";
+import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
@@ -402,7 +402,7 @@ export function SidebarPlan({
               {unread ? <span className="visually-hidden">(unread)</span> : null}
               <span className="sidebar-plan-time">
                 <PlanStatusMark plan={plan} />
-                {sinceText(plan.updatedAt, now)}
+                <RelativeTime at={plan.updatedAt} now={now} hint={false} />
               </span>
             </span>
           </button>

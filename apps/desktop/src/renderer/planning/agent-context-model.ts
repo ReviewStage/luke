@@ -4,7 +4,7 @@ import {
   type CodingAgentContext,
 } from "@sidecar/hosted/coding-agent-wire";
 import { compactCount } from "./coding-agent-model";
-import { sinceText } from "./plan-time";
+import { agoText } from "./plan-time";
 
 /**
  * agent-context-model.ts -- what the agent box's context ring and its popover say of the agent's model's context.
@@ -73,12 +73,6 @@ export interface ContextStat {
 /** A count rounded where it is whole, as a window reads: 200k, 1M, 1.5M. */
 function roundCount(count: number): string {
   return compactCount(count).replace(/\.0(?=[kM]$)/u, "");
-}
-
-/** How long ago an instant was, as a row says it: "now", "20m ago", and past four weeks the date. */
-function agoText(at: number, now: number): string {
-  const since = sinceText(at, now);
-  return /^\d/u.test(since) ? `${since} ago` : since;
 }
 
 /** The share of the window the last step read, past one where it read more than the window holds. */

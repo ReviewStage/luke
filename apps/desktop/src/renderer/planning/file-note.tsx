@@ -1,10 +1,10 @@
 import { ChevronDownIcon, WingFace } from "@sidecar/panel";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
-import { Tooltip } from "../tooltip";
 import { rangeLabel } from "./code-pane-model";
 import type { FileNote } from "./file-tab-model";
-import { momentText, sinceText, useMinute } from "./plan-time";
+import { useMinute } from "./plan-time";
+import { RelativeTime } from "./relative-time";
 
 /**
  * file-note.tsx -- Luke's note on lines of a File tab's file: a card standing over the lines he showed, saying why he showed them, as a review comment stands over the lines it is on.
@@ -76,11 +76,7 @@ function FileNoteCard({
             <span className="file-note-lines">{lines}</span>
           )}
         </button>
-        <Tooltip label={momentText(note.shownAt)}>
-          <time className="file-note-time" dateTime={new Date(note.shownAt).toISOString()}>
-            {sinceText(note.shownAt, now)}
-          </time>
-        </Tooltip>
+        <RelativeTime className="file-note-time" at={note.shownAt} now={now} />
         <button type="button" className="file-note-show" onClick={onShow}>
           {SHOW_IN_CODE_LABEL}
         </button>

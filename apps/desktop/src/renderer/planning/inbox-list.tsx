@@ -23,7 +23,8 @@ import {
   type InboxListView,
   NEEDS_YOU,
 } from "./inbox-model";
-import { sinceText, useMinute } from "./plan-time";
+import { useMinute } from "./plan-time";
+import { RelativeTime } from "./relative-time";
 import { cardTitle } from "./tool-call-model";
 
 /**
@@ -130,7 +131,12 @@ function ItemRow({
               <ItemGlyph plan={plan} agentId={item.agentId} models={models} />
             </span>
             <span className="sidebar-plan-name">{title}</span>
-            <span className="sidebar-plan-time">{sinceText(item.updatedAt, now)}</span>
+            <RelativeTime
+              className="sidebar-plan-time"
+              at={item.updatedAt}
+              now={now}
+              hint={false}
+            />
             {needsYou ? (
               <span className="inbox-row-dot">
                 <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>

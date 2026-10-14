@@ -2,8 +2,8 @@ import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@sidecar/live";
 import type { ReactNode } from "react";
 import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
-import { spanText, useMinute } from "./plan-time";
-import { type CallRecord, callHeading } from "./transcript-model";
+import { callHeading, spanText, useMinute } from "./plan-time";
+import type { CallRecord } from "./transcript-model";
 import { TurnModel } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 
