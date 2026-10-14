@@ -213,8 +213,8 @@ export interface PlansControl {
   github: GitHubConnection | undefined;
   /** Opens the page that connects the account's own GitHub in the browser; answers whether it opened, a refusal saying why in a toast. */
   onConnectAccountGitHub: () => Promise<boolean>;
-  /** Disconnects the account's own GitHub, under the Mac's session; a refusal says why in a toast. */
-  onDisconnectAccountGitHub: () => void;
+  /** Disconnects the account's own GitHub, under the Mac's session; answers whether it did, a refusal saying why in a toast. */
+  onDisconnectAccountGitHub: () => Promise<boolean>;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -1391,9 +1391,7 @@ export function usePlansTab(input: {
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
-    onDisconnectAccountGitHub: () => {
-      void accountGitHub(ACT_KIND.GITHUB_DISCONNECT);
-    },
+    onDisconnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_DISCONNECT),
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,

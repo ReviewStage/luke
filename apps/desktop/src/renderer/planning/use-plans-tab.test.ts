@@ -848,7 +848,9 @@ test("Settings' GitHub row is the connection main's view holds, its Connect and 
   act(() => {
     void tab.control().onConnectAccountGitHub();
   });
-  act(() => tab.control().onDisconnectAccountGitHub());
+  act(() => {
+    void tab.control().onDisconnectAccountGitHub();
+  });
   await settle();
 
   assert.deepEqual(tab.control().github, { connected: true, login: null });
@@ -874,7 +876,9 @@ test("a Disconnect whose page did not open says why in a toast", async () => {
     { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },
   );
 
-  act(() => tab.control().onDisconnectAccountGitHub());
+  act(() => {
+    void tab.control().onDisconnectAccountGitHub();
+  });
   await settle();
 
   assert.equal(newestToastSays(), refusal);

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -250,7 +249,7 @@ async function openChip(): Promise<HTMLButtonElement[]> {
   return [...document.querySelectorAll<HTMLButtonElement>("button")];
 }
 
-/** A read answering that Luke is installed on no account the workspace reaches. */
+/** A read answering that no GitHub is connected to the workspace. */
 const NOWHERE_INSTALLED = () =>
   Promise.resolve({
     repositories: {
@@ -260,45 +259,22 @@ const NOWHERE_INSTALLED = () =>
     },
   });
 
-test("a list refused for GitHub not connected points to Settings, and the menu's Open Settings opens the account's connected accounts", async () => {
-  const dialog = await mount(undefined, undefined, {
-    read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }),
-  });
-
-  const buttons = await openChip();
-  const alert = document.querySelector(".plan-compose-menu [role=alert]")?.textContent;
-  const open =
-    buttons.find((button) => button.textContent === "Open Settings") ??
-    assert.fail("the menu offers to open Settings");
-  act(() => open.click());
-
-  assert.equal(alert, "Connect GitHub in Settings to use a repository with Luke.");
-  assert.equal(
-    buttons.some((button) => button.textContent === "Retry"),
-    false,
-  );
-  assert.deepEqual(dialog.links, [
-    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
-  ]);
-});
-
-test("a workspace with Luke installed nowhere offers Open Settings at that workspace's GitHub repositories, and the chip itself installs nothing", async () => {
+test("an owner or admin of a workspace with no GitHub connected is told so and offered Open Settings at that workspace's GitHub repositories", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-acme",
     read: NOWHERE_INSTALLED,
   });
 
   const buttons = await openChip();
+  const notes = [...document.querySelectorAll(".plan-compose-menu-note")].map(
+    (note) => note.textContent,
+  );
   const open =
     buttons.find((button) => button.textContent === "Open Settings") ??
     assert.fail("the menu offers to open Settings");
   act(() => open.click());
 
-  assert.equal(
-    buttons.some((button) => button.textContent?.includes("Install")),
-    false,
-    "the chip offers no install of its own",
-  );
+  assert.deepEqual(notes, ["No GitHub is connected to this workspace yet."]);
   assert.deepEqual(dialog.links, [
     {
       page: SETTINGS_VIEW.WORKSPACE,
@@ -308,7 +284,7 @@ test("a workspace with Luke installed nowhere offers Open Settings at that works
   ]);
 });
 
-test("a member of a workspace with Luke installed nowhere is told to ask an owner or admin, and offered no Open Settings", async () => {
+test("a member of a workspace with no GitHub connected is told only to ask an owner or admin, with no Open Settings", async () => {
   await mount(undefined, undefined, {
     scope: "workspace-acme",
     manages: false,
@@ -320,9 +296,9 @@ test("a member of a workspace with Luke installed nowhere is told to ask an owne
     (note) => note.textContent,
   );
 
-  assert.ok(notes.includes("Ask an owner or admin to install Luke on GitHub."));
+  assert.deepEqual(notes, ["Ask an owner or admin to connect GitHub."]);
   assert.equal(
-    buttons.some((button) => button.textContent === "Open Settings"),
+    buttons.some((button) => ["Open Settings", "Retry"].includes(button.textContent ?? "")),
     false,
   );
 });

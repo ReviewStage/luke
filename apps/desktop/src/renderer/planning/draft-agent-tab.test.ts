@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -26,20 +25,15 @@ import type { AgentDraft } from "./use-coding-agents";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
- * Start GitHub refused offers Connect GitHub in place, which once GitHub is
- * connected and the window is back sends the message again by itself; a
- * connect withdrawn leaves the refusal and its press; any other refusal
- * offers Retry; a server the agent has on whose sign-in expired is offered
- * to reconnect in place. The window's GitHub connection is the test's to
- * change, as the host's read of it would.
+ * refused Start offers Retry; a server the agent has on whose sign-in
+ * expired is offered to reconnect in place; and the MCP popover's GitHub
+ * row connects the account's GitHub in place.
  */
 
 /** Where the account's Slack connection stands at the service; every other provider but GitHub is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
 /** Whether the next Connect the bridge is asked for is refused, as a service that does not answer refuses it. */
 let refuseConnect = false;
-/** Whether the browser opens the account's GitHub connect page. */
-let githubOpens = true;
 /** Where GitHub stands for the account, unavailable unless a test offers it. */
 let github: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 
@@ -58,15 +52,12 @@ const DRAFT: AgentDraft = {
   disabledServers: [],
 };
 
-const SIGN_IN_REFUSAL = startFailureNote(CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED);
-
 const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
   sent = [];
   refuseConnect = false;
-  githubOpens = true;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
   Object.defineProperty(window, "sidecar", {
@@ -123,11 +114,7 @@ async function settle(): Promise<void> {
 }
 
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
-function mount(
-  answers: (Failure | undefined)[],
-  draft: AgentDraft = DRAFT,
-  linked: GitHubConnection = { connected: false, login: null },
-) {
+function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
@@ -145,30 +132,28 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // The window's GitHub connection, drawn again as the host's read of it lands.
-  const draw = (connection: GitHubConnection | undefined) =>
-    act(() =>
-      root.render(
+  act(() =>
+    root.render(
+      createElement(
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => links.push(link) },
         createElement(
-          OpenSettingsProvider,
-          { value: (link: SettingsLink) => links.push(link) },
-          createElement(
-            GitHubConnectProvider,
-            {
-              value: {
-                connection,
-                connect: () => {
-                  github.connects += 1;
-                  return Promise.resolve(githubOpens);
-                },
+          GitHubConnectProvider,
+          {
+            value: {
+              connection: { connected: false, login: null },
+              connect: () => {
+                github.connects += 1;
+                return Promise.resolve(true);
               },
+              disconnect: () => Promise.resolve(false),
             },
-            createElement(DraftAgentTab, { draft, control }),
-          ),
+          },
+          createElement(DraftAgentTab, { draft, control }),
         ),
       ),
-    );
-  draw(linked);
+    ),
+  );
   // A press is named by its words; the mark before them carries a title of its own.
   const button = (words: string) =>
     [...container.querySelectorAll("button")].find((each) =>
@@ -181,11 +166,6 @@ function mount(
     links,
     settings,
     github,
-    /** GitHub connected, as the host reads it once the window is back from the browser. */
-    connected: async () => {
-      draw({ connected: true, login: "dean" });
-      await settle();
-    },
     send: async () => {
       const field = container.querySelector("textarea");
       assert.ok(field, "the draft's box is drawn");
@@ -205,80 +185,13 @@ function mount(
   };
 }
 
-/** The window coming back from the browser. */
-async function windowBack(): Promise<void> {
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
-  await settle();
-}
-
-test("a Start GitHub refused offers Connect GitHub in place, and once GitHub is connected and the window is back the message is sent again by itself", async () => {
-  const tab = mount([SIGN_IN_REFUSAL, undefined]);
-  await tab.send();
-  assert.match(tab.note() ?? "", /^Connect GitHub to start an agent\./u);
-  assert.equal(tab.button("Retry"), undefined, "Retry cannot mend it");
-
-  await tab.press("Connect GitHub");
-  assert.equal(tab.github.connects, 1, "the press connects GitHub in the browser");
-  assert.ok(tab.button("Waiting for browser…")?.disabled, "the press waits on the browser");
-  assert.deepEqual(tab.links, [], "nothing leaves for Settings");
-  assert.deepEqual(tab.starts, [DRAFT.task]);
-
-  await windowBack();
-  assert.deepEqual(tab.starts, [DRAFT.task], "back without GitHub connected, nothing is sent");
-  await tab.connected();
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-  assert.equal(tab.note(), undefined);
-});
-
-test("a GitHub connect withdrawn leaves the refusal with its press, and a connect that lands after sends nothing", async () => {
-  const tab = mount([SIGN_IN_REFUSAL]);
-  await tab.send();
-
-  await tab.press("Connect GitHub");
-  await tab.press("Cancel");
-  assert.match(tab.note() ?? "", /^Connect GitHub to start an agent\./u);
-  assert.ok(tab.button("Connect GitHub"), "the press is offered again");
-
-  await windowBack();
-  await tab.connected();
-  assert.deepEqual(tab.starts, [DRAFT.task]);
-});
-
-test("a GitHub already linked whose authorization lapsed sends nothing on the window's return until GitHub is read again", async () => {
-  const tab = mount([SIGN_IN_REFUSAL, undefined], DRAFT, { connected: true, login: "dean" });
-  await tab.send();
-
-  await tab.press("Connect GitHub");
-  await windowBack();
-  assert.deepEqual(tab.starts, [DRAFT.task], "the connection held on return is not a landing");
-  assert.ok(tab.button("Waiting for browser…"), "the press still waits");
-
-  await tab.connected();
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-});
-
-test("a GitHub connect page that could not be opened ends the wait at once", async () => {
-  githubOpens = false;
-  const tab = mount([SIGN_IN_REFUSAL]);
-  await tab.send();
-
-  await tab.press("Connect GitHub");
-
-  assert.equal(tab.button("Waiting for browser…"), undefined);
-  assert.ok(tab.button("Connect GitHub"), "the press is offered again");
-});
-
-test("a refusal a GitHub connect does not mend offers Retry, and no Connect GitHub", async () => {
+test("a refused Start offers Retry, which sends the message again", async () => {
   const tab = mount([startFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), undefined]);
   await tab.send();
   assert.match(tab.note() ?? "", /could not be started/u);
-  assert.equal(tab.button("Connect GitHub"), undefined);
 
   await tab.press("Retry");
   assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-  assert.equal(tab.github.connects, 0);
 });
 
 test("a server the agent has on whose sign-in expired is offered to reconnect under the box, and one it has off is not", async () => {

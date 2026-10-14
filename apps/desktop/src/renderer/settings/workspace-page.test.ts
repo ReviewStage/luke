@@ -33,9 +33,9 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
  * are read and listed, the page holding itself back while they are, an
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
- * invites by address and role and copies or cancels what is pending, and a
- * team's owner or admin connects or disconnects the workspace's GitHub
- * repositories.
+ * invites by address and role and copies or cancels what is pending, and
+ * every workspace's GitHub repositories, the personal one's too, are an
+ * owner's or an admin's to connect or disconnect and a member's to read.
  * Synthetic accounts.
  */
 
@@ -87,6 +87,7 @@ let firstRead: Promise<void> | undefined;
 let refuseLaterReads = false;
 /** Where the next invitation waits before the service makes it, so a test can hold it on the wire. */
 let inviteHeld: Promise<void> | undefined;
+/** Whether the page is drawn by a development build, which may point at a Preview. */
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -385,33 +386,40 @@ test("a member leaves after confirming, which lists the personal workspace again
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the personal workspace says it is yours and lists no members and no GitHub repositories", async () => {
+test("the personal workspace says it is yours, lists no members, and offers its owner Connect for its GitHub repositories", async () => {
   const { page } = await mount(PERSONAL);
+  const row = rowNamed(page, "GitHub");
+  act(() => button(row, "Connect").click());
+  await settle();
 
-  assert.deepEqual(sent, []);
   assert.equal(pickerLine(page), "Your personal workspace. Its plans are yours alone.");
   assert.equal(page.querySelector(".workspace-invite"), null);
   assert.deepEqual(
     [...page.querySelectorAll(".settings-row strong")].map((each) => each.textContent),
-    ["Workspace"],
-    "the personal workspace offers no members and no GitHub repositories",
+    ["Workspace", "GitHub"],
   );
+  assert.equal(
+    row.querySelector("small")?.textContent,
+    "Not connected. Connect one to use its repositories in this workspace.",
+  );
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: PERSONAL.id } },
+  ]);
 });
 
-test("an admin sees the team's GitHub organization, led by GitHub's mark, and disconnects it from its ⋯ after confirming", async () => {
+test("an admin sees whose repositories the workspace has, led by GitHub's mark, and disconnects them from the row's ⋯ after confirming", async () => {
   const { page } = await mount({
     ...ACME,
     role: WORKSPACE_ROLE.ADMIN,
     github: { login: "acme", active: true },
   });
-  const row = rowNamed(page, "GitHub organization");
+  const row = rowNamed(page, "Repositories from acme");
   const mark = row.querySelector(".settings-row-mark")?.innerHTML;
 
   await chooseAction(row, "Disconnect");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT);
   await confirm("Disconnect");
 
-  assert.equal(row.querySelector("small")?.textContent, "acme");
   assert.equal(
     mark,
     renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
@@ -425,16 +433,17 @@ test("an admin sees the team's GitHub organization, led by GitHub's mark, and di
   );
 });
 
-test("an owner of a workspace with no GitHub organization is offered Connect, a connected one Choose repositories on GitHub, and a member sees no GitHub repositories", async () => {
+test("an owner of a workspace with no GitHub is offered Connect, and an admin of a connected one Choose repositories on GitHub", async () => {
   const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  act(() => button(rowNamed(owner.page, "GitHub organization"), "Connect").click());
+  act(() => button(rowNamed(owner.page, "GitHub"), "Connect").click());
   const admin = await mount({
     ...ACME,
     role: WORKSPACE_ROLE.ADMIN,
     github: { login: "acme", active: true },
   });
-  act(() => button(rowNamed(admin.page, "GitHub organization"), "Choose repositories").click());
-  const member = await mount({ ...ACME, github: { login: "acme", active: true } });
+  act(() =>
+    button(rowNamed(admin.page, "Repositories from acme"), "Choose repositories on GitHub").click(),
+  );
   await settle();
 
   assert.deepEqual(
@@ -443,12 +452,21 @@ test("an owner of a workspace with no GitHub organization is offered Connect, a 
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }, { workspaceId: ACME.id }],
   );
+});
+
+test("a member reads whose repositories the workspace has, or is told to ask an owner or admin, and is offered no button or ⋯", async () => {
+  const connected = await mount({ ...ACME, github: { login: "acme", active: true } });
+  const connectedRow = rowNamed(connected.page, "Repositories from acme");
+  const unconnected = await mount(ACME);
+  const unconnectedRow = rowNamed(unconnected.page, "GitHub");
+
   assert.equal(
-    [...member.page.querySelectorAll(".settings-row strong")].some(
-      (each) => each.textContent === "GitHub organization",
-    ),
-    false,
+    unconnectedRow.querySelector("small")?.textContent,
+    "No GitHub connected. Ask an owner or admin.",
   );
+  for (const row of [connectedRow, unconnectedRow]) {
+    assert.equal(row.querySelector("button"), null);
+  }
 });
 
 test("the picker shows another workspace on the page, the account's role, and its own members", async () => {
@@ -667,7 +685,7 @@ test("a Disconnect asked for one workspace does not stand over another listed in
     github: { login: "acme", active: true },
   };
   const { page, relist } = await mount(connected);
-  await chooseAction(rowNamed(page, "GitHub organization"), "Disconnect");
+  await chooseAction(rowNamed(page, "Repositories from acme"), "Disconnect");
   const asked = dialog().querySelector("h2")?.textContent;
 
   await relist({

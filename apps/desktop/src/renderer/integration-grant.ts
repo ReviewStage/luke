@@ -16,10 +16,10 @@ import type { IntegrationStatuses } from "./integration-statuses";
  * A provider granted through Vercel Connect begins a browser sign-in there:
  * the host opens it, the provider stands pending, and the window reads it
  * again on its return (`integration-statuses.ts`). GitHub is granted by the
- * account's own GitHub (`INTEGRATION_GRANT_OF`), so its grant is the connect
- * Settings › Connected accounts runs, begun in place (`github-connect.tsx`),
- * which links GitHub to an account made with Google too, and is read again
- * on the window's return in the same way.
+ * account's own GitHub (`INTEGRATION_GRANT_OF`), so its grant is that
+ * GitHub's connect (`github-connect.tsx`), which links GitHub to an account
+ * made with Google too, and is read again on the window's return in the
+ * same way.
  */
 
 /** How a grant begun went, as the surface that began it says. */

@@ -12,7 +12,7 @@ import { useId } from "react";
  * one door to them, so GitHub's mark is traced once whether it stands for
  * the account's sign-in, its connected GitHub, a workspace's organization,
  * or the GitHub integration: the sign-in buttons, Settings › Account,
- * Connected accounts, Workspace and Integrations, the composer's list of
+ * Workspace and Integrations, the composer's list of
  * servers, and anywhere else a provider is named draw it. The harnesses a
  * model runs in are not providers of this kind and have their own marks
  * (`harness-marks.tsx`). The web's pages draw the same marks in their own

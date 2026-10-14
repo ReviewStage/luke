@@ -41,7 +41,7 @@ import {
  * why, and nothing the service said beyond that reaches it. The failures
  * are the few a window can act on: the service never answered, the plan or
  * the agent is gone, the plan names no repository yet, the App does not
- * reach it, the account must sign in with GitHub again, the choice named is
+ * reach it, the choice named is
  * not one the service offers now, or — for a message, and for an answer to
  * the plan's inbox, which may reach the agent as one — the words run past
  * the bound, the agent's session is still coming up, or it has ended for
@@ -71,8 +71,6 @@ export const CODING_AGENT_CALL_FAILURE = {
   NO_REPOSITORY: "no-repository",
   /** The plan's repository is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The account must sign in with GitHub again before the service can read GitHub for it. */
-  GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
   /** The model or effort named is not one the service offers now. */
   INVALID_CHOICE: "invalid-choice",
   /** The message spells more characters than one message to an agent may; shortened, it is taken. */

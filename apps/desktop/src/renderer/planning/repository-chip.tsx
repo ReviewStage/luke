@@ -5,7 +5,7 @@ import { GearIcon } from "@sidecar/panel";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
-import { CONNECTED_ACCOUNTS_LINK, OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
+import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
@@ -24,18 +24,15 @@ import { repositoryFailureNote } from "./planning-model";
  * one, the sidebar's row says which and the toolbar draws no chip, and the
  * menu alone is left, opened by the plan menu's Change repository and
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
- * repository the Luke GitHub App reaches, the repositories the account's
- * plans were about lately first and the rest as GitHub last saw them
- * change, each under its owner's picture, and
- * pinned under the list the page on GitHub where the developer chooses
- * which repositories the App reaches, which with the App installed nowhere
- * is the page that installs it. With the App installed nowhere and no
- * repository named, the chip offers installing it instead of a menu; with
- * the list refused for GitHub not connected, the menu offers connecting it
- * in place of Retry. The
- * list is read from the service when the chip mounts and again whenever
- * the window takes focus, so a developer back from installing the App in
- * the browser sees the change on the next opening; nothing polls. The menu
+ * repository the GitHub connected to the workspace reaches, the
+ * repositories the account's plans were about lately first and the rest as
+ * GitHub last saw them change, each under its owner's picture. With no
+ * GitHub connected to the workspace, the menu says so in the list's place:
+ * an owner or an admin is offered Open Settings at the workspace's GitHub
+ * repositories, the one place they are set, and a member is told to ask
+ * one. The list is read from the service when the chip mounts and again
+ * whenever the window takes focus, so a developer back from connecting
+ * GitHub in the browser sees the change on the next opening; nothing polls. The menu
  * closes on a choice, on Escape, and on focus leaving it; Escape stops
  * there, so it closes the menu and not the panel behind it.
  */
@@ -52,7 +49,7 @@ export interface RepositoryChooser {
   pictures: boolean;
   /** The workspace the list is for, where one is chosen; a chip keyed by it reads afresh when it changes. */
   scope?: string | undefined;
-  /** Whether the account manages that workspace, so can install Luke there; a member is told to ask. */
+  /** Whether the account manages that workspace, so can connect its GitHub; a member is told to ask. */
   manages: boolean;
 }
 
@@ -76,8 +73,8 @@ const CHOOSE_LABEL = "Choose repository";
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
-  NOT_INSTALLED: "Luke isn't installed on GitHub for this workspace yet.",
-  ASK_TO_INSTALL: "Ask an owner or admin to install Luke on GitHub.",
+  NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
+  ASK_TO_CONNECT: "Ask an owner or admin to connect GitHub.",
   NO_MATCH: "No repositories match",
 } as const;
 
@@ -170,19 +167,12 @@ export function RepositoryChip(props: {
 
   const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
-  // GitHub not connected, and the App installed nowhere, are each mended in
-  // Settings, at their own place; a member's Workspace page draws no
-  // GitHub repositories, so a member is told to ask instead.
-  const mendedAt: SettingsLink | undefined =
-    failure === PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED
-      ? CONNECTED_ACCOUNTS_LINK
-      : listed !== undefined && !listed.installed && chooser.manages
-        ? {
-            page: SETTINGS_VIEW.WORKSPACE,
-            section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-            ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
-          }
-        : undefined;
+  // No GitHub connected is mended at the workspace's GitHub repositories.
+  const workspaceGitHub: SettingsLink = {
+    page: SETTINGS_VIEW.WORKSPACE,
+    section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+    ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
+  };
   const label = props.value ?? CHOOSE_LABEL;
   const press = () => {
     opener.current = trigger.current;
@@ -192,35 +182,34 @@ export function RepositoryChip(props: {
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
-  const openSettingsRow =
-    mendedAt === undefined ? null : (
-      <button
-        type="button"
-        className="plan-compose-menu-row"
-        onClick={() => choose(() => openSettings(mendedAt))}
-      >
-        <GearIcon />
-        <span className="plan-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
-      </button>
-    );
   const note =
     failure !== undefined ? (
       <>
         <p className="plan-compose-menu-note" role="alert">
           {repositoryFailureNote(failure)}
         </p>
-        {openSettingsRow ?? (
-          <button type="button" className="plan-compose-menu-row" onClick={read}>
-            <RotateCwIcon aria-hidden="true" />
-            <span className="plan-compose-menu-name">Retry</span>
-          </button>
-        )}
+        <button type="button" className="plan-compose-menu-row" onClick={read}>
+          <RotateCwIcon aria-hidden="true" />
+          <span className="plan-compose-menu-name">Retry</span>
+        </button>
       </>
     ) : listed !== undefined && !listed.installed ? (
-      <>
-        <p className="plan-compose-menu-note">{MENU_NOTE.NOT_INSTALLED}</p>
-        {openSettingsRow ?? <p className="plan-compose-menu-note">{MENU_NOTE.ASK_TO_INSTALL}</p>}
-      </>
+      // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
+      chooser.manages ? (
+        <>
+          <p className="plan-compose-menu-note">{MENU_NOTE.NOT_CONNECTED}</p>
+          <button
+            type="button"
+            className="plan-compose-menu-row"
+            onClick={() => choose(() => openSettings(workspaceGitHub))}
+          >
+            <GearIcon />
+            <span className="plan-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
+          </button>
+        </>
+      ) : (
+        <p className="plan-compose-menu-note">{MENU_NOTE.ASK_TO_CONNECT}</p>
+      )
     ) : list === undefined ? (
       <div className="plan-compose-menu-note">
         <Spinner label="Loading repositories" />

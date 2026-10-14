@@ -34,10 +34,12 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * them now, each with its email and role. An owner or an admin invites
  * people by address and role, sees the invitations still pending with each
  * one's accept link to copy and send, and cancels one; removes a member who
- * is not an owner; and anyone but an owner leaves. For a team's owner or
- * admin, GitHub repositories connects one GitHub organization's installation
- * of the Luke GitHub App to the workspace, or names the connected account
- * with Choose repositories, the App's page on GitHub, and Disconnect.
+ * is not an owner; and anyone but an owner leaves. GitHub repositories, the
+ * one place a workspace's repositories are set, the personal one's too,
+ * connects one GitHub account's installation of the Luke GitHub App to the
+ * workspace for an owner or an admin, or names the connected account with
+ * Choose repositories on GitHub, the App's page there, and Disconnect; a
+ * member sees which account is connected, or is told to ask.
  *
  * Its rows are the Settings kit's: a row's one constructive act stands at
  * its end, and the rest are its ⋯'s (`menu-row.tsx`), each act that cannot
@@ -45,8 +47,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * it was asked. The page draws whole: while the members or the invitations
  * are being read it holds itself back (`.settings-reading`), and a read that
  * failed says so in red with Retry. The personal workspace has no team, so
- * it draws no members, and connects no GitHub organization, which the
- * service refuses it.
+ * it draws no members.
  */
 
 /** What each role reads as on a member's row. */
@@ -61,8 +62,14 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** The roles an invitation offers, in the order the form's segments draw them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
-/** What the GitHub organization's line says once the App's installation was suspended or removed. */
+/** What the connected GitHub account's line says once the App's installation was suspended or removed. */
 const GITHUB_SUSPENDED = "Suspended or removed on GitHub.";
+
+/** What GitHub repositories says where no GitHub is connected, by who is reading it. */
+const GITHUB_UNCONNECTED = {
+  MANAGES: "Not connected. Connect one to use its repositories in this workspace.",
+  MEMBER: "No GitHub connected. Ask an owner or admin.",
+} as const;
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -396,16 +403,36 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
   );
 }
 
+/** The connected GitHub account's row words: whose repositories they are, and whether GitHub suspended them. */
+function ConnectedCopy({
+  github,
+}: {
+  github: NonNullable<Workspace["github"]>;
+}): React.JSX.Element {
+  return (
+    <RowCopy
+      name={`Repositories from ${github.login}`}
+      line={
+        github.active ? undefined : (
+          <span className="settings-state" data-state="attention">
+            {GITHUB_SUSPENDED}
+          </span>
+        )
+      }
+    />
+  );
+}
+
 /**
- * The workspace's GitHub organization, for an owner or an admin: Connect
- * while none is, which installs the Luke GitHub App on a GitHub organization
- * for this workspace, or the connected account with Choose repositories, the
- * App's page on GitHub where its repositories are chosen, and Disconnect in
- * its ⋯. Both GitHub pages open in the browser through the one connect,
- * whose return to Luke links the installation to this workspace; a page
- * that could not be opened says why under the row.
+ * The workspace's GitHub, for an owner or an admin: Connect while none is,
+ * which installs the Luke GitHub App on a GitHub account for this
+ * workspace, or the connected account with Choose repositories on GitHub,
+ * the App's page there, and Disconnect in its ⋯. Both GitHub pages open in
+ * the browser through the one connect, whose return to Luke links the
+ * installation to this workspace; a page that could not be opened says why
+ * under the row.
  */
-function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.Element {
+function ManagedGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
   const { github } = workspace;
   const workspaceId = workspace.id;
@@ -425,26 +452,17 @@ function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.
       : [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }];
   return (
     <>
-      <MenuRow label="GitHub organization actions" actions={actions}>
+      <MenuRow label="GitHub actions" actions={actions}>
         <span className="settings-row-mark">
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
         </span>
-        <RowCopy
-          name="GitHub organization"
-          line={
-            github === null ? (
-              "Not connected. Connect one to use its repositories in this workspace."
-            ) : github.active ? (
-              github.login
-            ) : (
-              <span className="settings-state" data-state="attention">
-                {`${github.login} · ${GITHUB_SUSPENDED}`}
-              </span>
-            )
-          }
-        />
+        {github === null ? (
+          <RowCopy name="GitHub" line={GITHUB_UNCONNECTED.MANAGES} />
+        ) : (
+          <ConnectedCopy github={github} />
+        )}
         <button type="button" className="toolbar-button bordered-button" onClick={open}>
-          {github === null ? "Connect" : "Choose repositories"}
+          {github === null ? "Connect" : "Choose repositories on GitHub"}
         </button>
       </MenuRow>
       {refusal === undefined ? null : (
@@ -457,13 +475,35 @@ function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.
           confirm={disconnect}
           question={{
             title: `Disconnect ${github.login} from ${workspace.name}?`,
-            body: "Its plans lose the organization's repositories until one is connected again.",
+            body: "Its plans lose these repositories until GitHub is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}
         />
       )}
     </>
+  );
+}
+
+/**
+ * The workspace's GitHub repositories: an owner's or an admin's to set, and
+ * for a member, read only, the connected account or the ask to have one.
+ */
+function GitHubRepositories({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  if (managesWorkspace(workspace)) {
+    return <ManagedGitHub workspace={workspace} />;
+  }
+  return (
+    <div className="settings-row">
+      <span className="settings-row-mark">
+        <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+      </span>
+      {workspace.github === null ? (
+        <RowCopy name="GitHub" line={GITHUB_UNCONNECTED.MEMBER} />
+      ) : (
+        <ConnectedCopy github={workspace.github} />
+      )}
+    </div>
   );
 }
 
@@ -524,8 +564,8 @@ function WorkspaceHead({
 }
 
 /**
- * The page for one workspace: its head, a team's members, and, for a team's
- * owner or admin, its GitHub repositories; held back, as a page still
+ * The page for one workspace: its head, a team's members, and its GitHub
+ * repositories; held back, as a page still
  * reading is, before the workspaces are read, and Retry where that read failed.
  */
 export function WorkspacePage({
@@ -556,11 +596,9 @@ export function WorkspacePage({
           </Fragment>
         </SettingsGroup>
       )}
-      {!workspace.personal && managesWorkspace(workspace) ? (
-        <SettingsGroup title="GitHub repositories" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
-          <GitHubRepositories key={workspace.id} workspace={workspace} />
-        </SettingsGroup>
-      ) : null}
+      <SettingsGroup title="GitHub repositories" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+        <GitHubRepositories key={workspace.id} workspace={workspace} />
+      </SettingsGroup>
     </>
   );
 }

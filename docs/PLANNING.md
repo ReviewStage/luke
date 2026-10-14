@@ -193,10 +193,10 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
    ones first and the rest as GitHub last saw them change, each under the
    GitHub mark or a lock where it is private, with a check on the chosen
    one, in a list that scrolls past a bounded height. The chip only chooses:
-   with GitHub not connected, or the App installed nowhere for the
-   workspace, its menu says so with one `Open Settings` row, to the
-   account's Connected accounts or to the workspace's GitHub repositories
-   in Settings, where the App is installed and its repositories chosen. With no repository used before it reads
+   with no GitHub connected to the workspace, its menu says so, with one
+   `Open Settings` row for an owner or an admin to the workspace's GitHub
+   repositories in Settings, where the App is installed and its
+   repositories chosen, and for a member a line to ask one. With no repository used before it reads
    `Choose repository`; a plan can start without one and be given one later.
    The list is read when the chip mounts and again whenever the window takes
    focus, which is how the chip picks up an App installed in the browser
@@ -1216,11 +1216,10 @@ one.
 - **Loading a plan.** The document region shows the failure and `Try again`.
 - **Start.** The service refuses to start an agent on a plan with no
   repository (`no-repository`, 409), on one the Luke GitHub App no longer
-  reaches for the account (`repository-not-reachable`, 403), or while the
-  account must sign in with GitHub again (`github-sign-in-required`, 403),
-  and answers `unavailable` where eve did not take the session; the reason is
-  said beside the button until the next press. An agent that ends `failed`
-  or `cancelled` says so in its tab's head, and anything it pushed stays.
+  reaches for the workspace (`repository-not-reachable`, 403), and answers
+  `unavailable` where eve did not take the session; the reason is said
+  beside the button until the next press. An agent that ends `failed` or
+  `cancelled` says so in its tab's head, and anything it pushed stays.
 
 ## What each part reuses
 

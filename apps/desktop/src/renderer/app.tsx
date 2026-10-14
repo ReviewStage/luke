@@ -476,7 +476,11 @@ export function App(): React.JSX.Element {
   return (
     <OpenSettingsProvider value={openSettings}>
       <GitHubConnectProvider
-        value={{ connection: plans.github, connect: plans.onConnectAccountGitHub }}
+        value={{
+          connection: plans.github,
+          connect: plans.onConnectAccountGitHub,
+          disconnect: plans.onDisconnectAccountGitHub,
+        }}
       >
         <div
           className="app-stage"
@@ -544,11 +548,6 @@ export function App(): React.JSX.Element {
                 settings,
                 shortcuts,
                 workspace,
-                github: {
-                  connection: plans.github,
-                  onConnect: plans.onConnectAccountGitHub,
-                  onDisconnect: plans.onDisconnectAccountGitHub,
-                },
               }}
             />
           </div>

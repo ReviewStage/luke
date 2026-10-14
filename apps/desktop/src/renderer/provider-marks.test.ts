@@ -13,7 +13,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { type MarkedProvider, ProviderMark } from "./provider-marks";
 import { AccountSection } from "./settings/account-section";
-import { GitHubSection } from "./settings/github-section";
 import { SignInGate } from "./sign-in-gate";
 
 /**
@@ -165,7 +164,7 @@ test("every provider's mark lies inside its own box and fills it", () => {
   }
 });
 
-test("the sign-in buttons, the account's line, and Connected accounts each draw the provider's one mark beside its name", () => {
+test("the sign-in buttons and the account's line each draw the provider's one mark beside its name", () => {
   const gate = drawn(
     createElement(SignInGate, {
       account: { status: ACCOUNT_STATUS.SIGNED_OUT },
@@ -176,15 +175,6 @@ test("the sign-in buttons, the account's line, and Connected accounts each draw 
   );
   const button = (provider: AccountProvider) =>
     gate.querySelector(`button[data-provider="${provider}"]`);
-  const connected = drawn(
-    createElement(GitHubSection, {
-      control: {
-        connection: { connected: true, login: null },
-        onConnect: () => undefined,
-        onDisconnect: () => undefined,
-      },
-    }),
-  );
 
   assert.equal(markIn(button(ACCOUNT_PROVIDER.GOOGLE)), markOf(ACCOUNT_PROVIDER.GOOGLE));
   assert.equal(markIn(button(ACCOUNT_PROVIDER.GITHUB)), markOf(ACCOUNT_PROVIDER.GITHUB));
@@ -194,5 +184,4 @@ test("the sign-in buttons, the account's line, and Connected accounts each draw 
       markOf(provider),
     );
   }
-  assert.equal(markIn(connected.querySelector(".settings-row")), markOf(ACCOUNT_PROVIDER.GITHUB));
 });

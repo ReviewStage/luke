@@ -137,7 +137,6 @@ function succeeded<Answer>(answer: Answer) {
 /** The refusals a call that names a repository can answer with, by the service's own word for each. */
 const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
 } as const;
 
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
@@ -246,8 +245,7 @@ export class HostedPlanClient {
    * The repositories the account reaches through the Luke GitHub App, or
    * only those of the installation the workspace given stands for, with
    * whether the App is installed anywhere for it and where to install it;
-   * or why there is no list: the service did not answer, or the account must
-   * sign in with GitHub again.
+   * or why there is none: the service did not answer.
    */
   repositories(
     workspaceId?: string,
@@ -268,23 +266,18 @@ export class HostedPlanClient {
       });
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const listed = Result.getOrUndefined(
-          readServiceAnswer(githubRepositoriesAnswerSchema)(payload),
-        );
-        return listed === undefined ? UNANSWERED : succeeded(listed);
-      }
-      return refusedAs(payload, {
-        [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
-      });
+      if (!answer.response.ok) return UNANSWERED;
+      const listed = Result.getOrUndefined(
+        readServiceAnswer(githubRepositoriesAnswerSchema)(payload),
+      );
+      return listed === undefined ? UNANSWERED : succeeded(listed);
     });
   }
 
   /**
    * Gives one plan its repository, or takes it away with null, answering
    * the plan as changed; or why it is unchanged: the service did not answer,
-   * the App does not reach that repository for the account, or the account
-   * must sign in with GitHub again. A name the service would refuse by shape
+   * or the App does not reach that repository for the account. A name the service would refuse by shape
    * is refused here without traveling at all.
    */
   setRepository(

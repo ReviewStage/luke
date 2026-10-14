@@ -1,8 +1,7 @@
-import { PLAN_FILE_REFUSAL, type PlanFileRequest } from "@sidecar/hosted/plan-wire";
+import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFindOpen } from "../find-in-tab";
-import { CONNECTED_ACCOUNTS_LINK, OpenSettingsButton } from "../open-settings";
 import { READ_FAILURE_PLACE, ReadFailure, type ReadFailurePlace } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
@@ -236,14 +235,9 @@ function ReadNotice({
     return <ReadFailure line={line} onRetry={onRetry} place={place} />;
   }
   return (
-    <>
-      <p className="m-0" role="alert">
-        {refusalLine(read.refusal, read.branch, commit)}
-      </p>
-      {read.refusal === PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED ? (
-        <OpenSettingsButton link={CONNECTED_ACCOUNTS_LINK} />
-      ) : null}
-    </>
+    <p className="m-0" role="alert">
+      {refusalLine(read.refusal, read.branch, commit)}
+    </p>
   );
 }
 

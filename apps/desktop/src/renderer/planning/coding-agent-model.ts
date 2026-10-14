@@ -202,7 +202,6 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
-    case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
@@ -249,14 +248,12 @@ export function archiveWords(archived: boolean): {
 
 /** What a Start that did not start says beside the button, and what mends it. */
 export function startFailureNote(failure: CodingAgentCallFailure): Failure {
-  return callFailure(failure, startFailureWords(failure));
+  return callFailure(startFailureWords(failure));
 }
 
-/** A refused call's words with what mends them: a sign-in through GitHub where that is why, else trying again. */
-function callFailure(failure: CodingAgentCallFailure, text: string): Failure {
-  return failure === CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED
-    ? { reason: FAILURE_REASON.GITHUB_SIGN_IN, text }
-    : { reason: FAILURE_REASON.OTHER, text };
+/** A refused call's words, which trying again mends. */
+function callFailure(text: string): Failure {
+  return { reason: FAILURE_REASON.OTHER, text };
 }
 
 /** What a Start that did not start says, by why. */
@@ -264,8 +261,6 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
       return START_NEEDS_REPOSITORY;
-    case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
-      return "Connect GitHub to start an agent.";
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
@@ -283,7 +278,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
 
 /** What a message that did not reach the agent says under the composer, and what mends it. */
 export function messageFailureNote(failure: CodingAgentCallFailure): Failure {
-  return callFailure(failure, messageFailureWords(failure));
+  return callFailure(messageFailureWords(failure));
 }
 
 /** What a message that did not reach the agent says, by why. */
@@ -291,8 +286,6 @@ function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
-      return "Connect GitHub to message the agent.";
     // A message names no repository and no model, so neither refusal is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:

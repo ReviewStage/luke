@@ -21,13 +21,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActOutcome,
-  GITHUB_LAST_SIGN_IN_REFUSAL,
-} from "#shared/messages/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
 import { GitHubConnectProvider } from "../github-connect";
 import type { IntegrationTool, IntegrationToolIndex } from "../integration-health";
@@ -45,17 +39,15 @@ import { type IntegrationsSearch, IntegrationsSection } from "./integrations-pag
  * that fails still offers to read again. A row's button is for a problem
  * alone: a connection that works stands quiet, keeping Reconnect in its ⋯
  * beside Disconnect, and one expired or refused shows Reconnect on the row.
- * GitHub, which the account's own GitHub grants, is connected in place
- * through the account's GitHub connect, stands among the rows by its name,
- * and once connected keeps the same ⋯ as the rest, its Disconnect the
- * account's own GitHub disconnect. A Connect stands its provider pending at the service until the bridge
- * settles it, as the browser would, or a Cancel ends it. A connected
+ * GitHub, which the account's own GitHub grants, says what it is for, is
+ * connected in place through the account's GitHub connect, stands among the
+ * rows by its name, and once connected keeps the same ⋯ as the rest, its
+ * Disconnect the account's own GitHub disconnect. A Connect stands its
+ * provider pending at the service until the bridge settles it, as the
+ * browser would, or a Cancel ends it. A connected
  * provider's server lists the tools the bridge holds for it, which its row
  * opens onto in place, and which the page's search finds.
  */
-
-/** Where the service sends the developer to choose the Luke GitHub App's repositories. */
-const INSTALLATION_URL = "https://github.com/apps/luke/installations/new";
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
 let withheld: readonly IntegrationProvider[] = [];
@@ -63,8 +55,8 @@ let withheld: readonly IntegrationProvider[] = [];
 let refuseRead = false;
 /** Whether the account's own GitHub is connected, which is where GitHub stands. */
 let githubConnected = false;
-/** Whether the account's GitHub disconnect is refused, as it is where GitHub is the account's only sign-in. */
-let onlySignIn = false;
+/** Whether the account's GitHub disconnect is refused, its refusal the window's toast rather than the page's. */
+let refuseGitHubDisconnect = false;
 /** Where a provider stands where it is not disconnected, GitHub's own aside. */
 const standing = new Map<IntegrationProvider, IntegrationStatus>();
 /** What a provider's server answered when asked for its tools, over the tools it lists. */
@@ -75,6 +67,8 @@ let sent: Act[] = [];
 let links: SettingsLink[] = [];
 /** How many times the account's GitHub connect was begun. */
 let githubConnects = 0;
+/** How many times the account's GitHub disconnect was asked. */
+let githubDisconnects = 0;
 /** Whether another window begins the sign-in again while the next Cancel is out, so the Cancel finds it pending. */
 let reopenedDuringCancel = false;
 /** Where the service stands a provider a Connect or a Cancel has touched, over where it would otherwise. */
@@ -107,12 +101,13 @@ beforeEach(() => {
   withheld = [];
   refuseRead = false;
   githubConnected = false;
-  onlySignIn = false;
+  refuseGitHubDisconnect = false;
   standing.clear();
   toolReads.clear();
   sent = [];
   links = [];
   githubConnects = 0;
+  githubDisconnects = 0;
   touched.clear();
   listed.clear();
   reopenedDuringCancel = false;
@@ -162,22 +157,6 @@ function answerOf(request: Act): ActOutcome {
         ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
         : { status: DONE, value: { tools } };
     }
-    case ACT_KIND.PLANNING_REPOSITORIES:
-      return {
-        status: DONE,
-        value: {
-          repositories: { installed: true, repositories: [], installationUrl: INSTALLATION_URL },
-        },
-      };
-    case ACT_KIND.GITHUB_OPEN:
-      return { status: DONE, value: undefined };
-    // Where GitHub is the account's only way to sign in, the service refuses to unlink it.
-    case ACT_KIND.GITHUB_DISCONNECT:
-      if (onlySignIn) {
-        return { status: ACT_OUTCOME_STATUS.REFUSED, reason: GITHUB_LAST_SIGN_IN_REFUSAL };
-      }
-      githubConnected = false;
-      return { status: DONE, value: undefined };
     default:
       return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
   }
@@ -214,6 +193,11 @@ async function mount(
           connect: () => {
             githubConnects += 1;
             return Promise.resolve(true);
+          },
+          disconnect: () => {
+            githubDisconnects += 1;
+            if (!refuseGitHubDisconnect) githubConnected = false;
+            return Promise.resolve(!refuseGitHubDisconnect);
           },
         },
       },
@@ -357,7 +341,7 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.equal(
     [...page.querySelectorAll("button")].filter((button) => button.textContent === "Connect")
       .length,
-    10,
+    11,
   );
 });
 
@@ -385,7 +369,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
+test("GitHub, granted by the account's own GitHub, says it lets agents use GitHub tools as you and offers Connect, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -393,8 +377,11 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
   const buttonNamed = (name: string) =>
     [...page.querySelectorAll("button")].find((button) => button.textContent === name);
 
-  const connect = buttonNamed("Connect GitHub") ?? assert.fail("Connect GitHub is offered");
-  assert.equal(buttonNamed("Connect"), undefined);
+  assert.equal(
+    page.querySelector(".settings-copy small")?.textContent,
+    "Lets agents use GitHub tools as you.",
+  );
+  const connect = buttonNamed("Connect") ?? assert.fail("Connect is offered");
   act(() => connect.click());
   await settle();
 
@@ -412,54 +399,46 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
     false,
     "the service holds no GitHub sign-in to end",
   );
-  assert.ok(buttonNamed("Connect GitHub"), "Connect GitHub is offered again");
+  assert.ok(buttonNamed("Connect"), "Connect is offered again");
 });
 
-test("GitHub connected stands quiet with the same ⋯ as every row, under a line saying it uses the GitHub sign-in, and Manage repositories opens the App's page", async () => {
+test("GitHub connected stands quiet with the same ⋯ as every row, under a line saying it uses the GitHub sign-in", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
   githubConnected = true;
   const page = await mount();
   const row = rowNamed(page, "GitHub");
-  const buttons = rowButtons(row);
-  const menu = menuOf(row);
 
-  await choose(row, "Manage repositories");
-
-  assert.deepEqual(buttons, []);
-  assert.deepEqual(menu, {
-    items: ["Reconnect", "Manage repositories", "Disconnect"],
+  assert.deepEqual(rowButtons(row), []);
+  assert.deepEqual(menuOf(row), {
+    items: ["Reconnect", "Disconnect"],
     heading: "Uses your GitHub sign-in",
   });
-  assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
-    [{ url: INSTALLATION_URL }],
-  );
 });
 
-test("GitHub's Disconnect is the account's GitHub disconnect, which asks first, and is refused in the dialog where GitHub is the account's only sign-in", async () => {
+test("GitHub's Disconnect is the account's GitHub disconnect, which asks first and leaves Connect, and a refusal closes the dialog with GitHub still connected", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
   githubConnected = true;
-  onlySignIn = true;
-  const disconnects = () =>
-    sent.filter((request) => request.kind === ACT_KIND.GITHUB_DISCONNECT).length;
+  refuseGitHubDisconnect = true;
   const refusedPage = await mount();
   await choose(rowNamed(refusedPage, "GitHub"), "Disconnect");
-  const refusal = await confirm("Disconnect");
-  await confirm("Cancel");
-  onlySignIn = false;
+  await confirm("Disconnect");
+  const refusedDialog = document.querySelector('[role="alertdialog"]');
+  const refusedButtons = rowButtons(rowNamed(refusedPage, "GitHub"));
+  refuseGitHubDisconnect = false;
   const page = await mount();
   await choose(rowNamed(page, "GitHub"), "Disconnect");
-  const sentBeforeConfirm = disconnects();
+  const askedBeforeConfirm = githubDisconnects;
   await confirm("Disconnect");
 
-  assert.ok(refusal?.includes(GITHUB_LAST_SIGN_IN_REFUSAL), "the dialog says why");
-  assert.equal(sentBeforeConfirm, 1, "the second Disconnect asked before it disconnected");
-  assert.equal(disconnects(), 2);
-  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Connect GitHub"]);
+  assert.equal(refusedDialog, null, "the refusal is the window's toast, not the dialog's");
+  assert.deepEqual(refusedButtons, [], "GitHub stands connected");
+  assert.equal(askedBeforeConfirm, 1, "the second Disconnect asked before it disconnected");
+  assert.equal(githubDisconnects, 2);
+  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Connect"]);
 });
 
 test("GitHub connected but refused by its server shows Reconnect on the row, and keeps the rest of its ⋯", async () => {
@@ -474,7 +453,7 @@ test("GitHub connected but refused by its server shows Reconnect on the row, and
   const row = rowNamed(page, "GitHub");
 
   assert.deepEqual(rowButtons(row), ["Reconnect"]);
-  assert.deepEqual(menuOf(row).items, ["Manage repositories", "Disconnect"]);
+  assert.deepEqual(menuOf(row).items, ["Disconnect"]);
 });
 
 test("a connection that works stands quiet, with Reconnect in its ⋯ beside Disconnect, and Reconnect signs in again", async () => {

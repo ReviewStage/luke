@@ -529,8 +529,6 @@ export const PLAN_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The repository named is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The account must sign in with GitHub again before the service can read GitHub for it. */
-  GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
   /** The plan is archived, so it takes no write until it is brought back. */
   PLAN_ARCHIVED: "plan-archived",
 } as const;
@@ -541,7 +539,6 @@ export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_
 const REPOSITORY_CALL_FAILURES = [
   PLAN_CALL_FAILURE.UNANSWERED,
   PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
 ] as const;
 
 export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
@@ -556,11 +553,8 @@ export const planningStartAnswerSchema = EffectSchema.Union([
 
 export type PlanningStartAnswer = typeof planningStartAnswerSchema.Type;
 
-/** Why the repository list answered nothing: the service did not answer, or the account must sign in with GitHub again. */
-const REPOSITORY_LIST_FAILURES = [
-  PLAN_CALL_FAILURE.UNANSWERED,
-  PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
-] as const;
+/** Why the repository list answered nothing: the service did not answer. */
+const REPOSITORY_LIST_FAILURES = [PLAN_CALL_FAILURE.UNANSWERED] as const;
 
 export type RepositoryListFailure = (typeof REPOSITORY_LIST_FAILURES)[number];
 
