@@ -3,7 +3,7 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
@@ -27,7 +27,7 @@ import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-his
 import { PaneGlide } from "./pane-motion";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
-import type { SidebarCollapse } from "./sidebar-collapse";
+import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
@@ -44,15 +44,18 @@ export interface DesktopGates {
 }
 
 /**
- * Folds the sidebar away and back. It stands beside the traffic lights rather
- * than in the sidebar, so it is in the same place whichever way the sidebar
- * is, and the plan's toolbar leaves it room while the sidebar is folded; in
- * full screen, where macOS hides the lights, it takes their place at the
- * window's edge (`window-full-screen.ts`). It
+ * Folds the sidebar away and back, or in a window too narrow to pin it,
+ * floats it open over the work and puts it away. It stands beside the
+ * traffic lights rather than in the sidebar, so it is in the same place
+ * whichever way the sidebar is, and the plan's toolbar leaves it room while
+ * the sidebar is folded; in full screen, where macOS hides the lights, it
+ * takes their place at the window's edge (`window-full-screen.ts`). It
  * stands only where there is a sidebar to fold, so it offers the chord too.
+ * A peek is not yet open, so over one it still offers to show the sidebar.
  */
 function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Element {
-  const label = sidebar.collapsed ? "Show sidebar" : "Hide sidebar";
+  const shown = !sidebar.collapsed || sidebar.overlay === SIDEBAR_OVERLAY.OPEN;
+  const label = shown ? "Hide sidebar" : "Show sidebar";
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
@@ -156,6 +159,32 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 }
 
 /**
+ * Puts the floating sidebar away at a press anywhere outside it and its
+ * toggle, answering the handler they take the press with. Note that the
+ * press is heard at the document as it bubbles, after the sidebar's own
+ * handlers, so one inside it, a menu or a dialog it opened included, since
+ * React carries their presses through the sidebar, is marked before the
+ * document asks.
+ */
+function useOverlayDismiss(sidebar: SidebarCollapse): () => void {
+  const within = useRef(false);
+  const floating = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+  const { onOverlay } = sidebar;
+  useEffect(() => {
+    if (!floating) return;
+    const press = () => {
+      if (!within.current) onOverlay(SIDEBAR_OVERLAY.CLOSED);
+      within.current = false;
+    };
+    document.addEventListener("pointerdown", press);
+    return () => document.removeEventListener("pointerdown", press);
+  }, [floating, onOverlay]);
+  return () => {
+    within.current = true;
+  };
+}
+
+/**
  * Whether the open plan's Transcript is on screen with its words, streaming
  * a call's as they are said. A Call tab standing behind another chosen
  * tab is not on screen, and one still reading, or failed, shows no words.
@@ -184,7 +213,10 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
  * opening, shutting, or growing the side panel, or the plan's summary pinned
  * or folded to its rail, by a press or by its column's room
- * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). Back and forward ride the left column's title-bar row,
+ * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). A
+ * window too narrow to pin the sidebar folds it, and a folded sidebar floats
+ * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
+ * press outside it and its toggle. Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
  * stands behind it. New plan's dialog stands over the plans or a version
@@ -217,6 +249,7 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
+  const keepOverlay = useOverlayDismiss(sidebar);
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
@@ -303,6 +336,7 @@ export function DesktopShell({
       ref={shell}
       className="desktop-shell"
       data-sidebar-collapsed={String(sidebar.collapsed)}
+      data-sidebar-overlay={sidebar.overlay}
       data-panel-toggle={String(panelToggle)}
     >
       <DesktopSidebar
@@ -315,6 +349,7 @@ export function DesktopShell({
         updates={settings.updates}
         onSignOut={settings.onSignOut}
         call={sidebar.collapsed ? undefined : call}
+        onPressWithin={keepOverlay}
       />
       <main className="desktop-main">
         {inboxOpen ? (
@@ -335,8 +370,16 @@ export function DesktopShell({
         call={sidebar.collapsed ? call : undefined}
         surface={CALL_CARD_SURFACE.FLOATING}
       />
+      {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does. */}
+      {sidebar.collapsed && sidebar.overlay === SIDEBAR_OVERLAY.CLOSED ? (
+        <div
+          className="sidebar-peek-edge"
+          data-sidebar-peek-edge=""
+          onPointerEnter={() => sidebar.onOverlay(SIDEBAR_OVERLAY.PEEK)}
+        />
+      ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
-      <div className="title-bar-controls">
+      <div className="title-bar-controls" onPointerDown={keepOverlay}>
         <SidebarToggle sidebar={sidebar} />
         {sidebar.collapsed ? <TitleBarNewPlan plans={plans} /> : null}
       </div>

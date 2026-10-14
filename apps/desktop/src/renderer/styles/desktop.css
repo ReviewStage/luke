@@ -256,6 +256,30 @@ body,
   transform: translateX(-100%);
 }
 
+/* A folded sidebar floats open over the work rather than beside it, on the
+   same slide that folds it, so the work under it neither moves nor re-wraps
+   (`sidebar-collapse.ts`). It stands over the work's own layers, the panel
+   filling the window among them, and under the title bar's buttons that
+   follow it; its shadow parts it from the work as a popover's does. */
+.desktop-shell[data-sidebar-overlay="peek"] .desktop-sidebar,
+.desktop-shell[data-sidebar-overlay="open"] .desktop-sidebar {
+  z-index: 2;
+  box-shadow: var(--menu-shadow);
+  opacity: 1;
+  transform: none;
+}
+
+/* Where the pointer peeks the folded sidebar out: a strip at the window's
+   left edge, under the title bar so the traffic lights keep their presses. */
+.sidebar-peek-edge {
+  position: absolute;
+  z-index: 2;
+  top: var(--desktop-bar-height);
+  bottom: 0;
+  left: 0;
+  width: var(--space-6);
+}
+
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
   padding-left: var(--sidebar-toggle-clearance);
 }
@@ -288,14 +312,18 @@ body,
 }
 
 /* The Inbox's list stands on the sidebar's ground, so the folded sidebar's
-   buttons over its head do too. */
+   buttons over its head do too, as they do over the floating sidebar. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .inbox-view)
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
-.desktop-shell[data-sidebar-collapsed="true"]:has(.side-panel[data-full-screen="true"])
+.desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
+    .side-panel[data-full-screen="true"]
+  )
   .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
   --title-bar-ground: var(--desktop-well);

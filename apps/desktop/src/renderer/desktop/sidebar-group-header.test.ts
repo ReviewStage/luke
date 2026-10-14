@@ -16,6 +16,7 @@ import { PANEL_TAB } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ArchivedAgents } from "./agent-archive";
 import { DesktopSidebar } from "./desktop-sidebar";
+import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * sidebar-group-header.test.ts -- every group that folds folds under one
@@ -72,11 +73,21 @@ function mount(element: ReactElement): HTMLElement {
 function mountSidebar(plans: PlansControl): HTMLElement {
   return mount(
     createElement(DesktopSidebar, {
-      sidebar: { collapsed: false, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+      sidebar: {
+        collapsed: false,
+        compact: false,
+        overlay: SIDEBAR_OVERLAY.CLOSED,
+        width: 264,
+        onToggle: ignore,
+        onOverlay: ignore,
+        onResize: ignore,
+        staged: false,
+      },
       history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
       plans,
       tab: PANEL_TAB.PLANS,
       onTabChange: ignore,
+      onPressWithin: ignore,
       account: {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",
