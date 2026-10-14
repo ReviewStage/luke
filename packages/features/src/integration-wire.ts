@@ -183,18 +183,40 @@ export const integrationToolAnnotationsSchema = EffectSchema.Struct({
 export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema.Type;
 
 /**
+ * One argument a tool takes, as its server's input schema declares it, for a
+ * person to read: its name, its type in a few words (`string`, `string[]`,
+ * `string | null`, `enum`, `object`), whether a call must give it, and, where
+ * the schema says, what it is, the values it may take, and its default, each
+ * value written as the JSON it is unless it is a string.
+ */
+export const integrationToolParameterSchema = EffectSchema.Struct({
+  name: EffectSchema.String,
+  type: EffectSchema.String,
+  required: EffectSchema.Boolean,
+  description: EffectSchema.optionalKey(EffectSchema.String),
+  values: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
+  default: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type IntegrationToolParameter = typeof integrationToolParameterSchema.Type;
+
+/**
  * The tools one provider's server offers the account's agents (GET): each
- * one's name, what it does as its server wrote it, and the hints its server
- * annotated it with where it sent any, or why the server listed none, with
- * the server's own one-line message where it sent one.
+ * one's name, the title a person reads where its server gave one, what it
+ * does as its server wrote it, the hints its server annotated it with where
+ * it sent any, and the arguments it takes where its server's input schema
+ * was readable; or why the server listed none, with the server's own
+ * one-line message where it sent one.
  */
 export const integrationToolsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     tools: EffectSchema.Array(
       EffectSchema.Struct({
         name: EffectSchema.String,
+        title: EffectSchema.optionalKey(EffectSchema.String),
         description: EffectSchema.String,
         annotations: EffectSchema.optionalKey(integrationToolAnnotationsSchema),
+        parameters: EffectSchema.optionalKey(EffectSchema.Array(integrationToolParameterSchema)),
       }),
     ),
   }),

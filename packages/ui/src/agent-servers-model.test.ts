@@ -208,3 +208,20 @@ test("a search finds a server by what it is for, and a word naming a server coun
     ["get_issue"],
   );
 });
+
+test("a search finds a tool by the title its server gave it", () => {
+  const rows = rowsWhere(
+    { [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED },
+    {
+      tools: [
+        { name: "save_issue", title: "Write ticket", description: "Creates or updates an issue." },
+        { name: "list_issues", description: "Lists issues." },
+      ],
+    },
+  );
+
+  assert.deepEqual(
+    searchServers(rows, "ticket").tools.map((hit) => hit.tool.name),
+    ["save_issue"],
+  );
+});

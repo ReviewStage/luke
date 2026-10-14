@@ -5,9 +5,10 @@ import { Effect } from "effect";
 import { listMcpTools, MCP_TOOLS_FAILURE } from "../server/hosted/mcp-tools.js";
 
 /**
- * What the tools read keeps of a provider's MCP server: each tool's
- * description whole, bounded, and its hints exactly as the server sent them,
- * and none it did not send; and why a
+ * What the tools read keeps of a provider's MCP server: each tool's title in
+ * the spec's order, its description whole, bounded, its hints exactly as the
+ * server sent them, and none it did not send, and the arguments its input
+ * schema declares, each in a few words; and why a
  * server listed no tools, with the server's own JSON-RPC message where it
  * sent one under an error status, and never a message that could carry the
  * account's bearer.
@@ -70,6 +71,7 @@ it.effect("a tool keeps the hints its server sent, and only those", () =>
     assert.deepEqual(tools, [
       {
         name: "delete_project",
+        title: "Delete project",
         description: "Deletes a project.",
         annotations: { readOnlyHint: false, destructiveHint: true },
       },
@@ -86,7 +88,7 @@ it.effect("a tool keeps the hints its server sent, and only those", () =>
 
 it.effect("a tool keeps its description whole, every line of it, up to a bound", () =>
   Effect.gen(function* () {
-    const long = "x".repeat(2400);
+    const long = "x".repeat(9000);
     const tools = yield* listMcpTools(URL, TOKEN).pipe(
       Effect.provide(
         listingServer([
@@ -104,8 +106,150 @@ it.effect("a tool keeps its description whole, every line of it, up to a bound",
       tools[0]?.description,
       "Creates or updates an issue.\n\nPass an id to update one; omit it to create.",
     );
-    assert.equal(tools[1]?.description.length, 2000);
+    assert.equal(tools[1]?.description.length, 8000);
     assert.ok(tools[1]?.description.endsWith("…"));
+  }),
+);
+
+it.effect("a tool's title is its own, else its annotations', and none where neither is words", () =>
+  Effect.gen(function* () {
+    const tools = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(
+        listingServer([
+          {
+            name: "run_sql",
+            title: "Run SQL",
+            description: "Runs SQL.",
+            annotations: { title: "Execute a statement" },
+          },
+          {
+            name: "list_issues",
+            description: "Lists issues.",
+            annotations: { title: "List issues" },
+          },
+          {
+            name: "blank",
+            title: "  ",
+            description: "Blank.",
+            annotations: { title: "Blank tool" },
+          },
+          { name: "numbered", title: 7, description: "Numbered." },
+          { name: "untitled", description: "Untitled." },
+        ]),
+      ),
+    );
+
+    assert.deepEqual(
+      tools.map((tool) => [tool.name, tool.title]),
+      [
+        ["run_sql", "Run SQL"],
+        ["list_issues", "List issues"],
+        ["blank", "Blank tool"],
+        ["numbered", undefined],
+        ["untitled", undefined],
+      ],
+    );
+  }),
+);
+
+it.effect("a tool keeps the arguments its input schema declares, each type in a few words", () =>
+  Effect.gen(function* () {
+    const tools = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(
+        listingServer([
+          {
+            name: "search_issues",
+            description: "Searches issues.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: {
+                  type: "string",
+                  description: "  What to search for.  ",
+                  default: "is:open",
+                },
+                labels: { type: "array", items: { type: "string" } },
+                assignee: { type: ["string", "null"], description: "Null to remove." },
+                sort: { type: "string", enum: ["date", "freq"], default: "date" },
+                slaType: {
+                  anyOf: [{ type: "string", enum: ["all", "business"] }, { type: "null" }],
+                },
+                limit: { type: "number", default: 10 },
+                links: { type: "array", items: { type: "object", properties: {} } },
+                ids: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
+                anything: {},
+              },
+              required: ["query", "sort", "not_a_property"],
+            },
+          },
+        ]),
+      ),
+    );
+
+    assert.deepEqual(tools[0]?.parameters, [
+      {
+        name: "query",
+        type: "string",
+        required: true,
+        description: "What to search for.",
+        default: "is:open",
+      },
+      { name: "labels", type: "string[]", required: false },
+      { name: "assignee", type: "string | null", required: false, description: "Null to remove." },
+      { name: "sort", type: "enum", required: true, values: ["date", "freq"], default: "date" },
+      { name: "slaType", type: "enum | null", required: false, values: ["all", "business"] },
+      { name: "limit", type: "number", required: false, default: "10" },
+      { name: "links", type: "object[]", required: false },
+      { name: "ids", type: "(string | number)[]", required: false },
+      { name: "anything", type: "any", required: false },
+    ]);
+  }),
+);
+
+it.effect(
+  "a tool whose schema declares no arguments takes none, and one whose schema is unreadable says nothing of them",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            { name: "whoami", description: "Who am I.", inputSchema: { type: "object" } },
+            { name: "broken", description: "Broken.", inputSchema: "object" },
+            { name: "odd", description: "Odd.", inputSchema: { type: "object", properties: [] } },
+            { name: "bare", description: "Bare." },
+          ]),
+        ),
+      );
+
+      assert.deepEqual(tools, [
+        { name: "whoami", description: "Who am I.", parameters: [] },
+        { name: "broken", description: "Broken." },
+        { name: "odd", description: "Odd." },
+        { name: "bare", description: "Bare." },
+      ]);
+    }),
+);
+
+it.effect("a tool keeps a bounded number of arguments, each bounded", () =>
+  Effect.gen(function* () {
+    const properties = Object.fromEntries(
+      Array.from({ length: 80 }, (_, index) => [
+        `arg${index}`,
+        { type: "string", description: "d".repeat(900) },
+      ]),
+    );
+    const tools = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(
+        listingServer([
+          { name: "sprawl", description: "Sprawls.", inputSchema: { type: "object", properties } },
+        ]),
+      ),
+    );
+
+    const parameters = tools[0]?.parameters ?? [];
+    assert.equal(parameters.length, 64);
+    assert.equal(parameters[0]?.description?.length, 500);
+    assert.ok(parameters[0]?.description?.endsWith("…"));
   }),
 );
 

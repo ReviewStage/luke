@@ -1045,14 +1045,20 @@ that table.
   though Luke no longer uses it. Deleting the account revokes every
   provider's grant the same way.
 - `GET /api/account/integrations/{provider}/tools` answers the tools the
-  provider's server offers the account's agents, `{ tools: [{ name,
-  description }] }`, for the composer's MCP popover. It reads them as an MCP
-  client does (`server/hosted/mcp-tools.ts`: `initialize`, then `tools/list`
-  page by page, JSON or event-stream answers), with the account's token from
-  Connect. Each description is cut to its first line. It is held in the
-  instance's memory for five minutes per account and provider. A provider
-  the account has not connected is refused as unavailable before any token
-  is read.
+  provider's server offers the account's agents, `{ tools: [{ name, title?,
+  description, annotations?, parameters? }] }`, for the composer's MCP
+  popover and Settings › Integrations. It reads them as an MCP client does
+  (`server/hosted/mcp-tools.ts`: `initialize`, then `tools/list` page by
+  page, JSON or event-stream answers), with the account's token from
+  Connect. A title is the tool's own, else its annotations', the spec's
+  order; a description is kept whole up to 8,000 characters; the hints are
+  kept as the server spelled them; and the parameters are the input
+  schema's top-level arguments, each its name, its type in a few words,
+  whether it is required, and its description, values, and default where
+  the schema gives them, 64 at most (`server/hosted/mcp-tool-parameters.ts`).
+  None of it is what a model is handed. It is held in the instance's memory
+  for five minutes per account and provider. A provider the account has not
+  connected is refused as unavailable before any token is read.
 - `GET /api/account/integrations/connected` is where Connect returns the
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
