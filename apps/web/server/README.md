@@ -94,6 +94,23 @@ as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
 adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
 access token through the adapter over PGlite to hold the two together.
 
+The organization plugin's tables (`organization`, `member`, `invitation`, and
+`session.active_organization_id`) are transcribed into
+`packages/database/src/schemas/auth.ts` from `auth generate` for 1.6.29 with
+one edit, instants through `timestamptz()`, and migration
+`20261013230002_organization` is drizzle-kit's from that module. They keep
+Better Auth's default model names, since the Drizzle adapter finds a model by
+its export's name. A Luke workspace is an
+`organization` and its team the `member` rows, under the plugin's default
+roles `owner`, `admin`, and `member`. A desktop caller holds an OAuth token and
+no Better Auth session, which every member and organization endpoint requires,
+so a hosted route reads membership through Drizzle over these tables and
+writes only through the plugin's server-only `auth.api.createOrganization`
+(with a `userId` and no headers) and `auth.api.addMember`. Never call either
+inside `client.withTransaction`: Better Auth writes over its own pool, outside
+the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
+member through the plugin over PGlite.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
@@ -610,6 +627,21 @@ provider redirect, an unknown endpoint, a refused method, a HEAD, and a path
 outside the group, and `tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
+
+The organization plugin is served in the group with `ORGANIZATION_OPTIONS`
+(`server/auth-policy.ts`): no workspace is deleted, and no signed-in user
+creates one (`allowUserToCreateOrganization: false`). Every organization
+write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
+because a workspace is adopted by its slug, and a session free to create an
+organization or rename its own could take a team's slug first. That covers
+create, update, delete, check-slug, set-active, member removal, role changes,
+leave, every invitation endpoint (Luke sends no invitation mail), and the
+team and role endpoints this deployment does not mount. `disabledPaths` is
+read by the HTTP router alone, so the server-only `auth.api` calls a hosted
+route makes still run, and a create that names a `userId` and carries no
+session passes the creation rule as a system action.
+`auth-database.test.ts` holds both sides with an account signed up through
+`auth.api.signUpEmail`.
 
 ## The events and maintenance groups
 
