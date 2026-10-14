@@ -29,6 +29,7 @@ import {
 } from "./integration-wire.js";
 import {
   HOSTED_SERVICE_PATH,
+  integrationCancelPath,
   integrationConnectPath,
   integrationDisconnectPath,
   integrationToolsPath,
@@ -151,6 +152,16 @@ export class HostedIntegrationsClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: integrationToolsPath(provider) }),
       (answer) => readAnswer(answer, integrationToolsAnswerSchema),
+    );
+  }
+
+  /** One provider's sign-in under way ended, answering where it then stands. */
+  cancel(
+    provider: IntegrationProvider,
+  ): Effect.Effect<IntegrationStatusView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.POST, path: integrationCancelPath(provider) }),
+      (answer) => readAnswer(answer, integrationStatusAnswerSchema),
     );
   }
 

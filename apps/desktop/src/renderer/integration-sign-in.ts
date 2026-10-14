@@ -17,9 +17,10 @@ import { Duration } from "effect";
  * as failed: the service ends a sign-in the browser came back from without a
  * grant, which is all Vercel Connect ever says of one that did not connect —
  * no error and no reason. A sign-in that failed on Connect's own page never
- * comes back at all, so the window stops waiting on its own: three minutes
- * after the press, or a few seconds after the developer comes back to the
- * window, a read that still finds it pending ends it as unfinished. A
+ * comes back at all, so the window stops waiting on its own: each sign-in
+ * has its own deadline, three minutes after the press or a few seconds
+ * after the developer comes back to the window, and any read past it that
+ * still finds it pending ends it as unfinished. A
  * failed or unfinished sign-in stands until it is begun again, or until a
  * later read finds the provider connected after all.
  */
@@ -39,6 +40,8 @@ export type SignIn =
       readonly kind: typeof SIGN_IN.WAITING;
       /** The mark taken as it began; only a read issued after it says how it ended. */
       readonly since: number;
+      /** When the window gives up on it, in the runtime clock's milliseconds. */
+      readonly deadline: number;
     }
   | { readonly kind: typeof SIGN_IN.FAILED | typeof SIGN_IN.UNFINISHED };
 
@@ -60,8 +63,19 @@ export interface SignInRead {
   readonly status: IntegrationStatus | undefined;
   /** The mark taken as the read was issued. */
   readonly mark: number;
-  /** Whether it is the read at the wait's end, which gives up on a sign-in still pending. */
-  readonly due: boolean;
+  /** When it answered, in the runtime clock's milliseconds; a sign-in still pending past its deadline is given up on. */
+  readonly at: number;
+}
+
+/** A sign-in begun at `at`, waited on for its whole wait. */
+export function signInBegun(mark: number, at: number): SignIn {
+  return { kind: SIGN_IN.WAITING, since: mark, deadline: at + Duration.toMillis(SIGN_IN_WAIT) };
+}
+
+/** A sign-in as the developer's return to the window at `at` leaves it: one still waited on has the grace at most. */
+export function signInGraced(signIn: SignIn, at: number): SignIn {
+  if (signIn.kind !== SIGN_IN.WAITING) return signIn;
+  return { ...signIn, deadline: Math.min(signIn.deadline, at + Duration.toMillis(SIGN_IN_GRACE)) };
 }
 
 /**
@@ -73,13 +87,11 @@ export interface SignInRead {
 export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): SignIn | undefined {
   if (read.status === INTEGRATION_STATUS.CONNECTED) return undefined;
   if (signIn === undefined) {
-    return read.status === INTEGRATION_STATUS.PENDING
-      ? { kind: SIGN_IN.WAITING, since: read.mark }
-      : undefined;
+    return read.status === INTEGRATION_STATUS.PENDING ? signInBegun(read.mark, read.at) : undefined;
   }
   if (signIn.kind !== SIGN_IN.WAITING || read.mark <= signIn.since) return signIn;
   if (read.status !== INTEGRATION_STATUS.PENDING) return { kind: SIGN_IN.FAILED };
-  return read.due ? { kind: SIGN_IN.UNFINISHED } : signIn;
+  return read.at >= signIn.deadline ? { kind: SIGN_IN.UNFINISHED } : signIn;
 }
 
 /** The line a row draws for a sign-in. */

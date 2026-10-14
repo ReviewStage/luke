@@ -161,6 +161,13 @@ const standing = (
           // SAFETY: a tools answer is a list of named tools.
           ({ body }) => (body as { tools: { name: string }[] }).tools.map((tool) => tool.name),
         ),
+      /** A Cancel of the account's Slack sign-in, answering where Slack then stands. */
+      cancelSlack: (userId: string) =>
+        Effect.map(
+          ask(`/api/account/integrations/cancel?provider=${SLACK}`, { method: "POST", userId }),
+          // SAFETY: a cancel answers the one provider's word.
+          ({ body }) => (body as { status: string }).status,
+        ),
       connectSlack: (userId: string) =>
         ask(`/api/account/integrations/connect?provider=${SLACK}`, { method: "POST", userId }),
       /** Where the browser returning from a Slack sign-in under way for the account lands. */
@@ -248,6 +255,39 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         }
         assert.equal(yield* group.slackStatus(first), INTEGRATION_STATUS.DISCONNECTED);
         assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
+      }),
+  );
+
+  it.effect(
+    "a Cancel ends only a sign-in under way: a first one leaves Slack disconnected, one over an expired row leaves it expired, and one that completed just before leaves it connected",
+    () =>
+      Effect.gen(function* () {
+        const declining = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
+          declines: true,
+        });
+        const first = yield* openAccount("kai@cancelled.example");
+        const lapsed = yield* openAccount("lee@cancelled.example");
+        yield* beginIntegrationSignIn(lapsed, SLACK, "state-lapsed");
+        yield* completeIntegrationSignIn(lapsed, SLACK, "state-lapsed");
+        yield* expireIntegrationConnection(lapsed, SLACK);
+        for (const account of [first, lapsed]) {
+          assert.equal((yield* declining.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+        }
+
+        assert.equal(yield* declining.cancelSlack(first), INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(yield* declining.slackStatus(first), INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(yield* declining.cancelSlack(lapsed), INTEGRATION_STATUS.EXPIRED);
+        assert.equal(yield* declining.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
+
+        const granting = yield* standing(SLACK_CONNECTOR);
+        const finished = yield* openAccount("max@cancelled.example");
+        assert.equal((yield* granting.connectSlack(finished)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(
+          yield* granting.slackLanding(finished),
+          integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.CONNECTED),
+        );
+        assert.equal(yield* granting.cancelSlack(finished), INTEGRATION_STATUS.CONNECTED);
+        assert.equal(yield* granting.slackStatus(finished), INTEGRATION_STATUS.CONNECTED);
       }),
   );
 

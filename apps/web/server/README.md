@@ -1005,6 +1005,11 @@ that table.
   records the sign-in's one-time state, and answers the address. The
   desktop's host opens it through the native node; no window draws it and
   nothing logs it.
+- `POST /api/account/integrations/{provider}/cancel` ends the sign-in under
+  way and nothing else: a first sign-in's row goes, any other row keeps its
+  status, and no grant is revoked, so a sign-in that completed just before
+  the press stays connected. It answers `{ status }` as it then stands. The
+  desktop's Cancel asks it, never a Disconnect.
 - `POST /api/account/integrations/{provider}/disconnect` deletes the row
   first, then asks Connect to revoke the grant. A failed revoke is logged and
   the account is disconnected all the same. Connect revokes at the provider

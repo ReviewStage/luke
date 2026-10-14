@@ -1,4 +1,4 @@
-import { useAtom } from "@effect/atom-react";
+import { useAtom, useAtomValue } from "@effect/atom-react";
 import type { IntegrationStatusView } from "@sidecar/hosted/integration-view";
 import {
   INTEGRATION_PROVIDER_LIST,
@@ -6,17 +6,17 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@sidecar/hosted/integration-wire";
-import { type Duration, Effect } from "effect";
+import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import {
+  signInBegun as begunSignIn,
   SIGN_IN,
-  SIGN_IN_GRACE,
-  SIGN_IN_WAIT,
   type SignIn,
   signInAfterRead,
+  signInGraced,
 } from "./integration-sign-in";
 import { rendererRuntime } from "./renderer-runtime";
 
@@ -28,9 +28,12 @@ import { rendererRuntime } from "./renderer-runtime";
  * browser. Settings › Integrations and the composer's list of servers draw
  * from it alike, so the two never disagree about a provider, and so does a
  * sign-in the window waits on (`integration-sign-in.ts`): begun here, ended
- * by the reads, given up on by one more read at the end of its wait, which
- * the window's focus shortens to a grace, and cancelled here, which ends it
- * at the service so the provider no longer stands pending.
+ * by the reads, given up on by any read past its own deadline, which the
+ * window's focus shortens to a grace and one more read is armed for, and
+ * cancelled here, which ends it
+ * at the service so the provider no longer stands pending. A Cancel the
+ * service answers connected came too late: the sign-in had finished, and
+ * the row stands connected.
  */
 
 /** Where every provider stands, as the surfaces share it. */
@@ -46,7 +49,7 @@ export interface IntegrationStatuses {
   readonly settle: (provider: IntegrationProvider, status: IntegrationStatus) => void;
   /** A sign-in begun: the provider stands pending and the window waits on it, unless a connection already stands. */
   readonly signInBegun: (provider: IntegrationProvider) => void;
-  /** Ends a sign-in waited on, at the service too; answers whether the service ended it. */
+  /** Ends a sign-in waited on, at the service too, revoking nothing; answers whether the service answered. */
   readonly cancelSignIn: (provider: IntegrationProvider) => Promise<boolean>;
 }
 
@@ -56,14 +59,19 @@ type SignIns = ReadonlyMap<IntegrationProvider, SignIn>;
 
 const NO_SIGN_INS: SignIns = new Map();
 
-/** The one wait a surface holds: a write arms it afresh, cutting short the wait before it. */
-const signInWaitAtom = () => rendererRuntime.fn((wait: Duration.Duration) => Effect.sleep(wait));
+/** The one wait a surface holds, until a deadline on the runtime's clock: a write arms it afresh, cutting short the wait before it. */
+const signInWaitAtom = () =>
+  rendererRuntime.fn((deadline: number) =>
+    Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      Effect.sleep(Duration.millis(Math.max(0, deadline - now))),
+    ),
+  );
 
 /** Every provider's sign-in as one read leaves it. */
 function signInsAfterRead(
   signIns: SignIns,
   standing: Standing,
-  read: { readonly mark: number; readonly due: boolean },
+  read: { readonly mark: number; readonly at: number },
 ): SignIns {
   const next = new Map<IntegrationProvider, SignIn>();
   for (const provider of INTEGRATION_PROVIDER_LIST) {
@@ -73,12 +81,12 @@ function signInsAfterRead(
   return next;
 }
 
-/** The latest mark a sign-in waited on began at, which arms the wait anew whenever it moves. */
-function latestWait(signIns: SignIns): number | undefined {
-  const since = [...signIns.values()].flatMap((signIn) =>
-    signIn.kind === SIGN_IN.WAITING ? [signIn.since] : [],
+/** The earliest deadline of a sign-in waited on, which the wait is armed for whenever it moves. */
+function nextDeadline(signIns: SignIns): number | undefined {
+  const deadlines = [...signIns.values()].flatMap((signIn) =>
+    signIn.kind === SIGN_IN.WAITING ? [signIn.deadline] : [],
   );
-  return since.length === 0 ? undefined : Math.max(...since);
+  return deadlines.length === 0 ? undefined : Math.min(...deadlines);
 }
 
 export function useIntegrationStatuses(): IntegrationStatuses {
@@ -88,80 +96,87 @@ export function useIntegrationStatuses(): IntegrationStatuses {
   const [readFailed, setReadFailed] = useState(false);
   const [waitAtom] = useState(signInWaitAtom);
   const [waited, arm] = useAtom(waitAtom);
+  const services = useAtomValue(rendererRuntime);
+  // The runtime's own clock, which a test turns by hand; its layer is built synchronously, so it is always there.
+  const now = useCallback(
+    () => Context.get(AsyncResult.getOrThrow(services), Clock.Clock).currentTimeMillisUnsafe(),
+    [services],
+  );
   // Note that the marks are a ref, because a read's answer compares its own
   // mark with the sign-ins' as it lands, which no render stands between.
   const marks = useRef(0);
 
-  const readOnce = useCallback(
-    (due: boolean) => {
-      marks.current += 1;
-      const mark = marks.current;
-      setReadFailed(false);
-      return act(ACT_KIND.INTEGRATIONS_STATUS).then(
-        (answer) => {
-          if ("failure" in answer) {
-            setReadFailed(true);
-            return;
-          }
-          setStatuses(answer.integrations);
-          setSignIns((standing) => signInsAfterRead(standing, answer.integrations, { mark, due }));
-        },
-        () => setReadFailed(true),
-      );
-    },
-    [act],
-  );
-  const read = useCallback(() => readOnce(false), [readOnce]);
+  const read = useCallback(() => {
+    marks.current += 1;
+    const mark = marks.current;
+    setReadFailed(false);
+    return act(ACT_KIND.INTEGRATIONS_STATUS).then(
+      (answer) => {
+        if ("failure" in answer) {
+          setReadFailed(true);
+          return;
+        }
+        const at = now();
+        setStatuses(answer.integrations);
+        setSignIns((standing) => signInsAfterRead(standing, answer.integrations, { mark, at }));
+      },
+      () => setReadFailed(true),
+    );
+  }, [act, now]);
 
   useEffect(() => {
     void read();
   }, [read]);
 
-  // The wait ran out: one more read, which gives up on a sign-in still pending.
+  // A deadline passed: one more read, which gives up on a sign-in still pending past it.
   useEffect(() => {
-    if (AsyncResult.isSuccess(waited) && !waited.waiting) void readOnce(true);
-  }, [waited, readOnce]);
+    if (AsyncResult.isSuccess(waited) && !waited.waiting) void read();
+  }, [waited, read]);
 
-  // Each sign-in begun, or found pending, waits its whole wait afresh.
-  const waitingSince = latestWait(signIns);
+  const deadline = nextDeadline(signIns);
   useEffect(() => {
-    if (waitingSince !== undefined) arm(SIGN_IN_WAIT);
-  }, [waitingSince, arm]);
+    if (deadline !== undefined) arm(deadline);
+  }, [deadline, arm]);
 
   // The focus is the developer back from the browser, where a sign-in settles; one still pending is given a grace to land.
-  const waiting = waitingSince !== undefined;
   useEffect(() => {
     const focused = () => {
+      const at = now();
+      setSignIns((standing) =>
+        standing.size === 0
+          ? standing
+          : new Map(
+              [...standing].map(([provider, signIn]) => [provider, signInGraced(signIn, at)]),
+            ),
+      );
       void read();
-      if (waiting) arm(SIGN_IN_GRACE);
     };
     window.addEventListener("focus", focused);
     return () => window.removeEventListener("focus", focused);
-  }, [read, waiting, arm]);
+  }, [read, now]);
 
   const settle = useCallback((provider: IntegrationProvider, status: IntegrationStatus) => {
     setStatuses((standing) => ({ ...standing, [provider]: status }));
   }, []);
 
   // Note that a connection that stands is not waited on, because the service
-  // answers it connected throughout, and a Cancel there would disconnect it.
+  // answers it connected throughout, so no read could say how the sign-in ended.
   const signInBegun = useCallback(
     (provider: IntegrationProvider) => {
       if (statuses?.[provider] === INTEGRATION_STATUS.CONNECTED) return;
       marks.current += 1;
-      const since = marks.current;
+      const signIn = begunSignIn(marks.current, now());
       setStatuses((standing) => ({ ...standing, [provider]: INTEGRATION_STATUS.PENDING }));
-      setSignIns((standing) => new Map(standing).set(provider, { kind: SIGN_IN.WAITING, since }));
+      setSignIns((standing) => new Map(standing).set(provider, signIn));
     },
-    [statuses],
+    [statuses, now],
   );
 
   const cancelSignIn = useCallback(
     async (provider: IntegrationProvider): Promise<boolean> => {
-      const answer: IntegrationStatusView | undefined = await act(
-        ACT_KIND.INTEGRATIONS_DISCONNECT,
-        { provider },
-      ).catch(() => undefined);
+      const answer: IntegrationStatusView | undefined = await act(ACT_KIND.INTEGRATIONS_CANCEL, {
+        provider,
+      }).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return false;
       settle(provider, answer.status);
       setSignIns((standing) => {

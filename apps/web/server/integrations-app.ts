@@ -1,7 +1,7 @@
 /**
  * integrations-app.ts -- the integrations group: an account's connections read, begun, ended, and settled.
  *
- * Three endpoints the signed-in desktop calls with its bearer, and one
+ * Five endpoints the signed-in desktop calls with its bearer, and one
  * browser navigation that carries none:
  *
  * - `GET /api/account/integrations` answers where every provider's
@@ -14,6 +14,11 @@
  * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
  *   to begin a browser sign-in to the provider for the account, records the
  *   sign-in's one-time state, and answers the address the desktop opens.
+ * - `POST /api/account/integrations/{provider}/cancel` ends the sign-in
+ *   under way, if one still is, and nothing else: a first sign-in's row
+ *   goes, any other row keeps its status, and no grant is revoked, so a
+ *   sign-in that completed just before the press stays connected. It
+ *   answers where the provider then stands.
  * - `POST /api/account/integrations/{provider}/disconnect` deletes the
  *   account's row at the provider before anything else, which is what stops
  *   every agent's next token read, then asks Connect to revoke the grant; a
@@ -114,6 +119,8 @@ const INTEGRATIONS_PATH = {
   STATUSES: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS,
   /** POST begins a sign-in; the rewrite moves the path's provider into the `provider` query. */
   CONNECT: "/api/account/integrations/connect",
+  /** POST ends a sign-in under way; the rewrite moves the path's provider into the `provider` query. */
+  CANCEL: "/api/account/integrations/cancel",
   /** POST ends a connection; the rewrite moves the path's provider into the `provider` query. */
   DISCONNECT: "/api/account/integrations/disconnect",
   /** GET reads the tools a provider's server offers; the rewrite moves the path's provider into the `provider` query. */
@@ -503,6 +510,41 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url });
 });
 
+/** Where a provider stands once no sign-in is under way: its row's own status, or disconnected with none. */
+function standingAfterCancel(row: IntegrationConnectionRow | undefined): IntegrationStatus {
+  if (row?.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
+  if (row?.status === INTEGRATION_ROW_STATUS.EXPIRED) return INTEGRATION_STATUS.EXPIRED;
+  return INTEGRATION_STATUS.DISCONNECTED;
+}
+
+/**
+ * POST: ends the sign-in to one provider under way, under the state the row
+ * holds now, so a sign-in completed since has no state left to end and
+ * stands connected; answers where the provider then stands. Nothing is
+ * revoked: a grant Connect holds without the row is one no agent reads.
+ */
+const cancelEndpoint = /* @__PURE__ */ Effect.fn("web/integrationCancelEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
+> {
+  yield* hostedMethod(HTTP_METHOD.POST);
+  const provider = yield* requestedProvider();
+  const userId = yield* resolvedUserId(seams);
+  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
+  if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  const row = rows.find((each) => each.provider === provider);
+  if (row?.state !== undefined) {
+    yield* hostedStoreOrUnavailable(seams.endSignIn(userId, provider, row.state));
+  }
+  const after = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  const status = standingAfterCancel(after.find((each) => each.provider === provider));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status });
+});
+
 /**
  * POST: ends one provider's connection. The row goes first, so whatever
  * Connect answers, no agent reads a token again; the revoke after it is the
@@ -610,7 +652,7 @@ function refusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** The group: the five paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the six paths, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
 ): WebRoutes<DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient> {
@@ -619,6 +661,7 @@ export function integrationsApp(
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.TOOLS, refusing(toolsEndpoint(seams, tools))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.STATUSES, refusing(statusesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECT, refusing(connectEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CANCEL, refusing(cancelEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.DISCONNECT, refusing(disconnectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECTED, connectedEndpoint(seams)),
     hostedNotFoundRoute,

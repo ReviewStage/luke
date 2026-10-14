@@ -97,7 +97,7 @@ beforeEach(() => {
               : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
           );
         }
-        if (request.kind === ACT_KIND.INTEGRATIONS_DISCONNECT) {
+        if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
           slack = INTEGRATION_STATUS.DISCONNECTED;
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,

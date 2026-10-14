@@ -110,9 +110,14 @@ function answerOf(request: Act): ActOutcome {
     case ACT_KIND.INTEGRATIONS_CONNECT:
       touched.set(request.payload.provider, INTEGRATION_STATUS.PENDING);
       return { status: DONE, value: { opened: true } };
-    case ACT_KIND.INTEGRATIONS_DISCONNECT:
-      touched.set(request.payload.provider, INTEGRATION_STATUS.DISCONNECTED);
-      return { status: DONE, value: { status: INTEGRATION_STATUS.DISCONNECTED } };
+    // A Cancel ends a sign-in still pending; one that finished first stays connected.
+    case ACT_KIND.INTEGRATIONS_CANCEL: {
+      const provider = request.payload.provider;
+      if (touched.get(provider) === INTEGRATION_STATUS.PENDING) {
+        touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+      }
+      return { status: DONE, value: { status: serviceStatuses()[provider] } };
+    }
     default:
       return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
   }
@@ -307,13 +312,22 @@ test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends t
   assert.ok(
     sent.some(
       (request) =>
-        request.kind === ACT_KIND.INTEGRATIONS_DISCONNECT && request.payload.provider === GRANOLA,
+        request.kind === ACT_KIND.INTEGRATIONS_CANCEL && request.payload.provider === GRANOLA,
     ),
     "the sign-in is ended at the service",
   );
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
   await focusWindow();
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+});
+
+test("a Cancel that lands after the sign-in finished leaves the provider connected", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+  touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
+
+  await pressOnGranola(page, "Cancel");
+  assert.equal(granolaRow(page).line, "Connected");
 });
 
 test("a sign-in the browser came back from without a grant says it could not connect, and why, with Try again", async () => {
@@ -352,6 +366,32 @@ it.effect(
       yield* Effect.promise(focusWindow);
       assert.equal(granolaRow(page).line, "Connected");
     }),
+);
+
+it.effect("a sign-in begun later does not put off the deadline of one begun before it", () =>
+  Effect.gen(function* () {
+    const registry = registryOn(yield* Clock.Clock);
+    const page = yield* Effect.promise(() => mount(registry));
+    yield* Effect.promise(() => pressOnGranola(page, "Connect"));
+    yield* TestClock.adjust("2 minutes");
+    const linear =
+      [...page.querySelectorAll(".settings-row")]
+        .find((row) => row.querySelector("strong")?.textContent === "Linear")
+        ?.querySelector("button") ?? assert.fail("Linear offers Connect");
+    act(() => linear.click());
+    yield* Effect.promise(settle);
+
+    yield* TestClock.adjust("1 minute");
+    yield* Effect.promise(settle);
+    assert.deepEqual(granolaRow(page), {
+      line: "Sign-in didn't finish.",
+      buttons: ["Try again"],
+    });
+    assert.ok(
+      page.textContent?.includes("Waiting for Linear in your browser…"),
+      "Linear still waits its own three minutes",
+    );
+  }),
 );
 
 it.effect(

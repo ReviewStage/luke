@@ -22,6 +22,7 @@ export interface IntegrationActsDependencies {
   host: {
     integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
     integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
+    integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
     integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
     integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   };
@@ -30,6 +31,7 @@ export interface IntegrationActsDependencies {
 type IntegrationActKind =
   | typeof ACT_KIND.INTEGRATIONS_STATUS
   | typeof ACT_KIND.INTEGRATIONS_CONNECT
+  | typeof ACT_KIND.INTEGRATIONS_CANCEL
   | typeof ACT_KIND.INTEGRATIONS_DISCONNECT
   | typeof ACT_KIND.INTEGRATIONS_TOOLS;
 
@@ -54,6 +56,10 @@ export function integrationActRows(
     [ACT_KIND.INTEGRATIONS_TOOLS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.INTEGRATIONS_TOOLS, sender);
       return host.integrationsTools(params);
+    },
+    [ACT_KIND.INTEGRATIONS_CANCEL]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.INTEGRATIONS_CANCEL, sender);
+      return host.integrationsCancel(params);
     },
     [ACT_KIND.INTEGRATIONS_DISCONNECT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.INTEGRATIONS_DISCONNECT, sender);

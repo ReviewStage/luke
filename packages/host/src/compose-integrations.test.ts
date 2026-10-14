@@ -51,6 +51,13 @@ function fakeService(script: ServiceScript) {
         asked.push(provider);
         return { tools: [{ name: "list_issues", description: "List issues." }] };
       }),
+    cancel: (provider) =>
+      Effect.sync(() => {
+        asked.push(provider);
+        if (script.status === INTEGRATION_STATUS.PENDING)
+          script.status = INTEGRATION_STATUS.DISCONNECTED;
+        return { status: script.status };
+      }),
     disconnect: (provider) =>
       Effect.sync(() => {
         asked.push(provider);
@@ -96,6 +103,7 @@ it.effect(
         for (const method of [
           GATEWAY_METHOD.INTEGRATIONS_STATUS,
           GATEWAY_METHOD.INTEGRATIONS_CONNECT,
+          GATEWAY_METHOD.INTEGRATIONS_CANCEL,
           GATEWAY_METHOD.INTEGRATIONS_DISCONNECT,
           GATEWAY_METHOD.INTEGRATIONS_TOOLS,
         ]) {
