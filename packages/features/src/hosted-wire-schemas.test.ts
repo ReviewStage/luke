@@ -271,6 +271,7 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedQuotaSchema: serviceWire.hostedQuotaSchema,
     hostedErrorSchema: serviceWire.hostedErrorSchema,
     wireUuidSchema: serviceWire.wireUuidSchema,
+    memberRefSchema: serviceWire.memberRefSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
   "transcript-wire": {
     transcriptTextPartSchema: transcriptWire.transcriptTextPartSchema,

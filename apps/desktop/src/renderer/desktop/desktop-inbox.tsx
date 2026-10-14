@@ -118,6 +118,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     onOpenIntegrations: () => undefined,
     onOpenApiKeys: () => undefined,
     onStarted: () => undefined,
+    me: plans.me,
   });
   const live = usePlanInbox({
     planId,

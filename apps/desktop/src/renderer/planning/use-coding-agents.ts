@@ -93,6 +93,8 @@ const NO_KEYWORDS: readonly string[] = [];
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
 export interface CodingAgentsControl {
+  /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
+  me: string | undefined;
   /** The open plan's agents in the order started, an archived one left out, or nothing before the first read lands. */
   agents: readonly CodingAgentSummary[] | undefined;
   /** The open plan's archived agents in the order started, or nothing before the first read lands. */
@@ -250,6 +252,8 @@ export function useCodingAgents(input: {
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Coding agents page. */
+  /** The signed-in account's id, whose own agents carry no "Started by". */
+  me?: string | undefined;
   onOpenApiKeys: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
@@ -735,6 +739,7 @@ export function useCodingAgents(input: {
     onChoose,
     onSwitchServers,
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
+    me: input.me,
     onOpenApiKeys: () => latest.current.onOpenApiKeys(),
     onRename,
     onArchive,

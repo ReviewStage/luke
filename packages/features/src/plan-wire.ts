@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
@@ -329,10 +329,7 @@ export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
  * name it holds now, a member who has since left the workspace among them.
  * The window calls the member You only where the id is its own account's.
  */
-export const planEditorSchema = EffectSchema.Struct({
-  userId: EffectSchema.String,
-  name: EffectSchema.String,
-});
+export const planEditorSchema = memberRefSchema;
 
 export type PlanEditor = typeof planEditorSchema.Type;
 

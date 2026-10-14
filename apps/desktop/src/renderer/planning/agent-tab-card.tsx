@@ -75,6 +75,8 @@ export interface CardReading {
   readonly corner: CardCorner;
   readonly choice: ModelChoice | undefined;
   readonly transcript: CopiedTranscript | undefined;
+  /** The teammate who started the agent, said as "Started by …"; none for the reader's own, or a card that is no agent's. */
+  readonly startedBy?: string | undefined;
 }
 
 function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
@@ -203,7 +205,7 @@ export function AgentTabCard({
   /** One line under a rule, said by a tab of the agent's other than its own. */
   foot?: React.ReactNode;
 }): React.JSX.Element {
-  const { corner, choice, transcript } = read();
+  const { corner, choice, transcript, startedBy } = read();
   return (
     <HoverCard data-tab-card="">
       <CardHead
@@ -212,6 +214,7 @@ export function AgentTabCard({
         sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
         corner={corner.kind === CARD_CORNER.NONE ? undefined : <Corner corner={corner} />}
       />
+      {startedBy === undefined ? null : <CardNote oneLine>{`Started by ${startedBy}`}</CardNote>}
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
       {foot === undefined ? null : (
         <>

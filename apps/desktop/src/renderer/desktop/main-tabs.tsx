@@ -233,7 +233,7 @@ function agentTabs(input: {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
     const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
-    const readCard = agentCardReading(agent, label, views.held, chosen(tab));
+    const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents.me);
     return {
       tab,
       agent,

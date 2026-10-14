@@ -61,6 +61,7 @@ export function codingAgentsControl(
   overrides: Partial<CodingAgentsControl> = {},
 ): CodingAgentsControl {
   return {
+    me: undefined,
     agents: [],
     archived: [],
     agentIds: [],
