@@ -20,7 +20,6 @@ import {
   channelLabel,
   channelThreads,
   chatWho,
-  FOR_YOU_REASON,
   type ForYouEntry,
   forYou,
   placeChannel,
@@ -293,7 +292,8 @@ function ThreadRow({
 
 /** Where For you says a message was posted: its channel, or a direct message. */
 function whereWords(chat: ChatAnswer, names: ChatNames, entry: ForYouEntry): string {
-  if (entry.reason === FOR_YOU_REASON.DIRECT) return "direct message";
+  // Note that the channel decides, not the reason, since an ask in a direct message is listed as an ask.
+  if (entry.channel.kind === CHANNEL_KIND.DM) return "direct message";
   return `in #${channelLabel(chat, names, entry.channel)}`;
 }
 

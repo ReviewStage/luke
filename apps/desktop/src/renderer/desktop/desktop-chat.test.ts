@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { Effect } from "effect";
@@ -11,7 +12,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl } from "#testing/tasks-control";
-import { fixtureChat } from "../tasks/chat-fixture";
+import { type FixtureChat, fixtureChat } from "../tasks/chat-fixture";
 import { DesktopChat } from "./desktop-chat";
 
 /** The moment the fixture's messages are stamped before. */
@@ -39,9 +40,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Chat over the fixture's chat, its place its own, as the plans tab holds it. */
-function mount(): HTMLElement {
-  const chat = fixtureChat({ fixtureMode: true }, AT);
+/** The window's Chat over the fixture's chat, changed as the test asks, its place its own, as the plans tab holds it. */
+function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTMLElement {
+  const staged = fixtureChat({ fixtureMode: true }, AT);
+  const chat = staged === undefined ? undefined : change(staged);
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
     return createElement(DesktopChat, {
@@ -140,5 +142,33 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "  ↳ Add teammate invitations",
     "  ↳ Invite emails",
+  ]);
+});
+
+test("an ask posted in a direct message is listed among For you's asks as a direct message, never as a channel", () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) =>
+        message.seq === 47
+          ? {
+              ...message,
+              ask: {
+                key: "take-invite-file",
+                revision: 1,
+                status: ASK_STATUS.OPEN,
+                needsReply: true,
+                response: { type: CHAT_ASK.APPROVAL },
+              },
+            }
+          : message,
+      ),
+    },
+  }));
+  assert.deepEqual(stream(page).slice(0, 3), [
+    "Add teammate invitations in #teammate-invitations",
+    "Invite emails direct message",
+    "Invite emails in #teammate-invitations",
   ]);
 });
