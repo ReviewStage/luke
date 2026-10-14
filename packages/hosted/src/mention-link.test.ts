@@ -67,3 +67,13 @@ test("only a label that starts with @ and says more is a mention's, which its ch
   assert.equal(isMentionLabel("@"), false);
   assert.equal(mentionName("@Rollout"), "Rollout");
 });
+
+test("a heading at its bound in the widest characters still reads back from its target", () => {
+  const section: Mention = {
+    kind: MENTION_KIND.SECTION,
+    planId: "pl_1",
+    heading: "語".repeat(1_000),
+  };
+
+  assert.deepEqual(decodeMention(encodeMention(section)), section);
+});

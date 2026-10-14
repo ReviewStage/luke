@@ -28,8 +28,8 @@ export const MENTION_KIND = {
 } as const;
 
 const MENTION_BOUNDS = {
-  /** The most characters a mention's target may spell: a plan's id and a heading at its bound, encoded, and then some. */
-  MAX_TARGET_CHARS: 4_000,
+  /** The most characters a mention's target may spell: a heading at its bound, every character encoded as UTF-8's widest, and the plan's id. */
+  MAX_TARGET_CHARS: 12_000,
   /** The most characters a plan's id may spell; the service mints them far shorter. */
   MAX_PLAN_ID_CHARS: 200,
 } as const;

@@ -256,12 +256,16 @@ function plainLink(href: string | undefined, children: ReactNode): ReactNode {
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
 
-/** A link's label as its words, where it is words alone: a label with emphasis or code in it is none. */
+/** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */
+function wordsOf(node: HastParent | HastNode): string {
+  if (node.type === "text") return node.value;
+  if (!("children" in node)) return "";
+  return node.children.map((child) => wordsOf(child)).join("");
+}
+
+/** A link's label as its words. */
 function labelOf(link: HastParent | undefined): string {
-  const children = link?.children ?? [];
-  return children.every((child) => child.type === "text")
-    ? children.map((child) => (child.type === "text" ? child.value : "")).join("")
-    : "";
+  return link === undefined ? "" : wordsOf(link);
 }
 
 function heading(level: number, children: ReactNode): React.JSX.Element {

@@ -365,7 +365,16 @@ function attributed(
 }
 
 /** A section's ⋯: the window's own menu, holding the one item that copies the section's link. */
-function SectionMenu({ planId, heading }: { planId: string; heading: string }): React.JSX.Element {
+function SectionMenu({
+  planId,
+  heading,
+  tabbable,
+}: {
+  planId: string;
+  heading: string;
+  /** Whether it is a Tab stop: only beside the document's one, its section's block. */
+  tabbable: boolean;
+}): React.JSX.Element {
   const menu = useActionMenu(true);
   const copy = useCopyToast();
   const trigger = menu.trigger();
@@ -381,6 +390,7 @@ function SectionMenu({ planId, heading }: { planId: string; heading: string }): 
           type="button"
           className="icon-button plan-unit-more"
           aria-label={SECTION_MENU.LABEL}
+          tabIndex={tabbable ? 0 : -1}
           {...trigger}
           onClick={(event) => {
             // Note that the press stops here, because a click into a section opens its editor.
@@ -421,6 +431,7 @@ function DocumentUnit({
   marks,
   link,
   planId,
+  entry,
 }: {
   view: UnitView;
   marks: SectionMarks;
@@ -428,6 +439,8 @@ function DocumentUnit({
   link: LinkDrawer | undefined;
   /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
   planId: string | undefined;
+  /** Whether the section's block is the document's one Tab stop, beside which its ⋯ is the next. */
+  entry: boolean;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const drawn = (
@@ -440,7 +453,7 @@ function DocumentUnit({
   );
   const menu =
     planId === undefined || view.heading === "" ? null : (
-      <SectionMenu planId={planId} heading={view.heading} />
+      <SectionMenu planId={planId} heading={view.heading} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }
@@ -601,10 +614,23 @@ export function PlanBody({
         entry={entry === view.id}
         editing={editing}
       >
-        <DocumentUnit view={view} marks={marks} link={link} planId={linkedPlan} />
+        <DocumentUnit
+          view={view}
+          marks={marks}
+          link={link}
+          planId={linkedPlan}
+          entry={entry === view.id}
+        />
       </DocumentBlock>
     ) : (
-      <DocumentUnit key={view.id} view={view} marks={marks} link={link} planId={linkedPlan} />
+      <DocumentUnit
+        key={view.id}
+        view={view}
+        marks={marks}
+        link={link}
+        planId={linkedPlan}
+        entry={false}
+      />
     ),
   );
   const editedNote =

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, type Mention } from "@sidecar/hosted/mention-link";
+import { MENTION_KIND, type Mention, mentionMarkdown } from "@sidecar/hosted/mention-link";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -183,4 +183,89 @@ test("off a plan's own page a mention stays its words", () => {
   assert.equal(container.querySelector(".mention-chip"), null);
   assert.equal(container.querySelector(".plan-unit-more"), null);
   assert.match(container.textContent ?? "", /Ship as @Rollout says/u);
+});
+
+test("a section whose heading is formatted is copied as a link that is drawn as its chip", () => {
+  const heading = "Rollout *draft*";
+  const plan: Plan = {
+    ...PLAN,
+    document: {
+      body: `## ${heading}\nStore first.\n\n## Notes\nSee ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading }, heading)}.`,
+      assumptions: [],
+    },
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const opened: Mention[] = [];
+
+  act(() =>
+    root.render(
+      createElement(PlanBody, {
+        plan,
+        live: false,
+        sectionLinks: { onOpen: (mention) => opened.push(mention), reveal: undefined },
+      }),
+    ),
+  );
+  const chip = chipNamed(container, "Rollout draft");
+  act(() => chip.click());
+
+  assert.equal(chip.dataset.state, "found");
+  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading }]);
+});
+
+/** The plan's page drawn editable, as a plan's own page is. */
+function drawnEditable(): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanBody, {
+        plan: PLAN,
+        live: false,
+        onEdit: () => new Promise(() => undefined),
+        sectionLinks: { onOpen: () => undefined, reveal: undefined },
+      }),
+    ),
+  );
+  return container;
+}
+
+test("copying a section's link from its ⋯ opens no editor, as a click into its words does", async () => {
+  const container = drawnEditable();
+  const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
+    (unit) => unit.textContent?.startsWith("Rollout"),
+  );
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  assert.ok(more);
+
+  act(() => more.click());
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link to section",
+  );
+  assert.ok(item);
+  await act(async () => item.click());
+  const afterCopy = container.querySelector(".plan-document-editor");
+  act(() =>
+    rollout
+      ?.querySelector("p:not(.markdown-heading)")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+
+  assert.equal(afterCopy, null);
+  assert.notEqual(container.querySelector(".plan-document-editor"), null);
+});
+
+test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
+  const container = drawnEditable();
+
+  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more")].filter(
+    (more) => more.tabIndex === 0,
+  );
+
+  assert.ok(stops.length <= 1, `${stops.length} of the ⋯ are Tab stops`);
 });
