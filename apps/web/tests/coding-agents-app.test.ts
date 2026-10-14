@@ -545,6 +545,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           url: "https://github.com/reviewstage/luke/pull/412",
           state: PULL_REQUEST_STATE.OPEN,
           checks: CHECK_SUMMARY.PASSING,
+          base: "main",
+          mergedSha: null,
           additions: 40,
           deletions: 2,
           changedFiles: 3,

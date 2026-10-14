@@ -176,6 +176,19 @@
                 "none"
               ]
             },
+            "base": {
+              "type": "string"
+            },
+            "mergedSha": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "additions": {
               "type": "number",
               "minimum": 0
@@ -195,6 +208,8 @@
             "url",
             "state",
             "checks",
+            "base",
+            "mergedSha",
             "additions",
             "deletions",
             "changedFiles"

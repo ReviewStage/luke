@@ -653,6 +653,8 @@ const FIXTURE_STACK_AGENTS: readonly CodingAgentSummary[] = [
       url: "https://github.com/acme/relay/pull/412",
       state: PULL_REQUEST_STATE.OPEN,
       checks: CHECK_SUMMARY.PENDING,
+      base: "main",
+      mergedSha: null,
       additions: 64,
       deletions: 3,
       changedFiles: 4,

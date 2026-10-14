@@ -57,6 +57,8 @@ const OPEN = worker("a1", 1, CODING_AGENT_STATUS.COMPLETED, {
     url: "https://github.com/acme/relay/pull/412",
     state: PULL_REQUEST_STATE.OPEN,
     checks: CHECK_SUMMARY.PENDING,
+    base: "main",
+    mergedSha: null,
     additions: 4,
     deletions: 1,
     changedFiles: 1,

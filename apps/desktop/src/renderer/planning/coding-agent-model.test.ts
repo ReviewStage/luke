@@ -481,6 +481,8 @@ test("an agent the service answers takes its place in the list, keeping the pull
     url: "https://github.com/acme/relay/pull/412",
     state: PULL_REQUEST_STATE.OPEN,
     checks: CHECK_SUMMARY.PASSING,
+    base: "main",
+    mergedSha: null,
     additions: 4,
     deletions: 1,
     changedFiles: 1,
