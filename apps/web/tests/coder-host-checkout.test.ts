@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { getTestDB } from "@sidecar/database/testing";
+import { ROLLOUT_ROLE, type RolloutRole } from "@sidecar/hosted/coding-agent-wire";
 import { Effect, Option, Redacted } from "effect";
+import { rolloutBranchPrefix } from "../server/hosted/coder-host/bounds";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
 import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
@@ -51,8 +53,19 @@ function carriesToken(text: string): boolean {
   return text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN) || text.includes(TOKEN_HEADER);
 }
 
-/** An account with one agent started on a plan of the repository given, the installation given connected to the plan's workspace. */
-const openAgent = (repository: string, installation: InstallationFixture) =>
+/** The branch the rollout's second pull request stands on, which its third is based on. */
+const BASE_BRANCH = "luke/invitations/2-route";
+
+/** An account with one agent started on a plan of the repository given, the installation given connected to the plan's workspace, at the rollout position and base given where any is. */
+const openAgent = (
+  repository: string,
+  installation: InstallationFixture,
+  rollout: {
+    readonly position?: number;
+    readonly baseBranch?: string;
+    readonly role?: RolloutRole;
+  } = {},
+) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const plan = yield* startPlan(userId, { name: "Teammate invitations", repository });
@@ -68,6 +81,7 @@ const openAgent = (repository: string, installation: InstallationFixture) =>
       planSnapshot: "# Teammate invitations\n",
       task: null,
       repository,
+      ...rollout,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -139,6 +153,68 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           repositories: [RELAY.name],
           permissions: { contents: "write", pull_requests: "write" },
         });
+      }),
+  );
+
+  it.effect(
+    "a rollout's worker is cloned whole at its base branch with the default branch fetched beside it, under the token at the firewall for the clone alone, which reaches no command",
+    () =>
+      Effect.gen(function* () {
+        const installation = installationOf(9);
+        const { agent, target } = yield* openAgent(RELAY_FULL_NAME, installation, {
+          position: 3,
+          baseBranch: BASE_BRANCH,
+          role: ROLLOUT_ROLE.BUILDER,
+        });
+        const github = githubReaching([installation]);
+        const sandbox = sandboxDouble(() => undefined);
+
+        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+
+        assert.deepEqual(sandbox.clones, [
+          {
+            repository: RELAY_FULL_NAME,
+            branch: BASE_BRANCH,
+            url: `https://github.com/${RELAY_FULL_NAME}.git`,
+            alsoFetch: RELAY.defaultBranch,
+          },
+        ]);
+        assert.equal(sandbox.policies.length, 2);
+        assert.equal(sandbox.policies.at(-1), "allow-all");
+        for (const run of sandbox.runs) {
+          assert.equal(carriesToken(JSON.stringify(run)), false);
+        }
+        assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
+      }),
+  );
+
+  it.effect(
+    "the rollout's keeper is cloned whole at the default branch with every branch under its plan's rollout prefix fetched beside it, under the token at the firewall for the clone alone",
+    () =>
+      Effect.gen(function* () {
+        const installation = installationOf(10);
+        const { agent, target } = yield* openAgent(RELAY_FULL_NAME, installation, {
+          role: ROLLOUT_ROLE.KEEPER,
+        });
+        const github = githubReaching([installation]);
+        const sandbox = sandboxDouble(() => undefined);
+
+        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+
+        const prefix = `luke/${agent.planId.replaceAll("-", "").slice(0, 8)}/`;
+        assert.equal(rolloutBranchPrefix(agent.planId), prefix);
+        assert.deepEqual(sandbox.clones, [
+          {
+            repository: RELAY_FULL_NAME,
+            branch: RELAY.defaultBranch,
+            url: `https://github.com/${RELAY_FULL_NAME}.git`,
+            alsoFetch: `${prefix}*`,
+          },
+        ]);
+        assert.equal(sandbox.policies.at(-1), "allow-all");
+        for (const run of sandbox.runs) {
+          assert.equal(carriesToken(JSON.stringify(run)), false);
+        }
       }),
   );
 

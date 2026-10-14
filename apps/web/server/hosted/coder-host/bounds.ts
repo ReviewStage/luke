@@ -39,6 +39,8 @@ export const CODER = {
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */
   BRANCH_PREFIX: "luke/",
+  /** How many hex digits of the plan's id name its rollout's branches under `BRANCH_PREFIX`. */
+  ROLLOUT_BRANCH_ID_DIGITS: 8,
   /** The most times an agent fixes a failing check on its pull request and pushes again before it stops and says so; an instruction to the model, enforced by nothing. */
   CI_FIX_ROUNDS: 3,
   /** How long a transcript read is held open for a new message while the agent runs, inside the function's own duration. */
@@ -111,3 +113,14 @@ export const CODER_REFUSAL = {
 } as const;
 
 export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];
+
+/**
+ * Where a plan's rollout branches stand, `luke/<first 8 hex of plan id>/`:
+ * a builder names its branch `<prefix><position>-<slug>`, and the keeper
+ * fetches everything under it. Note that it is cut from the plan's id
+ * rather than its name, so a renamed plan keeps its branches.
+ */
+export function rolloutBranchPrefix(planId: string): string {
+  const digits = planId.replaceAll("-", "").slice(0, CODER.ROLLOUT_BRANCH_ID_DIGITS);
+  return `${CODER.BRANCH_PREFIX}${digits}/`;
+}
