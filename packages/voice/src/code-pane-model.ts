@@ -14,7 +14,7 @@ import {
 /** The calls the feed groups its code under, as the Call tab draws them. */
 export type CodeFeedCallSource = Pick<
   TranscriptCallRow,
-  "key" | "startedAt" | "live" | "lukeEnded" | "record"
+  "key" | "startedAt" | "live" | "lukeEnded" | "record" | "caller"
 >;
 
 /**
@@ -31,6 +31,8 @@ export interface CodeFeedCall {
   readonly showings: readonly PlanCodeShowing[];
   readonly ended: string | undefined;
   readonly record: CallRecord | undefined;
+  /** The teammate whose call it was, named over its run as the Call tab names it; none for the reader's own or a turn's run. */
+  readonly caller: string | undefined;
 }
 
 /** A reference as a place names it, read from a call's input or a stored note, its lines absent for a whole file. */
@@ -118,6 +120,7 @@ export function codeFeedCalls(
         live: call?.live ?? false,
         ended: call === undefined ? undefined : callEndedLine(call),
         record: call?.record,
+        caller: call?.caller,
       },
       showings: [],
     };
