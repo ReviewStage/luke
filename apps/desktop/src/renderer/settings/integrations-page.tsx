@@ -212,14 +212,8 @@ function IntegrationRow({
         (connected && !broken) ? null : (
           <>
             {connecting && signIn ? (
-              <button
-                type="button"
-                className="toolbar-button"
-                onClick={() => {
-                  grant.cancel();
-                  setConnecting(false);
-                }}
-              >
+              // The row waits on until the host settles the cancelled sign-in, so a retry starts a sign-in of its own.
+              <button type="button" className="toolbar-button" onClick={grant.cancel}>
                 Cancel
               </button>
             ) : null}

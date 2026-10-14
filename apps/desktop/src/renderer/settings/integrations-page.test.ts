@@ -190,7 +190,7 @@ test("GitHub, granted by the account's own GitHub sign-in, offers Sign in with G
   assert.equal(page.querySelector('[aria-label="GitHub actions"]'), null);
 });
 
-test("a GitHub sign-in cancelled from its row and landing after all is not taken as the row's: the row offers Sign in with GitHub again, and nothing is brought back from the browser", async () => {
+test("a GitHub sign-in cancelled from its row and landing after all is not taken as the row's: the row offers Sign in with GitHub again once the host settles it, and nothing is brought back from the browser", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -209,6 +209,8 @@ test("a GitHub sign-in cancelled from its row and landing after all is not taken
   buttonNamed("Cancel")?.click();
   await settle();
   assert.ok(sent.some((request) => request.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN));
+  // A retry waits for the host to settle the cancelled sign-in, so it never joins it.
+  assert.equal(buttonNamed("Sign in with GitHub"), undefined);
   landSignIn?.(true);
   await settle();
 

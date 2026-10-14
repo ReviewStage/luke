@@ -441,8 +441,8 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { problem: toolsProblem(failure) });
   }
   const tools = listed.success;
+  heldToolsSwept(cache, seams.now());
   if (holds) {
-    heldToolsSwept(cache, seams.now());
     const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
     accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
     cache.set(userId, accountReads);
