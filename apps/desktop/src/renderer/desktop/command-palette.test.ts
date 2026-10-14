@@ -6,18 +6,24 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
+import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { settingsView } from "@sidecar/settings/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { shownFiles } from "../planning/code-pane-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import type { SidePanelControl } from "../planning/use-side-panel";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { CommandPalette } from "./command-palette";
+import { panelEntries } from "./side-panel";
 
 /** Where the palette sent the window: each tab and each Settings page it asked for, in order. */
 interface Sent {
@@ -37,7 +43,11 @@ afterEach(() => {
 });
 
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
-function openPalette(plans: PlansControl = plansControl()): Sent {
+function openPalette(
+  plans: PlansControl = plansControl(),
+  readFiles: (planId: string) => Promise<PlanningTreeAnswer> = () =>
+    Promise.reject(new Error("no repository is open")),
+): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
   document.body.append(host);
@@ -54,7 +64,7 @@ function openPalette(plans: PlansControl = plansControl()): Sent {
           rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
           onViewChange: (view) => sent.views.push(view),
         },
-        readFiles: () => Promise.reject(new Error("no repository is open")),
+        readFiles,
       }),
     ),
   );
@@ -339,4 +349,88 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
   assert.ok(rows().includes(changes), "found by its pull request's number");
   type("CSV");
   assert.ok(rows().includes(changes), "found by its pull request's title");
+});
+
+test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
+  const path = "src/invites/accept.ts";
+  const note = "A used invite is refused here.";
+  const showing: PlanCodeShowing = {
+    callId: "c",
+    turnId: "t",
+    shownAt: 1_000,
+    code: {
+      ref: { path, startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+      note,
+    },
+  };
+  const opened: unknown[][] = [];
+  const base = plansControl();
+  const sidePanel: SidePanelControl = {
+    ...base.sidePanel,
+    files: [{ path, range: { startLine: 3, endLine: 5 }, opened: 1 }],
+    onOpenFile: (...asked) => opened.push(asked),
+  };
+  const plans = plansControl({
+    activePlanId: "plan-1",
+    plans: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Teammate invitations",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+    sidePanel,
+    shownCode: [showing],
+  });
+  openPalette(plans, () =>
+    Promise.resolve({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: [{ name: path, kind: PLAN_TREE_ENTRY.FILE }],
+        truncated: false,
+      },
+    }),
+  );
+  chooseFilter("Files");
+  await act(async () => undefined);
+  assert.deepEqual(rows(), ["accept.ts · src/invites"]);
+
+  const [plus] = panelEntries({
+    panel: sidePanel,
+    kinds: [],
+    workers: [],
+    files: shownFiles([showing]),
+  });
+  assert.ok(plus, 'the "+" offers the file');
+  const row = document.querySelector<HTMLElement>(".menu-item");
+  assert.equal(
+    row?.querySelector(".menu-item-glyph")?.innerHTML,
+    renderToStaticMarkup(plus.row.icon),
+    'the row wears the icon the "+" row does',
+  );
+  act(() => {
+    row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-file-card]");
+  assert.deepEqual(
+    [
+      card?.querySelector(".card-name")?.textContent,
+      card?.querySelector(".card-note")?.textContent,
+    ],
+    [path, note],
+  );
+
+  press("accept.ts · src/invites");
+  act(() => plus.onPick());
+  // Both name the file alone, so the tab it has is shown as it stands.
+  assert.deepEqual(opened, [[{ path }], [{ path }]]);
 });

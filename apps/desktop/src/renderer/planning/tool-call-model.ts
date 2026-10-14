@@ -18,6 +18,7 @@ import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
+import { fileRefText } from "./code-pane-model";
 import { shortCommit } from "./file-tab-model";
 import { skillWord } from "./skill-mention";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
@@ -287,7 +288,7 @@ function blockLine(block: InboxPostBlock): string {
     case INBOX_BLOCK.LINK:
       return `${block.label}: ${block.url}`;
     case INBOX_BLOCK.CODE:
-      return `${block.path}:${block.startLine}-${block.endLine} at ${shortCommit(block.sha)}`;
+      return `${fileRefText(block)} at ${shortCommit(block.sha)}`;
     case INBOX_BLOCK.IMAGE:
       return `Image: ${block.alt} (${block.path})`;
   }
@@ -470,13 +471,12 @@ function repositoryOutput(output: WireValue): ToolBlock {
   return commandOutput(output);
 }
 
-/** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any. */
+/** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
 function shownLines(input: WireValue | undefined): string {
   const path = stringAt(input, "path") ?? "";
-  const start = isRecord(input) && isWireNumber(input.startLine) ? input.startLine : undefined;
-  if (start === undefined) return path;
-  const end = isRecord(input) && isWireNumber(input.endLine) ? input.endLine : start;
-  return end === start ? `${path}:${start}` : `${path}:${start}-${end}`;
+  const startLine = isRecord(input) && isWireNumber(input.startLine) ? input.startLine : undefined;
+  const endLine = isRecord(input) && isWireNumber(input.endLine) ? input.endLine : startLine;
+  return fileRefText({ path, startLine, endLine });
 }
 
 /** A planning call whose input is one field the row names it by, its answer as its JSON. */

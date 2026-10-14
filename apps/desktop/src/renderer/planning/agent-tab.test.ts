@@ -299,7 +299,13 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
       }),
     ],
   });
-  const cards = planCards({ agents, workRows: [], held: NOTHING_HELD, chosen: () => false });
+  const cards = planCards({
+    agents,
+    workRows: [],
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [],
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

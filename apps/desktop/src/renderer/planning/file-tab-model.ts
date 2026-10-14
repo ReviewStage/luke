@@ -92,7 +92,7 @@ export function refusalLine(
 }
 
 /** Whether lines Luke showed are the lines a tab reads: any of his showings for a read of the default branch, and one read at the same commit for a read pinned to one. */
-function shownWhereRead(code: PlanCode, commit: string | undefined): boolean {
+export function shownWhereRead(code: PlanCode, commit: string | undefined): boolean {
   return commit === undefined || code.commit === commit;
 }
 

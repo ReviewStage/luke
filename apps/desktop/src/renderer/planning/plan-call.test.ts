@@ -9,12 +9,15 @@ import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { TURN_ORIGIN } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/plan-work";
 import { codingAgentsControl } from "#testing/plans-control";
 import { planCards } from "../desktop/side-panel";
 import { NOTHING_HELD } from "./agent-ref";
+import { CodeCardHeader } from "./code-pane";
 import { PlanCall } from "./plan-call";
+import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workRowsOf } from "./work-model";
 
@@ -270,6 +273,7 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     workRows: workRowsOf(conversation, false),
     held: NOTHING_HELD,
     chosen: () => false,
+    shownCode: [],
   });
   const page = mounted(
     callTab({
@@ -302,4 +306,60 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     "Invoice export",
     "Working…",
   ]);
+});
+
+test("on the Call tab, a show_code row says its lines as the Code tab's card says them, hangs the file's card with Luke's note, and opens the file on those lines", () => {
+  const ref = { path: "src/invites/accept.ts", startLine: 3, endLine: 5 };
+  const turn = workTurn(PLAN_WORK_STATE.DONE, [
+    toolCall(AGENT_TOOL.SHOW_CODE, "c", ref, { output: { status: "shown" } }),
+  ]);
+  const conversation = conversationOf([turn]);
+  const note = "A used invite is refused here.";
+  const cards = planCards({
+    agents: codingAgentsControl(),
+    workRows: workRowsOf(conversation, false),
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [
+      {
+        callId: "c",
+        turnId: "t",
+        shownAt: 1_000,
+        code: { ref, repository: "acme/relay", firstLine: 1, lineCount: 9, lines: [], note },
+      },
+    ],
+  });
+  const opened: ToolTarget[] = [];
+  const page = mounted(
+    callTab({
+      region: said(0),
+      conversation,
+      cards: cards.call,
+      onOpenTarget: (target) => opened.push(target),
+    }),
+  );
+  for (const fold of page.querySelectorAll<HTMLElement>("details > summary")) {
+    act(() => fold.click());
+  }
+  const head = document.createElement("div");
+  head.innerHTML = renderToStaticMarkup(
+    createElement(CodeCardHeader, { codeRef: ref, note, copied: undefined, onOpen: undefined }),
+  );
+  const lines = head.querySelector(".file-ref-lines")?.textContent;
+  assert.equal(lines, "Lines 3–5");
+  const row = page.querySelector<HTMLElement>('button[data-call-id="c"]');
+  assert.ok(row, "the row opens the file");
+  assert.equal(row.textContent, `Showed ${ref.path}, ${lines}`);
+  document.documentElement.dataset.keyboard = "true";
+  act(() => row.focus());
+  const card = document.querySelector(".tooltip-card [data-file-card]");
+  assert.deepEqual(
+    [
+      card?.querySelector(".card-name")?.textContent,
+      card?.querySelector(".card-note")?.textContent,
+    ],
+    [ref.path, note],
+  );
+  act(() => row.click());
+  assert.deepEqual(opened, [{ kind: TOOL_TARGET.SHOWN_CODE, call: "c", ref }]);
 });

@@ -37,6 +37,7 @@ import {
   agentTabLabel,
   pullRequestNumberLabel,
 } from "../planning/coding-agent-model";
+import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { snippetOf } from "../planning/file-tab-model";
 import { FileView } from "../planning/file-view";
 import { PagePane } from "../planning/page-pane";
@@ -296,15 +297,15 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * under Subagents, each subagent the plan's work holds; then, under Files,
  * each file Luke showed on the plan, by name with its folder beside it.
  * Each row wears its tab's own look (`tab-look.tsx`): a subagent its
- * model's mark wearing where the worker stands, and a file its type's
- * coloured icon, as the file tree draws it. Picking a row whose tab is
- * open chooses that tab rather than opening another, as a browser's tab
- * search does, so no row says it is open; a file not open opens on the
- * newest snippet of it. Then, under Changes, each agent's pull request
- * (`changesOffers`), named as its Changes tab is, with the pull request's
- * number beside it, found by its title and number too, which opens the
- * agent's Changes tab. The plan's coding agents are opened from the plan's
- * column's own "+" (`main-tabs.tsx`).
+ * model's mark wearing where the worker stands, and a file as every place
+ * names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
+ * that tab rather than opening another, as a browser's tab search does, so
+ * no row says it is open; a file not open opens through the panel's one
+ * door for a file on the newest snippet of it. Then, under Changes, each
+ * agent's pull request (`changesOffers`), named as its Changes tab is, with
+ * the pull request's number beside it, found by its title and number too,
+ * which opens the agent's Changes tab. The plan's coding agents are opened
+ * from the plan's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
   panel: SidePanelControl;
@@ -337,17 +338,11 @@ export function panelEntries(input: {
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
   const fileRows = files.map((ref, at) => {
-    const look = tabLook({ kind: TAB_KIND.FILE, path: ref.path });
     const open = panel.files.some((file) => file.path === ref.path);
     return {
-      row: {
-        id: String(at),
-        ...look,
-        detail: ref.path.slice(0, -look.label.length - 1) || undefined,
-        terms: [ref.path],
-        section: ADD_SECTION.FILES,
-      },
-      onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref, ref.commit)),
+      row: { id: String(at), ...fileLook(ref.path), section: ADD_SECTION.FILES },
+      onPick: () =>
+        open ? panel.onOpenFile({ path: ref.path }) : panel.onOpenFile(ref, ref.commit),
     };
   });
   // Note that a pull request's row is named by its page, because an agent's
@@ -418,13 +413,17 @@ function stripTabs(input: {
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
+  /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
+  shown: readonly PlanCodeShowing[];
+  /** The plan's repository, whose showings alone a file tab's card reads its note from. */
+  repository: string | null;
   held: HeldTranscripts;
   copied: TranscriptCopier;
   /** Reads a planning worker's whole session for a copy, the plan standing in the agent's place. */
   readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, held, copied, readWorker } =
-    input;
+  const { panel, unread, agents, subagents, files, changes, pages, shown, held } = input;
+  const { repository, copied, readWorker } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -471,11 +470,19 @@ function stripTabs(input: {
       copy: copied(read),
     };
   });
-  const fileTabs = files.map(({ path }) => ({
-    tab: { file: path },
-    look: look({ file: path }, { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path }),
-    close: () => panel.onClose({ file: path }),
-  }));
+  // A file's tab hangs the file's card, as every place naming the file does.
+  const fileTabs = files.map(({ path, commit }) => {
+    const note = newestFileNote(shown, path, { repository, commit });
+    const card = <FileCard path={path} note={note} />;
+    return {
+      tab: { file: path },
+      look: look(
+        { file: path },
+        { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path, card },
+      ),
+      close: () => panel.onClose({ file: path }),
+    };
+  });
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
     const agent = agents.agents?.find((each) => each.id === tab.changes);
@@ -535,6 +542,8 @@ function PanelTabs({
   changes,
   pages,
   shownFiles,
+  shown,
+  repository,
   offeredPages,
   held,
   readWorker,
@@ -558,6 +567,10 @@ function PanelTabs({
   pages: readonly DrawnPage[];
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly ShownFile[];
+  /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
+  shown: readonly PlanCodeShowing[];
+  /** The plan's repository, whose showings alone the file tabs' cards read. */
+  repository: string | null;
   /** The plan's pages, which the "+" offers. */
   offeredPages: readonly PageLine[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
@@ -574,6 +587,8 @@ function PanelTabs({
     files,
     changes,
     pages,
+    shown,
+    repository,
     held,
     copied,
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
@@ -867,7 +882,8 @@ export interface PlanCards {
 
 /**
  * The cards a transcript's rows hang, each the card of the tab the row
- * opens: a call about an agent the agent's (`agent-ref.tsx`), and a
+ * opens: a call about an agent the agent's (`agent-ref.tsx`), code shown
+ * the file's, with Luke's note on the lines (`file-ref.tsx`), and a
  * subagent's row its worker's, read as its tab reads its own, `chosen`
  * telling whether that tab is the one shown, whose transcript follows the
  * run. A worker the plan's work no longer holds hangs none.
@@ -877,9 +893,15 @@ export function planCards(input: {
   workRows: readonly WorkTurnRow[];
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
+  /** Every code Luke showed on the plan, whose note on a `show_code` call's lines its row's card says. */
+  shownCode: readonly PlanCodeShowing[];
 }): PlanCards {
-  const { agents, workRows, held, chosen } = input;
+  const { agents, workRows, held, chosen, shownCode } = input;
   const target = (opened: ToolTarget) => {
+    if (opened.kind === TOOL_TARGET.SHOWN_CODE) {
+      const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
+      return <FileCard path={opened.ref.path} note={note} />;
+    }
     if (opened.kind !== TOOL_TARGET.AGENT) return undefined;
     const tab = { agent: opened.agent };
     const subject = agentSubject(agents, opened.agent, held, chosen(tab));
@@ -1486,6 +1508,8 @@ export function SidePanel({
             changes={changes}
             pages={pageTabs}
             shownFiles={offered}
+            shown={shownCode ?? []}
+            repository={repository}
             offeredPages={planPages}
             held={drawnTranscripts}
             readWorker={work.readWorker}

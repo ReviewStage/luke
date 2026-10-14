@@ -390,13 +390,14 @@ function PlanDocument({
     }
   };
   // A row in a transcript that opens a tab hangs that tab's card, read as
-  // the tab reads it, so an agent or a subagent is previewed alike wherever named.
+  // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = planCards({
     agents,
     workRows: workRowsOf(plans.work.conversation, plans.work.callLive),
     held: views.held,
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
+    shownCode: plans.shownCode ?? [],
   });
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
@@ -535,6 +536,7 @@ function PlanDocument({
             cardId={summaryCard}
             inbox={inbox.board}
             held={views.held}
+            repository={plan.repository}
           />
         </div>
         {/* Note that a call of the plan's own still stands, so it can be
@@ -603,9 +605,9 @@ export function DesktopPlans({
       return (
         <SkillFiles
           source={plans.agents.readSkills}
-          // Note that a skill's file is browsed to, as a file the palette finds is,
+          // Note that a skill's file opens as a file the palette finds does, whole,
           // so its tab stands on this plan though Luke never showed it.
-          onOpen={(skill) => plans.sidePanel.onBrowseFile(skill.path, skill.path, true)}
+          onOpen={(skill) => plans.sidePanel.onOpenFile({ path: skill.path })}
         >
           <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />
           {secondCall}

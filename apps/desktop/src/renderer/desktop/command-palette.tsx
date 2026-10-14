@@ -44,7 +44,7 @@
  */
 
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/hosted/plan-wire";
-import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { GearIcon, SearchIcon } from "@sidecar/panel";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -63,9 +63,8 @@ import {
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
-import { fileName } from "../planning/code-pane-model";
+import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { refusalLine } from "../planning/file-tab-model";
-import { FileTypeIcon } from "../planning/file-type-icon";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -323,14 +322,16 @@ function filesNotice(repositoryOpen: boolean, held: FilesHeld | undefined): stri
   return held.read === FILES_READ.MISSED ? held.notice : undefined;
 }
 
-/** A file's row: its type's icon, its name, and its folder after it. */
-function fileRow(path: string, open: (path: string) => void): PaletteRow {
-  const name = fileName(path);
+/** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
+function fileRow(
+  path: string,
+  read: { readonly shown: readonly PlanCodeShowing[]; readonly repository: string | null },
+  open: (path: string) => void,
+): PaletteRow {
+  const note = newestFileNote(read.shown, path, { repository: read.repository, commit: undefined });
   return {
-    icon: <FileTypeIcon name={name} />,
-    label: name,
-    detail: path.slice(0, -name.length - 1) || undefined,
-    terms: [path],
+    ...fileLook(path),
+    card: <FileCard path={path} note={note} />,
     onChoose: () => open(path),
   };
 }
@@ -769,13 +770,15 @@ export function CommandPalette({
     ],
     [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
-  // Note that a file found opens in a tab of its own, as one chosen in a
-  // File tab's tree with ⌘ held does, or chooses the tab it has.
+  // Note that a file found opens through the panel's one door for a file
+  // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
-    onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onBrowseFile(path, path, true)));
+    onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
-      ? matchedPaths.map((path) => fileRow(path, openFile))
+      ? matchedPaths.map((path) =>
+          fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
+        )
       : tiersOf[kind]()
           .flatMap((tier) => ranked(tier, query, limit, byRow))
           .slice(0, limit);

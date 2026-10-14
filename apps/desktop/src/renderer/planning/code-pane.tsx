@@ -17,11 +17,10 @@ import {
   type CodeFeedCallSource,
   codeFeedCalls,
   copiedLines,
-  fileName,
+  fileRefText,
   isPointed,
-  rangeLabel,
 } from "./code-pane-model";
-import { FileTypeIcon } from "./file-type-icon";
+import { FileRef } from "./file-ref";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
@@ -174,52 +173,30 @@ function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
   );
 }
 
-/** What a card is called: its path, and the lines pointed at where it names some. */
-export function codeCardName(ref: CodeRef): string {
-  const label = rangeLabel(ref);
-  return label === undefined ? ref.path : `${ref.path}, ${label}`;
-}
-
 /**
- * A card's header: its file's type icon, as the file tree draws it
- * (`file-type-icon.tsx`), then its path, cut from the left so the file's own name stays
- * in sight, with the whole path in its hint; the lines pointed at; their
- * copy, where the card holds them; and the whole file opened in a tab of
- * its own, from the path or its button, where the card's file can be. The Code tab's cards and an inbox
- * item's code are both headed by it.
+ * A card's header: the file and the lines pointed at, named as every place
+ * names them (`file-ref.tsx`), hanging the file's card and opening it in its
+ * tab where the card's file can be; their copy, where the card holds them;
+ * and the file's opening again as a button of its own. The Code tab's cards
+ * and an inbox item's code are both headed by it.
  */
 export function CodeCardHeader({
   codeRef,
+  note,
   copied,
   onOpen,
 }: {
   codeRef: CodeRef;
+  /** Luke's note on the lines, which the file's card says; none where the card has none. */
+  note: string | undefined;
   /** The lines a copy carries; none where the card holds no lines yet. */
   copied: string | undefined;
-  /** Opens the whole file; none where the card's file cannot be opened, its path then plain words. */
+  /** Opens the file on the card's lines; none where the card's file cannot be opened, its path then plain words. */
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
-  const label = rangeLabel(codeRef);
   return (
     <header className="code-card-header">
-      <FileTypeIcon name={fileName(codeRef.path)} />
-      <Tooltip label={codeRef.path}>
-        {onOpen === undefined ? (
-          <span className="code-card-path">
-            <bdi>{codeRef.path}</bdi>
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="code-card-path"
-            aria-label={`Open ${codeRef.path}`}
-            onClick={onOpen}
-          >
-            <bdi>{codeRef.path}</bdi>
-          </button>
-        )}
-      </Tooltip>
-      {label === undefined ? null : <span className="code-card-range">{label}</span>}
+      <FileRef codeRef={codeRef} note={note} onOpen={onOpen} />
       <span className="code-card-actions">
         {copied === undefined ? null : <CopyLinesButton lines={copied} />}
         {onOpen === undefined ? null : (
@@ -249,13 +226,10 @@ function CodeCardContent({
 }): React.JSX.Element {
   const { code } = showing;
   return (
-    <article
-      className="code-card"
-      data-call-id={showing.callId}
-      aria-label={codeCardName(code.ref)}
-    >
+    <article className="code-card" data-call-id={showing.callId} aria-label={fileRefText(code.ref)}>
       <CodeCardHeader
         codeRef={code.ref}
+        note={code.note}
         copied={copiedLines(code)}
         onOpen={() => onOpenFile(code.ref, code.commit)}
       />

@@ -40,8 +40,8 @@ import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
-import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
-import { copiedLines } from "./code-pane-model";
+import { CodeCardHeader, CodeLines } from "./code-pane";
+import { copiedLines, fileRefText } from "./code-pane-model";
 import type { ReadFileWindow } from "./file-tab";
 import {
   CODE_READ,
@@ -233,11 +233,12 @@ function CodeBlock({
   return (
     <article
       className="code-card ph-no-capture"
-      aria-label={codeCardName(codeRef)}
+      aria-label={fileRefText(codeRef)}
       data-inbox-code=""
     >
       <CodeCardHeader
         codeRef={codeRef}
+        note={undefined}
         copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
         // Note that lines the plan does not read open nothing, because the File tab reads the plan's repository alone.
         onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
