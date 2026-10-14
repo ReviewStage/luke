@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { githubConnectionSchema } from "./planning-view.js";
 
 /**
  * github-connection-wire.ts -- whether the signed-in account has connected its GitHub, and the browser page that connects or disconnects it.
@@ -22,10 +23,7 @@ export const githubConnectAnswerSchema = EffectSchema.Struct({ url: EffectSchema
 export type GitHubConnectAnswer = typeof githubConnectAnswerSchema.Type;
 
 /** Whether the account has a GitHub account linked (GET), and its login where the service holds one. */
-export const githubConnectionAnswerSchema = EffectSchema.Struct({
-  connected: EffectSchema.Boolean,
-  login: EffectSchema.NullOr(EffectSchema.String),
-});
+export const githubConnectionAnswerSchema = githubConnectionSchema;
 
 export type GitHubConnection = typeof githubConnectionAnswerSchema.Type;
 

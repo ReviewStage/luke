@@ -8,6 +8,7 @@ import { Fragment, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { SETTINGS_SECTION } from "../settings-views";
+import { managesWorkspace } from "../workspace-role";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { SelectRow } from "./select-row";
 import { SettingsGroup } from "./settings-group";
@@ -47,11 +48,6 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
  */
 function refusedWith(refused: Error): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message };
-}
-
-/** Whether the account's role lets it manage the workspace's members and GitHub organization. */
-function managesWorkspace(workspace: Workspace): boolean {
-  return workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN;
 }
 
 /** The members as the section reads them: still reading, read, or refused with a line. */

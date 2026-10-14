@@ -1,4 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
@@ -28,6 +29,7 @@ import {
 import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useStateWithRef } from "../use-state-with-ref";
+import { managesWorkspace } from "../workspace-role";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -204,6 +206,12 @@ export interface PlansControl {
   onCreateWorkspace: (name: string) => Promise<string | undefined>;
   /** Opens Settings on its Workspace page, showing the listed workspace. */
   onOpenWorkspaceSettings: () => void;
+  /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
+  github: GitHubConnection | undefined;
+  /** Opens the page that connects the account's own GitHub in the browser. */
+  onConnectAccountGitHub: () => void;
+  /** Opens the page that disconnects the account's own GitHub in the browser. */
+  onDisconnectAccountGitHub: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -1041,6 +1049,9 @@ export function usePlansTab(input: {
   // plan's, else the one New plan starts in.
   const repositoriesOf =
     region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : listedWorkspace?.id;
+  // A workspace not yet read is taken as managed, so the chip still points somewhere.
+  const chooserWorkspace = viewed.workspaces.find((each) => each.id === repositoriesOf);
+  const managesChosen = chooserWorkspace === undefined || managesWorkspace(chooserWorkspace);
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
     fixture !== undefined
       ? Promise.resolve(fixtureRepositories())
@@ -1051,6 +1062,18 @@ export function usePlansTab(input: {
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A fixture's GitHub is connected nowhere. The page, to connect or to
+  // disconnect, is the service's, opened by main, and the connection arrives
+  // on the view once the panel comes forward again; one that did not open
+  // says why in a toast.
+  const accountGitHub = (
+    kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
+  ) => {
+    if (fixture !== undefined) return;
+    act(kind).catch((refused: Error) =>
+      toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    );
+  };
   // A fixture's workspaces are made, shared, and connected nowhere. A
   // workspace made is listed at once, main's view holding it after; the
   // invite and the connect open the browser, and a refusal of either says
@@ -1345,6 +1368,9 @@ export function usePlansTab(input: {
         workspace.choose(personal.id);
       }
     },
+    github: viewed.github,
+    onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
+    onDisconnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_DISCONNECT),
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
@@ -1482,6 +1508,7 @@ export function usePlansTab(input: {
       openGitHub,
       pictures: fixture === undefined,
       scope: repositoriesOf,
+      manages: managesChosen,
     },
     repositoryMenu,
     onChangeRepository: changeRepository,

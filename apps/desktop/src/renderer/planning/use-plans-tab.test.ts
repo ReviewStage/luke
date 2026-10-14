@@ -23,7 +23,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
+import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
 import {
   type AppInboxPlan,
   type AppInboxPlanHolding,
@@ -833,6 +833,43 @@ test("before the workspaces are read every plan is listed and New plan names no 
     ["notes", "alerts", "billing"],
   );
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
+});
+
+test("Settings' GitHub row is the connection main's view holds, and its Connect and Disconnect ask main for their pages", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
+    { [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined) },
+  );
+
+  act(() => tab.control().onConnectAccountGitHub());
+  act(() => tab.control().onDisconnectAccountGitHub());
+  await settle();
+
+  assert.deepEqual(tab.control().github, { connected: true, login: null });
+  assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
+});
+
+test("the repository chooser says the account manages the workspace it owns, and not one it is a member of", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
+
+  const personal = tab.control().repositories.manages;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.equal(personal, true);
+  assert.equal(tab.control().repositories.manages, false);
+});
+
+test("a Disconnect whose page did not open says why in a toast", async () => {
+  const refusal = ACT[ACT_KIND.GITHUB_DISCONNECT].refusal;
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
+    { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },
+  );
+
+  act(() => tab.control().onDisconnectAccountGitHub());
+  await settle();
+
+  assert.equal(newestToastSays(), refusal);
 });
 
 test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {

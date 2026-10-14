@@ -14,6 +14,7 @@ import type {
   ShortcutControl,
   UpdateControl,
 } from "./controls";
+import { GitHubSection, type GitHubSettingsControl } from "./github-section";
 import { IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
@@ -50,6 +51,8 @@ export interface SettingsPanelProps {
   shortcuts: ShortcutControl;
   /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
+  /** Whether the account has GitHub connected, and the pages that connect and disconnect it, drawn while an account is signed in. */
+  github?: GitHubSettingsControl;
 }
 
 /**
@@ -108,6 +111,7 @@ export function SettingsPanel({
   settings,
   shortcuts,
   workspace,
+  github,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, microphone, account });
@@ -164,6 +168,11 @@ export function SettingsPanel({
               onSignOut={onSignOut}
               onDeleteAccount={onDeleteAccount}
             />
+          ) : null}
+
+          {/* Beside the account, where every Open Settings for GitHub not connected lands. */}
+          {github !== undefined && account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+            <GitHubSection control={github} />
           ) : null}
         </>
       )}

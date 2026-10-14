@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   INTEGRATION_PROVIDER,
@@ -17,6 +16,8 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import type { Failure } from "../failure-remedy";
+import { OpenSettingsProvider } from "../open-settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
 import type { AgentDraft } from "./use-coding-agents";
@@ -26,19 +27,14 @@ import type { AgentDraft } from "./use-coding-agents";
  * Start GitHub refused offers the sign-in itself, which once it lands sends
  * the message again by itself; a sign-in withdrawn leaves the refusal and
  * its press; any other refusal offers Retry; a server the agent has on
- * whose sign-in expired is offered to reconnect. The sign-ins the bridge is
+ * whose sign-in expired offers Settings › Integrations. The sign-ins the bridge is
  * asked for are held until the test answers them.
  */
 
-/** One sign-in the bridge holds, answered when the test chooses. */
-interface HeldSignIn {
-  request: Act;
-  answer: (outcome: ActOutcome) => void;
-}
-
-let signIns: HeldSignIn[] = [];
-/** Where the account's Slack connection stands at the service; every other provider is not offered. */
+/** Where the account's Slack connection stands at the service; every other provider but GitHub is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
+/** Where GitHub stands for the account, unavailable unless a test offers it. */
+let github: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 
 // SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
 const UNAVAILABLE = Object.fromEntries(
@@ -61,23 +57,24 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  signIns = [];
   sent = [];
   slack = INTEGRATION_STATUS.CONNECTED;
+  github = INTEGRATION_STATUS.UNAVAILABLE;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {
         sent.push(request);
-        if (request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN) {
-          return new Promise((answer) => {
-            signIns.push({ request, answer });
-          });
-        }
         if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
-            value: { integrations: { ...UNAVAILABLE, [INTEGRATION_PROVIDER.SLACK]: slack } },
+            value: {
+              integrations: {
+                ...UNAVAILABLE,
+                [INTEGRATION_PROVIDER.SLACK]: slack,
+                [INTEGRATION_PROVIDER.GITHUB]: github,
+              },
+            },
           });
         }
         if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
@@ -104,17 +101,30 @@ async function settle(): Promise<void> {
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
 function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   const starts: string[] = [];
+  const links: SettingsLink[] = [];
+  const settings = { integrationsOpened: false };
   const control = codingAgentsControl({
     startTask: (_draftId, task) => {
       starts.push(task);
       return Promise.resolve(answers.shift());
+    },
+    onOpenIntegrations: () => {
+      settings.integrationsOpened = true;
     },
   });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(DraftAgentTab, { draft, control })));
+  act(() =>
+    root.render(
+      createElement(
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => links.push(link) },
+        createElement(DraftAgentTab, { draft, control }),
+      ),
+    ),
+  );
   // A press is named by its words; the mark before them carries a title of its own.
   const button = (words: string) =>
     [...container.querySelectorAll("button")].find((each) =>
@@ -124,6 +134,8 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     );
   return {
     starts,
+    links,
+    settings,
     send: async () => {
       const field = container.querySelector("textarea");
       assert.ok(field, "the draft's box is drawn");
@@ -143,80 +155,56 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   };
 }
 
-/** The newest sign-in the tab asked for, answered with whether a new session landed. */
-async function answerSignIn(signedIn: boolean): Promise<void> {
-  const held = signIns.at(-1);
-  assert.ok(held, "a sign-in was asked for");
-  await act(async () => {
-    held.answer({ status: ACT_OUTCOME_STATUS.DONE, value: signedIn });
-  });
-  await settle();
-}
-
-test("a Start GitHub refused offers the GitHub sign-in, and once it lands the message is sent again by itself", async () => {
-  const tab = mount([SIGN_IN_REFUSAL, undefined]);
-  await tab.send();
-  assert.match(tab.note() ?? "", /^Sign in with GitHub again to start an agent\./u);
-  assert.equal(tab.button("Retry"), undefined, "Retry cannot mend it");
-
-  await tab.press("Sign in with GitHub");
-  assert.deepEqual(
-    signIns.map(({ request }) => request),
-    [{ kind: ACT_KIND.ACCOUNT_SIGN_IN_AGAIN, payload: { provider: ACCOUNT_PROVIDER.GITHUB } }],
-  );
-  assert.ok(tab.button("Waiting for browser…")?.disabled, "the press waits on the browser");
-  assert.deepEqual(tab.starts, [DRAFT.task]);
-
-  await answerSignIn(true);
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-  assert.equal(tab.note(), undefined);
-});
-
-test("a GitHub sign-in withdrawn, or one that did not land, leaves the refusal with its press and sends nothing", async () => {
+test("a Start GitHub refused points to Settings, and Open Settings opens the account's connected accounts and asks for no sign-in", async () => {
   const tab = mount([SIGN_IN_REFUSAL]);
   await tab.send();
+  assert.match(tab.note() ?? "", /^Connect GitHub in Settings to start an agent\./u);
+  assert.equal(tab.button("Retry"), undefined, "Retry cannot mend it");
 
-  await tab.press("Sign in with GitHub");
-  await tab.press("Cancel");
-  assert.ok(sent.some((each) => each.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN));
-  assert.match(tab.note() ?? "", /^Sign in with GitHub again to start an agent\./u);
-  assert.ok(tab.button("Sign in with GitHub"), "the press is offered again");
-  // The withdrawn sign-in's own answer, arriving late, is spent.
-  await answerSignIn(true);
-  assert.deepEqual(tab.starts, [DRAFT.task]);
+  await tab.press("Open Settings");
 
-  await tab.press("Sign in with GitHub");
-  await answerSignIn(false);
+  assert.deepEqual(tab.links, [
+    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+  ]);
+  assert.deepEqual(
+    sent.filter(
+      (request) =>
+        request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN ||
+        request.kind === ACT_KIND.ACCOUNT_BEGIN_SIGN_IN,
+    ),
+    [],
+  );
   assert.deepEqual(tab.starts, [DRAFT.task]);
-  assert.ok(tab.button("Sign in with GitHub"), "the press is offered again");
 });
 
-test("a refusal a sign-in does not mend offers Retry, and no sign-in", async () => {
+test("a refusal Settings does not mend offers Retry, and no Open Settings", async () => {
   const tab = mount([startFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), undefined]);
   await tab.send();
   assert.match(tab.note() ?? "", /could not be started/u);
-  assert.equal(tab.button("Sign in with GitHub"), undefined);
+  assert.equal(tab.button("Open Settings"), undefined);
 
   await tab.press("Retry");
   assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-  assert.deepEqual(signIns, []);
+  assert.deepEqual(tab.links, []);
 });
 
-test("a server the agent has on whose sign-in expired is offered to reconnect under the box, and one it has off is not", async () => {
+test("a server the agent has on whose sign-in expired offers Settings › Integrations under the box, and one it has off does not", async () => {
   slack = INTEGRATION_STATUS.EXPIRED;
   const tab = mount([]);
   await settle();
   assert.match(tab.note() ?? "", /^Slack's sign-in expired\./u);
 
-  await tab.press("Reconnect Slack");
+  await tab.press("Open Settings");
+  assert.ok(tab.settings.integrationsOpened, "Settings opens on Integrations");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.INTEGRATIONS_CONNECT),
-    [{ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: { provider: INTEGRATION_PROVIDER.SLACK } }],
+    [],
+    "the composer signs in to nothing itself",
   );
 
   const off = mount([], { ...DRAFT, disabledServers: [INTEGRATION_PROVIDER.SLACK] });
   await settle();
-  assert.equal(off.button("Reconnect Slack"), undefined);
+  assert.equal(off.note(), undefined);
 });
 
 test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
@@ -232,4 +220,34 @@ test("the MCP servers popover draws a row for each server the deployment offers 
   );
   assert.deepEqual(rows, ["Slack"]);
   assert.equal(tab.button("Connect"), undefined, "nothing offers a server not offered");
+});
+
+test("the MCP popover's GitHub row opens Settings at Connected accounts and signs nothing in", async () => {
+  github = INTEGRATION_STATUS.DISCONNECTED;
+  const tab = mount([]);
+  await settle();
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  assert.ok(servers, "the MCP button is drawn");
+  act(() => servers.click());
+  await settle();
+
+  const githubRow =
+    [...document.querySelectorAll(".agent-servers-row")].find(
+      (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "GitHub",
+    ) ?? assert.fail("the popover draws GitHub's row");
+  const open =
+    [...githubRow.querySelectorAll("button")].find(
+      (button) => button.textContent === "Open Settings",
+    ) ?? assert.fail("GitHub's row offers Open Settings");
+  act(() => open.click());
+  await settle();
+
+  assert.deepEqual(tab.links, [
+    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+  ]);
+  assert.equal(document.querySelector(".agent-servers-row"), null, "the popover gives way");
+  assert.equal(
+    sent.some((request) => request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN),
+    false,
+  );
 });

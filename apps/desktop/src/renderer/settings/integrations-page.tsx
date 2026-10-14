@@ -21,6 +21,8 @@ import {
 import { IntegrationMark } from "../integration-marks";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { useIntegrationTools } from "../integration-tools";
+import { GITHUB_REMEDY_TITLE } from "../open-settings";
+import { CONNECT_GITHUB_LABEL } from "../planning/planning-model";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
@@ -37,8 +39,9 @@ import { SettingsGroup } from "./settings-group";
  * that mends it (`integration-health.ts`). A Connect sends the browser to
  * sign in with the provider; a connected row's ⋯ (or a right-click on it)
  * offers Disconnect, which asks first in the confirm dialog. GitHub is
- * granted by the account's own GitHub sign-in (`integration-grant.ts`), so
- * its row offers Sign in with GitHub instead, and no Disconnect. The window never sees a sign-in address; the
+ * granted by the account's own GitHub (`integration-grant.ts`), so its row
+ * offers Connect GitHub, which opens Settings › Connected accounts, and no
+ * Disconnect. The window never sees a sign-in address; the
  * host opens it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
@@ -115,17 +118,13 @@ function rowLine(
   }
 }
 
-/** What a row's grant button says: a Connect, or for GitHub the sign-in it is, and so on once one stands. */
+/** What a row's grant button says: a Connect, and so on once one stands, or Connect GitHub for GitHub. */
 function grantLabel(
   signIn: boolean,
   status: IntegrationStatus | undefined,
   broken: boolean,
-  connecting: boolean,
 ): string {
-  if (signIn) {
-    if (connecting) return "Waiting for browser…";
-    return status === INTEGRATION_STATUS.DISCONNECTED ? "Sign in with GitHub" : "Sign in again";
-  }
+  if (signIn) return CONNECT_GITHUB_LABEL;
   if (status === INTEGRATION_STATUS.DISCONNECTED) return "Connect";
   return broken ? "Reconnect" : "Connect again";
 }
@@ -158,14 +157,10 @@ function IntegrationRow({
       setConnecting(false);
       if (outcome === GRANT_OUTCOME.NOT_OPENED) setRejection(PAGE_LINE.NOT_OPENED);
       if (outcome === GRANT_OUTCOME.REFUSED) {
-        setRejection(
-          signIn
-            ? "Luke could not sign in with GitHub. Try again in a moment."
-            : `Luke could not start connecting ${name}. Try again in a moment.`,
-        );
+        setRejection(`Luke could not start connecting ${name}. Try again in a moment.`);
       }
     });
-  }, [grant, provider, name, signIn]);
+  }, [grant, provider, name]);
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
@@ -211,24 +206,14 @@ function IntegrationRow({
         status === INTEGRATION_STATUS.UNAVAILABLE ||
         (connected && !broken) ? null : (
           <>
-            {connecting && signIn ? (
-              // The row waits on until the host settles the cancelled sign-in, so a retry starts a sign-in of its own.
-              <button type="button" className="toolbar-button" onClick={grant.cancel}>
-                Cancel
-              </button>
-            ) : null}
             <button
               type="button"
               className="toolbar-button bordered-button"
               disabled={connecting}
-              title={
-                signIn
-                  ? "Sign in to Luke with GitHub in your browser"
-                  : `Sign in to ${name} in your browser`
-              }
+              title={signIn ? GITHUB_REMEDY_TITLE : `Sign in to ${name} in your browser`}
               onClick={connect}
             >
-              {grantLabel(signIn, status, broken, connecting)}
+              {grantLabel(signIn, status, broken)}
             </button>
           </>
         )}

@@ -13,6 +13,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { OpenSettingsProvider } from "../open-settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { IntegrationsSection } from "./integrations-page";
 
 /**
@@ -21,21 +23,19 @@ import { IntegrationsSection } from "./integrations-page";
  * account has a row, and one it does not, which the service answers as
  * unavailable, has none; an account offered none is told so, and a read
  * that fails still offers to read again. GitHub, which the account's own
- * GitHub sign-in grants, is connected by signing in with GitHub.
+ * GitHub grants, is connected in Settings › Connected accounts.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
 let withheld: readonly IntegrationProvider[] = [];
 /** Whether the next read of where they stand fails. */
 let refuseRead = false;
-/** Whether the account has signed in with GitHub, which is where GitHub stands. */
-let githubSignedIn = false;
+/** Whether the account's own GitHub is connected, which is where GitHub stands. */
+let githubConnected = false;
 /** Every act the page sent, in order. */
 let sent: Act[] = [];
-/** Whether the host holds its answer to a GitHub sign-in back until the test lands it. */
-let holdSignIn = false;
-/** Lands a GitHub sign-in the host is holding, as it landed or not. */
-let landSignIn: ((landed: boolean) => void) | undefined;
+/** Every Settings link the page's presses followed. */
+let links: SettingsLink[] = [];
 
 const roots: Root[] = [];
 
@@ -47,7 +47,7 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
       provider,
       withheld.includes(provider)
         ? INTEGRATION_STATUS.UNAVAILABLE
-        : provider === INTEGRATION_PROVIDER.GITHUB && githubSignedIn
+        : provider === INTEGRATION_PROVIDER.GITHUB && githubConnected
           ? INTEGRATION_STATUS.CONNECTED
           : INTEGRATION_STATUS.DISCONNECTED,
     ]),
@@ -57,26 +57,14 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
 beforeEach(() => {
   withheld = [];
   refuseRead = false;
-  githubSignedIn = false;
+  githubConnected = false;
   sent = [];
-  holdSignIn = false;
-  landSignIn = undefined;
+  links = [];
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {
         sent.push(request);
-        // The host's sign-in with GitHub, which lands.
-        if (request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN) {
-          const landed = (value: boolean): ActOutcome => {
-            githubSignedIn = value;
-            return { status: ACT_OUTCOME_STATUS.DONE, value };
-          };
-          if (!holdSignIn) return Promise.resolve(landed(true));
-          return new Promise<ActOutcome>((answer) => {
-            landSignIn = (value) => answer(landed(value));
-          });
-        }
         return Promise.resolve(
           request.kind !== ACT_KIND.INTEGRATIONS_STATUS
             ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
@@ -104,7 +92,15 @@ async function mount(): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(IntegrationsSection, { signedIn: true })));
+  act(() =>
+    root.render(
+      createElement(
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => links.push(link) },
+        createElement(IntegrationsSection, { signedIn: true }),
+      ),
+    ),
+  );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
@@ -164,7 +160,7 @@ test("a read that fails after one that offered nothing still says so and offers 
   );
 });
 
-test("GitHub, granted by the account's own GitHub sign-in, offers Sign in with GitHub rather than Connect, and once that sign-in lands stands connected with no Disconnect", async () => {
+test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which opens Settings at Connected accounts and signs nothing in", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
@@ -172,48 +168,32 @@ test("GitHub, granted by the account's own GitHub sign-in, offers Sign in with G
   const buttonNamed = (name: string) =>
     [...page.querySelectorAll("button")].find((button) => button.textContent === name);
 
-  const signIn = buttonNamed("Sign in with GitHub");
-  assert.ok(signIn, "Sign in with GitHub is offered");
+  const connect = buttonNamed("Connect GitHub") ?? assert.fail("Connect GitHub is offered");
   assert.equal(buttonNamed("Connect"), undefined);
   await act(async () => {
-    signIn.click();
+    connect.click();
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 
-  assert.ok(
-    sent.some(
-      (request) =>
-        request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN && request.payload.provider === "github",
-    ),
+  assert.deepEqual(links, [
+    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+  ]);
+  assert.equal(
+    sent.some((request) => request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN),
+    false,
   );
-  assert.equal(buttonNamed("Sign in with GitHub"), undefined);
-  assert.equal(page.querySelector('[aria-label="GitHub actions"]'), null);
 });
 
-test("a GitHub sign-in cancelled from its row and landing after all is not taken as the row's: the row offers Sign in with GitHub again once the host settles it, and nothing is brought back from the browser", async () => {
+test("GitHub connected stands connected with no Disconnect, whose way out is Settings › Connected accounts", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
-  holdSignIn = true;
+  githubConnected = true;
   const page = await mount();
-  const buttonNamed = (name: string) =>
-    [...page.querySelectorAll("button")].find((button) => button.textContent === name);
-  const settle = () =>
-    act(async () => {
-      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-    });
 
-  buttonNamed("Sign in with GitHub")?.click();
-  await settle();
-  assert.ok(buttonNamed("Waiting for browser…"));
-  buttonNamed("Cancel")?.click();
-  await settle();
-  assert.ok(sent.some((request) => request.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN));
-  // A retry waits for the host to settle the cancelled sign-in, so it never joins it.
-  assert.equal(buttonNamed("Sign in with GitHub"), undefined);
-  landSignIn?.(true);
-  await settle();
-
-  assert.ok(buttonNamed("Sign in with GitHub"), "the row still offers the sign-in");
-  assert.ok(!sent.some((request) => request.kind === ACT_KIND.WINDOW_FOCUS_PANEL));
+  assert.equal(
+    [...page.querySelectorAll("button")].some((button) => button.textContent === "Connect GitHub"),
+    false,
+  );
+  assert.equal(page.querySelector('[aria-label="GitHub actions"]'), null);
 });

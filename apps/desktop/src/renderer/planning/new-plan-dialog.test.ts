@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { OpenSettingsProvider } from "../open-settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { NewPlanDialog } from "./new-plan-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
@@ -58,9 +61,10 @@ async function mount(
     recent: ["acme/web", "acme/api"],
     ...chooser,
   };
+  const links: SettingsLink[] = [];
   function Owner() {
     const [open, setOpen] = useState(true);
-    return createElement(NewPlanDialog, {
+    const dialog = createElement(NewPlanDialog, {
       newPlan: {
         open,
         preset: preset === undefined ? undefined : { repository: preset },
@@ -72,6 +76,11 @@ async function mount(
       },
       repositories,
     });
+    return createElement(
+      OpenSettingsProvider,
+      { value: (link: SettingsLink) => links.push(link) },
+      dialog,
+    );
   }
   const opener = document.createElement("button");
   document.body.append(opener);
@@ -103,6 +112,8 @@ async function mount(
   };
   return {
     starts,
+    /** Every Settings link the dialog's presses followed. */
+    links,
     opener,
     dialog,
     field,
@@ -227,4 +238,91 @@ test("the workspace first resolving keeps a repository picked before the workspa
   await dialog.press("Enter", dialog.field());
 
   assert.deepEqual(dialog.starts, [["Dark mode", "alice/private"]]);
+});
+
+/** The chip's menu opened, and the buttons then drawn anywhere in the document. */
+async function openChip(): Promise<HTMLButtonElement[]> {
+  const chip =
+    document.querySelector<HTMLButtonElement>(".plan-compose-chip") ??
+    assert.fail("the dialog draws the repository chip");
+  act(() => chip.click());
+  await settle();
+  return [...document.querySelectorAll<HTMLButtonElement>("button")];
+}
+
+/** A read answering that Luke is installed on no account the workspace reaches. */
+const NOWHERE_INSTALLED = () =>
+  Promise.resolve({
+    repositories: {
+      installed: false,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  });
+
+test("a list refused for GitHub not connected points to Settings, and the menu's Open Settings opens the account's connected accounts", async () => {
+  const dialog = await mount(undefined, undefined, {
+    read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }),
+  });
+
+  const buttons = await openChip();
+  const alert = document.querySelector(".plan-compose-menu [role=alert]")?.textContent;
+  const open =
+    buttons.find((button) => button.textContent === "Open Settings") ??
+    assert.fail("the menu offers to open Settings");
+  act(() => open.click());
+
+  assert.equal(alert, "Connect GitHub in Settings to use a repository with Luke.");
+  assert.equal(
+    buttons.some((button) => button.textContent === "Retry"),
+    false,
+  );
+  assert.deepEqual(dialog.links, [
+    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+  ]);
+});
+
+test("a workspace with Luke installed nowhere offers Open Settings at that workspace's GitHub repositories, and the chip itself installs nothing", async () => {
+  const dialog = await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    read: NOWHERE_INSTALLED,
+  });
+
+  const buttons = await openChip();
+  const open =
+    buttons.find((button) => button.textContent === "Open Settings") ??
+    assert.fail("the menu offers to open Settings");
+  act(() => open.click());
+
+  assert.equal(
+    buttons.some((button) => button.textContent?.includes("Install")),
+    false,
+    "the chip offers no install of its own",
+  );
+  assert.deepEqual(dialog.links, [
+    {
+      page: SETTINGS_VIEW.WORKSPACE,
+      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+      workspaceId: "workspace-acme",
+    },
+  ]);
+});
+
+test("a member of a workspace with Luke installed nowhere is told to ask an owner or admin, and offered no Open Settings", async () => {
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    manages: false,
+    read: NOWHERE_INSTALLED,
+  });
+
+  const buttons = await openChip();
+  const notes = [...document.querySelectorAll(".plan-compose-menu-note")].map(
+    (note) => note.textContent,
+  );
+
+  assert.ok(notes.includes("Ask an owner or admin to install Luke on GitHub."));
+  assert.equal(
+    buttons.some((button) => button.textContent === "Open Settings"),
+    false,
+  );
 });

@@ -6,8 +6,9 @@ import { type SettingsSearchInput, searchSettings, settingsSearchEntries } from 
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";
 
 /**
- * Settings search over the Workspace page: a query finds a group only where
- * the page draws it for the workspace Settings shows. Synthetic workspaces.
+ * Settings search over what the pages draw: a Workspace group is found only where
+ * the page draws it for the workspace Settings shows, and a row elsewhere
+ * only while its page draws it. Synthetic workspaces.
  */
 
 const TEAM: Workspace = {
@@ -56,4 +57,22 @@ test("GitHub repositories is found only for an owner or an admin of a team works
   );
   assert.deepEqual(workspaceFound("GitHub repositories", TEAM), []);
   assert.deepEqual(workspaceFound("GitHub repositories", PERSONAL), []);
+});
+
+/** The ids of every row a query for `query` finds, signed in or not, with no workspace shown. */
+function found(query: string, accountDrawn: boolean): readonly string[] {
+  const input: SettingsSearchInput = {
+    settings: settingsView(),
+    voiceControlsDrawn: true,
+    accountDrawn,
+  };
+  return (searchSettings(settingsSearchEntries(input), query)?.groups ?? []).flatMap((group) =>
+    group.items.map((entry) => entry.id),
+  );
+}
+
+test("searching GitHub finds Connected accounts while signed in, and not while signed out, when it is not drawn", () => {
+  assert.ok(found("GitHub", true).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS));
+  assert.ok(found("reconnect", true).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS));
+  assert.equal(found("GitHub", false).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS), false);
 });
