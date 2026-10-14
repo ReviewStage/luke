@@ -1,5 +1,9 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
-import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import type {
+  MemberSeams,
+  OrganizationRefused,
+  WorkspaceSeams,
+} from "@sidecar/database/models/workspace-seams";
 import {
   createWorkspace,
   ensurePersonalWorkspace,
@@ -41,10 +45,11 @@ import {
   hostedRefusing,
   hostedStoreOrUnavailable,
   readJsonBodyEffect,
+  type SessionUserIdResolver,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import type { StoreFailure } from "./hosted/store-failure.js";
-import { listMembers, removeMember } from "./hosted/workspace-members.js";
+import { listMembers, memberIdOf } from "./hosted/workspace-members.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -67,6 +72,14 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * `POST /api/workspaces/leave` lets anyone but an owner leave. A personal
  * workspace, whose members nobody manages, is not permitted any of these.
  * The bearer is resolved before any row is touched.
+ *
+ * Removing and leaving are Better Auth's own `removeMember` and
+ * `leaveOrganization`
+ * (https://www.better-auth.com/docs/plugins/organization#remove-member),
+ * so their bearer is the Mac's Better Auth session, signed, which the bearer
+ * plugin reads as the session cookie those calls take; every other path
+ * here takes the Mac's OAuth token. Luke's own rules stand in front of the
+ * plugin's, which checks the caller's role and membership again itself.
  */
 
 const WORKSPACES_PATH = "/api/workspaces";
@@ -89,7 +102,11 @@ const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKS
 
 export interface WorkspacesAppSeams {
   resolveUserId: UserIdResolver;
+  /** The account the Mac's Better Auth session names, for the paths that write through the plugin under it. */
+  resolveSessionUserId: SessionUserIdResolver;
   workspaces: WorkspaceSeams;
+  /** The plugin's member writes, made under the session `resolveSessionUserId` read. */
+  members: MemberSeams;
 }
 
 type Requirements =
@@ -125,6 +142,48 @@ const accountOf = Effect.fn("web/workspacesAccount")(function* (seams: Workspace
   if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   return account.value;
 });
+
+/**
+ * The account the Mac's session names, and the headers that carry it on to
+ * the plugin; a session the service does not take is refused as
+ * unauthenticated, which is the Mac's cue to ask for a new one.
+ */
+const sessionAccountOf = Effect.fn("web/workspacesSessionAccount")(function* (
+  seams: WorkspacesAppSeams,
+) {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const account = yield* seams.resolveSessionUserId(request).pipe(
+    Effect.tapError((failure) => Effect.logWarning("the auth service read no session", failure)),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return { userId: account.value, headers: request.headers };
+});
+
+/**
+ * A member write through the plugin: its refusal of the session as
+ * unauthenticated, any other refusal as not permitted, since Luke's own
+ * rules already passed, and a failure that is not a refusal as the outage
+ * the Mac may retry, logged by its kind alone.
+ */
+function memberWriteOrRefused<R>(
+  write: Effect.Effect<void, OrganizationRefused | Cause.UnknownError, R>,
+): Effect.Effect<void, HostedRefusal, R> {
+  return Effect.catch(write, (failure): Effect.Effect<never, HostedRefusal> => {
+    if (failure._tag === "UnknownError") {
+      return Effect.andThen(
+        Effect.logWarning("Member write failed: UnknownError"),
+        Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
+      );
+    }
+    return Effect.fail(
+      failure.status === HOSTED_HTTP_STATUS.UNAUTHORIZED
+        ? HOSTED_REFUSAL.INVALID_TOKEN
+        : HOSTED_REFUSAL.NOT_PERMITTED,
+    );
+  });
+}
 
 /** The workspace the body names, where the account is an owner or admin of it; one it is not in is not found. */
 const administeredWorkspace = Effect.fn("web/administeredWorkspace")(function* (userId: string) {
@@ -250,7 +309,7 @@ const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* 
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
-  const userId = yield* accountOf(seams);
+  const { userId, headers } = yield* sessionAccountOf(seams);
   const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
   const asked = readEither(workspaceMemberRemovalSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -258,11 +317,16 @@ const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* 
   const workspace = yield* managedWorkspace(userId, workspaceId);
   if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const target = yield* hostedStoreOrUnavailable(workspaceOf(removed, workspaceId));
-  if (Option.isNone(target)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const memberId = yield* hostedStoreOrUnavailable(memberIdOf(removed, workspaceId));
+  if (Option.isNone(target) || Option.isNone(memberId)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
   if (target.value.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  yield* hostedStoreOrUnavailable(removeMember(removed, workspaceId));
+  yield* memberWriteOrRefused(
+    seams.members.removeMember({ headers, organizationId: workspaceId, memberId: memberId.value }),
+  );
   const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
 });
@@ -275,7 +339,7 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
-  const userId = yield* accountOf(seams);
+  const { userId, headers } = yield* sessionAccountOf(seams);
   const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
   const asked = readEither(workspaceLeaveRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -284,7 +348,9 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   if (workspace.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  yield* hostedStoreOrUnavailable(removeMember(userId, workspaceId));
+  yield* memberWriteOrRefused(
+    seams.members.leaveOrganization({ headers, organizationId: workspaceId }),
+  );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 

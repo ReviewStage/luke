@@ -11,7 +11,7 @@ import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import type { AccountRefreshFailed, AccountToken } from "./account-token.js";
+import type { AccountRefreshFailed, AccountSessionToken, AccountToken } from "./account-token.js";
 
 const ACCOUNT_CALL_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -384,6 +384,23 @@ export function accountBearer(token: AccountToken): CallCredential {
         accessToken ? bearer(accessToken) : undefined,
       ),
     renew: token.refreshAccount,
+    holder: token.readAccountKey,
+  };
+}
+
+/**
+ * The Mac's own Better Auth session as the bearer, for the calls that write
+ * through Better Auth's organization endpoints: a refusal is answered by
+ * asking for a new session, and the one retry runs on it while the account
+ * is still the same.
+ */
+export function sessionBearer(token: AccountToken & AccountSessionToken): CallCredential {
+  return {
+    authorization: () =>
+      Effect.map(token.readSessionToken(), (sessionToken) =>
+        sessionToken ? bearer(sessionToken) : undefined,
+      ),
+    renew: token.obtainSession,
     holder: token.readAccountKey,
   };
 }

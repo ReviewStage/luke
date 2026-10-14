@@ -11,10 +11,12 @@ import {
   type AccountCallEffects,
   accountBearer,
   accountCall,
+  CALL_FAULT,
   type CallRequest,
   callAnswered,
+  sessionBearer,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
+import type { AccountSessionToken, AccountToken } from "./account-token.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -47,14 +49,18 @@ import {
  * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. A list that did not come back is
+ * and a 401 is renewed and retried once. Removing a member and leaving
+ * write through Better Auth's own organization calls, so they carry the
+ * Mac's Better Auth session rather than its OAuth token: with no session
+ * yet, or one the service no longer takes, the call asks for one through
+ * the browser's hand-off and is sent once more on it. A list that did not come back is
  * nothing, because the one thing a caller does without it is keep the
  * workspaces it last read; every other call answers a result, because its
  * caller draws why it did not happen: the account's role does not allow
  * it, the workspace is not one it is in, or no answer came.
  */
 
-export interface HostedWorkspaceClientOptions extends AccountToken {
+export interface HostedWorkspaceClientOptions extends AccountToken, AccountSessionToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -85,6 +91,9 @@ function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
 
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
+  /** The calls that write through Better Auth under the Mac's session. */
+  readonly #sessionCall: AccountCallEffects;
+  readonly #obtainSession: () => Effect.Effect<void>;
 
   constructor(options: HostedWorkspaceClientOptions) {
     this.#call = accountCall({
@@ -92,6 +101,12 @@ export class HostedWorkspaceClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#sessionCall = accountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential: sessionBearer(options),
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
+    this.#obtainSession = () => Effect.ignore(options.obtainSession());
   }
 
   /** Every workspace the account is a member of, its personal one first; nothing where the service refused or did not answer. */
@@ -166,6 +181,7 @@ export class HostedWorkspaceClient {
       },
       workspaceMembersAnswerSchema,
       (answer) => answer.members,
+      this.#inSession(),
     );
   }
 
@@ -186,6 +202,7 @@ export class HostedWorkspaceClient {
         },
         workspaceLeaveAnswerSchema,
         (answer) => answer.workspaceId,
+        this.#inSession(),
       ),
       (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
     );
@@ -206,15 +223,34 @@ export class HostedWorkspaceClient {
     return send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted) });
   }
 
+  /**
+   * The send under the Mac's session. A Mac that holds no session yet has
+   * nothing for the call to carry, which the account call answers without
+   * asking for anything, so the session is asked for here and the call sent
+   * once more; a session the service refuses is asked for by the call's own
+   * renewal.
+   */
+  #inSession(): (request: CallRequest) => ReturnType<AccountCallEffects["send"]> {
+    const call = this.#sessionCall;
+    const obtainSession = this.#obtainSession;
+    return (request) =>
+      Effect.gen(function* () {
+        const first = yield* call.send(request);
+        if (callAnswered(first) || first.fault !== CALL_FAULT.NO_CREDENTIAL) return first;
+        yield* obtainSession();
+        return yield* call.send(request);
+      });
+  }
+
   /** One call's answer read under its schema and picked, or its refusal named. */
   #answered<A, Encoded, Picked>(
     request: CallRequest,
     schema: Schema.Codec<A, Encoded>,
     pick: (answer: A) => Picked,
+    send: (request: CallRequest) => ReturnType<AccountCallEffects["send"]> = this.#call.send,
   ): Effect.Effect<WorkspaceCallResult<Picked>, never, HttpClient.HttpClient> {
-    const call = this.#call;
     return Effect.gen(function* () {
-      const answer = yield* call.send(request);
+      const answer = yield* send(request);
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (!answer.response.ok) return refusedAs(payload);

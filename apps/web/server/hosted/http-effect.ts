@@ -1,5 +1,5 @@
 import type { PlanArchived } from "@sidecar/database/models/plan-store";
-import { Effect, type Layer, type Option, Stream } from "effect";
+import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
@@ -50,6 +50,11 @@ export type HostedRefusal = { readonly error: HostedRefusalSlug };
 export type UserIdResolver<Input = Request> = (
   input: Input,
 ) => Effect.Effect<Option.Option<string>>;
+
+/** A Better Auth session's account, or none; a failure is the auth service's, not a signed-out caller. */
+export type SessionUserIdResolver = (
+  request: Request,
+) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
 /** The refusal values themselves, since not one of them carries a field. */
 export const HOSTED_REFUSAL = {
