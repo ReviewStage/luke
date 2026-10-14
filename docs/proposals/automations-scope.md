@@ -306,16 +306,18 @@ step drops it (D9).
 | Run now, pause, or resume | its creator | every member |
 | Runs as, and pays | its creator | its creator (D3) |
 
-A run is a planless agent (D4) that inherits its automation's visibility. A
-personal automation's runs are seen by their creator, owners, and admins; a
-workspace automation's runs, by every member.
+A run is a planless agent (D4). **Revised for Chat (D11):** "personal"
+covers an automation's settings, not its runs. Its runs and their Chat
+messages are visible to the workspace, as every plan's agents already are
+and as every Chat channel (and every DM) is. Chat has no private surface for
+them to land in.
 
 ### D3. Runs as the creator: accepted, with a service identity on the roadmap
 
 Dean: "Let's put that on the roadmap but start with the person who created
 it for simplicity first." The estimate is §5.
 
-### D4. Planless agents and Inbox items (Dean chose this over a hidden plan)
+### D4. Planless agents (Dean chose this over a hidden plan; the Inbox half moves to Chat, D11)
 
 Dean: "If we want to support automations as first-class, they should be
 able to run agents outside of a plan. So agents and Inbox both need a
@@ -344,18 +346,17 @@ rework."
 - `coding_agent`:
   - `organization_id` (the workspace), backfilled from the plan;
   - `plan_id` becomes nullable;
-  - `automation_id` (set null), which labels the tab "⚡ <automation>";
-  - `visibility` (`workspace` | `private`, default `workspace`).
+  - `automation_id` (set null), which labels the tab "⚡ <automation>".
+  - The `visibility` column is dropped (D2, revised for Chat).
   - `repositories`, an ordered list backfilled as `[repository]`.
     `repository` stays as its first entry for readers until full
     multi-repo (`automations-multi-repo.md`).
-- `inbox_item` and `inbox_attachment`: `organization_id`, with `plan_id`
-  nullable.
+- `inbox_item` and `inbox_attachment` are **not touched**. Chat's X1 (#2580)
+  retires them, and its S4a/S4b move items into Chat.
 
 **Permissions.** An agent is reachable by a member of its
-`organization_id`, and a `private` one only by its starter, owners, and
-admins. A plan's agents keep their plan check, so nothing changes for
-them. Start serialises on the automation's row lock for a planless run,
+`organization_id`. A plan's agents keep their plan check, so nothing
+changes for them. Start serialises on the automation's row lock for a planless run,
 which `withAutomationLocked` already takes.
 
 **Start, checkout, and steer.**
@@ -371,36 +372,33 @@ which `withAutomationLocked` already takes.
 - `edit_plan` already refuses without a plan.
 - `show_page` stores pages per plan, so a planless agent is offered no
   `show_page` in v1.
-- The Inbox tools write `organization_id` and a null plan.
+- Asks go through Chat's tools (`post_chat` with an ask, `resolve_ask`; chain
+  T), not the Inbox's (D11).
 - Luke's planning tools stay plan-scoped and simply never see planless
   agents.
 
-**Inbox.**
-- Items group by plan *or by automation*. A planless item's breadcrumb is
-  "⚡ <automation> · <repository>" where a plan's name would stand.
-- The account-wide read keeps a plan's archive filter and adds the
-  agent's visibility.
+**Inbox.** Superseded by Chat (D11): there is no Inbox grouping, breadcrumb,
+or account read to build.
 
 **Desktop.**
 - A new window place, **an agent page**: one planless agent, full width
   and titled with its automation. It stands in the plan's place as the
   Inbox does and reuses the agent tab's own body.
-- It opens from the automation's run list, from its Inbox item, and from
-  its notification.
+- It opens from the automation's run list, from its Chat ask's "Open
+  agent", and from its turn-end notification.
 - Agent notices watch planless agents through a new workspace-wide list
   rather than per plan.
 - The command palette lists them under Automations.
 
 **Old builds.** v0.12.0 decodes an agent's `planId` as a required UUID.
 - Plan-nested routes already leave planless agents out.
-- The account Inbox (`/api/inbox`) and the notices' reads leave planless
-  items out unless the client asks for them (`?planless=include`, the same
-  shape `archived=include` uses), so an old build never sees a row it
-  can't read.
+- The notices' plan reads leave planless agents out. The account Inbox
+  needs no filter, because X1 removes it once the minimum desktop reads
+  Chat.
 
 **Risks:**
 1. Access-control regressions, since every per-id read changes its EXISTS.
-   Each store PR ships a cross-account and cross-visibility test.
+   Each store PR ships a cross-account test.
 2. Old desktops decoding a null `planId`, guarded above.
 3. The desktop's `planId: string` assumptions. The type system finds them
    once the view types are optional.
@@ -463,16 +461,15 @@ There is no workspace scope there. The owner control is hidden.
 - `target_agent_id` (set null);
 - `plan_id` becomes nullable.
 
-**Expand migration 2, agents and the Inbox:**
+**Expand migration 2, agents:**
 - `coding_agent`: `organization_id` (backfilled), `automation_id`, and
-  `visibility`, with `plan_id` nullable;
-- `inbox_item` and `inbox_attachment`: `organization_id` (backfilled), with
-  `plan_id` nullable;
-- indexes on `(organization_id, created_at)`.
+  `repositories`, with `plan_id` nullable;
+- an index on `(organization_id, created_at)`.
+- The Inbox tables are untouched (D11).
 
 **Contract**, once every reader uses the new columns:
-- `organization_id` becomes not null on all four tables, after a check for
-  nulls;
+- `organization_id` becomes not null on `automation` and `coding_agent`,
+  after a check for nulls;
 - `automation.plan_id` is dropped.
 
 Nothing else is dropped. Each expand is additive under v0.12.0, which has no
@@ -484,6 +481,88 @@ The carve-out line goes into AGENTS.md in #2516, worded as Dean approved:
 "a webhook body an automation's caller sends may reach that run's agent
 task, transcript and traces". The dialog says "don't send secrets in the
 body".
+
+### D11. Chat replaces the Inbox (Charles's #2569–#2587)
+
+**What Chat is** (from the PR bodies and branches; there is no written plan):
+- **Channels** are workspace-scoped: one `#general`, one plan channel per
+  plan, up to 12 topics per workspace, and DMs between any two members.
+- **Membership** is per workspace, with no per-channel table. Every member
+  reads every non-DM channel, and **every person reads every DM** (#2584).
+- **Agents** are members (`agent-N`), minted on first post. Their workspace
+  is found **through the agent's plan** (`findAgentWorkspace` joins `plan`),
+  so a planless agent gets no member today.
+- **Asks** are `post_chat` with an ask (chain T, not yet opened). By default
+  they land in the poster's plan channel.
+- **"For you"** lists every open ask from anyone, plus unread DMs and
+  mentions of you. An ask has no addressee.
+- **X1 (#2580)** removes the Inbox: its tables, routes, wire, desktop
+  surfaces, the coder's inbox tools, and the agent notices' inbox half
+  together with the Dock badge. Nothing in Chat yet replaces the macOS
+  notice or the badge.
+
+**What it does to this plan:**
+- **The Inbox PRs disappear:**
+  - #6 (Inbox server: grouping by plan or automation, the old-build
+    filter, the breadcrumb);
+  - #9 (desktop Inbox and notices);
+  - the Inbox columns in expand migration 2 and the Inbox reach in #3.
+- **#5 shrinks:** planless asks go through Chat's tools, once chain T
+  lands.
+- **The agent page's** "open from its Inbox item" becomes "Open agent" on
+  the Chat ask, which #2587's agent card already draws in reverse.
+- **Turn-end notices** stay mine. X1 keeps them, and they need the planless
+  watch.
+
+**Where a planless agent's or an automation's asks land**, each option with
+a recommendation (R):
+
+- **(a) Its automation's own channel,** a new `CHANNEL_KIND` (or a
+  `chat_channel.automation_id` on a topic, exempt from the 12-topic bound).
+  - One channel per automation, named after it (`#nightly-flaky-test-sweep`).
+  - It is created with the automation and archived when the automation is
+    deleted.
+  - This mirrors the plan channel: a plan's agents talk in the plan's
+    channel; an automation's runs talk in the automation's.
+  - **R.**
+- **(b) The owner's DM.** It feels personal, but every person reads every
+  DM, so it is not private. It also tangles each run's asks into one
+  conversation.
+- **(c) `#general`.** It is the workspace's room, and a nightly automation
+  would flood it.
+
+**Addressee.** Each ask names who it waits on: the owner for a personal
+automation, the workspace for a workspace one. "For you" then lists an ask
+for its addressee, rather than every open ask for every person. This is a
+small field on `chatAskSchema` and a rule in `forYou`.
+
+**One member per automation, not one per run.** Each run is a new agent, so
+per-run members mint an `agent-N` every night. Runs therefore post as their
+automation's member: a fourth `MEMBER_KIND`, `automation`, with
+`@nightly-flaky-test-sweep` as its handle. This also seeds the service
+identity in §5.
+
+**To coordinate with Charles:**
+1. **The blocker:** `findAgentWorkspace` reads `coding_agent.organization_id`
+   (expand migration 2) rather than joining `plan`, or coalesces the two
+   while both stand. Migration 2 goes first.
+2. **Automation channels:** the new `CHANNEL_KIND` (or `automation_id`),
+   made by the automation's create and archived on its delete.
+3. **Default `to` in T1a/T1b:** a planless agent's default is its
+   automation's channel. A planless agent with no automation (a future
+   "start an agent on a repo") defaults to its starter's DM.
+4. **An addressee on asks,** and the `forYou` rule.
+5. **The `automation` member kind:** runs post as it, and @-mentions of it
+   reach the latest run, or the continued agent (D5).
+6. **`@luke` from an automation's channel:** unresolved in v1, since there
+   is no planner without a plan. It says so rather than guessing.
+7. **Notifications:** asks lose their macOS notice and badge at X1 with
+   nothing yet in Chat. Automations need one, because nobody watches a
+   nightly run. Agree on a Chat notice in chain D.
+8. **D4's chat read** carries planless agents' lines (name, ⚡ automation),
+   since `ChatNames` reads plans today.
+9. **Order:** automations' planless rework (#2–#4) lands before chain T's
+   planless defaults. Automation runs (#10) wait for T1b.
 
 ## 4. The revised PR plan
 
@@ -505,28 +584,31 @@ GitHub triggers. The expand migrations rework them in place.
 1. **Automation scope, expand migration 1 and the store** (M): owner,
    repository, and target; the scope reach (D2); webhook carve-out
    wording.
-2. **Agents and Inbox, expand migration 2** (M): backfill, plus
-   cross-account tests.
-3. **Agent and Inbox reach by workspace and visibility** (M/L): every
-   per-id read, and Start's lock for planless runs.
+2. **Agents, expand migration 2** (M): backfill, plus cross-account tests.
+3. **Agent reach by workspace** (M): every per-id read, and Start's lock
+   for planless runs.
 4. **Start, checkout, steer, skills, and published without a plan** (M).
-5. **Coder brief and tools for planless agents** (S/M): the `TASK` brief,
-   no `show_page`, and planless Inbox writes.
-6. **Inbox server** (M): group by plan or automation, the old-build filter,
-   and the breadcrumb data.
+5. **Coder brief for planless agents** (S): the `TASK` brief and no
+   `show_page`. Asks come with Chat's chain T.
+6. ~~Inbox server~~: dropped; Chat replaces it (D11).
 7. **Wire, API, and gateway** (M): optional `planId`,
    `GET /api/agents/{id}`, and a planless list for an automation's runs.
 8. **Desktop agent page** (L, likely two PRs): a new navigation place, the
    tab body outside a column, and file and PR reads without a plan.
-9. **Desktop Inbox and notices for planless items** (M).
+9. **Turn-end notices for planless agents** (S). The Inbox half is
+   dropped (D11).
 10. **Automation runs start planless agents; continue-one-agent through
-    steer** (M).
+    steer** (M), after Chat's T1b.
+10a. **Chat integration, in Charles's chains or as PRs on them** (M):
+    automation channels, the `automation` member kind, the ask addressee,
+    and `findAgentWorkspace` on `organization_id` (D11).
 11. **#2525 rework, #2522, and the cleanup stack with page heads**
     (M, about 3 PRs).
 12. **Contract** (S).
 
-That is about 14–16 PRs. Items 2–9 are the planless-agent rework, and they
-ship value on their own: a planless agent is useful beyond automations.
+That is about 12–14 PRs on our side, plus the Chat integration (10a), down
+from 14–16 now that the Inbox work moves to Chat. Items 2–9 are the
+planless-agent rework, and they ship value on their own.
 
 ## 5. Roadmap: a workspace service identity (Dean's ask; not built now)
 
@@ -553,9 +635,13 @@ workspace-scoped reach it reuses.
 
 1. D1: drop per-plan automations for v1, with the repository as the only
    filter?
-2. D4: the planless-agent plan and order above (about 10 PRs of the
-   14–16)?
+2. D4: the planless-agent plan and order above (about 8 of the 12–14 PRs,
+   with its Inbox half moved to Chat)?
 3. D6: no special state on departure, with the guard pausing and admins
    deleting?
 4. The revised PR plan in §4: close #2541, rework #2564 to webhook reach
    alone, rework #2525, and build in the order listed?
+5. D11: an automation's asks land in its own Chat channel, posted as one
+   member per automation and addressed to its owner (personal) or the
+   workspace. D2 is relaxed so that "personal" covers settings, not runs,
+   since Chat has no private surface.
