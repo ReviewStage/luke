@@ -149,3 +149,12 @@ test("a fence's line carrying an info string inside the fence closes nothing, so
 
   assert.deepEqual(mentionsIn(words), []);
 });
+
+test("a fence closed on a line ending in a carriage return closes, so a mention after it is read", () => {
+  const words = ["```", "code", "```", "[@a](luke://file/a.ts)"].join("\r\n");
+
+  assert.deepEqual(
+    mentionsIn(words).map(({ mention }) => mention),
+    [{ kind: MENTION_KIND.FILE, path: "a.ts" }],
+  );
+});

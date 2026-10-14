@@ -34,6 +34,9 @@ export const MENTIONED_BOUNDS = {
   PART_CHARS: 24_000,
 } as const;
 
+/** The room an excerpt leaves in the part for the closing line saying what was left out, which never names a heading. */
+const LEFT_OUT_ROOM = 120;
+
 /** How much of the text is kept when it is cut on a line to the bound: all of it where it fits. */
 function keptLength(text: string, bound: number): number {
   if (text.length <= bound) return text.length;
@@ -92,17 +95,18 @@ export function mentionedContext(words: string, plan: Plan): string | undefined 
   }
   if (named.length === 0) return undefined;
   let part = MENTIONED_HEADING;
-  for (const [at, mention] of named.entries()) {
+  let left = 0;
+  // Note that an excerpt too long for the room left is passed over rather than
+  // ending the part, so a shorter one after it still goes; what was passed
+  // over is counted, and said once at the end.
+  for (const mention of named) {
     const excerpt = `\n\n${excerptOf(mention, plan)}`;
-    if (part.length + excerpt.length <= MENTIONED_BOUNDS.PART_CHARS) {
+    if (part.length + excerpt.length + LEFT_OUT_ROOM <= MENTIONED_BOUNDS.PART_CHARS)
       part += excerpt;
-      continue;
-    }
-    // What the part has no room left for is said once, in as few words as name it.
-    const left = named.length - at;
-    const note = `\n\n${left} more mention${left === 1 ? "" : "s"} of the plan left out, since this part is full; ask for what you need.`;
-    if (part.length + note.length <= MENTIONED_BOUNDS.PART_CHARS) part += note;
-    break;
+    else left += 1;
+  }
+  if (left > 0) {
+    part += `\n\n${left} more mention${left === 1 ? "" : "s"} of the plan left out, since this part is full; ask for what you need.`;
   }
   return part;
 }

@@ -167,3 +167,41 @@ test("a message whose words happen to open as the mentioned part does still read
 
   assert.equal(receipt.words, words);
 });
+
+test("a section too long for the room left is passed over, and a shorter one after it still goes", () => {
+  const plan: Plan = {
+    ...PLAN,
+    document: {
+      body: [
+        "## Big",
+        "",
+        ...Array.from({ length: 6 }, () => "x".repeat(3_900)),
+        "## Huge",
+        "",
+        ...Array.from({ length: 6 }, () => "y".repeat(3_900)),
+        "## Small",
+        "",
+        "Store first.",
+      ].join("\n"),
+      assumptions: [],
+    },
+  };
+  const many = Array.from({ length: 5 }, (_, at) => `## S${at}\n\n${"z".repeat(3_950)}`).join(
+    "\n\n",
+  );
+  const crowded: Plan = {
+    ...plan,
+    document: { body: `${many}\n\n${plan.document.body}`, assumptions: [] },
+  };
+  const words = [
+    ...Array.from({ length: 5 }, (_, at) => section(`S${at}`)),
+    section("Big"),
+    section("Small"),
+  ].join(" ");
+
+  const part = mentionedContext(words, crowded) ?? "";
+
+  assert.match(part, /The plan's section "Small"/u);
+  assert.match(part, /1 more mention of the plan left out/u);
+  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS);
+});

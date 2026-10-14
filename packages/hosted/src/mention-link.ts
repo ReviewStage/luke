@@ -68,7 +68,7 @@ const TARGET_SPECIAL = /[()!'*]/gu;
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
 
 /** A line that closes a fenced block: its run alone, as CommonMark has it, with no info string after it. */
-const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
+const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/u;
 
 /** A run of backticks, which opens a code span the next run of the same length on its line closes. */
 const TICKS = /`+/gu;
