@@ -495,6 +495,8 @@ function pullRequestIn(state: PullRequestState): CodingAgentPullRequest {
     url: "https://github.com/Acme/Relay/pull/415",
     state,
     checks: CHECK_SUMMARY.PENDING,
+    base: "main",
+    mergedSha: null,
     additions: 1,
     deletions: 0,
     changedFiles: 1,

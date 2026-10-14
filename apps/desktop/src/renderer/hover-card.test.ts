@@ -103,6 +103,8 @@ const PULL_REQUEST = {
   additions: 210,
   deletions: 14,
   changedFiles: 6,
+  base: "main",
+  mergedSha: null,
 };
 
 test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {

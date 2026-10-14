@@ -370,9 +370,10 @@ against the HMAC-SHA256 of the body's own bytes in constant time before it
 reads anything; a deployment without the secret answers every delivery
 `unavailable` (503), and a signature that does not hold is `invalid-token`
 (401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
-ready_for_review, converted_to_draft), `check_suite`, a completed
-`check_run`, and `status` are read, for the repository's full name and the branches they
-name, and nothing of a delivery is kept or logged: the branch finds the agents
+ready_for_review, converted_to_draft), a submitted `pull_request_review`
+asking for changes, `check_suite`, a completed `check_run`, and `status` are
+read, for the repository's full name and the branches they name, and nothing
+of a delivery is logged or kept but the report below: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 plan's workspace installation through `agentPublished`, as the agent's tab
@@ -395,6 +396,20 @@ That is a write to Better Auth's own table, since a webhook carries no
 session and Better Auth documents no server call that clears another user's
 provider tokens. `tests/github-webhook-app.test.ts`
 holds it over a scripted GitHub and PGlite.
+answered and ignored.
+
+After the reread, a pull request closed (merged or not) or a review asking
+for changes is reported to Luke on the plan of each rollout worker on the
+branch (an agent with a position): `reportToPlan` with a GitHub report,
+`[github] merged #412` ("merged into main as 9f3c2ab"), `[github] stopped on
+#412` (closed without merging), or `[github] blocked on #415` with the
+review's words, keyed by `X-GitHub-Delivery` so a redelivery reports once and
+a delivery without the header reports nothing. It reaches eve as the
+deployment acting for the worker's owner (`CRON_SECRET` and the deployment's
+eve origin); a deployment missing either reads again and reports nothing.
+The App's settings must subscribe it to pull request reviews for the review
+report to arrive. `tests/github-webhook-app.test.ts` holds it over a
+scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
@@ -2824,9 +2839,14 @@ sandbox as the cancelled turn ends, and anything the agent pushed stays.
 `GET /api/agents/{id}/pull-request` answers what the agent published
 (`coder-host/published.ts`): the repository, the branch it pushed, and the
 pull request from it with its state (`open`, `draft`, `merged`, `closed`),
-its checks as one word (`pending`, `passing`, `failing`, `none`), and its
+its checks as one word (`pending`, `passing`, `failing`, `none`), the
+branch it merges into (`base`), the commit it merged as (`mergedSha`, null
+until it merged, though GitHub names a test merge on an open one), and its
 additions, deletions, and changed files; null for a branch or a pull
-request it has not. The agent reaches GitHub through `git` and `gh` in its
+request it has not. A rollout's state reads a merged one as `#412 merged
+into main as 9f3c2ab` from the row alone. A pull request a row kept before
+the read carried its base was forgotten (migration `20261014181838_coding_agent_published_base`), since the next
+read writes it again whole. The agent reaches GitHub through `git` and `gh` in its
 shell alone, and the branch its sandbox stands on as a turn ends is the one
 its pull request is on, whatever it cut, switched, or deleted on the way:
 the service's hook (`coder/hooks/store.ts`) runs `git branch

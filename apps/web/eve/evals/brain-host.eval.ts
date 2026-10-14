@@ -186,6 +186,8 @@ function pullRequestIn(number: number, state: PullRequestState): CodingAgentPull
     url: `https://github.com/acme/relay/pull/${number}`,
     state,
     checks: CHECK_SUMMARY.PENDING,
+    base: "main",
+    mergedSha: null,
     additions: 1,
     deletions: 0,
     changedFiles: 1,

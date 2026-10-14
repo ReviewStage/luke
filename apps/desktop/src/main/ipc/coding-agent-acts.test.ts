@@ -174,6 +174,8 @@ function fixture() {
               url: "https://github.com/acme/relay/pull/41",
               state: PULL_REQUEST_STATE.OPEN,
               checks: CHECK_SUMMARY.PASSING,
+              base: "main",
+              mergedSha: null,
               additions: 12,
               deletions: 3,
               changedFiles: 2,

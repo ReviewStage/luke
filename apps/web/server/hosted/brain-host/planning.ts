@@ -213,6 +213,18 @@ const GITHUB_REPORT_ACTION: readonly ReportAction[] = [
     action:
       "someone merged it outside the rollout. Tell the keeper to retarget what based on it to main and restack, then start each position this made Ready to start; never tell each builder above it yourself.",
   },
+  {
+    kind: REPORT_KIND.STOPPED,
+    pullRequest: true,
+    action:
+      "it was closed without merging. Start nothing at its position or on it, and put to the developer with queue_question whether to reopen it, start the position again, or drop it.",
+  },
+  {
+    kind: REPORT_KIND.BLOCKED,
+    pullRequest: true,
+    action:
+      "a review requested changes. Find its builder by the position the [rollout] lines show for that pull request, and send it the review's words with message_coding_agent, telling it to address them, push, and report.",
+  },
 ];
 
 /** Each report as the turn opens with it and what Luke does on it, the reporter named as `reporterOf` names it. */

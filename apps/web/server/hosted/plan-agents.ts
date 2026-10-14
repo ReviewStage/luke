@@ -228,9 +228,15 @@ function positionStateOf(workers: readonly RolloutWorker[]): PositionState {
   return { newest: workers.at(-1), live: workers.some((worker) => worker.live), published };
 }
 
-/** A pull request in words: its number and where it stands, or none. */
+/** How much of a merge commit's id a line names, as `git` abbreviates one. */
+const SHORT_SHA_CHARS = 7;
+
+/** A pull request in words: its number and where it stands, a merged one with the base it merged into and as what, or none. */
 function pullRequestWords(published: CodingAgentPullRequest | null): string {
   if (published === null) return "none";
+  if (published.state === PULL_REQUEST_STATE.MERGED && published.mergedSha !== null) {
+    return `#${published.number} merged into ${published.base} as ${published.mergedSha.slice(0, SHORT_SHA_CHARS)}`;
+  }
   const words =
     published.state === PULL_REQUEST_STATE.OPEN
       ? OPEN_PULL_REQUEST_WORD[published.checks]

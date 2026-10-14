@@ -36,6 +36,8 @@ const PUBLISHED = {
     url: "https://github.com/acme/relay/pull/42",
     state: PULL_REQUEST_STATE.OPEN,
     checks: "passing",
+    base: "main",
+    mergedSha: null,
     additions: 3,
     deletions: 1,
     changedFiles: 2,

@@ -186,6 +186,8 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   url: "https://github.com/acme/relay/pull/123",
   state: PULL_REQUEST_STATE.OPEN,
   checks: CHECK_SUMMARY.PASSING,
+  base: "main",
+  mergedSha: null,
   additions: 210,
   deletions: 14,
   changedFiles: 6,

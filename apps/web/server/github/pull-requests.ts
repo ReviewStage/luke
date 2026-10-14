@@ -40,7 +40,7 @@ import {
   send,
 } from "./github-app.js";
 
-/** A pull request as much as the agent's pill and its summary row draw: where it stands, its head, and its size. */
+/** A pull request as much as the agent's pill, its summary row, and a rollout's state draw: where it stands, its head and base, what it merged as, and its size. */
 export interface GitHubPullRequest {
   readonly number: number;
   readonly title: string;
@@ -48,6 +48,10 @@ export interface GitHubPullRequest {
   readonly state: PullRequestState;
   readonly headRef: string;
   readonly headSha: string;
+  /** The branch it merges into. */
+  readonly baseRef: string;
+  /** The commit it merged as on its base; null until it merged. */
+  readonly mergeCommitSha: string | null;
   readonly additions: number;
   readonly deletions: number;
   readonly changedFiles: number;
@@ -92,10 +96,12 @@ const PullRequestSchema = Schema.Struct({
   state: Schema.String,
   draft: Schema.Boolean,
   merged: Schema.Boolean,
+  merge_commit_sha: Schema.NullOr(Schema.String),
   additions: Schema.Number,
   deletions: Schema.Number,
   changed_files: Schema.Number,
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
+  base: Schema.Struct({ ref: Schema.String }),
 });
 
 /** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
@@ -176,6 +182,9 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     state,
     headRef: record.head.ref,
     headSha: record.head.sha,
+    baseRef: record.base.ref,
+    // Note that GitHub names a test merge commit on an open pull request too, so only a merged one keeps it.
+    mergeCommitSha: record.merged ? record.merge_commit_sha : null,
     additions: record.additions,
     deletions: record.deletions,
     changedFiles: record.changed_files,

@@ -442,6 +442,10 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
   checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+  /** The branch it merges into: the repository's default branch, or the branch of the pull request a rollout's position stands on. */
+  base: EffectSchema.String,
+  /** The commit it merged as on its base; null until it merged. */
+  mergedSha: EffectSchema.NullOr(EffectSchema.String),
   additions: countedNumber,
   deletions: countedNumber,
   changedFiles: countedNumber,

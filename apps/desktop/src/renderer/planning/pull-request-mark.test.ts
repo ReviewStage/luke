@@ -45,6 +45,8 @@ function pullRequest(
     url: "https://github.com/acme/relay/pull/42",
     state,
     checks,
+    base: "main",
+    mergedSha: null,
     additions: 210,
     deletions: 14,
     changedFiles: 6,

@@ -162,6 +162,8 @@ function mount(): HTMLElement {
             additions: 210,
             deletions: 14,
             changedFiles: 6,
+            base: "main",
+            mergedSha: null,
           },
         ],
       ]),
