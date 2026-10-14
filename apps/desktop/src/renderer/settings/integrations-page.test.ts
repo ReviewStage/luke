@@ -9,9 +9,11 @@ import {
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
+  type IntegrationSignInFailure,
   type IntegrationStatus,
 } from "@sidecar/hosted/integration-wire";
 import { Clock, Context, Effect } from "effect";
@@ -75,6 +77,8 @@ let reopenedDuringCancel = false;
 const touched = new Map<IntegrationProvider, IntegrationStatus>();
 /** The tools each provider's server lists; one absent here is never answered. */
 const listed = new Map<IntegrationProvider, readonly IntegrationTool[]>();
+/** The sign-in failures the service's next read names, as it names each once while it ends it. */
+let signInFailures: IntegrationSignInFailure[] = [];
 
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
@@ -110,6 +114,7 @@ beforeEach(() => {
   githubDisconnects = 0;
   touched.clear();
   listed.clear();
+  signInFailures = [];
   reopenedDuringCancel = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -136,7 +141,15 @@ function answerOf(request: Act): ActOutcome {
     case ACT_KIND.INTEGRATIONS_STATUS:
       return refuseRead
         ? { status: DONE, value: { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } }
-        : { status: DONE, value: { integrations: serviceStatuses() } };
+        : {
+            status: DONE,
+            value: {
+              integrations: serviceStatuses(),
+              ...(signInFailures.length > 0
+                ? { signInFailures: signInFailures.splice(0) }
+                : undefined),
+            },
+          };
     case ACT_KIND.INTEGRATIONS_CONNECT:
       touched.set(request.payload.provider, INTEGRATION_STATUS.PENDING);
       return { status: DONE, value: { opened: true } };
@@ -524,6 +537,44 @@ test("a Cancel that lands after the sign-in finished leaves the provider connect
 
   await pressOnGranola(page, "Cancel");
   assert.equal(granolaRow(page).line, "Connected");
+});
+
+test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try again", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
+  signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
+  await focusWindow();
+  assert.deepEqual(granolaRow(page), {
+    line: "You cancelled connecting Granola.",
+    buttons: ["Try again"],
+  });
+  // The service names a failure once; the next read leaves the line as it stood.
+  await focusWindow();
+  assert.equal(granolaRow(page).line, "You cancelled connecting Granola.");
+});
+
+test("a sign-in Connect refused says why in Connect's own line, with Try again", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
+  signInFailures = [
+    {
+      provider: GRANOLA,
+      reason: INTEGRATION_SIGN_IN_FAILURE.ERROR,
+      message: "client_assertion aud must be the authorization server issuer",
+    },
+  ];
+  await focusWindow();
+  assert.deepEqual(granolaRow(page), {
+    line: "Couldn't connect to Granola: client_assertion aud must be the authorization server issuer.",
+    buttons: ["Try again"],
+  });
+
+  await pressOnGranola(page, "Try again");
+  assert.deepEqual(granolaRow(page), WAITING);
 });
 
 test("a sign-in the browser came back from without a grant says it could not connect, and why, with Try again", async () => {
