@@ -140,7 +140,32 @@ column nullable, the custom `20261013231735_plan_organization_backfill` after
 it moves every plan standing into its starter's personal workspace, and
 `20261013231809_plan_organization_not_null` then sets the column not null). A plan's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
-statement joins into its own where clause.
+statement joins into its own where clause. A plan is read and written by
+every member of its workspace, whichever of them started it:
+`planReachableBy` and `reachablePlan` gate every plan statement in
+`plan-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
+and `plan-revisions.ts`, and the voice door's `heldPlan`, on the caller's
+membership of the plan's workspace rather than on the plan's starter. Past
+that gate a shared plan's transcript and a new call's earlier calls are
+every member's calls about it.
+
+A plan's conversation keeps the member who opened it as its `user_id`, the
+address its messages, turns, and asks are written under, and is reached by
+every member of the plan's workspace: `conversationReachableBy` in
+`hosted/brain-host/recorded-session.ts` admits the opener, or a member of the
+workspace of the plan or coding agent naming the conversation, or naming its
+parent one hop up (a subagent's session). The eve doors
+(`brain-host/door.ts`), the two hosts' admission (`brain-host/conversation.ts`,
+which answers the caller beside the conversation's owner), and the ask door
+all read it, so a member speaks into the session a teammate opened. From
+there the caller and the owner are two ids: the planning brain's inference
+and research are metered to the caller, not the conversation's owner, and
+the plan, the board, and every tool binding are read and written as the
+caller, while the writer, the seed, and the relay address the owner's rows.
+A voice call is the caller's `voice_sessions` row and meter, landing in the
+plan's one conversation, which `openPlanConversation` answers with its
+opener. A coding agent still runs on its starter's provider keys and GitHub
+token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left through
 `server/workspaces-app.ts` under the bearer, since the plugin's own
@@ -1185,8 +1210,10 @@ plan listed with `coding_agent.published` (migration 0078), their newest
 turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`packages/database/src/models/plan-store.ts` names the account beside the plan, so another
-account's plan answers exactly as none does.
+`packages/database/src/models/plan-store.ts` names the account beside the plan and gates on
+its membership of the plan's workspace, so a teammate's plan reads and
+writes as the account's own, and a plan of a workspace the account is not in
+answers exactly as none does.
 
 `server/repository-pins-app.ts` answers `/api/repository-pins`, the
 repositories the account pinned in the sidebar, whose groups of plans stand
@@ -1282,8 +1309,9 @@ locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
-A plan id another account owns reads as an empty history and restores as
-`not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
+Every member of the plan's workspace reads the history any of them wrote;
+a plan of a workspace the account is not in reads as an empty history and
+restores as `not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
 A plan's repository is `plan.repository` (migration 0063), the full name
@@ -1401,8 +1429,8 @@ or reserved; the check is a lookup ahead of the request, so a DNS answer that
 changes between the two is the case it does not cover. A turn gets at most
 4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
 page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
-inference on Luke's key, so each one is counted as one of the account's hosted
-uses before it is sent; a count that cannot be written is logged and stops
+inference on Luke's key, so each one is counted as one of the calling account's
+hosted uses before it is sent; a count that cannot be written is logged and stops
 nothing.
 `tests/public-research.test.ts` holds both against scripted HTTP and DNS.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
@@ -1909,8 +1937,9 @@ held), and waits for every record write already started, so no line begun
 before the settle is cut; an append not yet sent is dropped with the session
 and never re-sent, and a write that fails after the socket closed is
 reported. `server/voice/exchange-attachment.ts` is what the function passes:
-the plan's conversation resolved at the session's start, the function's
-writer, eve reached as the deployment for the account, and the plan's
+the plan's conversation resolved at the session's start, under whichever
+member of its workspace opened it, the function's writer, eve reached as the
+deployment for the calling account, and the plan's
 notetaker (`server/voice/plan-scribe.ts`), which runs only where the
 deployment holds the OpenAI key.
 
@@ -1928,8 +1957,8 @@ route or kind of turn carrying the secret is refused outright rather than
 passed to the account authenticator behind it. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
-a turn only on a conversation the named account owns and cancel one only in
-a session that account's conversation recorded. Where eve answers is an
+a turn only on a conversation the named account reaches and cancel one only
+in a session a conversation that account reaches recorded. Where eve answers is an
 origin of this deployment's own, whose rewrites carry `/eve/v1/*` into the
 eve service (`deploymentEveOrigin` in `server/hosted/brain-host/eve-origin.ts`):
 `LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
@@ -2436,7 +2465,13 @@ delegation, so no sandbox opens there either.
 ## The coding-agent routes
 
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
-reads, messages, re-models, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
+reads, messages, re-models, and stops a plan's agents through. An agent
+belongs to its plan's workspace: every route reads it through the plan's
+membership gate (`coding-agent-store.ts`), so any member lists, reads,
+messages, renames, re-models, and stops an agent a teammate started, while
+its conversation stays its starter's, the row's `userId`, under which its
+turns and lines are read and written, and its Start's retry key stays the
+starter's own; `packages/hosted/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -2519,15 +2554,16 @@ of them leaves a row behind.
 transcript the same way, under the agent and eve's id for the `delegate`
 call that started it, which the call's tool part carries as `toolCallId`:
 the child conversation is `childConversationId` of the two, and only a
-delegation recorded under the account's agent answers, so another account's
-agent, or a call that made no delegation, is `not-found`.
+delegation recorded under an agent the account reaches answers, so an agent
+of a workspace the account is not in, or a call that made no delegation, is
+`not-found`.
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateCodingAgentChoice`), answering the agent's summary with
 it; the coder agent reads the row at every step (`coder/agent.ts`'s
 `defineDynamic`, through `coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
-refuses another account's agent as not found and a model or effort the
+refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
 default as it was.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by

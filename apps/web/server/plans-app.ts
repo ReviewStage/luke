@@ -470,7 +470,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, planId, { includeArchived: true }),
   );
-  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
+  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
     discard: true,
   });
   const stopped = new Set(agents.map(({ id }) => id));

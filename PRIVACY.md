@@ -75,7 +75,8 @@ keeps its newest sixty parts with every piece of text cut to 4,000
 characters, and a page's HTML and a picture of the whiteboard are left out;
 each worker the planning model handed work to shows only its title, model,
 and where it stands. Opening a worker reads its whole session, uncut, for its
-own tab, and opening a coding agent reads its transcript (its words, reasoning
+own tab, and opening a coding agent, yours or another member's, reads its
+transcript (its words, reasoning
 summaries, and tool calls with their input and output) for its tab, as it
 runs. Our service keeps the planning turns with the plan's planning
 conversation and Luke reads them while the plan is open, during a call within
@@ -99,8 +100,11 @@ planning conversation. A fixture or evidence run keeps no conversation at all.
 
 **Feature plans.** When you start a named plan, our service stores it in a
 workspace: your personal workspace unless you start it in another workspace
-you are a member of, and the plan records which. It stores under your
-account its name and its one Markdown document, which begins as a copy of
+you are a member of, and the plan records which. Every member of that
+workspace can read, change, and delete the plan, its board, its pages, and
+its history, read what was said on its calls, yours included, and read,
+message, rename, and stop the coding agents any member started on it. It stores
+under your account its name and its one Markdown document, which begins as a copy of
 your plan template and is written by the planning call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;

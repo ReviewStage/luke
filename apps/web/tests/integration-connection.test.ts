@@ -94,8 +94,8 @@ const planningHost = Effect.gen(function* () {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     eveOrigin: () => undefined,
@@ -142,7 +142,7 @@ const plannedSession = (
     const plan = yield* startPlan(userId, { name: "Teammate invitations" });
     const opened = yield* openPlanConversation(userId, plan.id);
     assert.ok(Option.isSome(opened));
-    const conversationId = opened.value;
+    const conversationId = opened.value.conversationId;
     const auth = seat(userId, conversationId);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
