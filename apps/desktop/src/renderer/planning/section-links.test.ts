@@ -227,7 +227,7 @@ function drawnEditable(): HTMLElement {
       createElement(PlanBody, {
         plan: PLAN,
         live: false,
-        onEdit: () => new Promise(() => undefined),
+        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
         sectionLinks: { onOpen: () => undefined, reveal: undefined },
       }),
     ),
@@ -268,4 +268,13 @@ test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
   );
 
   assert.ok(stops.length <= 1, `${stops.length} of the ⋯ are Tab stops`);
+});
+
+test("on a plan that cannot be edited, where no block is a Tab stop, every section's ⋯ is one", () => {
+  const { container } = drawn();
+
+  const mores = [...container.querySelectorAll<HTMLElement>(".plan-unit-more")];
+
+  assert.equal(mores.length, 3);
+  assert.ok(mores.every((more) => more.tabIndex === 0));
 });

@@ -439,7 +439,7 @@ function DocumentUnit({
   link: LinkDrawer | undefined;
   /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
   planId: string | undefined;
-  /** Whether the section's block is the document's one Tab stop, beside which its ⋯ is the next. */
+  /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
@@ -629,7 +629,8 @@ export function PlanBody({
         marks={marks}
         link={link}
         planId={linkedPlan}
-        entry={false}
+        // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
+        entry
       />
     ),
   );
