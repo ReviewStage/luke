@@ -1011,15 +1011,26 @@ that table.
 **The routes** (`server/integrations-app.ts`):
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
-  status } }`, each status `connected`, `pending`, `expired`,
-  `disconnected`, or `unavailable` (no connector for it on this deployment).
-  A sign-in still under way, begun within the last fifteen minutes, is
-  settled here by asking Connect for a token afresh, and stands `pending`
-  until it settles, over an `expired` row as over none.
+  status }, signInFailures?: [{ provider, reason, message? }] }`, each
+  status `connected`, `pending`, `expired`, `disconnected`, or
+  `unavailable` (no connector for it on this deployment). A sign-in still
+  under way, begun within the last fifteen minutes, is settled here by
+  asking Connect for a token afresh, and stands `pending` until it settles,
+  over an `expired` row as over none. One with no token yet is asked after
+  by the `verifier` Connect's `startAuthorization` answered it with, kept in
+  the row's `connect_verifier` beside its state (never logged, never
+  answered): Connect's `GET /v1/connect/result/{verifier}`, the read its
+  CLI polls, under the deployment's OIDC token. One Connect answers
+  `canceled` (the developer cancelled on Connect's page) or `error` (Connect
+  or the provider refused it) is ended here and named once in
+  `signInFailures`, `reason` `canceled` or `error`, with the first line of
+  Connect's error message, cut to 200 characters, where it is shaped like no
+  credential (`credentialFreeLine` in `server/hosted/mcp-tools.ts`).
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account, with Luke's own user id as the
   subject and `/api/account/integrations/connected?state=…` as the callback,
-  records the sign-in's one-time state, and answers the address. The
+  records the sign-in's one-time state and Connect's verifier, and answers
+  the address. The
   desktop's host opens it through the native node; no window draws it and
   nothing logs it.
 - `POST /api/account/integrations/{provider}/cancel` ends the sign-in under
@@ -1048,12 +1059,13 @@ that table.
   `/integration-connected.html` with the provider and one word: `connected`,
   `not-completed` (declined or cancelled), `expired`, or `unavailable`. A
   `not-completed` ends the sign-in, so the desktop's next read finds it no
-  longer pending and says it failed. The callback carries the state Luke put
-  on it and nothing of Connect's: no error and no reason. A sign-in that
-  fails on Connect's own page ("Connection Failed", a token exchange the
-  provider refused) never sends the browser back here at all; Connect tells
-  only a server-side completion webhook of it, which Luke does not register,
-  so the desktop says such a sign-in did not finish once it stops waiting.
+  longer pending and says it failed, unless Connect's result names it
+  `canceled` or `error`: that one is left for the next statuses read, which
+  says why as it ends it. The callback carries the state Luke put on it and
+  nothing of Connect's: no error and no reason. A sign-in that fails on
+  Connect's own page ("Connection Failed", a token exchange the provider
+  refused) never sends the browser back here at all, and the statuses read
+  is what learns how it ended, from Connect's result.
 
 The rewrite moves a provider's path segment into the `provider` query
 (`function-rewrites.ts`), as a plan's id is moved into `id`.

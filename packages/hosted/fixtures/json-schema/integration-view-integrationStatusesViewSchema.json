@@ -153,6 +153,47 @@
             "ycombinator"
           ],
           "additionalProperties": false
+        },
+        "signInFailures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "executor",
+                  "github",
+                  "granola",
+                  "linear",
+                  "mercury",
+                  "neon",
+                  "notion",
+                  "posthog",
+                  "sentry",
+                  "slack",
+                  "supabase",
+                  "vercel",
+                  "ycombinator"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "canceled",
+                  "error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

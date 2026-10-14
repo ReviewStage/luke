@@ -8,16 +8,21 @@ import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_PROVIDER,
+  INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
   integrationLandingPath,
 } from "@sidecar/hosted/integration-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { GitHubApp } from "../server/github/github-app";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import {
+  CONNECT_SIGN_IN_RESULT,
+  type ConnectSignInResult,
+} from "../server/hosted/integration-connect";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -33,7 +38,11 @@ import {
   mintIntegrationState,
 } from "../server/integrations-app";
 import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
-import { GRANTING_SIGN_IN_URL, integrationConnectOver } from "./support/integration-connect";
+import {
+  GRANTING_SIGN_IN_URL,
+  GRANTING_SIGN_IN_VERIFIER,
+  integrationConnectOver,
+} from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 
 /**
@@ -88,14 +97,15 @@ function githubServer(listed: () => readonly string[]) {
 /**
  * The group over the test's database and a deployment with these variables
  * and this GitHub App, none unless given, each bearer the account it names,
- * over a Connect that grants everything unless it `declines`, and over the
- * real store unless `seams` stands in for part of it.
+ * over a Connect that grants everything unless it `declines` and says the
+ * sign-ins it began `ends` as given, and over the real store unless `seams`
+ * stands in for part of it.
  */
 const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
   network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
-  connect: { readonly declines?: boolean } = {},
+  connect: { readonly declines?: boolean; readonly ends?: ConnectSignInResult } = {},
   seams: Partial<IntegrationsAppSeams> = {},
 ) =>
   Effect.gen(function* () {
@@ -145,6 +155,17 @@ const standing = (
         return { status: response.status, body };
       });
     return {
+      /** Where Slack stands for the account, and the sign-in failures the read found. */
+      slackRead: (userId: string) =>
+        Effect.map(ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }), ({ body }) => {
+          // SAFETY: a statuses answer is a record of every provider's word, and the failures it found.
+          const read = body as { integrations: Record<string, string>; signInFailures?: unknown };
+          return {
+            status: read.integrations[SLACK],
+            failures: read.signInFailures,
+            answer: JSON.stringify(body),
+          };
+        }),
       /** Where Slack stands for the account. */
       slackStatus: (userId: string) =>
         Effect.map(
@@ -181,7 +202,12 @@ const standing = (
       slackLanding: (userId: string) =>
         Effect.gen(function* () {
           const state = mintIntegrationState();
-          yield* beginIntegrationSignIn(userId, SLACK, state);
+          yield* beginIntegrationSignIn(
+            userId,
+            SLACK,
+            state,
+            Redacted.make(GRANTING_SIGN_IN_VERIFIER),
+          );
           const response = yield* fetch(
             `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED}?state=${state}`,
           );
@@ -246,7 +272,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, { declines: true });
         const first = yield* openAccount("alex@declined.example");
         const lapsed = yield* openAccount("jo@declined.example");
-        yield* beginIntegrationSignIn(lapsed, SLACK, "state-before");
+        yield* beginIntegrationSignIn(
+          lapsed,
+          SLACK,
+          "state-before",
+          Redacted.make("connect-verifier"),
+        );
         yield* completeIntegrationSignIn(lapsed, SLACK, "state-before");
         yield* expireIntegrationConnection(lapsed, SLACK);
 
@@ -274,7 +305,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         });
         const first = yield* openAccount("kai@cancelled.example");
         const lapsed = yield* openAccount("lee@cancelled.example");
-        yield* beginIntegrationSignIn(lapsed, SLACK, "state-lapsed");
+        yield* beginIntegrationSignIn(
+          lapsed,
+          SLACK,
+          "state-lapsed",
+          Redacted.make("connect-verifier"),
+        );
         yield* completeIntegrationSignIn(lapsed, SLACK, "state-lapsed");
         yield* expireIntegrationConnection(lapsed, SLACK);
         for (const account of [first, lapsed]) {
@@ -311,7 +347,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
             // A Reopen's Connect lands between the Cancel's read and its ending of the state it read.
             endSignIn: (userId, provider, state) =>
               Effect.andThen(
-                beginIntegrationSignIn(userId, provider, "state-reopened"),
+                beginIntegrationSignIn(
+                  userId,
+                  provider,
+                  "state-reopened",
+                  Redacted.make("connect-verifier"),
+                ),
                 endIntegrationSignIn(userId, provider, state),
               ),
           },
@@ -321,6 +362,81 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
 
         assert.equal(yield* group.cancelSlack(account), INTEGRATION_STATUS.PENDING);
         assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.PENDING);
+      }),
+  );
+
+  it.effect(
+    "a sign-in Connect says was cancelled on its own page is ended by the next read, which says so once, and Connect's handle never leaves the service",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
+          declines: true,
+          ends: { kind: CONNECT_SIGN_IN_RESULT.CANCELED },
+        });
+        const account = yield* openAccount("ana@cancelled-at-connect.example");
+        const begun = yield* group.connectSlack(account);
+        assert.deepEqual(begun.body, { url: GRANTING_SIGN_IN_URL });
+
+        const ending = yield* group.slackRead(account);
+        assert.equal(ending.status, INTEGRATION_STATUS.DISCONNECTED);
+        assert.deepEqual(ending.failures, [
+          { provider: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED },
+        ]);
+        assert.ok(!ending.answer.includes(GRANTING_SIGN_IN_VERIFIER));
+
+        const after = yield* group.slackRead(account);
+        assert.equal(after.status, INTEGRATION_STATUS.DISCONNECTED);
+        assert.equal(after.failures, undefined);
+      }),
+  );
+
+  it.effect(
+    "a sign-in Connect says was refused answers Connect's own line as why, and an expired row stands expired again",
+    () =>
+      Effect.gen(function* () {
+        const message = "The provider rejected the authorization-code exchange";
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
+          declines: true,
+          ends: { kind: CONNECT_SIGN_IN_RESULT.FAILED, message },
+        });
+        const lapsed = yield* openAccount("bo@refused.example");
+        yield* beginIntegrationSignIn(
+          lapsed,
+          SLACK,
+          "state-before",
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(lapsed, SLACK, "state-before");
+        yield* expireIntegrationConnection(lapsed, SLACK);
+        assert.equal((yield* group.connectSlack(lapsed)).status, HOSTED_HTTP_STATUS.OK);
+
+        const read = yield* group.slackRead(lapsed);
+        assert.equal(read.status, INTEGRATION_STATUS.EXPIRED);
+        assert.deepEqual(read.failures, [
+          { provider: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR, message },
+        ]);
+        assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
+      }),
+  );
+
+  it.effect(
+    "a browser back without a grant from a sign-in Connect says was refused leaves it for the next read to say why",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
+          declines: true,
+          ends: { kind: CONNECT_SIGN_IN_RESULT.FAILED },
+        });
+        const account = yield* openAccount("dee@denied.example");
+        assert.equal(
+          yield* group.slackLanding(account),
+          integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.NOT_COMPLETED),
+        );
+        const read = yield* group.slackRead(account);
+        assert.equal(read.status, INTEGRATION_STATUS.DISCONNECTED);
+        assert.deepEqual(read.failures, [
+          { provider: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR },
+        ]);
       }),
   );
 

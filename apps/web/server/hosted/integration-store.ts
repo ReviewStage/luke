@@ -5,7 +5,8 @@
  * use the account's grant at one provider: `connected` lets them, anything
  * else or no row does not. A sign-in begins by writing its one-time state
  * beside whatever the row already said, so an account signing in again keeps
- * working while it does; the sign-in completes by setting the row connected
+ * working while it does, with the handle Connect answered it with, which
+ * goes with the state; the sign-in completes by setting the row connected
  * and clearing the state, or ends without a grant by clearing the state alone
  * (a first sign-in's row with it); a Disconnect deletes the row. Every function here
  * is an effect over the ambient `SqlClient`.
@@ -19,7 +20,7 @@ import {
   integrationProviderSchema,
 } from "@sidecar/hosted/integration-wire";
 import { and, eq } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
 /** What a row's status may say. No row is a disconnected provider. */
@@ -49,6 +50,8 @@ export interface IntegrationConnectionRow {
   readonly state: string | undefined;
   /** When the sign-in under way began; nothing when none is. */
   readonly stateIssuedAt: Date | undefined;
+  /** Connect's handle on the sign-in under way, which asks it how that sign-in ended; nothing when none is. */
+  readonly verifier: Redacted.Redacted | undefined;
   /** When a sign-in last completed, which names the grant the row stands for; nothing until one has. */
   readonly connectedAt: Date | undefined;
 }
@@ -59,6 +62,7 @@ const IntegrationRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
+  connectVerifier: Schema.NullOr(Schema.String),
   connectedAt: Schema.NullOr(InstantColumnSchema),
 });
 
@@ -68,6 +72,7 @@ const ROW_COLUMNS = {
   status: integrationConnection.status,
   state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
+  connectVerifier: integrationConnection.connectVerifier,
   connectedAt: integrationConnection.connectedAt,
 };
 
@@ -78,6 +83,7 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
+    verifier: row.connectVerifier === null ? undefined : Redacted.make(row.connectVerifier),
     connectedAt: row.connectedAt ?? undefined,
   };
 }
@@ -154,6 +160,7 @@ const BeginSchema = Schema.Struct({
   userId: Schema.String,
   provider: integrationProviderSchema,
   state: Schema.String,
+  verifier: Schema.String,
   at: Schema.Date,
 });
 
@@ -164,7 +171,7 @@ const BeginSchema = Schema.Struct({
  */
 const upsertSignIn = SqlSchema.void({
   Request: BeginSchema,
-  execute: ({ userId, provider, state, at }) =>
+  execute: ({ userId, provider, state, verifier, at }) =>
     Database.use((db) =>
       db
         .insert(integrationConnection)
@@ -174,22 +181,30 @@ const upsertSignIn = SqlSchema.void({
           status: INTEGRATION_ROW_STATUS.PENDING,
           state,
           stateIssuedAt: at,
+          connectVerifier: verifier,
           updatedAt: at,
         })
         .onConflictDoUpdate({
           target: [integrationConnection.userId, integrationConnection.provider],
-          set: { state, stateIssuedAt: at, updatedAt: at },
+          set: { state, stateIssuedAt: at, connectVerifier: verifier, updatedAt: at },
         }),
     ),
 });
 
-/** Records a sign-in to one provider under way for the account, under the state only its callback carries back. */
+/**
+ * Records a sign-in to one provider under way for the account, under the
+ * state only its callback carries back and the handle Connect answered it
+ * with.
+ */
 export function beginIntegrationSignIn(
   userId: string,
   provider: IntegrationProvider,
   state: string,
+  verifier: Redacted.Redacted,
 ): IntegrationStoreEffect<void> {
-  return Effect.flatMap(DateTime.nowAsDate, (at) => upsertSignIn({ userId, provider, state, at }));
+  return Effect.flatMap(DateTime.nowAsDate, (at) =>
+    upsertSignIn({ userId, provider, state, verifier: Redacted.value(verifier), at }),
+  );
 }
 
 const StampedSchema = Schema.Struct({
@@ -216,6 +231,7 @@ const updateConnected = SqlSchema.findAll({
           status: INTEGRATION_ROW_STATUS.CONNECTED,
           state: null,
           stateIssuedAt: null,
+          connectVerifier: null,
           connectedAt: at,
           updatedAt: at,
         })
@@ -300,7 +316,7 @@ const clearState = SqlSchema.void({
     Database.use((db) =>
       db
         .update(integrationConnection)
-        .set({ state: null, stateIssuedAt: null, updatedAt: at })
+        .set({ state: null, stateIssuedAt: null, connectVerifier: null, updatedAt: at })
         .where(and(ofAccount(account), eq(integrationConnection.state, state))),
     ),
 });
