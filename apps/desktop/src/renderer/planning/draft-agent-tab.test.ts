@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   INTEGRATION_PROVIDER,
@@ -17,6 +16,8 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import type { Failure } from "../failure-remedy";
+import { OpenSettingsProvider } from "../open-settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
 import type { AgentDraft } from "./use-coding-agents";
@@ -30,13 +31,6 @@ import type { AgentDraft } from "./use-coding-agents";
  * asked for are held until the test answers them.
  */
 
-/** One sign-in the bridge holds, answered when the test chooses. */
-interface HeldSignIn {
-  request: Act;
-  answer: (outcome: ActOutcome) => void;
-}
-
-let signIns: HeldSignIn[] = [];
 /** Where the account's Slack connection stands at the service; every other provider is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
 
@@ -61,7 +55,6 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  signIns = [];
   sent = [];
   slack = INTEGRATION_STATUS.CONNECTED;
   Object.defineProperty(window, "sidecar", {
@@ -69,11 +62,6 @@ beforeEach(() => {
     value: {
       act: (request: Act): Promise<ActOutcome> => {
         sent.push(request);
-        if (request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN) {
-          return new Promise((answer) => {
-            signIns.push({ request, answer });
-          });
-        }
         if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
@@ -104,6 +92,7 @@ async function settle(): Promise<void> {
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
 function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   const starts: string[] = [];
+  const links: SettingsLink[] = [];
   const control = codingAgentsControl({
     startTask: (_draftId, task) => {
       starts.push(task);
@@ -114,7 +103,15 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(DraftAgentTab, { draft, control })));
+  act(() =>
+    root.render(
+      createElement(
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => links.push(link) },
+        createElement(DraftAgentTab, { draft, control }),
+      ),
+    ),
+  );
   // A press is named by its words; the mark before them carries a title of its own.
   const button = (words: string) =>
     [...container.querySelectorAll("button")].find((each) =>
@@ -124,6 +121,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     );
   return {
     starts,
+    links,
     send: async () => {
       const field = container.querySelector("textarea");
       assert.ok(field, "the draft's box is drawn");
@@ -143,63 +141,29 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   };
 }
 
-/** The newest sign-in the tab asked for, answered with whether a new session landed. */
-async function answerSignIn(signedIn: boolean): Promise<void> {
-  const held = signIns.at(-1);
-  assert.ok(held, "a sign-in was asked for");
-  await act(async () => {
-    held.answer({ status: ACT_OUTCOME_STATUS.DONE, value: signedIn });
-  });
-  await settle();
-}
-
-test("a Start GitHub refused offers the GitHub sign-in, and once it lands the message is sent again by itself", async () => {
-  const tab = mount([SIGN_IN_REFUSAL, undefined]);
+test("a Start GitHub refused points to Settings, and Open Settings opens the account's connected accounts", async () => {
+  const tab = mount([SIGN_IN_REFUSAL]);
   await tab.send();
   assert.match(tab.note() ?? "", /^Connect GitHub in Settings to start an agent\./u);
   assert.equal(tab.button("Retry"), undefined, "Retry cannot mend it");
 
-  await tab.press("Sign in with GitHub");
-  assert.deepEqual(
-    signIns.map(({ request }) => request),
-    [{ kind: ACT_KIND.ACCOUNT_SIGN_IN_AGAIN, payload: { provider: ACCOUNT_PROVIDER.GITHUB } }],
-  );
-  assert.ok(tab.button("Waiting for browser…")?.disabled, "the press waits on the browser");
-  assert.deepEqual(tab.starts, [DRAFT.task]);
+  await tab.press("Open Settings");
 
-  await answerSignIn(true);
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-  assert.equal(tab.note(), undefined);
+  assert.deepEqual(tab.links, [
+    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+  ]);
+  assert.deepEqual(tab.starts, [DRAFT.task]);
 });
 
-test("a GitHub sign-in withdrawn, or one that did not land, leaves the refusal with its press and sends nothing", async () => {
-  const tab = mount([SIGN_IN_REFUSAL]);
-  await tab.send();
-
-  await tab.press("Sign in with GitHub");
-  await tab.press("Cancel");
-  assert.ok(sent.some((each) => each.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN));
-  assert.match(tab.note() ?? "", /^Connect GitHub in Settings to start an agent\./u);
-  assert.ok(tab.button("Sign in with GitHub"), "the press is offered again");
-  // The withdrawn sign-in's own answer, arriving late, is spent.
-  await answerSignIn(true);
-  assert.deepEqual(tab.starts, [DRAFT.task]);
-
-  await tab.press("Sign in with GitHub");
-  await answerSignIn(false);
-  assert.deepEqual(tab.starts, [DRAFT.task]);
-  assert.ok(tab.button("Sign in with GitHub"), "the press is offered again");
-});
-
-test("a refusal a sign-in does not mend offers Retry, and no sign-in", async () => {
+test("a refusal Settings does not mend offers Retry, and no Open Settings", async () => {
   const tab = mount([startFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), undefined]);
   await tab.send();
   assert.match(tab.note() ?? "", /could not be started/u);
-  assert.equal(tab.button("Sign in with GitHub"), undefined);
+  assert.equal(tab.button("Open Settings"), undefined);
 
   await tab.press("Retry");
   assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
-  assert.deepEqual(signIns, []);
+  assert.deepEqual(tab.links, []);
 });
 
 test("a server the agent has on whose sign-in expired is offered to reconnect under the box, and one it has off is not", async () => {
