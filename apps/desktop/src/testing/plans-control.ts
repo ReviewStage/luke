@@ -213,6 +213,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onShowPlan: ignore,
     onShowMention: ignore,
     sectionReveal: undefined,
+    onSectionRevealed: ignore,
     onShowInbox: ignore,
     secondCall: {
       confirm: {

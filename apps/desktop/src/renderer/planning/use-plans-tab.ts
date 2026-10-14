@@ -292,8 +292,10 @@ export interface PlansControl {
   onShowPlan: (planId: string) => void;
   /** Opens a plan the same way, scrolled to the section a mention or a Luke link names, or at its top for the plan's own. */
   onShowMention: (mention: PlanMention) => void;
-  /** The last ask to show a section, under the plan it was asked of, so a section of a plan not yet open is shown once it is drawn. */
+  /** The last ask to show a section, under the plan it was asked of, so a section of a plan not yet open is shown once it is drawn; let go once shown. */
   sectionReveal: { readonly planId: string; readonly reveal: SectionReveal } | undefined;
+  /** The plan's page showed the section an ask named, so a later visit to the plan does not show it again. */
+  onSectionRevealed: (ask: number) => void;
   /** Opens a plan on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
   onShowInbox: (planId: string) => void;
   /** What waits on the developer across the account's plans, as main's read last answered: each plan with an open inbox item, and its items. */
@@ -543,6 +545,8 @@ export function usePlansTab(input: {
   >(undefined);
   const [reveal, setReveal] = useState<SourceReveal | undefined>(undefined);
   const [sectionReveal, setSectionReveal] = useState<PlansControl["sectionReveal"]>(undefined);
+  /** The asks to show a section made so far, so each is its own even after the last was let go. */
+  const sectionAsks = useRef(0);
   /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
   const [closedTabs, setClosedTabs, latestClosedTabs] =
     useStateWithRef<readonly ClosedTab[]>(NO_CLOSED_TABS);
@@ -1559,12 +1563,13 @@ export function usePlansTab(input: {
     onShowMention: (mention) => {
       showColumnTab(mention.planId, MAIN_TAB.PLAN);
       const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
-      setSectionReveal((last) => ({
-        planId: mention.planId,
-        reveal: { anchor, ask: (last?.reveal.ask ?? 0) + 1 },
-      }));
+      sectionAsks.current += 1;
+      setSectionReveal({ planId: mention.planId, reveal: { anchor, ask: sectionAsks.current } });
     },
     sectionReveal,
+    // Only the ask shown is let go; a newer one stands until its own plan shows it.
+    onSectionRevealed: (ask) =>
+      setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: (planId) => showColumnTab(planId, MAIN_TAB.INBOX),
     // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
     onOpenPinnedTab: (pin) => {

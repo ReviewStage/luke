@@ -163,12 +163,16 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
     act(() => root.render(createElement(PlanBody, { plan: PLAN, live: false, sectionLinks })));
   const onOpen = () => undefined;
 
-  render({ workspace: WORKSPACE, onOpen, reveal: { anchor: "rollout", ask: 1 } });
+  const revealed: number[] = [];
+  const onRevealed = (ask: number) => revealed.push(ask);
+
+  render({ workspace: WORKSPACE, onOpen, onRevealed, reveal: { anchor: "rollout", ask: 1 } });
   const shown = scroller.scrollTop;
-  render({ workspace: WORKSPACE, onOpen, reveal: { anchor: "old-plan", ask: 2 } });
+  render({ workspace: WORKSPACE, onOpen, onRevealed, reveal: { anchor: "old-plan", ask: 2 } });
 
   assert.equal(shown, 600 - 16);
   assert.equal(scroller.scrollTop, 0);
+  assert.deepEqual(revealed, [1, 2], "each ask is said shown once, so it can be let go");
 });
 
 test("no attribute of the plan's page carries what a mention names", () => {

@@ -297,6 +297,7 @@ function PlanDocument({
     onOpen: openMention,
     onOpenFile: openMentionedFile,
     reveal: revealed?.planId === shown ? revealed.reveal : undefined,
+    onRevealed: plans.onSectionRevealed,
   });
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =

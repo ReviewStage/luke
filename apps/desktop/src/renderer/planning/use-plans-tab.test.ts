@@ -655,6 +655,26 @@ test("a Luke link to another plan's section opens that plan and asks its page to
   });
 });
 
+test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  const section = { kind: MENTION_KIND.SECTION, planId: OTHER_PLAN_ID, anchor: "rollout" } as const;
+
+  act(() => tab.control().onShowMention(section));
+  act(() => tab.control().onShowMention(section));
+  act(() => tab.control().onSectionRevealed(1));
+  const afterStale = tab.control().sectionReveal;
+  act(() => tab.control().onSectionRevealed(2));
+  const afterShown = tab.control().sectionReveal;
+  act(() => tab.control().onShowMention(section));
+
+  assert.deepEqual(afterStale, { planId: OTHER_PLAN_ID, reveal: { anchor: "rollout", ask: 2 } });
+  assert.equal(afterShown, undefined);
+  assert.deepEqual(tab.control().sectionReveal?.reveal, { anchor: "rollout", ask: 3 });
+});
+
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {
   const tab = mount({ shown: true, planning: OPEN });
   const panel = () => tab.control().sidePanel;
