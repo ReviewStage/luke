@@ -11,9 +11,11 @@ import {
   type IntegrationTool,
 } from "../integration-health";
 import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
+import { matchesTokens, searchTokens } from "../search-tokens";
+import { byName } from "./server-tools-model";
 
 /**
- * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it.
+ * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
  *
  * Every MCP server Luke hands a coding agent is one integration's, so the
  * popover has one row per integration provider the deployment offers the
@@ -33,7 +35,11 @@ import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
  * does not offer the account is not drawn at all, as the agent is never
  * handed it. No other row says where it stands in words: the switch, the
  * count, and the buttons are what say it. A read of the connections that
- * failed is the one error, offered as a way to read again.
+ * failed is the one error, offered as a way to read again. The rows stand
+ * under Connected, a lapsed connection among them, and Not connected, a
+ * sign-in under way or one that did not finish among the latter; one whose
+ * standing is unread stands first under no heading. A search finds servers
+ * by name and every connected server's tools by name or description.
  */
 
 /** The kinds of row the popover draws. */
@@ -161,6 +167,79 @@ export function serverRows(input: {
       ...wordsOf(provider, status, health, signIn),
     };
   });
+}
+
+/** The headings the popover's servers stand under: those connected, then those to connect. */
+export const SERVER_SECTION = {
+  CONNECTED: "Connected",
+  NOT_CONNECTED: "Not connected",
+} as const;
+
+type ServerSection = (typeof SERVER_SECTION)[keyof typeof SERVER_SECTION];
+
+/** A run of rows under one heading, or under none. */
+export interface ServerGroup {
+  readonly heading: ServerSection | undefined;
+  readonly rows: readonly ServerRow[];
+}
+
+/** Which heading a row stands under: none while where it stands is unread. */
+function sectionOf(row: ServerRow): ServerSection | undefined {
+  switch (row.kind) {
+    case SERVER_ROW.SWITCH:
+    case SERVER_ROW.RECONNECT:
+      return SERVER_SECTION.CONNECTED;
+    case SERVER_ROW.CONNECT:
+    case SERVER_ROW.SIGNING_IN:
+    case SERVER_ROW.TRY_AGAIN:
+      return SERVER_SECTION.NOT_CONNECTED;
+    case SERVER_ROW.QUIET:
+    case SERVER_ROW.RETRY:
+      return undefined;
+  }
+}
+
+/**
+ * The rows in their sections, each in the provider list's order: any whose
+ * standing is unread first under no heading, then Connected, then Not
+ * connected, a section with no row left out.
+ */
+export function serverGroups(rows: readonly ServerRow[]): readonly ServerGroup[] {
+  const order = [undefined, SERVER_SECTION.CONNECTED, SERVER_SECTION.NOT_CONNECTED] as const;
+  return order
+    .map((heading) => ({ heading, rows: rows.filter((row) => sectionOf(row) === heading) }))
+    .filter((group) => group.rows.length > 0);
+}
+
+/** Whether a row opens onto its server's tools: connected, and its server answered with at least one. */
+export function opensTools(row: ServerRow): boolean {
+  return row.kind === SERVER_ROW.SWITCH && row.tools !== undefined && row.tools.length > 0;
+}
+
+/** One tool a search found, with the server that offers it. */
+export interface ToolHit {
+  readonly row: ServerRow;
+  readonly tool: IntegrationTool;
+}
+
+/** What a search of the popover finds: the servers whose names hold every word, and every tool whose name or description does. */
+export interface ServerSearch {
+  readonly rows: readonly ServerRow[];
+  readonly tools: readonly ToolHit[];
+}
+
+/** The servers and tools a query finds; a blank query is every server and no tool. */
+export function searchServers(rows: readonly ServerRow[], query: string): ServerSearch {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0) return { rows, tools: [] };
+  return {
+    rows: rows.filter((row) => matchesTokens([row.name], tokens)),
+    tools: rows.flatMap((row) =>
+      byName(row.tools ?? [])
+        .filter((tool) => matchesTokens([tool.name, tool.description], tokens))
+        .map((tool) => ({ row, tool })),
+    ),
+  };
 }
 
 /** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */

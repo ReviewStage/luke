@@ -3,6 +3,7 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
+  type IntegrationToolAnnotations,
   type IntegrationToolsProblemReason,
 } from "@sidecar/hosted/integration-wire";
 
@@ -24,10 +25,11 @@ import {
  * service says.
  */
 
-/** One tool as a list draws it. */
+/** One tool as a list draws it, with the hints its server annotated it with where it sent any. */
 export interface IntegrationTool {
   readonly name: string;
   readonly description: string;
+  readonly annotations?: IntegrationToolAnnotations;
 }
 
 /** How far a connected provider's server is known to work. */
