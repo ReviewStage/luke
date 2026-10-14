@@ -109,6 +109,25 @@ test("a correction that drops a mention the developer placed is not taken", () =
   assert.deepEqual(taken.missed, [note]);
 });
 
+test("a correction that drops a mention written as a page's address, a file's on GitHub or a plan's, is not taken", () => {
+  for (const target of [
+    "https://github.com/acme/checkout/blob/HEAD/src/a.ts",
+    "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b#goal",
+  ]) {
+    const text = `## Rollout\n\n- Ship as [@a.ts](${target}) says, store first.\n`;
+    const note: PlanNote = {
+      kind: NOTE_KIND.REPLACE,
+      find: `Ship as [@a.ts](${target}) says`,
+      text: "Ship",
+    };
+
+    const taken = applyNotesToText(text, [note]);
+
+    assert.equal(taken.text, text, target);
+    assert.deepEqual(taken.missed, [note], target);
+  }
+});
+
 test("a correction that rewords around a mention, keeping it, is taken", () => {
   const taken = applyNotesToText(MENTIONED, [
     {

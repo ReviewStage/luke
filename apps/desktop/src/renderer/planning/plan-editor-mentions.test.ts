@@ -76,7 +76,12 @@ async function opened() {
         plan: PLAN,
         live: false,
         onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: { onOpen: () => undefined, onOpenFile: () => undefined, reveal: undefined },
+        sectionLinks: {
+          workspace: "acme",
+          onOpen: () => undefined,
+          onOpenFile: () => undefined,
+          reveal: undefined,
+        },
       }),
     ),
   );

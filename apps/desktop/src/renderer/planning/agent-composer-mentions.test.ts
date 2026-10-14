@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
-import { MENTION_KIND, type Mention, mentionMarkdown } from "@luke/features/mention-link";
+import {
+  MENTION_KIND,
+  type Mention,
+  type MentionPlace,
+  mentionMarkdown,
+} from "@luke/features/mention-link";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,7 +42,9 @@ const PLAN_ID = "pl_1";
 
 const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
-const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading: "Rollout" };
+const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" };
+
+const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
 /** The files each repository holds, as the plan's tree answers them. */
 const TREES: ReadonlyMap<string, string> = new Map([
@@ -102,11 +109,13 @@ function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsVal
   return {
     planId: PLAN_ID,
     planName: "Invitations",
+    workspace: PLACE.workspace,
     repository,
     text: () => PLAN_TEXT,
     doors: {
       planId: PLAN_ID,
-      headings: new Set(["Goal", "Rollout"]),
+      place: { workspace: PLACE.workspace, repository },
+      anchors: new Set(["goal", "rollout"]),
       onOpenPlan: (mention) => opened.push(mention),
       onOpenFile: undefined,
     },
@@ -191,7 +200,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
     chips.map((chip) => chip.textContent),
     ["Rollout"],
   );
-  assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout")}`]);
+  assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
 });
 
 test("off a plan's page an @ in the box opens nothing and is sent as the letter it is", async () => {
@@ -210,7 +219,9 @@ test("off a plan's page an @ in the box opens nothing and is sent as the letter 
 test("a sent message's mention is drawn on a plan's page as the chip that opens what it names", () => {
   const opened: Mention[] = [];
   const container = drawn(
-    createElement(TranscriptWords, { text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout")}.` }),
+    createElement(TranscriptWords, {
+      text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}.`,
+    }),
     planPage(opened),
   );
 
@@ -225,7 +236,9 @@ test("a sent message's mention is drawn on a plan's page as the chip that opens 
 
 test("off a plan's page a sent message's mention is drawn as its words, not a chip", () => {
   const container = drawn(
-    createElement(TranscriptWords, { text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout")}.` }),
+    createElement(TranscriptWords, {
+      text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}.`,
+    }),
     undefined,
   );
 

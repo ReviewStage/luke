@@ -1,4 +1,10 @@
-import { encodeMention, MENTION_KIND, type Mention } from "@luke/features/mention-link";
+import {
+  encodeMention,
+  MENTION_KIND,
+  type Mention,
+  type MentionPlace,
+  sectionAnchors,
+} from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { DocumentIcon } from "@luke/ui";
@@ -104,22 +110,23 @@ function pathRow(entry: RepositoryPath): MentionRow {
   };
 }
 
-/** The plan's rows: each section by its heading, then the plan itself. */
+/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself. */
 function planRows(planId: string, planName: string, text: string): MentionRow[] {
-  const headings = [
-    ...new Set(
-      planSections(text).flatMap((section) => (section.heading === "" ? [] : [section.heading])),
-    ),
-  ];
+  const headings = planSections(text).map((section) => section.heading);
+  const anchors = sectionAnchors(headings);
   return [
-    ...headings.map(
-      (heading): MentionRow => ({
-        mention: { kind: MENTION_KIND.SECTION, planId, heading },
-        name: heading,
-        detail: "Section",
-        terms: heading,
-      }),
-    ),
+    ...headings.flatMap((heading, at): MentionRow[] => {
+      const anchor = anchors[at] ?? "";
+      if (anchor === "") return [];
+      return [
+        {
+          mention: { kind: MENTION_KIND.SECTION, planId, anchor },
+          name: heading,
+          detail: "Section",
+          terms: heading,
+        },
+      ];
+    }),
     {
       mention: { kind: MENTION_KIND.PLAN, planId },
       name: planName,
@@ -210,7 +217,7 @@ function MentionMenu({
               const mine = index;
               return (
                 <button
-                  key={encodeMention(row.mention)}
+                  key={JSON.stringify(row.mention)}
                   id={optionId(id, mine)}
                   type="button"
                   role="option"
@@ -258,10 +265,12 @@ export const MENTION_MENU_SIDE = {
 
 type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
 
-/** The plan whose sections and repository the list offers, and its text as it stands now. */
+/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now. */
 export interface MentionSource {
   readonly planId: string;
   readonly planName: string;
+  /** The slug of the plan's workspace, which a mention of it is written under. */
+  readonly workspace: string;
   /** The plan's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
   readonly text: () => string;
@@ -298,6 +307,7 @@ export function useMentionPicker({
 
   const planId = source?.planId ?? "";
   const repository = source?.repository ?? null;
+  const place: MentionPlace = { workspace: source?.workspace ?? "", repository };
   const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
   // A word closed with Escape stays closed only while the caret is in it.
   const inWord = trigger !== undefined;
@@ -344,7 +354,7 @@ export function useMentionPicker({
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
   const choose = (row: MentionRow) =>
-    onChoose({ name: row.name, target: encodeMention(row.mention) });
+    onChoose({ name: row.name, target: encodeMention(row.mention, place) });
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!open) return false;

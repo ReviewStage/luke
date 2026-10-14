@@ -1037,7 +1037,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { plan, transcript, sent } = yield* startedAgent(eve, { running: true });
-        const words = `Do what ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: plan.id, heading: "Goal" }, "Goal")} says.`;
+        const words = `Do what ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: plan.id, anchor: "goal" }, "Goal", { workspace: "acme", repository: plan.repository })} says.`;
 
         yield* sent(words);
 

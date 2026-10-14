@@ -547,7 +547,13 @@ export function PlanDocumentEditor({
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
   const picker = useMentionPicker({
-    source: { planId: plan.id, planName: plan.name, repository: plan.repository, text },
+    source: {
+      planId: plan.id,
+      planName: plan.name,
+      workspace: mentions?.place.workspace ?? "",
+      repository: plan.repository,
+      text,
+    },
     room,
     side: MENTION_MENU_SIDE.BELOW,
     onChoose: (mention) => handle.current?.chooseMention(mention),
@@ -580,7 +586,8 @@ export function PlanDocumentEditor({
             onTrigger: picker.onTrigger,
             onKey: picker.onKey,
             drawMention: chips.draw,
-            retarget: (target, renamed) => retargetedMention(plan.id, target, renamed),
+            retarget: (target, change) =>
+              retargetedMention(plan.id, mentions.place, target, change),
           },
   };
   return (
