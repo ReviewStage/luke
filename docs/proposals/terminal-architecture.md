@@ -363,3 +363,87 @@ one chain, since they touch `side-panel.tsx`, `use-side-panel.ts` and
   once.
 - PR 4 joins them; 6 needs it for real data and stubs the act types until
   then.
+
+## 11. The host contract (PR 4), fixed for the desktop PRs
+
+The renderer reaches terminals through acts, which carry ids, sizes and
+names, never bytes, and through one `MessagePort` per attached shell, which
+carries only bytes and connection state. Field names follow the service's
+wire (`@sidecar/hosted/terminal-wire`): a shell is `id` and `title`.
+
+### Vocabulary (`@sidecar/hosted/terminal-wire`)
+
+- `SANDBOX_STATE`: `running` | `stopped` | `starting`.
+  - `starting` covers an agent that hasn't opened its sandbox yet (its
+    first command opens it) and a sandbox still coming up.
+- `TerminalSummary`: `{ id, title, command, cwd, running }`.
+  - `title` is the developer's name for the shell, or its foreground command
+    when it has none.
+  - `running` is true when something other than the shell at its prompt is
+    in the foreground.
+- `TerminalsAnswer`: `{ sandbox: SandboxState, terminals: TerminalSummary[] }`,
+  oldest first. It is always empty unless the sandbox is `running`.
+
+### Acts (renderer → main, `ACT_KIND.TERMINAL_*`)
+
+| Act | Payload | Answer |
+| --- | --- | --- |
+| `terminal.list` | `{ agentId }` | `TerminalsAnswer`. Never wakes a stopped sandbox |
+| `terminal.create` | `{ agentId, title? }` | `{ terminal: TerminalSummary }` |
+| `terminal.rename` | `{ agentId, terminalId, title }` | `TerminalsAnswer` after the change |
+| `terminal.kill` | `{ agentId, terminalId }` | `TerminalsAnswer` after the change |
+| `terminal.resume` | `{ agentId }` | `{ sandbox: SandboxState }`. The only path that wakes a stopped sandbox, sent on the developer's click |
+| `terminal.attach` | `{ agentId, terminalId, cols, rows }` | `{}` straight away, before the connection opens. Main then posts the port (below). Attaching again from the same window replaces that window's port, and the old one closes |
+| `terminal.detach` | `{ agentId, terminalId }` | `{}`. Closing the port does the same |
+
+**Refusals** (`TERMINAL_REFUSAL`, the act's fixed refusal):
+
+- `sandbox-stopped`: `create` in a stopped sandbox.
+- `agent-not-ready`: `create` before the agent opened its sandbox.
+- `not-found`: no such agent or shell, or another workspace's.
+- `gone`: an archived agent.
+- `unavailable`: the service or Vercel could not be reached, so the caller
+  may retry.
+
+### The port (`terminal:port`)
+
+After `terminal.attach`, main posts **one `MessagePort`** to the asking
+panel's `webContents` alone, with `{ agentId, terminalId }`, through the
+preload's port entry. Every message on it is an object.
+
+| Direction | Message |
+| --- | --- |
+| main → renderer | `{ type: "output", data: Uint8Array }`: PTY output, to `xterm.write(data, ack)` |
+| main → renderer | `{ type: "state", state, code? }`: the connection state, below |
+| renderer → main | `{ type: "input", data: string }`: xterm's `onData` |
+| renderer → main | `{ type: "resize", cols, rows }`: the fit addon, debounced to 100 ms |
+| renderer → main | `{ type: "ack", chars }`: sent every 5,000 characters xterm has written. Main pauses the socket above 100,000 unacked |
+
+**Connection states** (`TERMINAL_CONNECTION`, the `state` message). The
+first message on a new port is `connecting`.
+
+| `state` | Meaning | Host reconnects? | What the renderer does |
+| --- | --- | --- | --- |
+| `connecting` | The socket is opening | (n/a) | Nothing visible for 1 s |
+| `attached` | Connected, and tmux reattached to the shell | (n/a) | Clears any bar or line |
+| `reconnecting` | The socket dropped: sleep, a network change, or the 800 s bound | **Yes**, on a `Schedule`, and at once on `powerMonitor` resume | The slim "Connection lost. Reconnecting…" bar after 1 s |
+| `idle` | Closed after 5 minutes without typing (close 4000) | No | The inline `[Disconnected after 5 min without typing …]` line. A key press sends `terminal.attach` again |
+| `stopped` | The sandbox is stopped | No | The "Sandbox stopped · Resume sandbox ⏎" bar. The click sends `terminal.resume`, then `terminal.attach` |
+| `starting` | The agent hasn't opened its sandbox yet | **Yes**: the host re-asks every 5 s while the port is open, and posts `attached` once it exists | The "Waiting for the agent to open its sandbox…" bar |
+| `exited` | The shell ended (`code` carries its exit status). The tmux session is gone | No | The inline `[Process exited with code N …]` line. A key press sends `terminal.create`, then `terminal.attach` |
+| `gone` | The agent was archived, or the shell was killed elsewhere | No | Drops the shell (or closes the tab, for an archived agent) |
+
+"Resuming" is the renderer's own state, between sending `terminal.resume`
+and its answer. No port carries it.
+
+### What the renderer reads for the picker and the tab chrome
+
+- **Sandbox state per agent:** `terminal.list { agentId }` → `sandbox`.
+  The answer is `starting` for an agent with no sandbox yet.
+- **Whether the agent is working:** the `CodingAgentSummary.status` the
+  renderer already holds (`agentStillWriting`).
+- **Picker rows:** "Working · sandbox running" and "Idle · sandbox stopped"
+  are those two put together.
+- **Refreshing the list:** the renderer re-reads it while the tab is shown,
+  on focus and every 5 s, and after every `rename`, `kill` and `create`
+  answer.
