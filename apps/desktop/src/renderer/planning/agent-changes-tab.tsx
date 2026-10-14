@@ -41,6 +41,7 @@ import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, useTreeSlide } from "./file-view";
+import { PullRequestMark } from "./pull-request-mark";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
@@ -264,7 +265,7 @@ export function changesTabLabel(agentId: string, control: CodingAgentsControl): 
 
 /**
  * The card a Changes tab hangs, and its row in the plan's summary, in a tab
- * card's look: the pull request's title with its number at the right, the
+ * card's look: the pull request's title with its mark and number at the right, the
  * coding agent whose pull request it is under the title, wearing its glyph
  * as its own tab does, and under them how many files it changes and the
  * lines it adds and removes, as GitHub counts them.
@@ -290,7 +291,10 @@ export function ChangesCard({
             <span>{agentLabel}</span>
           </span>
         </div>
-        <span className="tab-card-time">{pullRequestNumberLabel(pullRequest)}</span>
+        <span className="tab-card-time changes-card-number">
+          <PullRequestMark pullRequest={pullRequest} />
+          {pullRequestNumberLabel(pullRequest)}
+        </span>
       </div>
       <p className="tab-card-note">
         {count} {count === 1 ? "file" : "files"} changed{" "}

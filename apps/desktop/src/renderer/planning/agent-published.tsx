@@ -6,7 +6,6 @@ import {
 import { CopyIcon } from "@sidecar/panel";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { GitHubMark } from "../account-marks";
 import {
   ActionMenu,
   MENU_ALIGN,
@@ -21,22 +20,22 @@ import {
   checkoutCommand,
   publishedUrl,
   pullRequestNumberLabel,
-  pullRequestPillLabel,
   pullRequestStateWord,
 } from "./coding-agent-model";
+import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
 
 /**
  * agent-published.tsx -- what an agent published, on its tab: the pull request or branch chip at the box's foot, and the pull request's row at a finished transcript's end.
  *
  * The box's foot wears one of two chips once the agent has pushed, after
- * the model chip and in its style: one for its pull request, the GitHub
- * mark and the number coloured by where the pull request stands; or, with
+ * the model chip and in its style: one for its pull request, its mark
+ * (`pull-request-mark.tsx`) and its number in the mark's colour; or, with
  * a branch and no pull request yet, one naming the branch. A press of
  * either opens it on GitHub, the pull request or the branch compared, and
  * a right-click offers what a press does not: copying the branch's name or
- * the command that checks it out. The row says the number and title, that
- * the checks failed where they did, the lines added and removed, and where
- * the pull request stands only where that changes what the developer would
+ * the command that checks it out. The row wears the same mark and says the
+ * number and title, that the checks failed where they did, the lines added
+ * and removed, and where the pull request stands only where that changes what the developer would
  * do; a press of it opens the pull request. Nothing here is drawn before
  * the service has said what stands, so a tab on an agent still reading the
  * repository wears nothing yet. Beside the pull request's chip stands a
@@ -88,7 +87,7 @@ function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer 
   if (published.pullRequest !== null) {
     return (
       <>
-        <GitHubMark />
+        <PullRequestMark pullRequest={published.pullRequest} />
         <span className="agent-pr-number">{pullRequestNumberLabel(published.pullRequest)}</span>
       </>
     );
@@ -113,14 +112,14 @@ export function PublishedChip({
   const url = published === undefined ? undefined : publishedUrl(published);
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
-  const label = pullRequest !== null ? pullRequestPillLabel(pullRequest) : (branch ?? "");
+  const label = pullRequest !== null ? pullRequestMarkLabel(pullRequest) : (branch ?? "");
   return (
     <>
       <Tooltip label={OPEN_HINT}>
         <button
           type="button"
           className="plan-compose-chip agent-published-chip"
-          data-state={pullRequest?.state}
+          data-pull-request-state={pullRequest?.state}
           data-menu-open={String(menu.open !== undefined)}
           aria-label={label}
           onClick={() => {
@@ -211,10 +210,9 @@ export function PublishedRow({
         type="button"
         className="agent-published-row"
         data-published-row=""
-        data-state={pullRequest.state}
         onClick={() => openGitHub(pullRequest.url)}
       >
-        <GitHubMark />
+        <PullRequestMark pullRequest={pullRequest} />
         <span ref={words} className="agent-published-title" data-overflow={String(clipped)}>
           {pullRequestNumberLabel(pullRequest)} · {pullRequest.title}
         </span>

@@ -2371,40 +2371,54 @@ button.agent-ref:hover .agent-ref-name {
   font-variant-numeric: tabular-nums;
 }
 
-.agent-published-chip[data-state] {
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-weight: 600;
+/* A pull request's colour for where it stands, in GitHub's colours: open in
+   the success green, a draft in the muted ink, merged in the merged purple,
+   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`),
+   and so does the chip naming it, as its tint, its edge, and its words;
+   the mark alone turns red once its checks failed. */
+[data-pull-request-state="open"] {
+  --pull-request-tone: var(--state-complete);
 }
 
-.agent-published-chip[data-state]:hover,
-.agent-published-chip[data-state][data-menu-open="true"] {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
+[data-pull-request-state="draft"] {
+  --pull-request-tone: var(--text-tertiary);
 }
 
-.agent-published-chip[data-state="open"] {
-  --accent: var(--state-complete);
+[data-pull-request-state="merged"] {
+  --pull-request-tone: var(--state-merged);
 }
 
-.agent-published-chip[data-state="draft"] {
-  --accent: var(--text-tertiary);
+[data-pull-request-state="closed"] {
+  --pull-request-tone: var(--danger);
 }
 
-.agent-published-chip[data-state="merged"] {
-  --accent: var(--state-merged);
-}
-
-.agent-published-chip[data-state="closed"] {
-  --accent: var(--danger);
-}
-
-.agent-published-chip .account-mark,
-.agent-published-row .account-mark {
+.pull-request-mark {
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
+}
+
+/* Keyed on the mark's own attributes as well, so a place sizing it by a
+   class of its own (`.plan-mark-glyph`) does not take its colour too. */
+.pull-request-mark[data-pull-request-state] {
+  color: var(--pull-request-tone);
+}
+
+.pull-request-mark[data-failing="true"] {
+  color: var(--danger);
+}
+
+.agent-published-chip[data-pull-request-state] {
+  border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
+  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
+  color: var(--pull-request-tone);
+  font-weight: 600;
+}
+
+.agent-published-chip[data-pull-request-state]:hover,
+.agent-published-chip[data-pull-request-state][data-menu-open="true"] {
+  background: color-mix(in srgb, var(--pull-request-tone) 22%, transparent);
+  color: var(--pull-request-tone);
 }
 
 .agent-branch-name {
@@ -2437,10 +2451,6 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-published-row:hover {
   background: var(--raised);
-}
-
-.agent-published-row[data-state="merged"] .account-mark {
-  color: var(--state-merged);
 }
 
 .agent-published-title {
