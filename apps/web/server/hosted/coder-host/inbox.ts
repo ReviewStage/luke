@@ -137,6 +137,8 @@ export const INBOX_REFUSAL = {
   UNREADABLE_CLOSE: "Not closed: name the item's key and why you close it.",
   TOO_MANY: `Not posted: you hold ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items already. Close one you no longer need first.`,
   NO_ITEM: "Not closed: you have no item under that key.",
+  PLANLESS:
+    "Not posted: you work on no plan, so you have no inbox yet. Say what needs the developer in your final message.",
   NO_OPTIONS: "Not posted: a choice's options each stand under a label of their own.",
   UNKNOWN_RECOMMENDATION: "Not posted: recommended names no option's label.",
   FIELD_LABELS: "Not posted: a form names each field by a label of its own.",

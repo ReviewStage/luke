@@ -17,7 +17,9 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
+import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import type { GitHubRepository } from "@luke/service/core";
 import { memberWorkspaceOnOwner } from "@luke/service/github/github-installations";
@@ -44,6 +46,22 @@ export function planWorkspace(
   return Effect.map(
     readPlan(userId, planId),
     Option.map((stored) => stored.plan.workspaceId),
+  );
+}
+
+/**
+ * The workspace an agent's repository is reached through: its plan's, read
+ * as the account, or for an agent with no plan its own, where the account
+ * is a member of it still; none otherwise.
+ */
+export function agentWorkspace(
+  userId: string,
+  agent: Pick<CodingAgent, "planId" | "organizationId">,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
+  if (agent.planId !== null) return planWorkspace(userId, agent.planId);
+  const { organizationId } = agent;
+  return Effect.map(isWorkspaceMember(userId, organizationId), (member) =>
+    member ? Option.some(organizationId) : Option.none(),
   );
 }
 

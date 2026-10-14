@@ -130,6 +130,8 @@ export function withPlanAgents(
     const byPlan = new Map<string, ReadAgent[]>();
     for (const agent of held) {
       const { conversationId, planId } = agent.agent;
+      // An agent with no plan is no plan's to summarise.
+      if (planId === null) continue;
       const line = agentLine(agent, turns.get(conversationId), awaiting.has(conversationId), now);
       byPlan.set(planId, [...(byPlan.get(planId) ?? []), line]);
     }

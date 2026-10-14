@@ -22,7 +22,7 @@ import type { HttpClient } from "effect/http";
 import { defineSkill } from "eve/skills";
 import { GitHubApp } from "../../github/github-app.js";
 import { type RepositorySkill, readRepositorySkills } from "../repository-skills.js";
-import { planWorkspace } from "../workspace-repository.js";
+import type { StoreFailure } from "@luke/service/http/store-failure";
 
 /** One skill as eve is handed it: its name, the description it routes on, and the body `load_skill` answers. */
 export interface AgentSkill {
@@ -39,7 +39,8 @@ export interface AgentSkill {
  */
 export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills")(function* (
   target: ConversationTarget,
-  planId: string,
+  /** The workspace whose installation reads the repository, as the caller reaches it. */
+  workspaceOf: Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices>,
   repository: string,
   loaded: (skill: RepositorySkill) => string,
 ): Effect.fn.Return<
@@ -49,7 +50,7 @@ export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills"
 > {
   const app = yield* GitHubApp;
   const read = Effect.gen(function* () {
-    const workspace = yield* planWorkspace(target.userId, planId);
+    const workspace = yield* workspaceOf;
     if (Option.isNone(workspace)) return [];
     const reached = yield* app.repositoryReadToken(workspace.value, repository);
     if (Option.isNone(reached)) return [];

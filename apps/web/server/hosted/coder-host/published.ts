@@ -23,7 +23,7 @@ import {
   type PullRequestReadFailure,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import { planWorkspace } from "../workspace-repository.js";
+import { agentWorkspace } from "../workspace-repository.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -99,7 +99,7 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<GitHubRepositoryToken, PublishedReadFailure, PublishedServices> {
-  const workspace = yield* planWorkspace(userId, agent.planId);
+  const workspace = yield* agentWorkspace(userId, agent);
   const app = yield* GitHubApp;
   const reached = Option.isNone(workspace)
     ? Option.none()

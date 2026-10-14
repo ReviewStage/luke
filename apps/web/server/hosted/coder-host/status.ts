@@ -143,9 +143,21 @@ export function codingAgentRunStartedAt(
   return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
+/** An agent that works on a plan, which the wire's summary names. */
+export type PlannedCodingAgent = CodingAgent & { readonly planId: string };
+
+/**
+ * Whether the agent works on a plan. Note that an agent with no plan has no
+ * summary on the wire yet, since the wire's summary names a plan; it gains
+ * one when the wire learns of agents with none.
+ */
+export function plannedAgent(agent: CodingAgent): agent is PlannedCodingAgent {
+  return agent.planId !== null;
+}
+
 /** One agent as the tabs draw it, its status read at `now`. */
 export function codingAgentSummary(
-  agent: CodingAgent,
+  agent: PlannedCodingAgent,
   standing: AgentTurnStanding,
   now: number,
 ): CodingAgentSummary {

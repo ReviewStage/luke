@@ -532,6 +532,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // An agent handed a task never saw the plan, so it has none to take notes on.
         if (found.success.task !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         const { id: agentId, planId } = found.success;
+        if (planId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         // The plan is written as the member whose turn this is, whoever started the agent.
         const binding = { userId: admitted.caller, planId };
         return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn);
@@ -545,6 +546,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
         const { id: agentId, planId, repository } = found.success;
+        // An agent with no plan has no inbox yet; its questions go in its final message.
+        if (planId === null) return inboxRejected(INBOX_REFUSAL.PLANLESS);
         const agent = { userId: admitted.target.userId, planId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:
@@ -563,9 +566,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return showPageRejected(found.failure);
+        const { planId } = found.success;
+        if (planId === null) return showPageRejected(SHOW_PAGE_REFUSAL.PLANLESS);
         const binding = {
           userId: admitted.target.userId,
-          planId: found.success.planId,
+          planId,
           sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
         };
         return yield* runShowPage(binding, input);

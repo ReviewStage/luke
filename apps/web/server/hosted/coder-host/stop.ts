@@ -25,7 +25,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type AgentTurnStanding, codingAgentSummary } from "./status.js";
+import { type AgentTurnStanding, codingAgentSummary, plannedAgent } from "./status.js";
 
 /**
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
@@ -85,6 +85,8 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
+  // An agent with no plan has no summary on the wire yet, so it reads as none.
+  if (!plannedAgent(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const standing = yield* standingsOf([agent.conversationId]);
   return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
 });

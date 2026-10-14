@@ -443,6 +443,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           taken: 2,
           missed: ["replace a phrase the plan never held"],
         });
+        assert.ok(agent.planId !== null);
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
         const sectionText = (heading: string) =>
           planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";

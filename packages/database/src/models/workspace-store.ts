@@ -309,6 +309,11 @@ function isOwnPersonalOrganization(
   return Effect.map(findOwnedOrganization({ userId, organizationId }), Option.isSome);
 }
 
+/** The condition that the account is a member of the workspace a statement names, by its id or a column or expression standing for it. */
+export function workspaceReachableBy(userId: string, organizationId: string | SQLWrapper): SQL {
+  return memberOfWorkspace(userId, organizationId);
+}
+
 /** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
 export function planReachableBy(userId: string): SQL {
   return memberOfWorkspace(userId, plan.organizationId);

@@ -13,22 +13,10 @@ import {
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { TURN_STATUS } from "@luke/wire";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  exists,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  type SQL,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import {
   codingAgent,
   codingAgentDelegation,
@@ -48,16 +36,17 @@ import {
   turnUsagesOf,
 } from "./message-reads.js";
 import { PlanArchived } from "./plan-store.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import { planReachableBy, reachablePlan, workspaceReachableBy } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on a workspace's plans, each one conversation and one row linking it to its plan.
  *
- * An agent belongs to its plan's workspace: every member reads, renames,
+ * An agent belongs to its workspace, its plan's or, for an agent an
+ * automation started with no plan, its own: every member reads, renames,
  * and re-chooses it, whichever of them started it. Every statement names the
  * account beside the plan or the agent and gates on that account's
- * membership of the plan's workspace (`workspace-store.ts`), so an agent of
+ * membership of that workspace (`workspace-store.ts`), so an agent of
  * a workspace the account is not in reads and starts exactly as an id that
  * names nothing. The one read keyed by the account alone is a Start's retry
  * key, which is the starter's own. Starting an agent is one transaction
@@ -113,7 +102,10 @@ export interface CodingAgent {
   readonly id: string;
   /** The account that started the agent, whose conversation it runs in and whose provider key pays for it. */
   readonly userId: string;
-  readonly planId: string;
+  /** The plan the agent works on; null for an agent an automation started with no plan. */
+  readonly planId: string | null;
+  /** The workspace the agent belongs to: its own, or its plan's on a row the backfill has not reached. */
+  readonly organizationId: string;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -169,11 +161,15 @@ export type NewCodingAgent = CodingAgentBriefText & {
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
 };
 
+/** The agent's workspace: its own, or its plan's on a row the backfill has not reached yet. */
+const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${codingAgent.planId}))`;
+
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const CODING_AGENT_COLUMNS = {
   id: codingAgent.id,
   userId: codingAgent.userId,
   planId: codingAgent.planId,
+  organizationId: AGENT_WORKSPACE,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -214,7 +210,8 @@ function storedServers(
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  planId: Schema.String,
+  planId: Schema.NullOr(Schema.String),
+  organizationId: Schema.String,
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -231,17 +228,12 @@ const CodingAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The condition that the account is a member of the workspace of the plan the agent row a statement reads was started on. */
+/** The condition that the account is a member of the workspace of the agent row a statement reads, an agent with no plan as much as one on a plan. */
 function agentReachableBy(userId: string): SQL {
-  return exists(
-    queryBuilder
-      .select({ id: plan.id })
-      .from(plan)
-      .where(and(eq(plan.id, codingAgent.planId), planReachableBy(userId))),
-  );
+  return workspaceReachableBy(userId, AGENT_WORKSPACE);
 }
 
-/** The agent under this id, where the account is a member of its plan's workspace; any other id reads as no agent. */
+/** The agent under this id, where the account is a member of its workspace; any other id reads as no agent. */
 function reachableAgent(userId: string, agentId: string): SQL | undefined {
   return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
 }

@@ -24,7 +24,7 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext } from "../mentioned-context.js";
-import { workspaceRepository } from "../workspace-repository.js";
+import { agentWorkspace, workspaceRepository } from "../workspace-repository.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**
@@ -46,8 +46,9 @@ import { codingAgentStatusOf } from "./status.js";
  * still writes the line when the turn receives it. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
- * first step. The caller is any member of the plan's workspace, whose plan
- * read gates the send and whose standing with GitHub is asked, while the
+ * first step. The caller is any member of the agent's workspace, whose plan
+ * read gates the send, or for an agent with no plan whose membership of its
+ * workspace does, and whose standing with GitHub is asked, while the
  * line lands in the agent's conversation under the member who started it.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
@@ -114,20 +115,26 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const held = yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));
-  if (Option.isNone(held)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  if (held.value.plan.archivedAt !== undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
-  }
+  // An agent on a plan answers to the plan, read as the sender; one with no plan, to its workspace.
+  const held =
+    agent.planId === null
+      ? undefined
+      : yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));
+  if (held !== undefined && Option.isNone(held))
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const plan = held === undefined ? undefined : Option.getOrUndefined(held);
+  if (plan?.plan.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+  const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   yield* workspaceRepository(
-    held.value.plan.workspaceId,
+    workspace.value,
     agent.repository,
-    held.value.ownerId === userId ? userId : undefined,
+    plan?.ownerId === userId ? userId : undefined,
   );
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention of the plan goes with them, read off the plan this send read as its sender.
-  const mentioned = mentionedContext(line.text, held.value.plan);
+  const mentioned = plan === undefined ? undefined : mentionedContext(line.text, plan.plan);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const dispatch = eve

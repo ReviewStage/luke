@@ -60,6 +60,7 @@ export const SHOW_PAGE_REFUSAL = {
   SECRET: "Not shown: that file holds secrets, such as a `.env`, and is never shown.",
   NO_FILE: "Not shown: no such file in your sandbox:",
   EMPTY: "Not shown: the page is empty.",
+  PLANLESS: "Not shown: you work on no plan, so there is no plan to show a page on.",
   TOO_LARGE: `Not shown: the page is larger than ${PAGE_BOUNDS.MAX_HTML_CHARS / 1024} KB. Inline less data, or load a library from cdnjs rather than inlining it.`,
   NO_PAGE:
     "Not shown: this plan has no page with that id. Leave `page` out to make a new page, or name one you showed on this plan.",

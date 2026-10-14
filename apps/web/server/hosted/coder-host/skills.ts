@@ -11,6 +11,7 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import type { Effect } from "effect";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import type { RepositorySkill } from "../repository-skills.js";
+import { agentWorkspace } from "../workspace-repository.js";
 import { CODER } from "./bounds.js";
 import type { CheckoutServices } from "./checkout.js";
 
@@ -25,5 +26,10 @@ export function agentSkills(
   target: ConversationTarget,
   agent: CodingAgent,
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
-  return repositorySkills(target, agent.planId, agent.repository, loadedMarkdown);
+  return repositorySkills(
+    target,
+    agentWorkspace(target.userId, agent),
+    agent.repository,
+    loadedMarkdown,
+  );
 }
