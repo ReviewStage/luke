@@ -23,7 +23,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
-import { PlanCard, PlanStatusMark } from "./plan-card";
+import { PlanStatusMark, planCardOf } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
 /**
@@ -369,21 +369,7 @@ export function SidebarPlan({
           />
         </div>
       ) : (
-        <Tooltip
-          label={plan.name}
-          card={
-            <PlanCard
-              plan={plan}
-              models={plans.agents.models ?? []}
-              pictures={plans.repositories.pictures}
-              now={now}
-              onOpenGitHub={plans.repositories.openGitHub}
-              onShowAgent={(agentId) => plans.onShowAgent(plan.id, agentId)}
-            />
-          }
-          cardBeside
-          cardRegion={item}
-        >
+        <Tooltip label={plan.name} card={planCardOf(plans, plan, now)} cardBeside cardRegion={item}>
           <button
             ref={row}
             type="button"

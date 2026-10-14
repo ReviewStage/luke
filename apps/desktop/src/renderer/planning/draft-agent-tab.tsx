@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Failure } from "../failure-remedy";
 import { AgentComposer } from "./agent-composer";
 import { ArchivedComposerNote } from "./archived-plan";
+import { TAB_WORDS } from "./tab-strip-model";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
@@ -29,9 +30,6 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * nothing starts on it, so the box gives way to the note that offers
  * Unarchive, and the words written wait in the draft until it is back.
  */
-
-/** What a draft agent's tab is named until its first message starts it. */
-export const DRAFT_TAB_LABEL = "New agent";
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve();
@@ -90,7 +88,7 @@ export function DraftAgentTab({
   const choice = draft.choice ?? fallback;
   if (control.onUnarchive !== undefined) {
     return (
-      <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
+      <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
         <footer className="agent-tab-foot">
           <ArchivedComposerNote onUnarchive={control.onUnarchive} />
         </footer>
@@ -99,7 +97,7 @@ export function DraftAgentTab({
   }
 
   return (
-    <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
+    <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
       <footer className="agent-tab-foot">
         <AgentComposer
           status={CODING_AGENT_STATUS.STARTING}

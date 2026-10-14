@@ -58,11 +58,10 @@ import {
   ToolStateMark,
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
-import { HarnessMark } from "../harness-marks";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
+import { SubagentMark } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
@@ -519,22 +518,6 @@ export type TranscriptSubagentProps = {
 /** What the hover over a subagent's row says it opens. */
 const SUBAGENT_HINT = "Open the subagent";
 
-/** The subagent's glyph: the mark of the harness its model runs in, read from the model's id as its tab reads it (`SubagentMark`), or the worker's robot where the model is no provider's Luke runs, in the muted ink whether it runs or not, since the row's working mark says which. */
-function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode {
-  const provider = pair === undefined ? undefined : providerOf(pair.choice.model);
-  if (provider === undefined) {
-    return <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
-  }
-  return (
-    <span
-      className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
-      data-subagent-harness={provider}
-    >
-      <HarnessMark provider={provider} />
-    </span>
-  );
-}
-
 /**
  * A subagent's row, on the Call tab and a coding agent's tab alike, running
  * or finished: one line drawn as a call's row is, in its muted ink, wearing
@@ -565,7 +548,9 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <SubagentGlyph pair={pair} />
+      <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
+        <SubagentMark model={pair?.choice.model} />
+      </span>
       <span
         ref={words}
         className="subagent-job min-w-0 flex-1 text-foreground"

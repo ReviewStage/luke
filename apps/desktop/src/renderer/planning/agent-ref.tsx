@@ -11,6 +11,7 @@ import {
   lastFinished,
 } from "./agent-tab-card";
 import { agentStateWords, agentStillWriting, agentTabLabel } from "./coding-agent-model";
+import { TAB_WORDS } from "./tab-strip-model";
 import { agentTranscript } from "./transcript-copy";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
@@ -38,9 +39,6 @@ const ARCHIVED_WORDS = "Archived";
 
 /** What a card's corner says of an agent the plan's list, once read, does not hold. */
 const UNLISTED_WORDS = "Not found";
-
-/** The name an agent goes by where the window holds nothing of it. */
-const UNLISTED_NAME = "Coding agent";
 
 /** What a place that draws no agent's tab holds of their transcripts: nothing, so its cards preview no step. */
 export const NOTHING_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
@@ -134,7 +132,7 @@ export function agentSubject(
     choice: undefined,
     transcript: undefined,
   };
-  return { name: UNLISTED_NAME, read: () => reading };
+  return { name: TAB_WORDS.CODING_AGENT, read: () => reading };
 }
 
 /** The agent's tab's card, as a place naming the agent hangs it. */

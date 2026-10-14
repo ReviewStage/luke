@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { settingsView } from "@sidecar/settings/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -283,4 +287,56 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.equal(card?.querySelector(".card-corner")?.textContent, "Working…");
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
+});
+
+test("an agent's Changes row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {
+  const agent = {
+    id: "agent-7",
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invoice export",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  openPalette(
+    plansControl({
+      activePlanId: "plan-1",
+      plans: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: null,
+        },
+      ],
+      agents: codingAgentsControl({
+        agents: [agent],
+        agentIds: [agent.id],
+        pullRequests: new Map([
+          [
+            agent.id,
+            {
+              number: 42,
+              title: "Export invoices as CSV",
+              url: "https://github.com/acme/billing/pull/42",
+              state: PULL_REQUEST_STATE.OPEN,
+              checks: CHECK_SUMMARY.PASSING,
+              additions: 120,
+              deletions: 8,
+              changedFiles: 4,
+            },
+          ],
+        ]),
+      }),
+    }),
+  );
+  const changes = "Changes: Invoice export · #42 · Billing usage alerts";
+  type("#42");
+  assert.ok(rows().includes(changes), "found by its pull request's number");
+  type("CSV");
+  assert.ok(rows().includes(changes), "found by its pull request's title");
 });

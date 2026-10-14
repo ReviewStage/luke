@@ -2,15 +2,17 @@ import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
-import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
 import { repositoryPageUrl } from "../planning/planning-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
+import { AgentGlyph, agentEndMark } from "../planning/tab-look";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
+import { Tooltip } from "../tooltip";
 
 /**
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
@@ -265,5 +267,58 @@ export function PlanCard({
         </>
       )}
     </HoverCard>
+  );
+}
+
+/**
+ * The plan's card as every place naming the plan hangs it, read from the
+ * window's plans: its sidebar row, its tab in its own column, and the
+ * Inbox's crumb. An agent's line opens the plan on that agent's tab.
+ */
+export function planCardOf(
+  plans: Pick<PlansControl, "agents" | "repositories" | "onShowAgent">,
+  plan: PlanSummary,
+  now: number,
+): React.JSX.Element {
+  return (
+    <PlanCard
+      plan={plan}
+      models={plans.agents.models ?? []}
+      pictures={plans.repositories.pictures}
+      now={now}
+      onOpenGitHub={plans.repositories.openGitHub}
+      onShowAgent={(agentId) => plans.onShowAgent(plan.id, agentId)}
+    />
+  );
+}
+
+/**
+ * A plan named in place: what it is drawn as, its document glyph and its
+ * name as the place sets them, as one button that hangs the plan's card
+ * while the pointer rests on it and opens the plan on a press, as
+ * `AgentRef` names an agent. Note that the Inbox list's plan heading, whose
+ * press folds it, and ⌘K's plan rows, whose card's buttons the modal
+ * palette would leave unpressable, name the plan without one.
+ */
+export function PlanRef({
+  plan,
+  card,
+  onOpen,
+  className,
+  children,
+}: {
+  plan: Pick<PlanSummary, "name">;
+  /** The plan's card (`planCardOf`). */
+  card: React.ReactNode;
+  onOpen: () => void;
+  className?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Tooltip label={plan.name} card={card}>
+      <button type="button" className={className} data-plan-ref="" onClick={onOpen}>
+        {children}
+      </button>
+    </Tooltip>
   );
 }

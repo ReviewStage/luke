@@ -28,7 +28,7 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
-import { PlanCard } from "./plan-card";
+import { planCardOf } from "./plan-card";
 
 /**
  * desktop-inbox.tsx -- the window's Inbox: every item of every plan holding one in a list of its own, and the chosen item read beside it.
@@ -192,16 +192,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
           agents={named}
           doors={{
             onOpenPlan: () => plans.onShowPlan(chosen.plan.id),
-            planCard: (
-              <PlanCard
-                plan={chosen.plan}
-                models={plans.agents.models ?? []}
-                pictures={plans.repositories.pictures}
-                now={now}
-                onOpenGitHub={plans.repositories.openGitHub}
-                onShowAgent={(agentId) => plans.onShowAgent(chosen.plan.id, agentId)}
-              />
-            ),
+            planCard: planCardOf(plans, chosen.plan, now),
             onOpenAgent: (agentId) => plans.onShowAgent(chosen.plan.id, agentId),
             openLink,
             code: {

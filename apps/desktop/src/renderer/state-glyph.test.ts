@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TOOL_STATE, ToolLine, type ToolState } from "./ai-elements/tool";
 import { PlanStatusMark } from "./desktop/plan-card";
-import { AgentGlyph, agentEndMark } from "./planning/agent-tab";
+import { AgentGlyph, agentEndMark } from "./planning/tab-look";
 
 /**
  * state-glyph.test.ts -- work that is working or failed wears one mark for

@@ -1,0 +1,246 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
+import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { onRegistry } from "#testing/copy-feedback";
+import { conversationOf, worker, workerCall, workTurn } from "#testing/plan-work";
+import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { MAIN_TAB } from "../planning/use-main-tabs";
+import { NO_LOOKS } from "../planning/use-plan-looks";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+import { DesktopPlans } from "./desktop-plans";
+
+/**
+ * tab-look.test.ts -- a tab wears one look wherever it is offered: the
+ * glyph and the name its tab wears in either strip are the ones its row in
+ * that strip's "+" menu wears, and the plan's own tab hangs the plan's card.
+ */
+
+const PLAN: Plan = {
+  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
+  name: "Teammate invitations",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+  document: { body: "", assumptions: [] },
+};
+
+const SUMMARY: PlanSummary = {
+  id: PLAN.id,
+  workspaceId: PLAN.workspaceId,
+  name: PLAN.name,
+  createdAt: PLAN.createdAt,
+  updatedAt: PLAN.updatedAt,
+  repository: PLAN.repository,
+  agents: {
+    total: 1,
+    working: 1,
+    agents: [
+      {
+        id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+        title: "Invite flow",
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        status: CODING_AGENT_STATUS.RUNNING,
+      },
+    ],
+    pullRequestTotal: 0,
+    pullRequests: [],
+  },
+};
+
+/** An agent on the plan, standing where `status` says. */
+function agent(
+  id: string,
+  title: string,
+  status: CodingAgentSummary["status"],
+): CodingAgentSummary {
+  return {
+    id,
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status,
+    turnId: null,
+  };
+}
+
+const WORKING = agent(
+  "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  "Invite flow",
+  CODING_AGENT_STATUS.RUNNING,
+);
+const DONE = agent(
+  "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  "Expiry job",
+  CODING_AGENT_STATUS.COMPLETED,
+);
+
+const DRAFT = "draft-1";
+
+/** A planning worker still at work, on a model whose harness Luke knows. */
+const READER = worker("w", "Read the invite emails.", {
+  state: PLAN_WORK_STATE.RUNNING,
+  model: "anthropic/claude-sonnet-5",
+  title: "Invite emails",
+});
+
+const roots: Root[] = [];
+
+beforeEach(installScrollIntoView);
+
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+});
+
+/**
+ * The plan open on its own tab, a working agent's tab and a draft's beside
+ * it, and the side panel open with a working subagent's tab and the done
+ * agent's Changes tab.
+ */
+function mount(): HTMLElement {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const base = plansControl();
+  const plans = plansControl({
+    page: PLANS_PAGE.DOCUMENT,
+    plans: [SUMMARY],
+    activePlanId: PLAN.id,
+    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    mainTabs: {
+      ...base.mainTabs,
+      tabs: [MAIN_TAB.PLAN, { agent: WORKING.id }, { draft: DRAFT }],
+      tab: MAIN_TAB.PLAN,
+      openAgents: [WORKING.id],
+    },
+    sidePanel: {
+      ...base.sidePanel,
+      open: true,
+      tab: SIDE_PANEL_TAB.CODE,
+      subagents: [{ subagent: READER.callId }],
+      changes: [{ changes: DONE.id }],
+    },
+    work: {
+      ...base.work,
+      conversation: conversationOf([
+        workTurn(PLAN_WORK_STATE.RUNNING, [workerCall(READER)], { workers: [READER] }),
+      ]),
+      callLive: true,
+    },
+    agents: codingAgentsControl({
+      agents: [WORKING, DONE],
+      agentIds: [WORKING.id, DONE.id],
+      draft: { id: DRAFT, task: "", attachments: [], choice: undefined, disabledServers: [] },
+      pullRequests: new Map([
+        [
+          DONE.id,
+          {
+            number: 42,
+            title: "Expire invitations",
+            url: "https://github.com/acme/relay/pull/42",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 210,
+            deletions: 14,
+            changedFiles: 6,
+          },
+        ],
+      ]),
+    }),
+  });
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans }),
+      ),
+    ),
+  );
+  return container;
+}
+
+/** A tab or a menu row as a reader sees it: its glyph's markup and its name. */
+interface Look {
+  glyph: string | undefined;
+  label: string | null | undefined;
+}
+
+/** Each tab of the strip in `column`, by its name. */
+function tabLooks(column: Element): Map<string, Look> {
+  return new Map(
+    [...column.querySelectorAll('[role="tab"]')].map((tab) => {
+      const label = tab.querySelector(".tab-label")?.textContent ?? "";
+      return [label, { glyph: tab.querySelector(".tab-icon")?.innerHTML, label }];
+    }),
+  );
+}
+
+/** Each row of the "+" menu in `column`, opened, by its name. */
+function rowLooks(column: Element): Map<string, Look> {
+  const add = column.querySelector<HTMLButtonElement>("button.tab-add");
+  assert.ok(add, "the strip's +");
+  act(() => add.click());
+  const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
+    const label = row.querySelector(".plan-compose-menu-name")?.textContent ?? "";
+    return [label, { glyph: row.firstElementChild?.outerHTML, label }] as const;
+  });
+  act(() => add.click());
+  return new Map(rows);
+}
+
+test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New coding agent", () => {
+  const column = mount().querySelector(".main-tabs");
+  assert.ok(column, "the plan's column's strip");
+  const tabs = tabLooks(column);
+  const rows = rowLooks(column);
+  for (const name of [WORKING.title, "New coding agent"]) {
+    assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
+    assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
+  }
+  assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
+});
+
+test("the side panel's + offers a working subagent and an agent's Changes in the look their tabs wear", () => {
+  const panel = mount().querySelector(".side-panel-tabs");
+  assert.ok(panel, "the side panel's strip");
+  const tabs = tabLooks(panel);
+  const rows = rowLooks(panel);
+  for (const name of [READER.title, `Changes: ${DONE.title}`]) {
+    assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
+    assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
+  }
+  assert.match(tabs.get(READER.title ?? "")?.glyph ?? "", /data-state="working"/u);
+});
+
+test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", () => {
+  const column = mount().querySelector(".main-tabs");
+  const tab = column?.querySelector<HTMLElement>('[role="tab"]');
+  assert.equal(tab?.textContent, PLAN.name);
+  act(() => {
+    tab?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-plan-card]");
+  assert.ok(card, "the plan's card is hung");
+  assert.equal(card.querySelector(".card-name")?.textContent, PLAN.name);
+  assert.match(card.textContent ?? "", /acme\/relay/u);
+  // The card is the plan as the list names it, its agents among it.
+  assert.equal(card.querySelector("[data-plan-card-agent]")?.textContent, "Invite flow");
+});

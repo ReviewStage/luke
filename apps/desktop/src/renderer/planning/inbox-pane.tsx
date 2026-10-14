@@ -18,7 +18,7 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { CodeRef, PlanSummary } from "@sidecar/hosted/plan-wire";
-import { ChevronRightIcon, DocumentIcon } from "@sidecar/panel";
+import { ChevronRightIcon } from "@sidecar/panel";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -30,6 +30,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
+import { PlanRef } from "../desktop/plan-card";
 import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
@@ -37,7 +38,6 @@ import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
-import { AgentGlyph } from "./agent-tab";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
@@ -62,6 +62,7 @@ import {
 } from "./inbox-model";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
+import { AgentGlyph, type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -863,35 +864,21 @@ export interface InboxPaneDoors {
 }
 
 /**
- * One crumb of the pane's path, drawn as a tab of the strip is: its glyph
- * and its label in a tab's pill, the label fading where it is cut short,
- * and the tab's hover fill, the chosen tab's while it is pressed. It is no
- * tab of a strip, so it takes no tab's role, and says its whole name in its
- * hint, or hangs the card it is given there.
+ * What a crumb of the pane's path draws, as a tab of the strip draws it:
+ * its kind's glyph and its label in a tab's pill (`tab-look.tsx`), the
+ * label fading where it is cut short, and the tab's hover fill, the chosen
+ * tab's while it is pressed. It is no tab of a strip, so it takes no tab's
+ * role.
  */
-function Crumb({
-  icon,
-  label,
-  card,
-  onOpen,
-}: {
-  icon: React.JSX.Element;
-  label: string;
-  card: React.ReactNode;
-  onOpen: () => void;
-}): React.JSX.Element {
+function CrumbWords({ look }: { look: KindLook }): React.JSX.Element {
   const [words, clipped] = useClipped();
   return (
-    <li className="tab inbox-crumb">
-      <Tooltip label={label} card={card}>
-        <button type="button" className="tab-button" onClick={onOpen}>
-          <span className="tab-icon">{icon}</span>
-          <span ref={words} className="tab-label" data-overflow={String(clipped)}>
-            {label}
-          </span>
-        </button>
-      </Tooltip>
-    </li>
+    <>
+      <span className="tab-icon">{look.icon}</span>
+      <span ref={words} className="tab-label" data-overflow={String(clipped)}>
+        {look.label}
+      </span>
+    </>
   );
 }
 
@@ -899,8 +886,9 @@ function Crumb({
  * The pane's path, plan › agent, each crumb drawn as its tab is in the
  * plan's column, the plan's document glyph and the agent's mark: each opens
  * what it names, the plan or the agent's tab, and hangs the card its
- * sidebar row or tab hangs. An agent this window does not list, one
- * started on another Mac, hangs a card saying so and still opens its tab.
+ * sidebar row or tab hangs, the plan's crumb as every place naming the
+ * plan does (`PlanRef`). An agent this window does not list, one started on
+ * another Mac, hangs a card saying so and still opens its tab.
  */
 function Crumbs({
   plan,
@@ -911,24 +899,30 @@ function Crumbs({
   by: ItemAgent;
   doors: InboxPaneDoors;
 }): React.JSX.Element {
+  const { name, agent } = by.subject;
   return (
     <nav className="file-breadcrumbs inbox-crumbs" aria-label="Path">
       <ol>
-        <Crumb
-          icon={<DocumentIcon />}
-          label={plan.name}
-          card={doors.planCard}
-          onOpen={doors.onOpenPlan}
-        />
+        <li className="tab inbox-crumb">
+          <PlanRef
+            plan={plan}
+            card={doors.planCard}
+            onOpen={doors.onOpenPlan}
+            className="tab-button"
+          >
+            <CrumbWords look={tabLook({ kind: TAB_KIND.PLAN, name: plan.name })} />
+          </PlanRef>
+        </li>
         <li className="file-breadcrumb-separator" aria-hidden="true">
           <ChevronRightIcon />
         </li>
-        <Crumb
-          icon={<AgentGlyph agent={by.subject.agent} />}
-          label={by.subject.name}
-          card={<AgentCard subject={by.subject} models={by.models} />}
-          onOpen={by.onOpen}
-        />
+        <li className="tab inbox-crumb">
+          <Tooltip label={name} card={<AgentCard subject={by.subject} models={by.models} />}>
+            <button type="button" className="tab-button" onClick={by.onOpen}>
+              <CrumbWords look={tabLook({ kind: TAB_KIND.AGENT, name, agent })} />
+            </button>
+          </Tooltip>
+        </li>
       </ol>
     </nav>
   );

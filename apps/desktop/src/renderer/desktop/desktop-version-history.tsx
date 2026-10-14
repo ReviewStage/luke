@@ -8,7 +8,6 @@ import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PersonAvatar } from "../person-avatar";
-import { AgentMark } from "../planning/agent-tab";
 import { centreWithin } from "../planning/code-pane";
 import {
   authorName,
@@ -30,6 +29,7 @@ import {
 import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { RelativeTime } from "../planning/relative-time";
+import { AgentMark } from "../planning/tab-look";
 import {
   HISTORY_READ,
   type OpenedSections,
