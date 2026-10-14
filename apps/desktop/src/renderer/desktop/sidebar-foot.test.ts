@@ -5,7 +5,7 @@ import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snaps
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -48,6 +48,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** The Help menu's commands, offered as `App` offers them, each press written down. */
@@ -110,15 +111,28 @@ function accountMenu(): HTMLElement | null {
 /** The open account menu as it reads down: its heading, each item's label and chord, and a dash for each rule. */
 function accountMenuLines(): string[] {
   const menu = accountMenu() ?? assert.fail("the account's menu stands");
-  return [...menu.children]
-    .filter((line) => line.getAttribute("role") !== "menu")
-    .map((line) => {
-      if (line.matches("hr")) return "—";
-      const words = [...line.querySelectorAll(":scope > span, :scope > kbd")].map(
-        (part) => part.textContent ?? "",
-      );
-      return words.filter((word) => word !== "").join(" ");
-    });
+  return [...menu.children].map((line) => {
+    if (line.matches("hr")) return "—";
+    const words = [...line.querySelectorAll(":scope > span, :scope > kbd")].map(
+      (part) => part.textContent ?? "",
+    );
+    return words.filter((word) => word !== "").join(" ");
+  });
+}
+
+/** Contact us's submenu, while it stands. */
+function contactMenu(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="menu"][aria-label="Contact us"]');
+}
+
+/** Lays an element out where the window would, which jsdom never does. */
+function placeAt(
+  element: Element,
+  box: { left: number; top: number; width: number; height: number },
+) {
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: box.left, y: box.top, width: box.width, height: box.height }),
+  );
 }
 
 /** The open account menu's own item by its label, not a submenu's. */
@@ -176,6 +190,73 @@ test("the account's menu offers the Help menu's own commands and opens the chang
     APP_COMMAND.KEYBOARD_SHORTCUTS,
   ]);
   assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
+});
+
+test("Contact us flies out its own menu beside the account's, which stands whole behind it with Contact us lit", () => {
+  const button = mount(DEAN);
+  act(() => button.click());
+  const contact = accountItem("Contact us");
+  act(() =>
+    contact.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+
+  const submenu = contactMenu() ?? assert.fail("Contact us opens its submenu");
+  assert.ok(!accountMenu()?.contains(submenu), "the submenu stands on its own surface");
+  assert.deepEqual(
+    [...submenu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
+    ["GitHub", "Email"],
+  );
+  assert.equal(document.activeElement?.textContent, "GitHub", "focus lands on its first item");
+  assert.equal(accountMenuLines().length, 11, "the account's menu keeps every line");
+  assert.equal(contact.getAttribute("aria-expanded"), "true");
+  assert.equal(contact.dataset.open, "true", "Contact us stays lit");
+});
+
+test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", () => {
+  const button = mount(DEAN);
+  act(() => button.click());
+  for (const key of ["ArrowLeft", "Escape"]) {
+    act(() => accountItem("Contact us").click());
+    act(() =>
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })),
+    );
+    assert.equal(contactMenu(), null, `${key} closes the submenu`);
+    assert.ok(accountMenu(), `and ${key} leaves the account's menu standing`);
+    assert.equal(document.activeElement, accountItem("Contact us"), "focus back on Contact us");
+  }
+
+  act(() => accountItem("Contact us").click());
+  const email = [...(contactMenu()?.querySelectorAll("button") ?? [])].find(
+    (item) => item.textContent === "Email",
+  );
+  act(() => email?.click());
+  assert.equal(accountMenu(), null);
+  assert.equal(contactMenu(), null, "the submenu goes with the menu");
+  assert.deepEqual(sent, [{ kind: ACT_KIND.CONTACT_EMAIL }]);
+});
+
+test("in the window's bottom-left corner, Contact us's menu opens rightward and rises so it ends level with its row", () => {
+  vi.spyOn(window, "innerWidth", "get").mockReturnValue(1000);
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(700);
+  const button = mount(DEAN);
+  act(() => button.click());
+  const contact = accountItem("Contact us");
+  placeAt(accountMenu() ?? assert.fail("the account's menu stands"), {
+    left: 12,
+    top: 340,
+    width: 210,
+    height: 340,
+  });
+  placeAt(contact, { left: 16, top: 640, width: 200, height: 32 });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, y: 0, width: 196, height: 74 }),
+  );
+
+  act(() => contact.click());
+
+  const submenu = contactMenu() ?? assert.fail("Contact us opens its submenu");
+  assert.equal(submenu.style.left, "226px", "beside the menu's right edge");
+  assert.equal(submenu.style.top, "602px", "its foot level with Contact us's");
 });
 
 test("Log out asks first, and only its answer signs the account out", async () => {

@@ -19,7 +19,10 @@ import { useDisclosure } from "../use-disclosure";
  * not apply now is drawn dimmed and passed over, as a system menu's is. An
  * item may open a submenu beside it instead of acting, as a system menu's
  * does: resting on it, pressing it, or Right opens it, Left or Escape in it
- * closes it alone, and resting on another item closes it. Closing hands
+ * closes it alone, and resting on another item closes it. A submenu is a
+ * flyout, a second menu on its own surface beside the first, which stands
+ * whole behind it; it is never a page drawn in the menu's place, as the MCP
+ * popover's server page is (`../planning/agent-servers.tsx`). Closing hands
  * focus back at once and plays the menu's exit after it: the menu is held
  * drawn, inert, until the exit is done, and opening it again in that time
  * takes it back as it stands.
@@ -323,45 +326,61 @@ function SubmenuItem({
 
 /**
  * A submenu, beside its item: to the menu's right, or its left where the
- * window leaves no room, its first item level with the item that opened it.
- * It stands inside the menu's own element, so a press in it is a press in the
- * menu and its keys pass the menu on their way out; it keeps its own arrows,
- * Left, and Escape, and leaves Tab to the menu, which closes both.
+ * window leaves no room, its first item level with the item that opened it,
+ * or its last where the window's foot leaves no room below, as at the
+ * account's menu in the sidebar's corner.
+ *
+ * Note that it is portalled to the body beside the menu rather than drawn
+ * inside the menu's element, because the surface's entrance animates a
+ * transform, and a transformed box is the containing block of every fixed
+ * box within it: a submenu inside would be placed against the menu instead
+ * of the window, and land in the menu's own scroll box, scrolling the menu's
+ * items out of sight as it took focus. React still bubbles its events
+ * through the menu, so its keys pass the menu on their way out; it keeps its
+ * own arrows, Left, and Escape, and leaves Tab to the menu, which closes
+ * both. It leaves with the menu, fading as the menu does.
  */
 function Submenu({
   open,
+  surface,
+  leaving,
   onChoose,
   onBack,
 }: {
   open: OpenSubmenu;
+  /** The submenu's element, which the menu counts as its own when it hears a press. */
+  surface: React.RefObject<HTMLDivElement | null>;
+  leaving: boolean;
   onChoose: (action: MenuAction) => void;
   /** Closes the submenu alone, focus back on the item that opened it. */
   onBack: () => void;
 }): React.JSX.Element {
   const { entry, anchor, focus } = open;
-  const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<{ left: number; top: number } | undefined>(undefined);
 
   useLayoutEffect(() => {
-    const drawn = element.current;
+    const drawn = surface.current;
     const menu = anchor.closest('[role="menu"]');
     if (drawn === null || menu === null) return;
     const { width, height } = drawn.getBoundingClientRect();
     const beside = menu.getBoundingClientRect();
+    const opener = anchor.getBoundingClientRect();
     const right = beside.right + MENU_DROP;
     const left =
       right + width > window.innerWidth - MENU_MARGIN ? beside.left - MENU_DROP - width : right;
-    const top = anchor.getBoundingClientRect().top - MENU_INSET;
+    const down = opener.top - MENU_INSET;
+    const top =
+      down + height > window.innerHeight - MENU_MARGIN ? opener.bottom + MENU_INSET - height : down;
     setAt({
       left: clamp(left, MENU_MARGIN, window.innerWidth - width - MENU_MARGIN),
       top: clamp(top, MENU_MARGIN, window.innerHeight - height - MENU_MARGIN),
     });
-  }, [anchor]);
+  }, [anchor, surface]);
 
   const placed = at !== undefined;
   useEffect(() => {
-    if (placed && focus) element.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
-  }, [placed, focus]);
+    if (placed && focus) surface.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
+  }, [placed, focus, surface]);
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" || event.key === "ArrowLeft") {
@@ -375,11 +394,13 @@ function Submenu({
 
   return (
     <div
-      ref={element}
+      ref={surface}
       className="menu-surface plan-menu plan-submenu"
       role="menu"
       aria-label={entry.label}
       data-placed={String(placed)}
+      data-leaving={leaving ? "true" : undefined}
+      inert={leaving}
       style={at ?? { left: 0, top: 0 }}
       onKeyDown={keyDown}
     >
@@ -422,6 +443,7 @@ export function ActionMenu({
   );
   const [at, setAt] = useState<{ left: number; top: number } | undefined>(undefined);
   const [submenu, setSubmenu] = useState<OpenSubmenu | undefined>(undefined);
+  const submenuElement = useRef<HTMLDivElement | null>(null);
   // Opened again while it was leaving, the menu stands with no submenu, as one opened anew does.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
@@ -455,7 +477,8 @@ export function ActionMenu({
     if (leaving) return;
     const pressed = (event: PointerEvent) => {
       const target = event.target instanceof Node ? event.target : null;
-      if (element.current?.contains(target) || opener.contains(target)) return;
+      if (element.current?.contains(target) || submenuElement.current?.contains(target)) return;
+      if (opener.contains(target)) return;
       onClose(false);
     };
     const leave = () => onClose(false);
@@ -538,17 +561,22 @@ export function ActionMenu({
           )}
         </Fragment>
       ))}
-      {submenu === undefined ? null : (
-        <Submenu
-          key={submenu.entry.label}
-          open={submenu}
-          onChoose={choose}
-          onBack={() => {
-            setSubmenu(undefined);
-            submenu.anchor.focus();
-          }}
-        />
-      )}
+      {submenu === undefined
+        ? null
+        : createPortal(
+            <Submenu
+              key={submenu.entry.label}
+              open={submenu}
+              surface={submenuElement}
+              leaving={leaving}
+              onChoose={choose}
+              onBack={() => {
+                setSubmenu(undefined);
+                submenu.anchor.focus();
+              }}
+            />,
+            document.body,
+          )}
     </div>,
     document.body,
   );
