@@ -1,0 +1,21 @@
+/* The terminal bundle's stylesheet, loaded beside `terminal.js` the first
+   time a terminal is shown: xterm.js's own rules, then the host's. The
+   colours are not here, since the canvas reads them as values
+   (`terminal-theme.ts`); only the box is. */
+@import "@xterm/xterm/css/xterm.css";
+
+/* The host fills its box on the terminal's ground, and the screen stands in
+   from its edges as the code does. Note that the inset is the host's own
+   padding, because the fit addon sizes the screen to the host's content box
+   and the screen paints every pixel of the box it is given. */
+.terminal-surface {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
+  background: var(--terminal-ground);
+}
+
+.terminal-surface .xterm {
+  height: 100%;
+}
