@@ -46,9 +46,12 @@ export function useAutomations(plan: string | undefined) {
   const { act } = useAct();
   const now = useMinute();
   const [read, setRead] = useState<AutomationsRead>(undefined);
-  // Note that every write moves the generation on, so a read asked before it answers nothing over it.
+  // Note that every read and every write moves the generation on, so only
+  // the newest read is taken: one asked before a write, or for another plan,
+  // answers nothing over what came after it.
   const generation = useRef(0);
   const reload = useCallback(() => {
+    generation.current += 1;
     const asked = generation.current;
     const taken = (answer: AutomationsRead) => {
       if (asked === generation.current) setRead(answer);
@@ -63,19 +66,31 @@ export function useAutomations(plan: string | undefined) {
     void now;
     void reload();
   }, [reload, now]);
-  /** One automation taken into the list as the service answered it, first where it is new. */
-  const take = useCallback((automation: AutomationSummary) => {
-    generation.current += 1;
-    setRead((held) => {
-      if (held === undefined || "failure" in held) return { automations: [automation] };
-      const known = held.automations.some((each) => each.id === automation.id);
-      return {
-        automations: known
-          ? held.automations.map((each) => (each.id === automation.id ? automation : each))
-          : [automation, ...held.automations],
-      };
-    });
-  }, []);
+  // Another plan's list is not this one's, so a new filter starts unread.
+  useEffect(() => {
+    void plan;
+    setRead(undefined);
+  }, [plan]);
+  /**
+   * One automation taken into the list as the service answered it, first
+   * where it is new, and the list read again: the read a write overtook is
+   * no longer taken, so this one brings back whatever it would have.
+   */
+  const take = useCallback(
+    (automation: AutomationSummary) => {
+      setRead((held) => {
+        if (held === undefined || "failure" in held) return held;
+        const known = held.automations.some((each) => each.id === automation.id);
+        return {
+          automations: known
+            ? held.automations.map((each) => (each.id === automation.id ? automation : each))
+            : [automation, ...held.automations],
+        };
+      });
+      void reload();
+    },
+    [reload],
+  );
   const written = useCallback(
     (answer: AutomationWrite): AutomationWrite => {
       if ("automation" in answer) take(answer.automation);
@@ -111,12 +126,13 @@ export function useAutomations(plan: string | undefined) {
                 ? held
                 : { automations: held.automations.filter((each) => each.id !== automationId) },
             );
+            void reload();
           }
           return answer;
         },
         () => UNANSWERED,
       ),
-    [act],
+    [act, reload],
   );
   return { read, reload, create, change, rotate, remove };
 }

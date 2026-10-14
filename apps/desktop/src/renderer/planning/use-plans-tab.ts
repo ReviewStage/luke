@@ -198,6 +198,10 @@ interface AutomationsViewControl {
   readonly onOpen: (plan?: string) => void;
   readonly onClose: () => void;
   readonly onChoose: (automationId: string | undefined) => void;
+  /** The automations deleted in this window, whose steps the history passes over. */
+  readonly deleted: ReadonlySet<string>;
+  /** Back to the list from an automation just deleted, which no step goes back to again. */
+  readonly onDeleted: (automationId: string) => void;
 }
 
 /** The pages that stand in the plan's place beside the sidebar. */
@@ -549,6 +553,9 @@ export function usePlansTab(input: {
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** The page standing in the plan's place, the Inbox or Automations, and what is chosen in it. */
   const [windowPage, setWindowPage] = useState<WindowPage | undefined>(undefined);
+  const [deletedAutomations, setDeletedAutomations] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const inboxView = windowPage?.kind === WINDOW_PAGE.INBOX ? windowPage : undefined;
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
@@ -1535,6 +1542,13 @@ export function usePlansTab(input: {
         setWindowPage((held) =>
           held?.kind === WINDOW_PAGE.AUTOMATIONS ? { ...held, chosen } : held,
         ),
+      deleted: deletedAutomations,
+      onDeleted: (automationId) => {
+        setDeletedAutomations((held) => new Set([...held, automationId]));
+        setWindowPage((held) =>
+          held?.kind === WINDOW_PAGE.AUTOMATIONS ? { ...held, chosen: undefined } : held,
+        );
+      },
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a

@@ -601,7 +601,7 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
       const answer = await store.remove(chosen.id);
       if ("failure" in answer)
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: "Couldn't delete it. Try again." };
-      view.onChoose(undefined);
+      view.onDeleted(chosen.id);
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     },
   );

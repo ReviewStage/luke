@@ -232,6 +232,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      deleted: new Set(),
+      onDeleted: ignore,
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,

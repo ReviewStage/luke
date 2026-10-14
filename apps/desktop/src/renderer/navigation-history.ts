@@ -277,6 +277,10 @@ export function useWindowHistory(input: {
     automations.plan,
   ]);
   const reachable = (to: Place) => {
+    // An automation deleted here is gone, so Back passes over its step to the one before.
+    if (to.kind === PLACE_KIND.AUTOMATIONS) {
+      return to.chosen === undefined || !automations.deleted.has(to.chosen);
+    }
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
     return (

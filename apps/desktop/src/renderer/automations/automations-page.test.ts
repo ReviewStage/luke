@@ -58,8 +58,13 @@ const SCHEDULED: AutomationSummary = {
 let asked: { readonly kind: string; readonly payload: WireBoundaryInput }[] = [];
 let root: Root | undefined;
 
-/** The host as a script: the list it holds, and each write answered with the automation it made or changed. */
+/** The host as a script: the list it holds, each write kept in it and answered with the automation it made or changed. */
 function script(automations: readonly AutomationSummary[]) {
+  let held = automations;
+  const kept = (automation: AutomationSummary) => {
+    held = [automation, ...held.filter((each) => each.id !== automation.id)];
+    return { automation };
+  };
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -70,20 +75,18 @@ function script(automations: readonly AutomationSummary[]) {
         const value = (() => {
           switch (request.kind) {
             case ACT_KIND.AUTOMATIONS_LIST:
-              return { automations };
+              return { automations: held };
             case ACT_KIND.AUTOMATIONS_CHANGE:
-              return { automation: { ...SCHEDULED, enabled: false } };
+              return kept({ ...SCHEDULED, enabled: false });
             case ACT_KIND.AUTOMATIONS_CREATE:
-              return {
-                automation: {
-                  ...SCHEDULED,
-                  id: "40000000-0000-4000-8000-000000000002",
-                  trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-                  nextRunAt: null,
-                  webhookUrl:
-                    "https://luke.test/api/automations/40000000-0000-4000-8000-000000000002/webhook",
-                },
-              };
+              return kept({
+                ...SCHEDULED,
+                id: "40000000-0000-4000-8000-000000000002",
+                trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+                nextRunAt: null,
+                webhookUrl:
+                  "https://luke.test/api/automations/40000000-0000-4000-8000-000000000002/webhook",
+              });
             case ACT_KIND.AUTOMATIONS_RUNS:
               return { runs: [] };
             default:
@@ -132,6 +135,8 @@ async function mount(): Promise<HTMLElement> {
       onOpen: () => undefined,
       onClose: () => undefined,
       onChoose: () => undefined,
+      deleted: new Set(),
+      onDeleted: () => undefined,
     },
   });
   await act(async () => {
