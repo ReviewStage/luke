@@ -38,7 +38,7 @@ import {
 import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The one connection per integration all four agents register, through the
@@ -103,8 +103,8 @@ const planningHost = Effect.gen(function* () {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     eveOrigin: () => undefined,
@@ -151,13 +151,13 @@ const plannedSession = (
     const plan = yield* startPlan(userId, { name: "Teammate invitations" });
     const opened = yield* openPlanConversation(userId, plan.id);
     assert.ok(Option.isSome(opened));
-    const conversationId = opened.value;
+    const conversationId = opened.value.conversationId;
     const auth = seat(userId, conversationId);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
     assert.ok(Result.isSuccess(starting));
     assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
-    return { userId, conversationId, auth, sessionId };
+    return { userId, conversationId, auth, sessionId, workspaceId: plan.workspaceId };
   });
 
 /** The account connected, as a completed sign-in leaves it. */
@@ -198,6 +198,32 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           yield* tokenRead(host.admit(crossed, theirs.sessionId), grants),
           Result.fail(LINEAR_UNAVAILABLE.NO_ACCOUNT),
         );
+      }),
+  );
+
+  it.effect(
+    "a member speaking in a plan conversation a teammate opened reads the member's own token, never the opener's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const opened = yield* plannedSession(host, typedSeat);
+        const member = yield* openGithubUser();
+        yield* joinWorkspace(opened.workspaceId, member);
+        yield* connected(opened.userId);
+        yield* connected(member);
+        const grants = new Map([
+          [opened.userId, {}],
+          [member, {}],
+        ]);
+        // The member speaks into the session the opener started, under the member's own principal.
+        const auth = {
+          current: typedSeat(member, opened.conversationId).current,
+          initiator: opened.auth.initiator,
+        };
+
+        const read = yield* tokenRead(host.admit(auth, opened.sessionId), grants);
+        assert.ok(Result.isSuccess(read));
+        assert.equal(read.success.token, tokenOf(member));
       }),
   );
 

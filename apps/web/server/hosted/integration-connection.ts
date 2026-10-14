@@ -171,8 +171,10 @@ const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The provider's token for the account the session was admitted for, or
  * the sentence saying why there is none. The account is the admitted
- * conversation's owner and nothing the session's principal names; a store
- * the read cannot reach fails the call like Connect being unreachable.
+ * caller, the member acting in the conversation, whoever opened it, so a
+ * teammate's call runs on the teammate's own grant and never the opener's;
+ * a store the read cannot reach fails the call like Connect being
+ * unreachable.
  */
 export function integrationAccessToken(
   provider: IntegrationProvider,
@@ -187,7 +189,7 @@ export function integrationAccessToken(
     if (Result.isFailure(admitted)) {
       return Result.fail(integrationUnavailable(provider).NO_ACCOUNT);
     }
-    return yield* connectedToken(provider, admitted.success.target.userId);
+    return yield* connectedToken(provider, admitted.success.caller);
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
