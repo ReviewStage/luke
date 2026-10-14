@@ -168,6 +168,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
         view={list}
         chosen={chosen?.item.id}
         head={{ shown: plans.shown, choices, folds }}
+        models={named.models}
         note={
           <ListNote
             failed={read.failed}

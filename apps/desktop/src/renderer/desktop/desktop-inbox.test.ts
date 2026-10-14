@@ -29,29 +29,48 @@ import { plansControl } from "#testing/plans-control";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
-const BILLING: PlanSummary = {
-  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-  workspaceId: "workspace-personal",
-  name: "Billing usage alerts",
-  createdAt: 1,
-  updatedAt: 2,
-  repository: "acme/relay",
-};
-const INVITES: PlanSummary = {
-  ...BILLING,
-  id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
-  name: "Invites",
-};
-
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: BILLING.id,
+  planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Alerts",
   createdAt: 3,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
+};
+
+const BILLING: PlanSummary = {
+  id: AGENT.planId,
+  workspaceId: "workspace-personal",
+  name: "Billing usage alerts",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+  // The sidebar's list names the plan's agent, as the service sums a plan's agents up.
+  agents: {
+    total: 1,
+    working: 1,
+    agents: [
+      {
+        id: AGENT.id,
+        title: AGENT.title,
+        model: AGENT.model,
+        effort: AGENT.effort,
+        status: AGENT.status,
+      },
+    ],
+    pullRequestTotal: 0,
+    pullRequests: [],
+  },
+};
+const INVITES: PlanSummary = {
+  id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  workspaceId: BILLING.workspaceId,
+  name: "Invites",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
 };
 
 /** An item of the agent's, open and asking a choice, as the service answers one. */
@@ -97,6 +116,8 @@ const HOLDING: readonly AppInboxPlanHolding[] = [
 ];
 
 let root: Root | undefined;
+/** The plan's agents as the service lists them, archived ones among them. */
+let listedAgents: readonly CodingAgentSummary[] = [AGENT];
 /** Each plan's inbox as the service answers a read of it from the start. */
 let inboxes = new Map<string, readonly InboxItem[]>();
 /** Moves main's list of the plans holding items, as its read of the account would. */
@@ -122,6 +143,7 @@ beforeEach(() => {
   ]);
   heldRead = () => new Promise(() => undefined);
   startRead = undefined;
+  listedAgents = [AGENT];
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -130,7 +152,7 @@ beforeEach(() => {
       act: (request: Act) => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: [AGENT] });
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
           const { planId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
@@ -319,6 +341,102 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   act(() => crumbs[1]?.click());
   assert.deepEqual(asked.shownPlans, [BILLING.id]);
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+function standingCard(): readonly [string | null | undefined, string | null | undefined] {
+  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  assert.ok(card, "an agent's card is hung");
+  return [
+    card.querySelector(".tab-card-name")?.textContent,
+    card.querySelector(".tab-card-time")?.textContent,
+  ];
+}
+
+/** Rests on a control as the keyboard reaches it, which hangs its card as a resting pointer does. */
+function reach(control: HTMLElement): void {
+  document.documentElement.dataset.keyboard = "true";
+  act(() => control.focus());
+}
+
+/** The agent's references in the pane's thread, each as its words. */
+function threadRefs(page: HTMLElement): HTMLButtonElement[] {
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-board button[data-agent-ref]")];
+}
+
+test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card and opens its tab, leaving the Inbox", async () => {
+  const { page, asked } = mount();
+  await settle();
+  const [byline] = threadRefs(page);
+  assert.ok(byline, "the byline names the agent");
+  assert.equal(byline.textContent, "Alerts");
+  reach(byline);
+  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  act(() => byline.click());
+  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const sent = page.querySelector<HTMLButtonElement>("[data-inbox-answer] button[data-agent-ref]");
+  assert.ok(sent, "the line saying the answer was sent names the agent");
+  assert.equal(sent.textContent, "Alerts");
+  reach(sent);
+  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  act(() => sent.click());
+  assert.deepEqual(asked.shownAgents, [
+    [BILLING.id, AGENT.id],
+    [BILLING.id, AGENT.id],
+  ]);
+});
+
+test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab, which shows the plan where its tab is gone", async () => {
+  listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
+  let { page, asked } = mount();
+  await settle();
+  let [byline] = threadRefs(page);
+  assert.ok(byline, "the byline names the archived agent");
+  assert.equal(byline.textContent, "Alerts");
+  reach(byline);
+  const [name, corner] = standingCard();
+  assert.equal(name, "Alerts");
+  assert.match(corner ?? "", /^Archived · /u);
+  const crumb = page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Path"] button')[1];
+  assert.ok(crumb, "the agent's crumb is drawn");
+  reach(crumb);
+  assert.equal(standingCard()[0], "Alerts", "the crumb hangs the archived agent's card too");
+
+  act(() => root?.unmount());
+  listedAgents = [];
+  ({ page, asked } = mount());
+  await settle();
+  [byline] = threadRefs(page);
+  assert.ok(byline, "the byline names an agent the plan does not list");
+  assert.equal(byline.textContent, "Coding agent");
+  reach(byline);
+  assert.deepEqual(standingCard(), ["Coding agent", "Not found"]);
+  act(() => byline.click());
+  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+test("an item's mark in the list hangs its agent's card where its plan's row names the agent, and a press on it chooses the item, as a press anywhere on its row does", async () => {
+  const { page, asked } = mount();
+  await settle();
+  const row = rowNamed(page, "How is a failed email retried?");
+  const mark = row.querySelector<HTMLElement>("[data-agent-ref]");
+  assert.ok(mark, "the row's mark is the agent's reference");
+  act(() => {
+    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  act(() => mark.click());
+  assert.equal(row.getAttribute("aria-current"), "page");
+  assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
+  const other = rowNamed(page, "Expire after 7 days?");
+  assert.equal(
+    other.querySelector("[data-agent-ref]"),
+    null,
+    "a plan whose row names no agent leaves the mark bare",
+  );
 });
 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled; Needs you then lists only what still needs you until pressed again, and outlives a relaunch", async () => {

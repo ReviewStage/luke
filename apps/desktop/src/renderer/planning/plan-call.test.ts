@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
@@ -10,8 +11,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/plan-work";
+import { codingAgentsControl } from "#testing/plans-control";
+import { planCards } from "../desktop/side-panel";
+import { NOTHING_HELD } from "./agent-ref";
 import { PlanCall } from "./plan-call";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import { workRowsOf } from "./work-model";
 
 /** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */
 function callTab(
@@ -223,4 +228,78 @@ test("the look around a call opens with, a spoken turn no line asked for, stands
   act(() => summary.click());
   assert.match(fold.textContent ?? "", /This is Luke, a macOS voice-planning app\./u);
   assert.ok(fold.querySelector("[data-worked]"), "how long the turn worked stands inside its fold");
+});
+
+test("on the Call tab, a subagent's row hangs its tab's card, its title and how it ended, and a coding agent's start hangs the agent's tab's card", () => {
+  const styling = worker("w", "Read the styling setup.", {
+    taskId: "worker-1",
+    title: "Styling setup",
+    state: PLAN_WORK_STATE.FAILED,
+  });
+  const turn = workTurn(
+    PLAN_WORK_STATE.DONE,
+    [
+      workerCall(styling),
+      toolCall(
+        AGENT_TOOL.START_CODING_AGENT,
+        "s",
+        { task: "Ship the invoice export" },
+        { output: { status: "accepted", agent: { id: "agent-9" } } },
+      ),
+      words("Both are under way."),
+    ],
+    { workers: [styling] },
+  );
+  const conversation = conversationOf([turn]);
+  const agents = codingAgentsControl({
+    agents: [
+      {
+        id: "agent-9",
+        planId: "plan-1",
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: "Invoice export",
+        createdAt: 1,
+        status: CODING_AGENT_STATUS.RUNNING,
+        turnId: null,
+      },
+    ],
+  });
+  const cards = planCards({
+    agents,
+    workRows: workRowsOf(conversation, false),
+    held: NOTHING_HELD,
+    chosen: () => false,
+  });
+  const page = mounted(
+    callTab({
+      region: said(0),
+      conversation,
+      cards: cards.call,
+      onOpenTarget: () => undefined,
+    }),
+  );
+  // A finished turn folds under one line, and its calls under another, each opened by a press.
+  for (const fold of page.querySelectorAll<HTMLElement>("details > summary")) {
+    act(() => fold.click());
+  }
+  const cardOn = (row: HTMLElement | null) => {
+    assert.ok(row, "the row is drawn");
+    document.documentElement.dataset.keyboard = "true";
+    act(() => row.focus());
+    const card = document.querySelector(".tooltip-card [data-tab-card]");
+    assert.ok(card, "the row hangs a tab's card");
+    return [
+      card.querySelector(".tab-card-name")?.textContent,
+      card.querySelector(".tab-card-time")?.textContent,
+    ];
+  };
+  assert.deepEqual(cardOn(page.querySelector("button[data-subagent-row]")), [
+    "Styling setup",
+    "Failed",
+  ]);
+  assert.deepEqual(cardOn(page.querySelector('button[data-call-id="s"]')), [
+    "Invoice export",
+    "Working…",
+  ]);
 });

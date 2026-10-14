@@ -1950,6 +1950,29 @@ button.attached-file-face:hover img {
   text-underline-offset: 2px;
 }
 
+/* An agent named in place (`agent-ref.tsx`): its mark and name as one quiet
+   button in the words around it, its name underlined under the pointer as a
+   link's is, and its tab's card hung while the pointer rests on it. */
+.agent-ref {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--glyph-gap);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  vertical-align: bottom;
+}
+
+button.agent-ref:hover .agent-ref-name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* The chips along the box's foot: the model chip, the MCP button, and the
    context ring, each the box its popover hangs from (`anchored-popover.tsx`),
    above itself since the box stands at the panel's foot, and after them what

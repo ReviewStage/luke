@@ -6,6 +6,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PageLine } from "@sidecar/hosted/page-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/hosted/planning-view";
@@ -26,7 +27,14 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { AgentChangesTab, ChangesCard, changesTabLabel } from "../planning/agent-changes-tab";
-import { AgentGlyph, AgentMark, AgentSubagentTab, SubagentMark } from "../planning/agent-tab";
+import { AgentCard, agentSubject } from "../planning/agent-ref";
+import {
+  AgentGlyph,
+  AgentMark,
+  AgentSubagentTab,
+  SubagentMark,
+  type TranscriptCards,
+} from "../planning/agent-tab";
 import {
   AgentTabCard,
   type CardReading,
@@ -64,7 +72,7 @@ import {
   sameTab,
   tabKey,
 } from "../planning/tab-strip-model";
-import { cardTitle, type ToolTarget } from "../planning/tool-call-model";
+import { cardTitle, TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,
   readWholeTranscript,
@@ -489,44 +497,15 @@ function stripTabs(input: {
     }),
     close: () => panel.onClose(tab),
   }));
-  const subagentTabs = subagents.map(({ tab, label, untitled, state, stateWords, worker }) => {
-    const running = state === GLYPH_STATE.WORKING;
+  const subagentTabs = subagents.map((drawn) => {
+    const { tab, label, untitled, state, worker } = drawn;
     const { delegation } = tab;
-    // Note that a delegated worker's pair is read from the call that started
-    // it, among what its agent's tab last held, whatever turn that was,
-    // because the call says it once and for good; its agent's own model
-    // stands in for the mark until that call is held.
-    const parent =
-      delegation === undefined
-        ? undefined
-        : agents.agents?.find((agent) => agent.id === delegation.agent);
-    const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
-    const started =
-      delegation === undefined ? undefined : held.agents.get(delegation.agent)?.messages;
-    const delegated = own && delegatedChoice(started, tab.subagent, own);
+    const choices = delegation && delegationChoices(delegation, tab.subagent, agents, held);
     const model =
       delegation === undefined
         ? worker && workerChoice(worker)?.model
-        : (delegated?.model ?? parent?.model);
-    // A worker runs one turn, so the run its tab last read is its run for good.
-    const readCard = () => {
-      if (delegation === undefined) return workerCardReading(worker, held, chosen(tab));
-      const drawn = held.workers.get(tab.subagent);
-      const now = { writing: running, runStartedAt: drawn?.runStartedAt };
-      const messages = heldLatest(drawn, now, chosen(tab));
-      return {
-        corner: cardCorner({
-          writing: running,
-          startedAt: drawn?.runStartedAt,
-          movedAt: lastFinished(messages),
-          state: stateWords,
-        }),
-        choice: delegated,
-        transcript:
-          messages &&
-          agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
-      };
-    };
+        : (choices?.delegated?.model ?? choices?.own?.model);
+    const readCard = subagentCardReading(drawn, agents, held, chosen(tab));
     const task = delegation?.task ?? worker?.task ?? "";
     const read = () =>
       (delegation === undefined
@@ -841,6 +820,38 @@ export function workerCardReading(
   };
 }
 
+/**
+ * A subagent as its tab draws it, `status` saying where a delegated worker
+ * stands; nothing for a planning worker the work no longer holds.
+ */
+function drawnSubagent(
+  tab: SubagentStripTab,
+  workRows: readonly WorkTurnRow[],
+  status: CodingAgentStatus,
+  held: HeldTranscripts,
+): DrawnSubagent | undefined {
+  const { delegation, subagent } = tab;
+  if (delegation !== undefined) {
+    // Its own page says its title, and its agent's pages say every worker's.
+    const title =
+      held.workers.get(subagent)?.title ??
+      held.agents.get(delegation.agent)?.subagentTitles.get(subagent);
+    return {
+      tab,
+      label: title ?? cardTitle(delegation.task),
+      untitled: title === undefined,
+      state: agentGlyphState(status),
+      stateWords: agentStateWords(status),
+      worker: undefined,
+    };
+  }
+  const worker = workerOf(workRows, subagent);
+  if (worker === undefined) return undefined;
+  const title = worker.session?.title;
+  const label = title ?? workerJob(worker.call);
+  return { tab, label, untitled: title === undefined, ...workerStanding(worker), worker };
+}
+
 /** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
 function drawnSubagents(
   tabs: readonly SubagentStripTab[],
@@ -851,30 +862,126 @@ function drawnSubagents(
 ): readonly DrawnSubagent[] {
   return tabs.flatMap((tab): DrawnSubagent[] => {
     if (!drawsSubagent(tab, drawn)) return [];
-    const { delegation, subagent } = tab;
-    if (delegation !== undefined) {
-      const status = standings.get(subagent) ?? CODING_AGENT_STATUS.RUNNING;
-      // Its own page says its title, and its agent's pages say every worker's.
-      const title =
-        held.workers.get(subagent)?.title ??
-        held.agents.get(delegation.agent)?.subagentTitles.get(subagent);
-      return [
-        {
-          tab,
-          label: title ?? cardTitle(delegation.task),
-          untitled: title === undefined,
-          state: agentGlyphState(status),
-          stateWords: agentStateWords(status),
-          worker: undefined,
-        },
-      ];
-    }
-    const worker = workerOf(workRows, subagent);
-    if (worker === undefined) return [];
-    const title = worker.session?.title;
-    const label = title ?? workerJob(worker.call);
-    return [{ tab, label, untitled: title === undefined, ...workerStanding(worker), worker }];
+    const status = standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING;
+    const subagent = drawnSubagent(tab, workRows, status, held);
+    return subagent === undefined ? [] : [subagent];
   });
+}
+
+/** What a delegated worker runs on: its agent's own pair, and the one the call that started it says. */
+interface DelegationChoices {
+  readonly own: ModelChoice | undefined;
+  readonly delegated: ModelChoice | undefined;
+}
+
+/**
+ * The pair a delegated worker runs on: its agent's own, and the pair the
+ * call that started it says, a half it left out being its agent's own.
+ * Note that the call is read among what its agent's tab last held,
+ * whatever turn that was, because the call says it once and for good; its
+ * agent's own pair stands in until that call is held.
+ */
+function delegationChoices(
+  delegation: NonNullable<SubagentStripTab["delegation"]>,
+  subagent: string,
+  agents: CodingAgentsControl,
+  held: HeldTranscripts,
+): DelegationChoices {
+  const parent = agents.agents?.find((agent) => agent.id === delegation.agent);
+  const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
+  const started = held.agents.get(delegation.agent)?.messages;
+  return { own, delegated: own && delegatedChoice(started, subagent, own) };
+}
+
+/**
+ * What a subagent's card says, its tab's and its row's in a transcript
+ * alike: a planning worker's from the session the plan's work holds
+ * (`workerCardReading`), a delegated worker's from what its own tab last
+ * held, its pair as the call that started it says it. A worker runs one
+ * turn, so the run its tab last read is its run for good.
+ */
+function subagentCardReading(
+  drawn: DrawnSubagent,
+  agents: CodingAgentsControl,
+  held: HeldTranscripts,
+  chosen: boolean,
+): () => CardReading {
+  const { tab, label, state, stateWords, worker } = drawn;
+  const { delegation } = tab;
+  return () => {
+    if (delegation === undefined) return workerCardReading(worker, held, chosen);
+    const running = state === GLYPH_STATE.WORKING;
+    const own = held.workers.get(tab.subagent);
+    const messages = heldLatest(own, { writing: running, runStartedAt: own?.runStartedAt }, chosen);
+    return {
+      corner: cardCorner({
+        writing: running,
+        startedAt: own?.runStartedAt,
+        movedAt: lastFinished(messages),
+        state: stateWords,
+      }),
+      choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
+      transcript:
+        messages &&
+        agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
+    };
+  };
+}
+
+/** What a transcript's rows hang, by where they stand: the Call tab's, whose workers are the plan's own, and an agent's transcript's, whose workers are its delegations. */
+export interface PlanCards {
+  readonly call: TranscriptCards;
+  readonly agent: (agentId: string) => TranscriptCards;
+}
+
+/**
+ * The cards a transcript's rows hang, each the card of the tab the row
+ * opens: a call about an agent the agent's (`agent-ref.tsx`), and a
+ * subagent's row its worker's, read as its tab reads its own, `chosen`
+ * telling whether that tab is the one shown, whose transcript follows the
+ * run. A worker the plan's work no longer holds hangs none.
+ */
+export function planCards(input: {
+  agents: CodingAgentsControl;
+  workRows: readonly WorkTurnRow[];
+  held: HeldTranscripts;
+  chosen: (tab: StripTab) => boolean;
+}): PlanCards {
+  const { agents, workRows, held, chosen } = input;
+  const target = (opened: ToolTarget) => {
+    if (opened.kind !== TOOL_TARGET.AGENT) return undefined;
+    const tab = { agent: opened.agent };
+    const subject = agentSubject(agents, opened.agent, held, chosen(tab));
+    return <AgentCard subject={subject} models={agents.models} />;
+  };
+  const card = (drawn: DrawnSubagent | undefined) =>
+    drawn && (
+      <AgentTabCard
+        name={drawn.label}
+        untitled={drawn.untitled}
+        models={agents.models ?? []}
+        read={subagentCardReading(drawn, agents, held, chosen(drawn.tab))}
+      />
+    );
+  return {
+    call: {
+      target,
+      worker: ({ callId, status }) =>
+        card(drawnSubagent({ subagent: callId }, workRows, status, held)),
+    },
+    agent: (agentId) => ({
+      target,
+      worker: ({ callId, task, status }) =>
+        card(
+          drawnSubagent(
+            { subagent: callId, delegation: { agent: agentId, task } },
+            workRows,
+            status,
+            held,
+          ),
+        ),
+    }),
+  };
 }
 
 /** Where a planning worker stands, as its tab's working line reads it: running while it moves, failed where it failed, and done otherwise. */
@@ -903,6 +1010,7 @@ function TabContent({
   findActive,
   onOpenSubagent,
   onOpenTarget,
+  cards,
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
@@ -938,6 +1046,8 @@ function TabContent({
   onOpenSubagent: (callId: string) => void;
   /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
   onOpenTarget: (target: ToolTarget) => void;
+  /** The cards the Call tab's rows that open a tab hang. */
+  cards: TranscriptCards;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
@@ -1089,6 +1199,7 @@ function TabContent({
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
           onOpenTarget={onOpenTarget}
+          cards={cards}
           shown={shown}
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
@@ -1313,6 +1424,7 @@ export function SidePanel({
   shown,
   focused,
   onOpenTarget,
+  cards,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1338,6 +1450,8 @@ export function SidePanel({
   focused: boolean;
   /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
   onOpenTarget: (target: ToolTarget) => void;
+  /** The cards the Call tab's rows that open a tab hang, as those tabs hang them. */
+  cards: PlanCards;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -1488,6 +1602,7 @@ export function SidePanel({
               findActive={keys && focused}
               onOpenSubagent={openSubagent}
               onOpenTarget={onOpenTarget}
+              cards={cards.call}
               onWorkerStatus={views.onWorkerStatus}
               onWorkerHeld={views.onWorkerHeld}
               onOpenFile={panel.onOpenFile}

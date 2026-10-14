@@ -3,6 +3,7 @@ import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChangesCard } from "../planning/agent-changes-tab";
+import { agentCardReading } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
 import { agentTabLabel } from "../planning/coding-agent-model";
@@ -17,14 +18,7 @@ import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
 import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
-import {
-  AGENTS_SECTION,
-  agentCardReading,
-  agentEntries,
-  INBOX_LABEL,
-  INBOX_ROW,
-  inboxEntry,
-} from "./main-tabs";
+import { AGENTS_SECTION, agentEntries, INBOX_LABEL, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
   ADD_SECTION,
   type ChangesOffer,

@@ -24,6 +24,7 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { SkillFiles } from "../planning/skill-chip";
+import { sameTab } from "../planning/tab-strip-model";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
@@ -31,6 +32,7 @@ import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox"
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+import { workRowsOf } from "../planning/work-model";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Shortcut } from "../shortcut";
@@ -42,7 +44,7 @@ import { PlanActions } from "./plan-actions";
 import { PlanCard } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
-import { changesTabOf, SidePanel, useSidePanelDrawing } from "./side-panel";
+import { changesTabOf, planCards, SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
 import { useTabViews } from "./strip-tabs";
 
@@ -174,6 +176,7 @@ function PlanInboxTab({
         view={list}
         chosen={chosen?.item.id}
         head={undefined}
+        models={plans.agents.models}
         note={
           inbox.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
@@ -394,6 +397,15 @@ function PlanDocument({
       }
     }
   };
+  // A row in a transcript that opens a tab hangs that tab's card, read as
+  // the tab reads it, so an agent or a subagent is previewed alike wherever named.
+  const cards = planCards({
+    agents,
+    workRows: workRowsOf(plans.work.conversation, plans.work.callLive),
+    held: views.held,
+    chosen: (opened) =>
+      sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
+  });
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
@@ -519,6 +531,7 @@ function PlanDocument({
                   onOpenDelegation={openDelegation}
                   onOpenChanges={openChanges}
                   onOpenTarget={openTarget}
+                  cards={cards}
                 />
               </section>
             )}
@@ -563,6 +576,7 @@ function PlanDocument({
           shown={plans.shown}
           focused={sideFocused}
           onOpenTarget={openTarget}
+          cards={cards}
         />
       ) : null}
     </div>
