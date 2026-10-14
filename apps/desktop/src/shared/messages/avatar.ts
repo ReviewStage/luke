@@ -34,7 +34,7 @@ export const AVATAR_END_REASON = {
   CALL_ENDED: "call-ended",
 } as const;
 
-type AvatarEndReason = (typeof AVATAR_END_REASON)[keyof typeof AVATAR_END_REASON];
+export type AvatarEndReason = (typeof AVATAR_END_REASON)[keyof typeof AVATAR_END_REASON];
 
 /**
  * The avatar as the document carries it, with why it went down once it has.

@@ -5,12 +5,19 @@ import { createRoot } from "react-dom/client";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import { App } from "./app";
+import { callAvatarAtom } from "./call/call-avatar";
 import { CallWindowCard } from "./call/call-card";
 import { rendererRegistry } from "./renderer-runtime";
+import { withoutAccessTokens } from "./sentry-breadcrumbs";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
 
-Sentry.init();
+Sentry.init({ beforeBreadcrumb: withoutAccessTokens });
+
+// The call window's avatar is subscribed to before anything is drawn, because
+// main hands a page the standing grant once it has drawn its first frame. No
+// other window is ever handed one, so elsewhere it stands idle.
+rendererRegistry.mount(callAvatarAtom);
 
 // One root for the panels, the hidden voice window, and the floating call
 // window alike, mounting by the role main decided for the window that asked.
