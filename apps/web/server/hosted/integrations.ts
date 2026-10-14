@@ -98,10 +98,16 @@ export const INTEGRATION = {
       "Notion, the developer's workspace of pages and databases, as their own account sees it: search, read, create, and update pages, databases, and comments.",
     REMOTE_TOOL: "notion_remote",
   },
+  /*
+   * PostHog's server picks its mode by the client it sees, and most get its
+   * one `exec` tool; `mode=tools` lists every tool by its own name, writes
+   * included, as every other server here does
+   * (https://posthog.com/docs/model-context-protocol/faq).
+   */
   [INTEGRATION_PROVIDER.POSTHOG]: {
     CONNECTOR_VARIABLE: "POSTHOG_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "POSTHOG_ALLOWED_ACCOUNTS",
-    MCP_URL: "https://mcp.posthog.com/mcp",
+    MCP_URL: "https://mcp.posthog.com/mcp?mode=tools",
     DESCRIPTION:
       "PostHog, the developer's product analytics, as their own account sees it: query events and insights with SQL, and read and change dashboards, feature flags, experiments, surveys, error tracking, and session recordings.",
     REMOTE_TOOL: "posthog_remote",

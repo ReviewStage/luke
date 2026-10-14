@@ -948,7 +948,8 @@ carve-out for integrations), and no approval step: GitHub
 (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
-(`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp`),
+(`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
+name rather than its default single `exec`),
 Sentry (`https://mcp.sentry.dev/mcp`), Slack (`https://mcp.slack.com/mcp`),
 Supabase (`https://mcp.supabase.com/mcp`), Vercel (`https://mcp.vercel.com`),
 and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
