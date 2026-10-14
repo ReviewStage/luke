@@ -85,6 +85,7 @@ import {
 } from "@sidecar/hosted/integration-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
+  GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
   type PlanningArchiveParams,
   type PlanningBoardSaveParams,
@@ -92,6 +93,7 @@ import {
   type PlanningEditParams,
   type PlanningFileAnswer,
   type PlanningFileParams,
+  type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
   type PlanningMessagesParams,
   type PlanningPageAnswer,
@@ -129,6 +131,7 @@ import {
   type PlanningWorkspaceParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
+  planningGitHubDisconnectAnswerSchema,
   planningGitHubPageAnswerSchema,
   planningPageAnswerSchema,
   planningRepositoriesAnswerSchema,
@@ -291,8 +294,8 @@ export interface HostOperator {
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
-  /** The page that disconnects the account's GitHub; its address, or why there is none. */
-  githubDisconnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+  /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
+  githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
   /** A workspace made under a name, owned by the account; the workspace, or why none was. */
   workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
   /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
@@ -782,7 +785,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.restored === true,
       ),
     githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
-    githubDisconnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_DISCONNECT), githubPage),
+    githubDisconnect: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_DISCONNECT),
+        (answer): PlanningGitHubDisconnectAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningGitHubDisconnectAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED },
+      ),
     workspaceCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),

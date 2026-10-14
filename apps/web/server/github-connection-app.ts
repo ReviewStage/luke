@@ -13,6 +13,7 @@ import { HTTP_METHOD } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import type { GitHubUnlink } from "./hosted/github-unlink.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -40,7 +41,24 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * and only then does the page ask Better Auth to link GitHub.
  * `GET /api/github/connection` answers whether the account has a GitHub
  * account row with a usable token, and never a token.
+ *
+ * `POST /api/github/disconnect` removes the account's GitHub link through
+ * Better Auth's own `unlinkAccount` (`hosted/github-unlink.ts`), under the
+ * Mac's Better Auth session, which the bearer plugin reads off the
+ * `Authorization` header: an OAuth token alone is no session, so it is
+ * refused as unauthenticated, and only the session's own link can go,
+ * whichever account a browser happens to be signed in to.
  */
+
+/**
+ * Better Auth's codes for an unlink it refused that Luke reads: a session
+ * older than its freshness bound, which `unlinkAccount` asks of a session,
+ * and GitHub as the account's last way to sign in.
+ */
+const UNLINK_REFUSAL = {
+  SESSION_NOT_FRESH: "SESSION_NOT_FRESH",
+  LAST_ACCOUNT: "FAILED_TO_UNLINK_LAST_ACCOUNT",
+} as const;
 
 /** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
 const MAXIMUM_CLAIM_BODY_BYTES = 1_024;
@@ -48,6 +66,8 @@ const MAXIMUM_CLAIM_BODY_BYTES = 1_024;
 export interface GitHubConnectionAppSeams {
   resolveUserId: UserIdResolver;
   resolveSessionUserId: SessionUserIdResolver;
+  /** Removes the GitHub link of the session the headers carry. */
+  unlinkGitHub: GitHubUnlink;
 }
 
 /** The bearer's account, or the request refused as unauthenticated. */
@@ -119,7 +139,55 @@ const connectionEndpoint = /* @__PURE__ */ Effect.fn("web/githubConnectionEndpoi
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, connection);
 });
 
-/** The group: the three paths, and the hosted vocabulary's own refusal for any other. */
+/**
+ * POST: the session's own GitHub link removed, answering the connection as it
+ * then stands. A session Better Auth refuses, or holds too old to unlink
+ * with, is unauthenticated, which the Mac answers with a fresh session from
+ * the hand-off; GitHub as the account's last way to sign in is not
+ * permitted; anything else is the outage the Mac may retry.
+ */
+const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/githubDisconnectEndpoint")(function* (
+  seams: GitHubConnectionAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | DatabaseServices
+> {
+  yield* hostedMethod(HTTP_METHOD.POST);
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const session = yield* seams.resolveSessionUserId(request).pipe(
+    Effect.tapError((failure) => Effect.logWarning("the auth service read no session", failure)),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+  if (Option.isNone(session)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  yield* seams.unlinkGitHub(request.headers).pipe(
+    Effect.catch((failure): Effect.Effect<never, HostedRefusal> => {
+      // A failure that is not a refusal is logged by its kind alone, since what it threw may quote a request.
+      if (failure._tag === "UnknownError") {
+        return Effect.andThen(
+          Effect.logWarning("GitHub unlink failed: UnknownError"),
+          Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
+        );
+      }
+      if (
+        failure.status === HOSTED_HTTP_STATUS.UNAUTHORIZED ||
+        failure.code === UNLINK_REFUSAL.SESSION_NOT_FRESH
+      ) {
+        return Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+      }
+      return Effect.fail(
+        failure.code === UNLINK_REFUSAL.LAST_ACCOUNT
+          ? HOSTED_REFUSAL.NOT_PERMITTED
+          : HOSTED_REFUSAL.UNAVAILABLE,
+      );
+    }),
+  );
+  const connection = yield* hostedStoreOrUnavailable(githubConnection(session.value));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, connection);
+});
+
+/** The group: the four paths, and the hosted vocabulary's own refusal for any other. */
 export function githubConnectionApp(seams: GitHubConnectionAppSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(
@@ -136,6 +204,11 @@ export function githubConnectionApp(seams: GitHubConnectionAppSeams): WebRoutes<
       ANY_METHOD,
       HOSTED_SERVICE_PATH.GITHUB_CONNECTION,
       hostedRefusing(connectionEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.GITHUB_DISCONNECT,
+      hostedRefusing(disconnectEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

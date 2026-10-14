@@ -66,7 +66,7 @@ test("with no GitHub connected, and before the first read, the row offers Connec
   assert.equal(disconnected.line(), "Not connected");
 });
 
-test("with GitHub connected, the row says so and offers Disconnect, which opens the disconnect page", () => {
+test("with GitHub connected, the row says so and offers Disconnect, which asks to disconnect it", () => {
   const connected = mount({ connected: true, login: null });
 
   connected.press("Disconnect");

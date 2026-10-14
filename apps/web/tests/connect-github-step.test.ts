@@ -35,18 +35,19 @@ test("a refusal Luke has no words for is drawn with Better Auth's own message or
     "GitHub could not be connected: state_mismatch",
   );
   assert.equal(
-    linkErrorWords(LINK_FAILED.DISCONNECT, "ACCOUNT_NOT_FOUND", "Account not found"),
-    "GitHub could not be disconnected: Account not found",
+    linkErrorWords(LINK_FAILED.CONNECT, "unknown_error", "GitHub is down"),
+    "GitHub could not be connected: GitHub is down",
   );
   assert.equal(linkErrorWords(LINK_FAILED.CONNECT, undefined), "GitHub could not be connected.");
 });
 
-test("the address asks for a connect by its intent, a disconnect, or a finished link, and nothing else asks anything", () => {
+test("the address asks for a connect by its intent or a finished link, and nothing else, a disconnect included, asks anything", () => {
   assert.deepEqual(connectStepFromSearch("?intent=opaque"), {
     kind: CONNECT_STEP.CONNECT,
     intent: "opaque",
   });
-  assert.deepEqual(connectStepFromSearch("?disconnect=1"), { kind: CONNECT_STEP.DISCONNECT });
+  // Disconnecting is the Mac's own, under its session: the page no longer reads it.
+  assert.deepEqual(connectStepFromSearch("?disconnect=1"), { kind: CONNECT_STEP.NOTHING });
   assert.deepEqual(connectStepFromSearch("?done=1"), { kind: CONNECT_STEP.DONE });
   assert.deepEqual(connectStepFromSearch("?intent="), { kind: CONNECT_STEP.NOTHING });
   assert.deepEqual(connectStepFromSearch(""), { kind: CONNECT_STEP.NOTHING });

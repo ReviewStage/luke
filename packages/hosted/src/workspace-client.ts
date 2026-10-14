@@ -11,9 +11,9 @@ import {
   type AccountCallEffects,
   accountBearer,
   accountCall,
-  CALL_FAULT,
   type CallRequest,
   callAnswered,
+  sendInSession,
   sessionBearer,
 } from "./account-call.js";
 import type { AccountSessionToken, AccountToken } from "./account-token.js";
@@ -98,10 +98,8 @@ function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
 
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
-  /** The calls that write through Better Auth under the Mac's session. */
-  readonly #sessionCall: AccountCallEffects;
-  readonly #obtainSession: () => Effect.Effect<void>;
-  readonly #holder: () => Effect.Effect<string | undefined>;
+  /** The send for the calls that write through Better Auth under the Mac's session. */
+  readonly #inSession: AccountCallEffects["send"];
 
   constructor(options: HostedWorkspaceClientOptions) {
     this.#call = accountCall({
@@ -109,13 +107,14 @@ export class HostedWorkspaceClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#sessionCall = accountCall({
-      baseUrl: options.serviceBaseUrl,
-      credential: sessionBearer(options),
-      requestTimeoutMs: options.requestTimeoutMs,
-    });
-    this.#obtainSession = () => Effect.ignore(options.obtainSession());
-    this.#holder = options.readAccountKey ?? (() => Effect.succeed(undefined));
+    this.#inSession = sendInSession(
+      accountCall({
+        baseUrl: options.serviceBaseUrl,
+        credential: sessionBearer(options),
+        requestTimeoutMs: options.requestTimeoutMs,
+      }),
+      options,
+    );
   }
 
   /** Every workspace the account is a member of, its personal one first; nothing where the service refused or did not answer. */
@@ -190,7 +189,7 @@ export class HostedWorkspaceClient {
       },
       workspaceMembersAnswerSchema,
       (answer) => answer.members,
-      this.#inSession(),
+      this.#inSession,
     );
   }
 
@@ -211,7 +210,7 @@ export class HostedWorkspaceClient {
         },
         workspaceLeaveAnswerSchema,
         (answer) => answer.workspaceId,
-        this.#inSession(),
+        this.#inSession,
       ),
       (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
     );
@@ -235,7 +234,7 @@ export class HostedWorkspaceClient {
       },
       workspaceInvitationAnswerSchema,
       (answer) => answer.invitation,
-      this.#inSession(),
+      this.#inSession,
     );
   }
 
@@ -252,7 +251,7 @@ export class HostedWorkspaceClient {
       { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS}?${query}` },
       workspaceInvitationsAnswerSchema,
       (answer) => answer.invitations,
-      this.#inSession(),
+      this.#inSession,
     );
   }
 
@@ -277,7 +276,7 @@ export class HostedWorkspaceClient {
       },
       workspaceInvitationsAnswerSchema,
       (answer) => answer.invitations,
-      this.#inSession(),
+      this.#inSession,
     );
   }
 
@@ -294,30 +293,6 @@ export class HostedWorkspaceClient {
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted) });
-  }
-
-  /**
-   * The send under the Mac's session. A Mac that holds no session yet has
-   * nothing for the call to carry, which the account call answers without
-   * asking for anything, so the session is asked for here and the call sent
-   * once more, but only while the account is the one that asked: a sign-out
-   * and sign-in during the hand-off ends the call rather than sending it
-   * under someone else. A session the service refuses is asked for by the
-   * call's own renewal, which holds the same rule.
-   */
-  #inSession(): (request: CallRequest) => ReturnType<AccountCallEffects["send"]> {
-    const call = this.#sessionCall;
-    const obtainSession = this.#obtainSession;
-    const holder = this.#holder;
-    return (request) =>
-      Effect.gen(function* () {
-        const asking = yield* holder();
-        const first = yield* call.send(request);
-        if (callAnswered(first) || first.fault !== CALL_FAULT.NO_CREDENTIAL) return first;
-        yield* obtainSession();
-        if ((yield* holder()) !== asking) return { fault: CALL_FAULT.HOLDER_CHANGED };
-        return yield* call.send(request);
-      });
   }
 
   /** One call's answer read under its schema and picked, or its refusal named. */

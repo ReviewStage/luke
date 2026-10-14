@@ -196,6 +196,10 @@
     "dest": "/api/default.js?route=github/connection"
   },
   {
+    "src": "/api/github/disconnect",
+    "dest": "/api/default.js?route=github/disconnect"
+  },
+  {
     "src": "/api/github/install",
     "dest": "/api/default.js?route=github/install"
   },

@@ -1,18 +1,25 @@
-import { HTTP_METHOD } from "@sidecar/wire";
-import { Effect, type Schema as EffectSchema } from "effect";
+import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import {
-  GITHUB_CONNECT_PAGE,
+  type AccountCallEffects,
+  accountBearer,
+  accountCall,
+  callAnswered,
+  sendInSession,
+  sessionBearer,
+} from "./account-call.js";
+import type { AccountSessionToken, AccountToken } from "./account-token.js";
+import {
   type GitHubConnectAnswer,
   type GitHubConnection,
   githubConnectAnswerSchema,
   githubConnectionAnswerSchema,
 } from "./github-connection-wire.js";
 import type { PlanCallResult } from "./plan-client.js";
-import { PLAN_CALL_FAILURE } from "./planning-view.js";
+import { GITHUB_DISCONNECT_FAILURE, PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { HOSTED_API_ERROR, hostedErrorSchema, readServiceAnswer } from "./service-wire.js";
 
 /**
  * github-connection-client.ts -- whether the signed-in account has connected its GitHub, and the page that connects it, as the host asks the service for them.
@@ -20,12 +27,17 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
  * Every call is the account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. Each answers a result, as the
  * workspace client's calls do, so a caller tells a service that did not
- * answer apart from an answer it can draw.
+ * answer apart from an answer it can draw. A disconnect is Better Auth's own
+ * unlink on the service, so it carries the Mac's Better Auth session rather
+ * than its OAuth token, asking for one through the browser's hand-off where
+ * there is none.
  */
 
 /** Why a GitHub connection call has no answer: the service never gave one the wire reads. */
 export const GITHUB_CONNECTION_CALL_FAILURE = {
   UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
+  /** GitHub is the account's only way to sign in, so the service keeps it linked. */
+  NOT_PERMITTED: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED,
 } as const;
 
 export type GitHubConnectionCallFailure =
@@ -50,7 +62,7 @@ function asked<Answer, Encoded>(
   );
 }
 
-export interface HostedGitHubConnectionClientOptions extends AccountToken {
+export interface HostedGitHubConnectionClientOptions extends AccountToken, AccountSessionToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -58,15 +70,23 @@ export interface HostedGitHubConnectionClientOptions extends AccountToken {
 
 export class HostedGitHubConnectionClient {
   readonly #call: AccountCallEffects;
-  readonly #serviceBaseUrl: string;
+  /** The send for the disconnect, under the Mac's session. */
+  readonly #inSession: AccountCallEffects["send"];
 
   constructor(options: HostedGitHubConnectionClientOptions) {
-    this.#serviceBaseUrl = options.serviceBaseUrl;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#inSession = sendInSession(
+      accountCall({
+        baseUrl: options.serviceBaseUrl,
+        credential: sessionBearer(options),
+        requestTimeoutMs: options.requestTimeoutMs,
+      }),
+      options,
+    );
   }
 
   /** A new connect intent: the page the browser opens to connect the account's GitHub. */
@@ -95,14 +115,32 @@ export class HostedGitHubConnectionClient {
     );
   }
 
-  /**
-   * The page that disconnects the account's GitHub, on the browser's own
-   * session: asking the service nothing, since unlinking is Better Auth's
-   * `unlinkAccount` and needs that session rather than the bearer.
-   */
-  disconnectUrl(): string {
-    const url = new URL(GITHUB_CONNECT_PAGE.PATH, this.#serviceBaseUrl);
-    url.searchParams.set(GITHUB_CONNECT_PAGE.DISCONNECT_PARAM, GITHUB_CONNECT_PAGE.FLAG);
-    return url.toString();
+  /** The account's GitHub disconnected on the service, answering the connection as it then stands. */
+  disconnect(): Effect.Effect<
+    GitHubConnectionCallResult<GitHubConnection>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const send = this.#inSession;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.GITHUB_DISCONNECT,
+      });
+      if (!callAnswered(answer)) return UNANSWERED;
+      const payload = unparsedWire(
+        yield* Effect.promise(
+          (): Promise<WireBoundaryInput> => answer.response.json().catch(() => undefined),
+        ),
+      );
+      if (!answer.response.ok) {
+        const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
+        return refusal === HOSTED_API_ERROR.NOT_PERMITTED
+          ? ({ ok: false, failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED } as const)
+          : UNANSWERED;
+      }
+      const read = Result.getOrUndefined(readServiceAnswer(githubConnectionAnswerSchema)(payload));
+      return read === undefined ? UNANSWERED : ({ ok: true, answer: read } as const);
+    });
   }
 }

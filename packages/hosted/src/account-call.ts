@@ -405,6 +405,31 @@ export function sessionBearer(token: AccountToken & AccountSessionToken): CallCr
   };
 }
 
+/**
+ * A call sent under the Mac's session (`sessionBearer`). A Mac that holds no
+ * session yet has nothing for the call to carry, which the account call
+ * answers without asking for anything, so the session is asked for here and
+ * the call sent once more, but only while the account is the one that asked:
+ * a sign-out and sign-in during the hand-off ends the call rather than
+ * sending it under someone else. A session the service refuses is asked for
+ * by the call's own renewal, which holds the same rule.
+ */
+export function sendInSession(
+  call: AccountCallEffects,
+  token: Pick<AccountToken, "readAccountKey"> & Pick<AccountSessionToken, "obtainSession">,
+): AccountCallEffects["send"] {
+  const holder = token.readAccountKey ?? (() => Effect.succeed(undefined));
+  return (request) =>
+    Effect.gen(function* () {
+      const asking = yield* holder();
+      const first = yield* call.send(request);
+      if (callAnswered(first) || first.fault !== CALL_FAULT.NO_CREDENTIAL) return first;
+      yield* Effect.ignore(token.obtainSession());
+      if ((yield* holder()) !== asking) return { fault: CALL_FAULT.HOLDER_CHANGED };
+      return yield* call.send(request);
+    });
+}
+
 /** A credential the build or the developer fixed: one header, one attempt, nothing to renew. */
 export function fixedBearer(credential: string): CallCredential {
   const authorization = bearer(credential);

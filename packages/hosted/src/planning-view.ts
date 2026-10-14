@@ -829,3 +829,19 @@ export const planningGitHubPageAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningGitHubPageAnswer = typeof planningGitHubPageAnswerSchema.Type;
+
+/** Why the account's GitHub was not disconnected: no answer, or GitHub is its only way to sign in. */
+export const GITHUB_DISCONNECT_FAILURE = {
+  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
+  NOT_PERMITTED: "not-permitted",
+} as const;
+
+/** A disconnect of the account's GitHub, as the window's process hears it: the connection as it then stands, or why it is not. */
+export const planningGitHubDisconnectAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ connection: githubConnectionSchema }),
+  EffectSchema.Struct({
+    failure: EffectSchema.Literals(Object.values(GITHUB_DISCONNECT_FAILURE)),
+  }),
+]);
+
+export type PlanningGitHubDisconnectAnswer = typeof planningGitHubDisconnectAnswerSchema.Type;

@@ -1,22 +1,31 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { OrganizationRefused } from "@sidecar/database/models/workspace-seams";
 import { account } from "@sidecar/database/schemas/auth";
 import { openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
 import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@sidecar/hosted/github-connection-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { betterAuth } from "better-auth";
+import { makeSignature } from "better-auth/crypto";
+import { bearer } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { Clock, Duration, Effect, Layer, Option } from "effect";
+import { Cause, Clock, Duration, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { authDatabaseAdapter } from "../server/auth-database";
-import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "../server/auth-policy";
+import {
+  ACCOUNT_TOKEN_STORAGE,
+  DISABLED_AUTH_PATHS,
+  GITHUB_SIGN_IN,
+  SESSION_BEARER,
+} from "../server/auth-policy";
 import type { WireValue } from "../server/core";
 import { githubConnectionApp } from "../server/github-connection-app";
+import { type GitHubUnlink, githubUnlink } from "../server/hosted/github-unlink";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 
 /**
@@ -25,8 +34,10 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
  * fake behind `fetch`. The Mac's bearer mints an intent and reads the
  * connection; the browser's real session cookie claims the intent and links
  * GitHub through Better Auth's own `link-social`, `callback/github`,
- * `list-accounts`, and `unlink-account`, none of which the deployment's
- * disabled paths shut. The browser signs in by email and password here only
+ * and `list-accounts`, none of which the deployment's disabled paths shut.
+ * The Mac disconnects GitHub through the group under its own Better Auth
+ * session, a signed bearer the bearer plugin reads, which the group hands to
+ * Better Auth's `unlinkAccount`. The browser signs in by email and password here only
  * because a session is what linking needs and how it was made is beside the
  * point, as in `auth-account-linking.test.ts`. GitHub's address is no
  * account's here, which the deployment's `allowDifferentEmails` links.
@@ -35,6 +46,7 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
  */
 
 const ORIGIN = "https://luke.test";
+const SECRET = "github-connection-test-secret-with-enough-length";
 const PASSWORD = "fixture-password-of-enough-length";
 const GITHUB_ACCOUNT_ID = 4242;
 const GITHUB_EMAIL = "octo@github.test";
@@ -105,11 +117,12 @@ const openService = Effect.gen(function* () {
   );
   const auth = betterAuth({
     baseURL: ORIGIN,
-    secret: "github-connection-test-secret-with-enough-length",
+    secret: SECRET,
     database: authDatabaseAdapter(drizzle({ client })),
     account: ACCOUNT_TOKEN_STORAGE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     emailAndPassword: { enabled: true },
+    plugins: [bearer(SESSION_BEARER)],
     socialProviders: {
       github: {
         clientId: "Iv1.fixture-app-client",
@@ -173,6 +186,14 @@ const openService = Effect.gen(function* () {
       return landed.headers.get("location") ?? "";
     });
 
+  /** A fresh session for the account, as the signed bearer token the bearer plugin hands the Mac. */
+  const sessionBearerOf = (userId: string) =>
+    Effect.promise(async () => {
+      const context = await auth.$context;
+      const session = await context.internalAdapter.createSession(userId);
+      return `${session.token}.${await makeSignature(session.token, SECRET)}`;
+    });
+
   /** One request to the group: the Mac's bearer where given, else the browser's cookie. */
   const ask = (
     path: string,
@@ -181,6 +202,7 @@ const openService = Effect.gen(function* () {
       bearer?: string;
       browser?: Browser | undefined;
       body?: WireValue;
+      unlink?: GitHubUnlink;
     },
   ) =>
     Effect.gen(function* () {
@@ -200,6 +222,7 @@ const openService = Effect.gen(function* () {
               const session = await auth.api.getSession({ headers: incoming.headers });
               return Option.fromNullishOr(session?.user.id);
             }),
+          unlinkGitHub: init.unlink ?? githubUnlink(auth.api),
         }).pipe(HttpRouter.provideRequest(services)),
         { disableLogger: true },
       );
@@ -237,7 +260,26 @@ const openService = Effect.gen(function* () {
         .where(eq(account.userId, userId)),
     ).pipe(Effect.provide(database));
 
-  return { auth, signUp, toAuth, linkGitHub, ask, connection, revokeTokens };
+  /** The account's providers, as Better Auth lists them to its own browser session. */
+  const providers = (browser: Browser) =>
+    Effect.gen(function* () {
+      const listed = yield* toAuth(browser, "/list-accounts");
+      // SAFETY: Better Auth answers the account list as JSON.
+      const accounts = (yield* Effect.promise(() => listed.json())) as { providerId: string }[];
+      return accounts.map((row) => row.providerId).sort();
+    });
+
+  return {
+    auth,
+    signUp,
+    toAuth,
+    linkGitHub,
+    ask,
+    connection,
+    revokeTokens,
+    sessionBearerOf,
+    providers,
+  };
 });
 
 /** The intent the page's address carries, failing the test where the answer names no page. */
@@ -344,30 +386,163 @@ it.effect("a GitHub account kept with its tokens revoked reads as not connected"
 );
 
 it.effect(
-  "unlinkAccount on the browser's session, given its GitHub account record, disconnects GitHub",
+  "the Mac's session disconnects its own GitHub and no one else's, and keeps the account's other sign-in",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* openService;
+      const ada = yield* service.signUp("Ada");
+      const bob = yield* service.signUp("Bob");
+      yield* service.linkGitHub(ada.browser);
+
+      // Bob's session asks: Bob has no GitHub, so nothing of Ada's goes.
+      const byBob = yield* service.ask("/api/github/disconnect", {
+        method: "POST",
+        bearer: yield* service.sessionBearerOf(bob.userId),
+      });
+      const adaAfterBob = (yield* service.connection(ada.userId)).body;
+      const byAda = yield* service.ask("/api/github/disconnect", {
+        method: "POST",
+        bearer: yield* service.sessionBearerOf(ada.userId),
+      });
+
+      assert.deepEqual(byBob, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: { connected: false, login: null },
+      });
+      assert.deepEqual(adaAfterBob, { connected: true, login: null });
+      assert.deepEqual(byAda, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: { connected: false, login: null },
+      });
+      assert.deepEqual(yield* service.providers(ada.browser), ["credential"]);
+    }),
+);
+
+it.effect(
+  "an OAuth token alone, or no bearer, is no session: unauthenticated, and GitHub stays linked",
   () =>
     Effect.gen(function* () {
       const service = yield* openService;
       const ada = yield* service.signUp("Ada");
       yield* service.linkGitHub(ada.browser);
 
-      // Better Auth unlinks by its own account record's id, which /list-accounts answers.
-      const listed = yield* service.toAuth(ada.browser, "/list-accounts");
-      // SAFETY: Better Auth answers /list-accounts as JSON, one record per linked account.
-      const accounts = (yield* Effect.promise(() => listed.json())) as {
-        id: string;
-        providerId: string;
-      }[];
-      const github = accounts.find((account) => account.providerId === "github");
-      assert.ok(github, "the browser's session lists its GitHub account");
-      const unlinked = yield* service.toAuth(ada.browser, "/unlink-account", {
-        accountId: github.id,
+      // The test's OAuth stand-in names the account on every bearer path, but this one reads a session.
+      const underToken = yield* service.ask("/api/github/disconnect", {
+        method: "POST",
+        bearer: ada.userId,
+      });
+      const anonymous = yield* service.ask("/api/github/disconnect", { method: "POST" });
+
+      const unauthenticated = {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      };
+      assert.deepEqual(underToken, unauthenticated);
+      assert.deepEqual(anonymous, unauthenticated);
+      assert.deepEqual(yield* service.providers(ada.browser), ["credential", "github"]);
+    }),
+);
+
+it.effect(
+  "a refusal Luke does not read, or a failure that is not a refusal, is unavailable, never the last sign-in",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* openService;
+      const ada = yield* service.signUp("Ada");
+      const asAda = yield* service.sessionBearerOf(ada.userId);
+      const answering =
+        (failure: OrganizationRefused | Cause.UnknownError): GitHubUnlink =>
+        () =>
+          Effect.fail(failure);
+
+      const unread = yield* service.ask("/api/github/disconnect", {
+        method: "POST",
+        bearer: asAda,
+        unlink: answering(new OrganizationRefused({ status: 403, code: "SOMETHING_ELSE" })),
+      });
+      const broken = yield* service.ask("/api/github/disconnect", {
+        method: "POST",
+        bearer: asAda,
+        unlink: answering(new Cause.UnknownError("the auth service threw")),
       });
 
-      assert.equal(unlinked.status, 200);
-      assert.deepEqual((yield* service.connection(ada.userId)).body, {
-        connected: false,
-        login: null,
+      assert.deepEqual(unread, {
+        status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+      });
+      assert.deepEqual(broken, {
+        status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        body: { error: HOSTED_API_ERROR.UNAVAILABLE },
       });
     }),
+);
+
+it.effect(
+  "a session older than Better Auth's freshness bound is unauthenticated, so the Mac asks for a fresh one, and GitHub stays",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* openService;
+      const ada = yield* service.signUp("Ada");
+      yield* service.linkGitHub(ada.browser);
+      // A session the Mac has held for two days, past `unlinkAccount`'s one-day freshness.
+      const aged = yield* Effect.promise(async () => {
+        const context = await service.auth.$context;
+        const session = await context.internalAdapter.createSession(
+          ada.userId,
+          false,
+          { createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+          true,
+        );
+        return `${session.token}.${await makeSignature(session.token, SECRET)}`;
+      });
+
+      const refused = yield* service.ask("/api/github/disconnect", {
+        method: "POST",
+        bearer: aged,
+      });
+
+      assert.deepEqual(refused, {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      });
+      assert.deepEqual(yield* service.providers(ada.browser), ["credential", "github"]);
+    }),
+);
+
+it.effect("GitHub as an account's only way to sign in is not disconnected", () =>
+  Effect.gen(function* () {
+    const service = yield* openService;
+    // An account made by signing in with GitHub alone: one user, one GitHub account row.
+    const browser = new Browser();
+    const started = yield* service.toAuth(browser, "/sign-in/social", {
+      provider: "github",
+      callbackURL: DONE_URL,
+    });
+    // SAFETY: Better Auth answers a social sign-in's start as JSON naming GitHub's authorize URL.
+    const { url } = (yield* Effect.promise(() => started.json())) as { url: string };
+    const callback = new URL("/api/auth/callback/github", ORIGIN);
+    callback.searchParams.set("code", "github-code-under-test");
+    callback.searchParams.set("state", new URL(url).searchParams.get("state") ?? "");
+    browser.keep(
+      yield* Effect.promise(() =>
+        service.auth.handler(new Request(callback, { headers: { cookie: browser.cookie } })),
+      ),
+    );
+    const session = yield* Effect.promise(() =>
+      service.auth.api.getSession({ headers: new Headers({ cookie: browser.cookie }) }),
+    );
+    const user = session?.user ?? assert.fail("GitHub's sign-in made no session");
+    assert.deepEqual(yield* service.providers(browser), ["github"]);
+
+    const refused = yield* service.ask("/api/github/disconnect", {
+      method: "POST",
+      bearer: yield* service.sessionBearerOf(user.id),
+    });
+
+    assert.deepEqual(refused, {
+      status: HOSTED_HTTP_STATUS.FORBIDDEN,
+      body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+    });
+    assert.deepEqual((yield* service.connection(user.id)).body, { connected: true, login: null });
+  }),
 );
