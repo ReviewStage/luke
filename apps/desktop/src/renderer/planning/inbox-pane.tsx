@@ -17,6 +17,7 @@ import {
   knownBlock,
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
+import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { CodeRef, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { ChevronRightIcon, DocumentIcon } from "@sidecar/panel";
 import { CheckIcon } from "lucide-react";
@@ -30,20 +31,17 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
-import { agentCardReading } from "../desktop/main-tabs";
-import type { HeldTranscripts } from "../desktop/strip-tabs";
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { AgentGlyph, AgentMark } from "./agent-tab";
-import { AgentTabCard } from "./agent-tab-card";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
 import { copiedLines } from "./code-pane-model";
-import { agentTabLabel } from "./coding-agent-model";
 import type { ReadFileWindow } from "./file-tab";
 import {
   CODE_READ,
@@ -103,10 +101,13 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * naming a newer Luke, so the rest still reads. The pane's bar is its
  * path, plan › agent, each crumb drawn as its tab in the plan's column,
  * opening what it names and hanging the card its sidebar row or tab
- * hangs. Every time shows its moment in the shared tooltip, and an agent
- * this window does not list, one started on another Mac, still leads with
- * a glyph. The pane shows words an agent wrote, a code block the
- * repository's lines, and an image block a picture of what it rendered,
+ * hangs. Wherever the thread names the agent, its bylines and the line
+ * saying an answer was sent to it, the name is the agent's own reference
+ * (`agent-ref.tsx`): its tab's card on hover, its tab on a press, an
+ * archived agent's card saying so. Every time shows its moment in the
+ * shared tooltip, and an agent this window does not list, one started on
+ * another Mac, still leads with a glyph. The pane shows words an agent
+ * wrote, a code block the repository's lines, and an image block a picture of what it rendered,
  * so its thread is out of the session recording (`ph-no-capture`), and the
  * viewer, drawn over the window outside it, is out of it on its own.
  */
@@ -672,9 +673,30 @@ function ResponseControls({
   }
 }
 
-/** What a settled item's line says of where the answer went: to the agent as a message, or kept for it to read. */
-function deliveredWords(item: InboxItem, agentName: string): string {
-  return item.needsReply ? `Sent to ${agentName}` : "Saved for the agent to read";
+/** The item's agent as the pane names it, the catalog its card names the model from, and the press that opens its tab. */
+interface ItemAgent {
+  readonly subject: AgentSubject;
+  readonly models: readonly CatalogModel[] | undefined;
+  readonly onOpen: () => void;
+}
+
+/** The agent's name in a line of the thread, which hangs its card and opens its tab. */
+function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
+  return (
+    <AgentRef subject={by.subject} models={by.models} onOpen={by.onOpen}>
+      <span className="agent-ref-name">{by.subject.name}</span>
+    </AgentRef>
+  );
+}
+
+/** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or kept for it to read. */
+function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
+  if (!item.needsReply) return <>Saved for the agent to read</>;
+  return (
+    <>
+      Sent to <AgentName by={by} />
+    </>
+  );
 }
 
 /**
@@ -711,26 +733,28 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   );
 }
 
-/** Who wrote a message of the thread and when: the agent's mark, its name, and what it did how long ago. */
+/** Who wrote a message of the thread and when: the agent's mark and its name, which hang its card and open its tab, and what it did how long ago. */
 function Byline({
-  agent,
-  name,
+  by,
   did,
   at,
   now,
 }: {
-  agent: CodingAgentSummary | undefined;
-  name: string;
+  by: ItemAgent;
   did: string;
   at: number;
   now: number;
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 items-center gap-(--glyph-gap) text-[12.5px] text-muted-foreground">
-      <span className="plan-summary-glyph">
-        <AuthorGlyph agent={agent} />
-      </span>
-      <span className="truncate font-medium text-foreground">{name}</span>
+      <AgentRef subject={by.subject} models={by.models} onOpen={by.onOpen}>
+        <span className="plan-summary-glyph">
+          <AuthorGlyph agent={by.subject.agent} />
+        </span>
+        <span className="agent-ref-name truncate font-medium text-foreground">
+          {by.subject.name}
+        </span>
+      </AgentRef>
       <span className="shrink-0">
         {did} <Moment at={at} now={now} />
       </span>
@@ -741,11 +765,11 @@ function Byline({
 /** What the developer has said, under their own bubble: what they did, when, and where the answer went. */
 function Answered({
   item,
-  agentName,
+  by,
   now,
 }: {
   item: InboxItem;
-  agentName: string;
+  by: ItemAgent;
   now: number;
 }): React.JSX.Element | null {
   const settled = settlementOf(item);
@@ -760,7 +784,7 @@ function Answered({
       )}
       <p className="m-0 text-[11.5px] text-muted-foreground">
         {settled.lead} · <Moment at={item.updatedAt} now={now} /> ·{" "}
-        {deliveredWords(item, agentName)}
+        <Delivered item={item} by={by} />
       </p>
     </Message>
   );
@@ -769,20 +793,18 @@ function Answered({
 /** The agent taking an item back, as one more message of its own: when, and why where it said. */
 function Withdrawn({
   item,
-  agent,
-  agentName,
+  by,
   now,
 }: {
   item: InboxItem;
-  agent: CodingAgentSummary | undefined;
-  agentName: string;
+  by: ItemAgent;
   now: number;
 }): React.JSX.Element | null {
   const settled = settlementOf(item);
   if (settled?.by !== SETTLED_BY.AGENT) return null;
   return (
     <Message from="assistant" data-inbox-withdrawn="">
-      <Byline agent={agent} name={agentName} did="withdrew this" at={item.updatedAt} now={now} />
+      <Byline by={by} did="withdrew this" at={item.updatedAt} now={now} />
       {settled.words === undefined ? null : (
         <MessageContent className="inbox-indent">
           <p className="m-0 select-text">{settled.words}</p>
@@ -863,9 +885,6 @@ export interface InboxPaneDoors {
   readonly code: InboxCodeDoors;
 }
 
-/** No agent's tab held a transcript for the agent's card to preview, which the Inbox draws none of. */
-const NO_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
-
 /**
  * One crumb of the pane's path, drawn as a tab of the strip is: its glyph
  * and its label in a tab's pill, the label fading where it is cut short,
@@ -904,31 +923,17 @@ function Crumb({
  * plan's column, the plan's document glyph and the agent's mark: each opens
  * what it names, the plan or the agent's tab, and hangs the card its
  * sidebar row or tab hangs. An agent this window does not list, one
- * started on another Mac, hangs no card but still opens its tab.
+ * started on another Mac, hangs a card saying so and still opens its tab.
  */
 function Crumbs({
   plan,
-  item,
-  agent,
-  agentName,
-  models,
+  by,
   doors,
 }: {
   plan: PlanSummary;
-  item: InboxItem;
-  agent: CodingAgentSummary | undefined;
-  agentName: string;
-  models: CodingAgentsControl["models"];
+  by: ItemAgent;
   doors: InboxPaneDoors;
 }): React.JSX.Element {
-  const agentCard =
-    agent === undefined ? undefined : (
-      <AgentTabCard
-        name={agentName}
-        models={models ?? []}
-        read={agentCardReading(agent, agentName, NO_HELD, false)}
-      />
-    );
   return (
     <nav className="file-breadcrumbs inbox-crumbs" aria-label="Path">
       <ol>
@@ -942,10 +947,10 @@ function Crumbs({
           <ChevronRightIcon />
         </li>
         <Crumb
-          icon={<AuthorGlyph agent={agent} />}
-          label={agentName}
-          card={agentCard}
-          onOpen={() => doors.onOpenAgent(item.agentId)}
+          icon={<AuthorGlyph agent={by.subject.agent} />}
+          label={by.subject.name}
+          card={<AgentCard subject={by.subject} models={by.models} />}
+          onOpen={by.onOpen}
         />
       </ol>
     </nav>
@@ -977,21 +982,17 @@ export function InboxPane({
   doors: InboxPaneDoors;
 }): React.JSX.Element {
   const now = useMinute();
-  const agent = agents.agents?.find((each) => each.id === item.agentId);
-  const agentName = agent === undefined ? "Coding agent" : agentTabLabel(agent, agents.models);
+  const by: ItemAgent = {
+    subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
+    models: agents.models,
+    onOpen: () => doors.onOpenAgent(item.agentId),
+  };
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   return (
     <section className="inbox-view-items" aria-label={cardTitle(item.title)}>
       <header className="desktop-toolbar">
-        <Crumbs
-          plan={plan}
-          item={item}
-          agent={agent}
-          agentName={agentName}
-          models={agents.models}
-          doors={doors}
-        />
+        <Crumbs plan={plan} by={by} doors={doors} />
       </header>
       <div className="desktop-inbox">
         <div
@@ -1000,7 +1001,7 @@ export function InboxPane({
           data-item-id={item.id}
         >
           <Message from="assistant">
-            <Byline agent={agent} name={agentName} did="asked" at={item.postedAt} now={now} />
+            <Byline by={by} did="asked" at={item.postedAt} now={now} />
             <MessageContent className="inbox-indent">
               <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
                 {cardTitle(item.title)}
@@ -1025,8 +1026,8 @@ export function InboxPane({
               )}
             </MessageContent>
           </Message>
-          <Answered item={item} agentName={agentName} now={now} />
-          <Withdrawn item={item} agent={agent} agentName={agentName} now={now} />
+          <Answered item={item} by={by} now={now} />
+          <Withdrawn item={item} by={by} now={now} />
           {control.failed ? (
             <div className="agent-note agent-failure" role="alert">
               <p className="m-0">The inbox could not be read.</p>

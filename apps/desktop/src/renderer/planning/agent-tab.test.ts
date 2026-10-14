@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { codingAgentsControl } from "#testing/plans-control";
+import { planCards } from "../desktop/side-panel";
+import { NOTHING_HELD } from "./agent-ref";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
@@ -13,7 +20,8 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
  * agent-tab.test.ts -- a call about something the window draws in a tab of
  * its own is a row that opens that tab, and every other call a row that
  * folds open in place; a run of calls and a list of the agents each wear
- * their own icon.
+ * their own icon. A row that opens an agent's or a worker's tab hangs that
+ * tab's card.
  */
 
 const roots: Root[] = [];
@@ -251,4 +259,86 @@ test("a run of calls wears a stack, and a list of the agents a list's icon", () 
     listed?.querySelector("svg")?.classList.contains("lucide-layout-list"),
     "the list's row wears LayoutList",
   );
+});
+
+/** An agent of the plan's, as its list holds it. */
+function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
+  return {
+    id,
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: null,
+    ...overrides,
+  } satisfies CodingAgentSummary;
+}
+
+/** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
+function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[] {
+  assert.ok(row, "the row is drawn");
+  document.documentElement.dataset.keyboard = "true";
+  act(() => row.focus());
+  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  assert.ok(card, "the row hangs a tab's card");
+  return [
+    card.querySelector(".tab-card-name")?.textContent,
+    card.querySelector(".tab-card-time")?.textContent,
+  ];
+}
+
+test("in an agent's transcript, a call about an agent hangs that agent's tab's card, archived or not found as well, and a delegation's row its worker's", () => {
+  const agents = codingAgentsControl({
+    agents: [listedAgent("agent-7", "Invoice export")],
+    archived: [
+      listedAgent("agent-8", "Retry audit", {
+        status: CODING_AGENT_STATUS.CANCELLED,
+        archivedAt: 2,
+      }),
+    ],
+  });
+  const cards = planCards({ agents, workRows: [], held: NOTHING_HELD, chosen: () => false });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const message = assistant([
+    toolPart("message_coding_agent", { agentId: "agent-7", text: "Rebase on main" }, ACCEPTED),
+    toolPart("read_coding_agent", { agentId: "agent-8" }, { status: "cancelled" }),
+    toolPart(
+      "start_coding_agent",
+      { task: "Gone" },
+      { status: "accepted", agent: { id: "agent-9" } },
+    ),
+    toolPart("delegate", { task: "Audit the retry paths" }),
+  ]);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message,
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: false,
+        delegation: {
+          models: [],
+          onOpen: () => undefined,
+          onOpenTarget: () => undefined,
+          cards: cards.agent("agent-1"),
+        },
+      }),
+    ),
+  );
+  const row = (callId: string) =>
+    container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
+  // The calls run together fold under one line, which a press opens.
+  const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
+  act(() => fold?.click());
+  assert.deepEqual(cardOn(row("message_coding_agent")), ["Invoice export", "Working…"]);
+  const [archived, corner] = cardOn(row("read_coding_agent"));
+  assert.equal(archived, "Retry audit");
+  assert.match(corner ?? "", /^Archived · /u);
+  assert.deepEqual(cardOn(row("start_coding_agent")), ["Coding agent", "Not found"]);
+  assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
 });

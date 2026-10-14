@@ -183,6 +183,24 @@ const WORKER_LEAD: TranscriptLead = {
   grouped: false,
 };
 
+/** A worker as its delegation's row knows it: the call that started it, the task it was handed, and where it stands. */
+interface DelegatedWorker {
+  readonly callId: string;
+  readonly task: string;
+  readonly status: CodingAgentStatus;
+}
+
+/**
+ * The cards a transcript's rows hang in their hints' place, each the card
+ * the tab the row opens hangs: an agent's for a call about one, a worker's
+ * for a delegation's row (`agent-ref.tsx`); none where that tab hangs
+ * none, when the row's hint says what it opens.
+ */
+export interface TranscriptCards {
+  readonly target: (target: ToolTarget) => ReactNode;
+  readonly worker: (worker: DelegatedWorker) => ReactNode;
+}
+
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
 export interface DelegationDoors {
   models: readonly CatalogModel[] | undefined;
@@ -193,6 +211,8 @@ export interface DelegationDoors {
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
   /** Opens what a call is about in the tab that draws it (`toolTarget`), which the row of such a call asks for; none where nothing opens one, when every such call folds open in place. */
   onOpenTarget?: ((target: ToolTarget) => void) | undefined;
+  /** The cards the rows that open a tab hang, as those tabs hang them; none where the rows hang their hints. */
+  cards?: TranscriptCards | undefined;
   /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
   /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
@@ -268,6 +288,7 @@ function DelegationRow({
       startedAt={doors?.starts?.get(part.callId)}
       errorText={part.errorText}
       onOpen={onOpen === undefined ? undefined : () => onOpen(part.callId, view.task, status)}
+      card={doors?.cards?.worker({ callId: part.callId, task: view.task, status })}
     />
   );
 }
@@ -363,10 +384,12 @@ const SKILL_HINT = "Open SKILL.md";
 function OpeningCallView({
   part,
   hint,
+  card,
   onOpen,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   hint: string;
+  card?: ReactNode;
   onOpen: () => void;
 }): ReactNode {
   const view = toolCallView(part);
@@ -377,6 +400,7 @@ function OpeningCallView({
       subject={view.subject}
       state={part.state}
       hint={hint}
+      card={card}
       onOpen={onOpen}
     />
   );
@@ -407,6 +431,7 @@ function AgentPartView({
           <OpeningCallView
             part={part}
             hint={TARGET_HINT[target.kind]}
+            card={delegation?.cards?.target(target)}
             onOpen={() => openTarget(target)}
           />
         );
@@ -729,6 +754,7 @@ function AgentTabView({
   onUnarchive,
   onOpenSubagent,
   onOpenTarget,
+  cards,
   openGitHub,
   onOpenApiKeys,
   keywords,
@@ -755,6 +781,8 @@ function AgentTabView({
   onOpenSubagent?: DelegationDoors["onOpen"];
   /** Opens what one of its calls is about; none where nothing opens it. */
   onOpenTarget?: DelegationDoors["onOpenTarget"];
+  /** The cards its rows that open a tab hang; none where they hang their hints. */
+  cards?: TranscriptCards | undefined;
   openGitHub: (url: string) => void;
   /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
   onOpenApiKeys?: (() => void) | undefined;
@@ -776,6 +804,7 @@ function AgentTabView({
           starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
           onOpen: onOpenSubagent,
           onOpenTarget,
+          cards,
           standings: transcript.subagents,
         }}
         reading={transcript.reading}
@@ -834,6 +863,7 @@ export function AgentTab({
   onOpenSubagent,
   onOpenChanges,
   onOpenTarget,
+  cards,
   onHeld,
 }: {
   agent: CodingAgentSummary;
@@ -844,6 +874,8 @@ export function AgentTab({
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
   /** Opens what one of its calls is about in the tab that draws it. */
   onOpenTarget?: DelegationDoors["onOpenTarget"];
+  /** The cards its rows that open a tab hang, as those tabs hang them. */
+  cards?: TranscriptCards | undefined;
   /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
   onOpenChanges?: (() => void) | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
@@ -914,6 +946,7 @@ export function AgentTab({
       onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
       onOpenTarget={onOpenTarget}
+      cards={cards}
       openGitHub={openGitHub}
       onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}

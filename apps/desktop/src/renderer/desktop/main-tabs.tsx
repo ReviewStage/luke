@@ -10,20 +10,10 @@ import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { agentCardReading } from "../planning/agent-ref";
 import { AgentGlyph, AgentMark, AgentTab, agentEndMark } from "../planning/agent-tab";
-import {
-  AgentTabCard,
-  type CardReading,
-  cardCorner,
-  heldLatest,
-  lastFinished,
-} from "../planning/agent-tab-card";
-import {
-  agentStateWords,
-  agentStillWriting,
-  agentTabLabel,
-  providerOf,
-} from "../planning/coding-agent-model";
+import { AgentTabCard } from "../planning/agent-tab-card";
+import { agentTabLabel, providerOf } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import {
@@ -46,11 +36,11 @@ import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
 import { useAgentArchive } from "./agent-archive";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
+import type { PlanCards } from "./side-panel";
 import {
   type AddEntry,
   AddTabButton,
   DoorsTab,
-  type HeldTranscripts,
   type TabDoors,
   type TabLook,
   type TabPin,
@@ -222,39 +212,6 @@ interface DrawnTab {
   close: (() => void) | undefined;
   copy?: ((copy: TranscriptCopy) => void) | undefined;
   agent?: CodingAgentSummary | undefined;
-}
-
-/**
- * What an agent's card says, read from what its tab last held as the card
- * is hung (`heldLatest`): where it stands and when it last moved, its pair,
- * and its latest step. Its tab's card and its row's in the plan's summary
- * both say it, `chosen` telling whether its tab is the one shown, whose
- * transcript follows the run. Note that an agent with no turn finished in
- * what its tab holds last moved when its newest run began, the latest
- * moment its summary knows.
- */
-export function agentCardReading(
-  agent: CodingAgentSummary,
-  label: string,
-  held: HeldTranscripts,
-  chosen: boolean,
-): () => CardReading {
-  return () => {
-    const writing = agentStillWriting(agent.status);
-    const now = { writing, runStartedAt: agent.runStartedAt };
-    const messages = heldLatest(held.agents.get(agent.id), now, chosen);
-    const movedAt = lastFinished(messages) ?? agent.runStartedAt ?? agent.createdAt;
-    return {
-      corner: cardCorner({
-        writing,
-        startedAt: agent.runStartedAt,
-        movedAt,
-        state: agentStateWords(agent.status),
-      }),
-      choice: { model: agent.model, effort: agent.effort },
-      transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
-    };
-  };
 }
 
 /**
@@ -584,7 +541,8 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * agent's transcript opens its worker in the side panel, through
  * `onOpenDelegation`, its Changes chip its pull request's changes,
  * through `onOpenChanges`, and a call about something drawn in a tab of its
- * own that tab, through `onOpenTarget`.
+ * own that tab, through `onOpenTarget`, each such row hanging that tab's
+ * card (`cards`).
  */
 export function MainTabContent({
   tab,
@@ -594,6 +552,7 @@ export function MainTabContent({
   onOpenDelegation,
   onOpenChanges,
   onOpenTarget,
+  cards,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -610,6 +569,8 @@ export function MainTabContent({
   onOpenChanges: (agentId: string) => void;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
+  /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
+  cards: PlanCards;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -634,6 +595,7 @@ export function MainTabContent({
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={() => onOpenChanges(agent.id)}
       onOpenTarget={onOpenTarget}
+      cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}
     />
   );

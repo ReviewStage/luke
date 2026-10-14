@@ -17,7 +17,9 @@
  * plan through the same select the sidebar does, which takes its ask back
  * when the host does not open the plan. Each plan names its repository
  * beside it, so two plans of one name can be told apart, and an archived
- * plan says so. An agent opens its tab as the column's "+" would, a subagent
+ * plan says so. An agent opens its tab as the column's "+" would, hanging
+ * its tab's card beside its row while the pointer rests on it, as every
+ * place naming an agent does (`agent-ref.tsx`), a subagent
  * its tab as the side panel's "+" would, a file in a tab of its own as one
  * chosen in a File tab's tree would, a Settings page opens as the Settings
  * sidebar's row for it does, and a setting lands on its row as the settings
@@ -60,6 +62,7 @@ import {
 } from "#shared/shortcuts";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { changesLabelOf } from "../planning/changes-model";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
@@ -79,6 +82,7 @@ import {
 } from "../settings-search";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
+import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
 import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
 
@@ -217,6 +221,8 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The mark at the row's end: a failed agent's. */
   endMark?: React.JSX.Element | undefined;
+  /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
+  card?: React.ReactNode;
   /** The chord an action's row draws as keys. */
   command?: KeyedCommand | undefined;
   /** The short words the search scores, the name first. */
@@ -412,11 +418,18 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     onPick: () => shownOverHistory(plans, entry.onPick),
   }));
   const entries = [...inbox, ...agents, ...subagents];
-  return entries.map(({ row, endMark, onPick }) => ({
+  return entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
     detail: planName,
     endMark,
+    card:
+      agent === undefined ? undefined : (
+        <AgentCard
+          subject={agentSubject(plans.agents, agent.id, NOTHING_HELD, false)}
+          models={plans.agents.models}
+        />
+      ),
     terms: planName === undefined ? [row.label] : [row.label, planName],
     onChoose: () => show(onPick),
   }));
@@ -491,7 +504,7 @@ function PaletteItem({
   value: string;
   tokens: readonly string[];
 }): React.JSX.Element {
-  return (
+  const item = (
     <Command.Item className="command-palette-row" value={value} onSelect={row.onChoose}>
       {row.icon === undefined ? null : <span className="command-palette-icon">{row.icon}</span>}
       <span className="command-palette-name">
@@ -513,6 +526,12 @@ function PaletteItem({
         <span className="command-palette-end">{row.endMark}</span>
       )}
     </Command.Item>
+  );
+  if (row.card === undefined) return item;
+  return (
+    <Tooltip label={row.label} card={row.card} cardBeside>
+      {item}
+    </Tooltip>
   );
 }
 

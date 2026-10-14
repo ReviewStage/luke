@@ -1,4 +1,5 @@
 import { INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
+import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
 import { ArrowDownNarrowWideIcon, CircleDotIcon, SlidersHorizontalIcon } from "lucide-react";
@@ -14,6 +15,7 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
+import { AgentRef, lineSubject } from "./agent-ref";
 import { AgentGlyph, AgentMark } from "./agent-tab";
 import {
   INBOX_GROUPING,
@@ -35,10 +37,13 @@ import { cardTitle } from "./tool-call-model";
  * launches as a sidebar group's is. An item is a sidebar row: the mark of
  * the agent that posted it, as the plan's summary names the agent, its
  * title, and how long ago it last changed; a press chooses it, for the
- * pane beside the list to show. An item that needs the developer's answer
- * reads as a mail app's unread mail does, its title in the heavier weight
- * and a blue dot past its time, in either grouping and filtered or not; an
- * answered one is settled, in the body's weight with no dot. A folded plan
+ * pane beside the list to show. The mark hangs the agent's tab's card
+ * while the pointer rests on it (`agent-ref.tsx`), where the plan's row
+ * names the agent, and leaves the press to its row, whose pane opens the
+ * agent. An item that needs the developer's answer reads as a mail app's
+ * unread mail does, its title in the heavier weight and a blue dot past
+ * its time, in either grouping and filtered or not; an answered one is
+ * settled, in the body's weight with no dot. A folded plan
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
@@ -71,11 +76,25 @@ function drawnWidth(width: number): string {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The mark of the agent that posted an item, as the plan's summary lists it, else the mark of an agent of no known harness. */
-function ItemGlyph({ plan, agentId }: { plan: PlanSummary; agentId: string }): React.JSX.Element {
+/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent of no known harness. */
+function ItemGlyph({
+  plan,
+  agentId,
+  models,
+}: {
+  plan: PlanSummary;
+  agentId: string;
+  models: readonly CatalogModel[] | undefined;
+}): React.JSX.Element {
   const agent = plan.agents?.agents.find((each) => each.id === agentId);
-  if (agent !== undefined) return <AgentGlyph agent={agent} />;
-  return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
+  if (agent === undefined) {
+    return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
+  }
+  return (
+    <AgentRef subject={lineSubject(agent, models)} models={models} onOpen={undefined}>
+      <AgentGlyph agent={agent} />
+    </AgentRef>
+  );
 }
 
 /** One item as a sidebar row: the agent's mark, the title, and how long ago it changed; one that needs the developer in the heavier weight with a dot past its time. */
@@ -83,11 +102,13 @@ function ItemRow({
   listed,
   chosen,
   now,
+  models,
   onChoose,
 }: {
   listed: InboxListed;
   chosen: boolean;
   now: number;
+  models: readonly CatalogModel[] | undefined;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const { plan, item } = listed;
@@ -106,7 +127,7 @@ function ItemRow({
         >
           <span className="sidebar-plan-line">
             <span className="sidebar-pinned-tab-glyph">
-              <ItemGlyph plan={plan} agentId={item.agentId} />
+              <ItemGlyph plan={plan} agentId={item.agentId} models={models} />
             </span>
             <span className="sidebar-plan-name">{title}</span>
             <span className="sidebar-plan-time">{sinceText(item.updatedAt, now)}</span>
@@ -242,11 +263,14 @@ export function InboxList({
   chosen,
   head,
   note,
+  models,
   onChoose,
 }: {
   view: InboxListView;
   /** The id of the item the pane shows. */
   chosen: string | undefined;
+  /** The catalog as last read, which names each agent's model on its card. */
+  models: readonly CatalogModel[] | undefined;
   head: InboxListHead | undefined;
   /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
   note: React.ReactNode;
@@ -268,6 +292,7 @@ export function InboxList({
       listed={listed}
       chosen={listed.item.id === chosen}
       now={now}
+      models={models}
       onChoose={onChoose}
     />
   );

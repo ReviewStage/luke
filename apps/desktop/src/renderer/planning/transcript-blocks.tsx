@@ -325,7 +325,8 @@ export function TranscriptTool({
  * does once the agent began, a page once shown, or the board drawn on: the
  * call's line as a call's row draws it, its icon, what it did, and where it
  * stands, as the one button that opens that tab rather than folding its
- * input and answer open in place, its hover saying what it opens.
+ * input and answer open in place, its hover saying what it opens, or
+ * hanging the card that tab hangs, an agent's, where it is given one.
  */
 export function TranscriptOpeningCall({
   callId,
@@ -333,6 +334,7 @@ export function TranscriptOpeningCall({
   subject,
   state,
   hint,
+  card,
   onOpen,
 }: {
   callId: string;
@@ -341,12 +343,14 @@ export function TranscriptOpeningCall({
   state: ToolState;
   /** What the hover says the row opens. */
   hint: string;
+  /** The card the hover hangs in the hint's place: the tab's own, where the tab it opens hangs one. */
+  card?: ReactNode;
   onOpen: () => void;
 }): ReactNode {
   const Icon = CALL_ICON[kind];
   const words = CALL_WORDS[kind];
   return (
-    <Tooltip label={hint}>
+    <Tooltip label={hint} card={card ?? undefined}>
       <button
         type="button"
         className={cn(TOOL_LINE_CLASS, "w-full bg-transparent text-left text-[12.5px]")}
@@ -508,6 +512,8 @@ export type TranscriptSubagentProps = {
   errorText: string | undefined;
   /** Opens the subagent's tab, or chooses it where it is open; none where the row stands in a tab that opens no tab. */
   onOpen: (() => void) | undefined;
+  /** The card the hover hangs in its hint's place, the subagent's tab's own; none where the row knows none. */
+  card?: ReactNode;
 };
 
 /** What the hover over a subagent's row says it opens. */
@@ -538,7 +544,8 @@ function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode 
  * drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands, with how long it has worked beside the
  * working mark while it runs (`working-time.tsx`). The whole line is
- * the one button that opens the subagent's tab, its hover saying so, which
+ * the one button that opens the subagent's tab, its hover hanging that
+ * tab's card, or saying what it opens where it is given none, and the tab
  * is where its steps and its answer are read, so it folds nothing open in
  * place. Where it
  * opens no tab it is the same line, pressed by nothing. A call that failed
@@ -552,6 +559,7 @@ export function TranscriptSubagent({
   startedAt,
   errorText,
   onOpen,
+  card,
 }: TranscriptSubagentProps): ReactNode {
   const [words, clipped] = useClipped();
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
@@ -583,7 +591,7 @@ export function TranscriptSubagent({
         {line}
       </div>
     ) : (
-      <Tooltip label={SUBAGENT_HINT}>
+      <Tooltip label={SUBAGENT_HINT} card={card ?? undefined}>
         <button
           type="button"
           className={className}

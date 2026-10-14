@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { settingsView } from "@sidecar/settings/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { plansControl } from "#testing/plans-control";
+import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { CommandPalette } from "./command-palette";
 
@@ -31,7 +33,7 @@ afterEach(() => {
 });
 
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
-function openPalette(): Sent {
+function openPalette(plans: PlansControl = plansControl()): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
   document.body.append(host);
@@ -43,7 +45,7 @@ function openPalette(): Sent {
         available: true,
         tab: PANEL_TAB.PLANS,
         onTabChange: (tab) => sent.tabs.push(tab),
-        plans: plansControl(),
+        plans,
         settings: {
           rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
           onViewChange: (view) => sent.views.push(view),
@@ -231,4 +233,54 @@ test("the footer names the keys that step the filters now: ← → while the fie
 
   type("");
   assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+});
+
+test("an agent's row hangs its tab's card beside it while the pointer rests on it, and choosing it opens the agent's tab", () => {
+  const shown: [string, string][] = [];
+  openPalette(
+    plansControl({
+      activePlanId: "plan-1",
+      plans: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: null,
+        },
+      ],
+      agents: codingAgentsControl({
+        agents: [
+          {
+            id: "agent-7",
+            planId: "plan-1",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            title: "Invoice export",
+            createdAt: 1,
+            status: CODING_AGENT_STATUS.RUNNING,
+            turnId: null,
+          },
+        ],
+        agentIds: ["agent-7"],
+      }),
+      onShowAgent: (planId, agentId) => shown.push([planId, agentId]),
+    }),
+  );
+  chooseFilter("Agents");
+  assert.deepEqual(rows(), [
+    "Inbox · Billing usage alerts",
+    "Invoice export · Billing usage alerts",
+  ]);
+  const row = document.querySelectorAll<HTMLElement>(".command-palette-row")[1];
+  assert.ok(row, "the agent is listed");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".tab-card-name")?.textContent, "Invoice export");
+  assert.equal(card?.querySelector(".tab-card-time")?.textContent, "Working…");
+  press("Invoice export · Billing usage alerts");
+  assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });

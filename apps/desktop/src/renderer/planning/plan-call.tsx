@@ -378,6 +378,7 @@ export function PlanCall({
   onLoadEarlier,
   onOpenSubagent,
   onOpenTarget,
+  cards,
   shown,
   models,
   reveal,
@@ -394,6 +395,8 @@ export function PlanCall({
   onOpenSubagent: (callId: string) => void;
   /** Opens what a call is about in the tab that draws it, as a start's row opens its agent's; none where nothing opens one. */
   onOpenTarget?: DelegationDoors["onOpenTarget"];
+  /** The cards a subagent's row and a call about an agent hang, as their tabs hang them; none where they hang their hints. */
+  cards?: DelegationDoors["cards"];
   /** Whether the tab is on screen, which is when a running turn counts how long it has worked. */
   shown: boolean;
   /** The catalog as last read, which names each subagent's model; none before the first read lands. */
@@ -425,6 +428,7 @@ export function PlanCall({
       starts: shown ? workerStarts(rows) : undefined,
       onOpen: (callId) => onOpenSubagent(callId),
       onOpenTarget,
+      cards,
       // A stop names the subagent it stopped by its job, wherever among the turns its start stands.
       jobs: workerJobs(conversation),
     },

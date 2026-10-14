@@ -1,7 +1,8 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { ArchiveIcon, ChevronRightIcon, UnarchiveIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
 import { agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
@@ -33,8 +34,11 @@ import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-
  * agent is a muted row in the summary's own shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, in the sidebar
- * rows' Pin and Archive style, and whose right-click offers the same. It
- * draws nothing while no agent is archived, and starts folded.
+ * rows' Pin and Archive style, and whose right-click offers the same. The
+ * row hangs the agent's card beside it as a standing row does, saying it
+ * was archived and when (`agent-ref.tsx`), though no press opens it,
+ * since its tab is gone. It draws nothing while no agent is archived, and
+ * starts folded.
  */
 
 /** What the archived agents' fold says, as the sidebar's archived plans' does. */
@@ -106,7 +110,7 @@ export function useAgentArchive(
   };
 }
 
-/** One archived agent: its glyph and name, muted, its Unarchive at its end, and its right-click offering the same. */
+/** One archived agent: its glyph and name, muted, hanging its card, its Unarchive at its end, and its right-click offering the same. */
 function ArchivedAgentRow({
   agent,
   agents,
@@ -119,24 +123,34 @@ function ArchivedAgentRow({
   const [words, clipped] = useClipped();
   const press = useArchivePress(agents);
   const menu = useActionMenu(shown);
+  const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
+  const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
     <li
+      ref={item}
       className="plan-summary-archived-agent"
       onContextMenu={(event) => {
         event.preventDefault();
         menu.show(atPointer(event), event.currentTarget);
       }}
     >
-      <span className="plan-summary-row">
-        <span className="plan-summary-glyph">
-          <AgentGlyph agent={agent} />
+      <Tooltip
+        label={subject.name}
+        card={<AgentCard subject={subject} models={agents.models} />}
+        cardBeside
+        cardRegion={item}
+      >
+        <span className="plan-summary-row">
+          <span className="plan-summary-glyph">
+            <AgentGlyph agent={agent} />
+          </span>
+          <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
+            {subject.name}
+          </span>
+          {agentEndMark(agent, false)}
         </span>
-        <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
-          {agentTabLabel(agent, agents.models)}
-        </span>
-        {agentEndMark(agent, false)}
-      </span>
+      </Tooltip>
       <span className="plan-summary-marks">
         <Tooltip label={UNARCHIVE_LABEL}>
           <button
