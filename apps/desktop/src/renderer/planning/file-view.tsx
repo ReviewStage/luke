@@ -67,14 +67,25 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  */
 
 /** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
-function TreeToggle({
+/** What a pane's toggle says while the pane is open, and while it is not. */
+interface ToggleWords {
+  readonly open: string;
+  readonly closed: string;
+}
+
+const FILES_TOGGLE: ToggleWords = { open: "Hide files", closed: "Show files" };
+
+/** The toggle at a bar's end that opens and closes the pane beside the tab: a File tab's tree, or a Terminal tab's shells. */
+export function TreeToggle({
   open,
   onToggle,
+  words = FILES_TOGGLE,
 }: {
   open: boolean;
   onToggle: () => void;
+  words?: ToggleWords;
 }): React.JSX.Element {
-  const label = open ? "Hide files" : "Show files";
+  const label = open ? words.open : words.closed;
   return (
     <Tooltip label={label}>
       <button

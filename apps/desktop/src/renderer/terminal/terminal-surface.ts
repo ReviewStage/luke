@@ -146,6 +146,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     write: (data, written) => terminal.write(data, written),
     size: () => ({ cols: terminal.cols, rows: terminal.rows }),
     focus: () => terminal.focus(),
+    reset: () => terminal.reset(),
     unmount: () => {
       resized.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);

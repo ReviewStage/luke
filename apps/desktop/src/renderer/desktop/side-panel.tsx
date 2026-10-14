@@ -61,6 +61,7 @@ import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
 import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
+import { TerminalCardFoot } from "../planning/terminal-shells";
 import { TerminalTab } from "../planning/terminal-tab";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import {
@@ -196,9 +197,6 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
 
 /** A plan with no page, the same array every render. */
 const NO_PAGES: readonly PageLine[] = [];
-
-/** What a Terminal tab's card says under its agent's, whose sandbox the shells run in. */
-const TERMINAL_CARD_FOOT = "Terminal in this agent’s sandbox";
 
 /** The "+" menu's sections after the fixed kinds, which the plan's summary lists under the same headings. */
 export const ADD_SECTION = {
@@ -521,7 +519,7 @@ function stripTabs(input: {
         name={subject.name}
         models={models}
         read={subject.read}
-        foot={TERMINAL_CARD_FOOT}
+        foot={<TerminalCardFoot agentId={tab.terminal} />}
       />
     );
     return {
@@ -1007,6 +1005,7 @@ function TabContent({
   onShowNote,
   onRevealed,
   onCloseTab,
+  shellsList,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -1056,6 +1055,8 @@ function TabContent({
   onRevealed: () => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
+  /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
+  shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const { act, tell } = useAct();
   if (isTerminalTab(tab)) {
@@ -1067,6 +1068,7 @@ function TabContent({
         shown={shown}
         onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.terminal })}
         onClose={() => onCloseTab(tab)}
+        shells={shellsList}
       />
     );
   }
@@ -1466,6 +1468,13 @@ export function SidePanel({
     () => ({ open: fileTreeOpen, onToggle: () => setFileTreeOpen((was) => !was) }),
     [fileTreeOpen],
   );
+  // Whether a Terminal tab's shells list is open, for every one of them alike
+  // and for the window's life, as the File tabs' tree is.
+  const [shellsOpen, setShellsOpen] = useState(true);
+  const shellsList = useMemo(
+    () => ({ open: shellsOpen, onToggle: () => setShellsOpen((was) => !was) }),
+    [shellsOpen],
+  );
   // Every subagent the plan's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
@@ -1620,6 +1629,7 @@ export function SidePanel({
               onShowNote={showNote}
               onRevealed={revealed}
               onCloseTab={panel.onClose}
+              shellsList={shellsList}
             />
           </FindScope>
         )}
