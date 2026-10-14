@@ -5255,6 +5255,12 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           [false, 2, ASK_STATUS.OPEN],
         );
         assert.equal(eve.sent.length, 0);
+        // An answer drawn from an earlier revision is not taken, whatever that revision asked.
+        const earlier = yield* chat.wrote(
+          answer(1, { reply: CHAT_REPLY.ANSWERED, note: "Later." }),
+        );
+        assert.ok("ask" in earlier);
+        assert.equal(earlier.taken, false);
         assert.deepEqual(
           yield* chat.write(answer(2, { reply: CHAT_REPLY.CHOSE, choices: ["Yes"] })),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),

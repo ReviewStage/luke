@@ -2297,7 +2297,9 @@ export function readTo(
       if (Option.isNone(reader) || !actsAs(userId, reader.value)) return Option.none();
       const to = Math.min(seq, yield* headOf(organizationId));
       yield* moveCursor({ readerId, organizationId, to });
-      return Option.some(Math.max(reader.value.readSeq, to));
+      // Read again, because a move landing at once may have carried the cursor further than this one.
+      const moved = yield* findMemberInWorkspace({ organizationId, memberId: readerId });
+      return Option.map(moved, (member) => member.readSeq);
     }),
   );
 }

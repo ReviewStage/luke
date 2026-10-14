@@ -260,8 +260,13 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { seq, revision, reply } = asked.answer;
   const message = yield* hostedStoreOrUnavailable(messageAt(userId, organizationId, self.id, seq));
   const ask = Option.flatMap(message, (row) => Option.fromNullishOr(row.ask));
-  if (Option.isNone(ask)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  if (replyRefusal(ask.value.response, reply) !== undefined) {
+  if (Option.isNone(message) || Option.isNone(ask)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  // Note that the answer is held to the ask only at the revision it names, because one drawn
+  // from an earlier revision is not taken, and the revision moves on whenever what it asks does.
+  const drawn = message.value.askRevision === revision;
+  if (drawn && replyRefusal(ask.value.response, reply) !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const answered = yield* hostedStoreOrUnavailable(
