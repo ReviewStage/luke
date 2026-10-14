@@ -16,6 +16,8 @@ export const WORKSPACE_CALL_FAILURE = {
   NOT_PERMITTED: "not-permitted",
   /** The workspace is not one the account is a member of. */
   NOT_FOUND: "not-found",
+  /** The address is already a member of the workspace, or already holds a pending invitation to it. */
+  ALREADY_INVITED: "already-invited",
 } as const;
 
 export type WorkspaceCallFailure =

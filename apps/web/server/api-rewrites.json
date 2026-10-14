@@ -248,6 +248,14 @@
     "dest": "/api/default.js?route=workspaces/github/disconnect"
   },
   {
+    "src": "/api/workspaces/invitations",
+    "dest": "/api/default.js?route=workspaces/invitations"
+  },
+  {
+    "src": "/api/workspaces/invitations/cancel",
+    "dest": "/api/default.js?route=workspaces/invitations/cancel"
+  },
+  {
     "src": "/api/workspaces/leave",
     "dest": "/api/default.js?route=workspaces/leave"
   },
