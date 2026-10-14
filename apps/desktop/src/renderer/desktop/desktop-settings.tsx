@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
+import type { IntegrationToolIndex } from "../integration-health";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { settingsPageOf } from "../settings/pages";
@@ -50,7 +51,9 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * pressing a result opens the page beside the results and leaves them
  * standing, so the next result is one press away, and clearing the field
  * brings the list back. The query lives here, so it lasts as long as Settings
- * stays open.
+ * stays open. It is Settings' one search: the Integrations page hands up the
+ * tools its integrations' servers listed, so the query finds an integration
+ * by its tools too, and opens the page's rows onto the tools it found.
  *
  * The list is as wide as the plans' sidebar and resizes it from its own edge,
  * but never folds: a drag past the least width holds there, because Settings
@@ -75,6 +78,7 @@ export function DesktopSettings({
   onExit: () => void;
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
+  const [integrationTools, setIntegrationTools] = useState<IntegrationToolIndex>();
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
   // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
@@ -88,7 +92,9 @@ export function DesktopSettings({
   const rows = settingsRowsInput(settings);
   // Built only while a query stands: an empty field searches nothing.
   const search =
-    rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
+    rows && query !== ""
+      ? searchSettings(settingsSearchEntries({ ...rows, integrationTools }), query)
+      : undefined;
   const open = (view: SettingsView) => {
     window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
@@ -205,7 +211,10 @@ export function DesktopSettings({
               <h1 className="settings-page-title">{shown.title}</h1>
               {reset}
             </header>
-            <SettingsPanel {...settings} />
+            <SettingsPanel
+              {...settings}
+              integrationsSearch={{ query, onTools: setIntegrationTools }}
+            />
           </div>
         </section>
       )}

@@ -18,6 +18,7 @@ import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
+import type { IntegrationToolIndex } from "./integration-health";
 import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { settingsPageOf } from "./settings/pages";
@@ -79,9 +80,15 @@ export interface SettingsSearchEntry {
  * record the rows themselves are drawn from. The settings' own half is the
  * schema's — each entry says whether its row is drawn right now, judged from
  * this same record — so nothing here restates a condition a page branches on.
- * Beside it, the workspace the Workspace page shows, absent while it draws none.
+ * Beside it, the workspace the Workspace page shows, absent while it draws none,
+ * and the tools each connected integration's server listed, once the
+ * Integrations page has read them, so an integration is found by its tools'
+ * names and descriptions as well as by its own.
  */
-export type SettingsSearchInput = SettingsRowsInput & { workspace?: Workspace | undefined };
+export type SettingsSearchInput = SettingsRowsInput & {
+  workspace?: Workspace | undefined;
+  integrationTools?: IntegrationToolIndex | undefined;
+};
 
 /**
  * The page named the way a group's head says it: the names the sidebar's own
@@ -164,6 +171,10 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
               INTEGRATION_NAME[provider],
               INTEGRATION_WORDS,
               INTEGRATION_KEYWORDS[provider],
+              ...(input.integrationTools?.get(provider) ?? []).flatMap((tool) => [
+                tool.name,
+                tool.description,
+              ]),
             ],
           }
         : undefined,

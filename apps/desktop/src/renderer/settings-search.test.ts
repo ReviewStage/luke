@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@sidecar/hosted/workspace-wire";
 import { settingsView } from "@sidecar/settings/testing";
 import { test } from "vitest";
@@ -7,8 +8,9 @@ import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";
 
 /**
  * Settings search over what the pages draw: a Workspace group is found only where
- * the page draws it for the workspace Settings shows, and a row elsewhere
- * only while its page draws it. Synthetic workspaces.
+ * the page draws it for the workspace Settings shows, a row elsewhere
+ * only while its page draws it, and an integration by its tools once the
+ * Integrations page has read them. Synthetic workspaces and tools.
  */
 
 const TEAM: Workspace = {
@@ -75,4 +77,26 @@ test("searching GitHub finds Connected accounts while signed in, and not while s
   assert.ok(found("GitHub", true).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS));
   assert.ok(found("reconnect", true).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS));
   assert.equal(found("GitHub", false).includes(SETTINGS_SECTION.CONNECTED_ACCOUNTS), false);
+});
+
+test("an integration is found by its tools' names and descriptions once the Integrations page has handed them up", () => {
+  const input: SettingsSearchInput = {
+    settings: settingsView(),
+    voiceControlsDrawn: true,
+    accountDrawn: true,
+    integrationTools: new Map([
+      [
+        INTEGRATION_PROVIDER.VERCEL,
+        [{ name: "get_deployment_build_logs", description: "Reads a build's output." }],
+      ],
+    ]),
+  };
+  const integrationsFound = (query: string, from: SettingsSearchInput) =>
+    (searchSettings(settingsSearchEntries(from), query)?.groups ?? [])
+      .filter((group) => group.page === SETTINGS_VIEW.INTEGRATIONS)
+      .flatMap((group) => group.items.map((entry) => entry.id));
+
+  assert.deepEqual(integrationsFound("build_logs", input), [INTEGRATION_PROVIDER.VERCEL]);
+  assert.deepEqual(integrationsFound("build's output", input), [INTEGRATION_PROVIDER.VERCEL]);
+  assert.deepEqual(integrationsFound("build_logs", { ...input, integrationTools: undefined }), []);
 });

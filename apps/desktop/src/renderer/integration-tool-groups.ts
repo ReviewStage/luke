@@ -1,8 +1,8 @@
 import type { IntegrationToolAnnotations } from "@sidecar/hosted/integration-wire";
-import type { IntegrationTool } from "../integration-health";
+import type { IntegrationTool } from "./integration-health";
 
 /**
- * server-tools-model.ts -- how a server's page in the MCP popover lists its tools: in alphabetical order, in runs by a shared name prefix where the names clearly share them, and each with the one badge its server's own annotations earn it.
+ * integration-tool-groups.ts -- how a list of an integration's tools is laid out, in the MCP popover and Settings alike: in alphabetical order, in runs by a shared name prefix where the names clearly share them, and each with the one badge its server's own annotations earn it.
  *
  * MCP gives a tool no category, so any grouping here is read off the names
  * alone and says so: a run's heading is the prefix its names share, drawn

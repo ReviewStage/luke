@@ -611,3 +611,52 @@
   width: 12px;
   height: 12px;
 }
+
+/* Settings › Integrations: a connected row's tools opened in place under
+   it. The chevron that opens a row, after its count, turns down while its
+   tools show; the tools scroll inside their own bound, past the row's
+   mark, their run headings staying at the bound's top on the card's own
+   ground. */
+.integration-tools-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: -1px -4px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.integration-tools-toggle:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.integration-tools-toggle svg {
+  width: 10px;
+  height: 10px;
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.integration-tools-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.settings-card > .integration-tools-panel {
+  --tool-list-top: calc(var(--space-4) * -1);
+  --tool-list-ground:
+    linear-gradient(var(--section-fill), var(--section-fill)), var(--desktop-ground);
+  max-height: 360px;
+  padding: var(--space-4) var(--space-8) var(--space-8) calc(var(--space-16) + 20px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.integration-tools-found {
+  margin: 0;
+  padding: var(--space-4) var(--row-inset) var(--space-2);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
