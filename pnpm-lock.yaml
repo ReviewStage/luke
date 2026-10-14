@@ -435,6 +435,9 @@ importers:
       '@luke/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@luke/features':
+        specifier: workspace:*
+        version: link:../../packages/features
       '@luke/service':
         specifier: workspace:*
         version: link:../../packages/service

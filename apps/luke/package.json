@@ -19,6 +19,7 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/database": "workspace:*",
+    "@luke/features": "workspace:*",
     "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
     "@sentry/node": "11.7.0",

@@ -235,6 +235,11 @@ export interface ChatUnread {
   readonly more: boolean;
 }
 
+/** A member's unread as a turn is handed it: the page, whether more waits, and the place a read of it moves the cursor to. */
+export interface ChatUnreadPage extends ChatUnread {
+  readonly through: number;
+}
+
 /** Where a read of unread looks: one channel, or every channel the member may see where none is named; and a page's size. */
 export interface ChatUnreadQuery {
   readonly channelId?: string | undefined;
@@ -1990,6 +1995,40 @@ export function resolveAsk(
 }
 
 /**
+ * The reader's unread page: what it may see that someone else posted or
+ * changed past its cursor in each channel, in one channel where the query
+ * names one, oldest change first, a page of between one and the bound, and
+ * the place reading it moves the cursor to, past the page, or the
+ * workspace's head where nothing more waits.
+ */
+function unreadPage(
+  reader: ChatMemberRow,
+  query: ChatUnreadQuery,
+): ChatStoreEffect<ChatUnreadPage> {
+  return Effect.gen(function* () {
+    const { channelId } = query;
+    const head = yield* headOf(reader.organizationId);
+    const page = boundedPage(query.limit ?? CHAT_BOUNDS.MAX_READ);
+    // One past the page is read, so a page that is the last says so.
+    const rows = yield* visibleMessages(
+      reader,
+      [
+        channelId === undefined ? undefined : eq(chatMessage.channelId, channelId),
+        sql`${chatMessage.touchedSeq} > ${cursorIn(reader.id, reader.readSeq, chatMessage.channelId)}`,
+        ne(chatMessage.authorMemberId, reader.id),
+      ],
+      READ_ORDER.TOUCHED,
+      page + 1,
+    );
+    const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    const more = read.length > page;
+    const messages = read.slice(0, page);
+    const through = more ? (messages.at(-1)?.touchedSeq ?? reader.readSeq) : head;
+    return { messages, more, through };
+  });
+}
+
+/**
  * What a member has not read: what it may see that someone else posted or
  * changed past its cursor in each channel, in one channel where the query
  * names one, oldest change first, a page of between one and the bound. The
@@ -2015,29 +2054,53 @@ export function unreadFor(
       if (channelId !== undefined && !(yield* seesChannel(reader.value, channelId))) {
         return Option.none();
       }
-      const head = yield* headOf(organizationId);
-      const page = boundedPage(query.limit ?? CHAT_BOUNDS.MAX_READ);
-      // One past the page is read, so a page that is the last says so.
-      const rows = yield* visibleMessages(
-        reader.value,
-        [
-          channelId === undefined ? undefined : eq(chatMessage.channelId, channelId),
-          sql`${chatMessage.touchedSeq} > ${cursorIn(readerId, reader.value.readSeq, chatMessage.channelId)}`,
-          ne(chatMessage.authorMemberId, readerId),
-        ],
-        READ_ORDER.TOUCHED,
-        page + 1,
-      );
-      const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
-      const more = read.length > page;
-      const messages = read.slice(0, page);
-      const to = more ? (messages.at(-1)?.touchedSeq ?? reader.value.readSeq) : head;
+      const { messages, more, through: to } = yield* unreadPage(reader.value, query);
       yield* channelId === undefined
         ? moveCursor({ readerId, organizationId, to })
         : moveChannelCursor({ readerId, organizationId, channelId, to });
       return Option.some({ messages, more });
     }),
   );
+}
+
+/**
+ * What a member has not read in every channel it may see, as `unreadFor`
+ * reads it, moving nothing: the page and the place its read would move the
+ * floor cursor to, which `readThrough` moves it to once the reader has
+ * taken the page in. Nothing where the account is not in the workspace or
+ * the member is not of it.
+ */
+export function peekUnread(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  limit: number = CHAT_BOUNDS.MAX_READ,
+): ChatStoreEffect<Option.Option<ChatUnreadPage>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    return Option.some(yield* unreadPage(reader.value, { limit }));
+  });
+}
+
+/**
+ * Moves a member's floor cursor on to the place given, never back, letting
+ * go of a notice it passes: a page `peekUnread` answered, taken in, as a
+ * read of every channel would have moved it. Answers whether the account
+ * and the member were found.
+ */
+export function readThrough(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  through: number,
+): ChatStoreEffect<boolean> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return false;
+    yield* moveCursor({ readerId, organizationId, to: through });
+    return true;
+  });
 }
 
 /**

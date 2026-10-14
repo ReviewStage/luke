@@ -14,6 +14,7 @@ import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
+import { CHAT_BOUNDS, CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -25,7 +26,7 @@ import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/mode
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
+import { Effect, Fiber, Layer, Option, Redacted, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -60,6 +61,8 @@ import {
   type InstallationFixture,
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
+import { CHAT_TOOL_REFUSAL } from "../coder-host/chat.js";
+import { HELD_DOORS } from "../coder-host/chat-notify.js";
 import { STEER_OUTCOME } from "../coder-host/steer.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import {
@@ -77,6 +80,7 @@ import {
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import { brainToolDeclarations, tasksModelOutput } from "./brain.js";
+import { ChatPostTally, lukeOn, type PlannerChatCall, runPlannerPost } from "./chat.js";
 import {
   claimRuntimeSession,
   conversationReachableBy,
@@ -761,4 +765,104 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
     (await call(READ_PAGE_TOOL.name, { pageId: theirs.id })).status,
     ACTION_RESULT_STATUS.REJECTED,
   );
+});
+
+test("Luke's direct message to the plan's agent is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
+  const userId = await database.createUser();
+  const plan = await taskConversation(userId, RELAY_FULL_NAME);
+  const agent = await agentOn(userId, plan.taskId);
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services);
+
+  const told = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
+  assert.equal(told.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(told));
+  assert.deepEqual([told.in, told.told, told.held], ["@agent-1", ["@agent-1"], []]);
+  assert.deepEqual(
+    eve.sent.map((request) => request.path),
+    [`/eve/coder/v1/session/${agent.sessionId}`],
+  );
+  assert.equal(eve.sent[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
+  assert.match(JSON.parse(eve.sent[0]?.body ?? "").message, /@luke to you/u);
+
+  // Another account's plan, on a deployment that reaches no eve: its agent reads Luke's word when it next reads.
+  const other = await taskConversation(undefined, RELAY_FULL_NAME);
+  await agentOn(other.userId, other.taskId);
+  const unsecured = await callerOn(brainHost(seams), other, eve.services);
+  const held = await unsecured(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
+  assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(held));
+  assert.deepEqual([held.told, held.held], [[], ["@agent-1"]]);
+  assert.equal(eve.sent.length, 1);
+});
+
+test("Luke posts at most the chat's bound in one turn, a call eve runs again is its one post however many came after, and a post the bound refused is no post", async () => {
+  const plan = await taskConversation();
+  const call = await callerOn(brainHost(seams), plan);
+
+  const first = await call(CHAT_TOOL.POST, { text: "Step 0 is done." }, "call-0");
+  for (let at = 1; at < CHAT_BOUNDS.MAX_POSTS_PER_TURN; at += 1) {
+    const posted = await call(CHAT_TOOL.POST, { text: `Step ${at} is done.` }, `call-${at}`);
+    assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+  }
+  const replayed = await call(CHAT_TOOL.POST, { text: "Step 0 is done." }, "call-0");
+  assert.equal(replayed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(replayed));
+  assert.equal(replayed.seq, first.seq);
+  assert.deepEqual(await call(CHAT_TOOL.POST, { text: "One more." }, "call-over"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CHAT_TOOL_REFUSAL.TOO_MANY_POSTS,
+  });
+  const read = await call(CHAT_TOOL.READ, { channel: "#teammate-invitations" });
+  assert.ok(Array.isArray(read.messages));
+  assert.equal(read.messages.length, CHAT_BOUNDS.MAX_POSTS_PER_TURN);
+});
+
+test("a post interrupted before it lands holds none of the turn's count", async () => {
+  const plan = await taskConversation();
+  const tally = new ChatPostTally();
+  let opened = false;
+  const call: PlannerChatCall = {
+    luke: {
+      ...lukeOn(plan.userId, plan.taskId),
+      repository: null,
+      telling: { eveFor: () => undefined, writer: Effect.succeed(writer), doors: HELD_DOORS },
+    },
+    clientKey: "call-a",
+    turnId: "turn-1",
+    tally,
+    // A sandbox that never opens, so the post is under way once it is asked for.
+    sandbox: () => {
+      opened = true;
+      return Promise.race([]);
+    },
+  };
+  const picture = {
+    text: "The new screen.",
+    blocks: [{ type: "image", path: "shot.png", alt: "The screen." }],
+  };
+
+  await database.run(
+    Effect.gen(function* () {
+      const posting = yield* Effect.forkChild(runPlannerPost(call, picture));
+      while (!opened) yield* Effect.yieldNow;
+      yield* Fiber.interrupt(posting);
+    }).pipe(Effect.provide(NO_GITHUB)),
+  );
+  assert.equal(tally.reserve("turn-1", "call-b"), 0);
+});
+
+test("two runs of one call that land differently hold the turn's count while either posted, and let it go only once neither did", () => {
+  const tally = new ChatPostTally();
+  assert.equal(tally.reserve("turn-1", "call-a"), 0);
+  assert.equal(tally.reserve("turn-1", "call-a"), 0);
+  tally.settle("turn-1", "call-a", false);
+  tally.settle("turn-1", "call-a", true);
+  assert.equal(tally.reserve("turn-1", "call-b"), 1);
+  tally.settle("turn-1", "call-b", false);
+  assert.equal(tally.reserve("turn-1", "call-c"), 1);
+  // Another turn counts on its own.
+  assert.equal(tally.reserve("turn-2", "call-a"), 0);
 });
