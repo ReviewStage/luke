@@ -11,8 +11,8 @@
  */
 
 import { Base64 } from "effect/encoding";
+import { AVATAR_FEED_KIND, type AvatarFeed } from "#shared/messages/avatar";
 import { PCM_SAMPLE_RATE } from "./contract";
-import { AVATAR_FEED_KIND, type AvatarFeed } from "./feed";
 
 /**
  * Spike 0 measured these on TTS through a Chrome Opus loopback, not on GPT

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { AVATAR_FEED_KIND, type AvatarFeed } from "#shared/messages/avatar";
 import { PCM_CHUNK_SAMPLES } from "./contract";
-import { AVATAR_FEED_KIND, type AvatarFeed } from "./feed";
 import { closeTurnGate, stepTurnGate, TURN_GATE, TURN_GATE_IDLE, type TurnGate } from "./turn-gate";
 
 /** Samples of a 10 ms frame, from Spike 0's measurements of TTS through Opus. */
