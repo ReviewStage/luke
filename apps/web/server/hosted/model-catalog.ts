@@ -2,15 +2,17 @@ import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import {
   type CatalogModel,
   type ContextWindows,
-  FAST_WITHHELD,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
+import { FAST_ACCESS, type FastAccess } from "@sidecar/hosted/provider-key-wire";
 import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { HostedEnvironment } from "./environment.js";
+import { checkFastAccess } from "./provider-key-check.js";
 
 /**
  * model-catalog.ts -- the models a coding agent may run on, read from AI Gateway's public catalog.
@@ -35,7 +37,10 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  * AI Gateway's own name and no provider's: the provider is asked for the
  * base model with its fast option on. Nothing here
  * knows which account asked: the catalog is public and the same for every
- * caller.
+ * caller, and so is the one thing kept beside it, whether Luke's own
+ * Anthropic key may run fast mode (`provider-key-check.ts`), asked once
+ * per instance for the same TTL. What an account is offered of the catalog
+ * is `offeredToAccount`, by whether the key its steps run on may.
  */
 
 const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
@@ -144,7 +149,11 @@ export class ModelChoiceRefused extends Data.TaggedError("ModelChoiceRefused")<{
 /** The catalog the instance read, offered as a service so one read serves every route that checks against it. */
 export class ModelCatalog extends Context.Service<
   ModelCatalog,
-  { readonly read: Effect.Effect<readonly OfferedModel[], ModelCatalogUnavailable> }
+  {
+    readonly read: Effect.Effect<readonly OfferedModel[], ModelCatalogUnavailable>;
+    /** Whether Luke's own Anthropic key may run fast mode, as the instance last asked; nothing where it holds no key or the answer said neither. */
+    readonly lukeFastAccess: Effect.Effect<FastAccess | undefined>;
+  }
 >()("ModelCatalog") {}
 
 // ------------------------------------------------------------- the boundary
@@ -360,50 +369,70 @@ const fetchOfferedModels = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The catalog as this instance's one cached read over the ambient client. A
  * success stands for the TTL; a failure stands for no time, so the next
- * request asks again rather than answering the outage for an hour.
+ * request asks again rather than answering the outage for an hour. Luke's
+ * own key's fast access is asked on first use and kept for the same TTL,
+ * an answer that said neither too, since the check spends on Luke's key.
  */
-export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.HttpClient> =
-  Layer.effect(
-    ModelCatalog,
-    Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient;
-      const read = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
-        Exit.isSuccess(exit) ? MODEL_CATALOG_TTL : Duration.zero,
-      );
-      return { read };
-    }),
-  );
+export const modelCatalogLayer: Layer.Layer<
+  ModelCatalog,
+  never,
+  HttpClient.HttpClient | HostedEnvironment
+> = Layer.effect(
+  ModelCatalog,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const { anthropicKey } = yield* HostedEnvironment;
+    const read = yield* Effect.cachedWithTTL(fetchOfferedModels(client), (exit) =>
+      Exit.isSuccess(exit) ? MODEL_CATALOG_TTL : Duration.zero,
+    );
+    const lukeFastAccess = yield* Effect.cachedWithTTL(
+      anthropicKey === undefined
+        ? Effect.succeed(undefined)
+        : checkFastAccess(anthropicKey).pipe(Effect.provideService(HttpClient.HttpClient, client)),
+      MODEL_CATALOG_TTL,
+    );
+    return { read, lukeFastAccess };
+  }),
+);
 
-/** A catalog of exactly these models, for a test or a caller that already holds one. */
-export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<ModelCatalog> {
-  return Layer.succeed(ModelCatalog, { read: Effect.succeed(models) });
+/** A catalog of exactly these models, and Luke's key's fast access as given, for a test or a caller that already holds one. */
+export function modelCatalogOf(
+  models: readonly OfferedModel[],
+  lukeFastAccess?: FastAccess,
+): Layer.Layer<ModelCatalog> {
+  return Layer.succeed(ModelCatalog, {
+    read: Effect.succeed(models),
+    lukeFastAccess: Effect.succeed(lukeFastAccess),
+  });
 }
 
 // ------------------------------------------------------------- the checks
 
 /**
- * The catalog as one account is offered it: where the account runs a
- * provider on its own key, that provider's fast versions are withheld and
- * each base model says why, since Luke runs Fast on its own key alone
- * (`coder-host/model.ts`); everything else as the catalog lists it.
+ * The catalog as one account is offered it, by whether the Anthropic key
+ * its steps run on may run fast mode: where Anthropic said its organization
+ * may not, Anthropic's fast versions are withheld and each base model says
+ * so; everything else as the catalog lists it. Note that a key no fast
+ * request has answered is offered its fast versions, because a fast step
+ * Anthropic refuses runs at standard speed anyway (`coder-host/model.ts`)
+ * and the refusal is the answer the key is then offered by.
  */
 export function offeredToAccount(
   offered: readonly OfferedModel[],
-  ownKeyProviders: ReadonlySet<ModelProvider>,
+  anthropicFastAccess: FastAccess | undefined,
 ): readonly OfferedModel[] {
+  if (anthropicFastAccess !== FAST_ACCESS.NOT_ENABLED) return offered;
   const withheld = new Set<string>();
   const kept: OfferedModel[] = [];
   for (const model of offered) {
     const fast = providerModelOf(model.id)?.fast ?? false;
-    if (fast && ownKeyProviders.has(model.provider)) {
+    if (fast && model.provider === MODEL_PROVIDER.ANTHROPIC) {
       withheld.add(standardModelIdOf(model.id));
     } else {
       kept.push(model);
     }
   }
-  return kept.map((model) =>
-    withheld.has(model.id) ? { ...model, fastWithheld: FAST_WITHHELD.OWN_KEY } : model,
-  );
+  return kept.map((model) => (withheld.has(model.id) ? { ...model, fastNotEnabled: true } : model));
 }
 
 /**
@@ -433,11 +462,11 @@ export function validateModelChoice(
 /** The choice checked against the instance's catalog as the account is offered it (`offeredToAccount`): accepted, refused, or the catalog unavailable. */
 export function acceptedModelChoice(
   choice: ModelChoice,
-  ownKeyProviders: ReadonlySet<ModelProvider>,
+  anthropicFastAccess: FastAccess | undefined,
 ): Effect.Effect<ModelChoice, ModelChoiceRefused | ModelCatalogUnavailable, ModelCatalog> {
   return Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
-    const offered = offeredToAccount(yield* catalog.read, ownKeyProviders);
+    const offered = offeredToAccount(yield* catalog.read, anthropicFastAccess);
     return yield* Effect.fromResult(validateModelChoice(offered, choice)).pipe(
       Effect.mapError((reason) => new ModelChoiceRefused({ reason })),
     );

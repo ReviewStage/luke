@@ -66,7 +66,7 @@ const webServices = Layer.mergeAll(
   githubAppFromEnvironment,
   integrationConnectFromEnvironment,
   webLogger,
-  modelCatalogLayer.pipe(Layer.provide(FetchHttpClient.layer)),
+  modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run at this edge may require. */

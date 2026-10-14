@@ -14,7 +14,7 @@ import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import type { AccountAppSeams } from "../account-app.js";
 import { resolveHostedUserId } from "./bearer.js";
 import { deploymentEveOrigin } from "./brain-host/eve-origin.js";
-import { ownKeyProviders } from "./coder-host/account-keys.js";
+import { anthropicFastAccess } from "./coder-host/account-keys.js";
 
 /**
  * The account group's seams over this deployment's real database. The
@@ -38,7 +38,7 @@ export function accountAppSeams(): AccountAppSeams {
     standingSessions: (userId) => standingSessionsOf(userId),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
-    ownKeyProviders,
+    anthropicFastAccess,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,
     writePlanTemplate,

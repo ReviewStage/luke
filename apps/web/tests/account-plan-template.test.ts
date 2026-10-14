@@ -34,7 +34,7 @@ import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
-import { ownKeyProviders } from "../server/hosted/coder-host/account-keys";
+import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
@@ -117,7 +117,7 @@ const openAccounts = Effect.gen(function* () {
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
-    ownKeyProviders,
+    anthropicFastAccess,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,
     writePlanTemplate,

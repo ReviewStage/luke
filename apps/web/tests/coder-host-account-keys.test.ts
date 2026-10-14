@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { parseKeyRing, sealProviderKey } from "@sidecar/database/models/provider-key-seal";
-import { saveProviderKey } from "@sidecar/database/models/provider-key-store";
-import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
+import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  FAST_ACCESS,
+  PROVIDER_KEY_PROVIDER,
+  type ProviderKeyProvider,
+} from "@sidecar/hosted/provider-key-wire";
 import { jsonResponse } from "@sidecar/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";
@@ -17,7 +22,9 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * account's own key where it saved one and Luke's where it did not, a step
  * refused rather than moved onto Luke's key where the account's cannot be
  * read, the row's status kept as the provider answers the account's key,
- * and every step on Luke's key counted on the account's meter.
+ * a fast step run on the account's key with what it showed of the key's
+ * organization kept on the row, and every step on Luke's key counted on
+ * the account's meter.
  *
  * Synthetic keys and accounts; the key-encryption keys are fixed bytes
  * written for this file.
@@ -103,12 +110,13 @@ const meter = (userId: string) => ({
   report: () => undefined,
 });
 
-/** One step's model for the account, as the host would select it, over the provider given. */
+/** One step's model for the account, as the host would select it, over the provider given, on the provider's choice above or the one named. */
 async function stepModel(
   userId: string,
   providerId: ProviderKeyProvider,
   fetch: typeof globalThis.fetch,
   held: { readonly ring: string | undefined } = { ring: RING.HELD },
+  choice: ModelChoice = CHOICE[providerId],
 ) {
   const { ring } = held;
   const keys = await database.run(
@@ -119,17 +127,19 @@ async function stepModel(
       run: database.run,
     }),
   );
-  return coderModel(CHOICE[providerId], { ...keys, fetch }, WINDOW, async () => undefined);
+  return coderModel(choice, { ...keys, fetch }, WINDOW, async () => undefined);
 }
 
 /** Runs one step on the model, answering its text or the failure's message. */
 async function step(selected: Awaited<ReturnType<typeof stepModel>>): Promise<string> {
   if (Result.isFailure(selected)) return assert.fail(`no model: ${selected.failure}`);
+  const { providerOptions } = selected.success.modelOptions;
   try {
     const answer = await generateText({
       model: selected.success.model,
       prompt: "Go.",
       maxRetries: 0,
+      ...(providerOptions === undefined ? undefined : { providerOptions }),
     });
     return answer.text;
   } catch (failure) {
@@ -168,4 +178,56 @@ test("an account's key the ring cannot open, or one on a deployment holding no r
   assert.deepEqual(otherRing, Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE));
   assert.deepEqual(noRing, Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE));
   assert.deepEqual(reached.keys, [], "no provider was reached on any key");
+});
+
+/** Anthropic's refusal of a fast request for an organization fast mode was never enabled for, as production met it. */
+const FAST_LIMIT_ZERO = {
+  type: "error",
+  error: {
+    type: "rate_limit_error",
+    message:
+      "This request would exceed your organization's rate limit of 0 fast mode input tokens per minute (model: claude-opus-5-5).",
+  },
+};
+
+const FAST_CHOICE = { model: "anthropic/claude-opus-5.5-fast", effort: "high" } as const;
+
+/** The fast access the account's Anthropic row now says. */
+async function rowFastAccess(userId: string) {
+  const rows = await database.run(listProviderKeyRows(userId));
+  return rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC)?.fastAccess;
+}
+
+test("a fast step runs on the account's own key, and the key's row keeps what it showed: enabled where the fast call ran, not enabled where Anthropic refused it at a fast limit of 0 and the step answered at standard speed", async () => {
+  const granted = await accountWithKeys({
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+  });
+  const refused = await accountWithKeys({
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+  });
+  const fast = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
+  const limitZero = provider([
+    jsonResponse(FAST_LIMIT_ZERO, 429),
+    jsonResponse(ANTHROPIC_MESSAGE, 200),
+  ]);
+
+  const ran = await step(
+    await stepModel(granted, PROVIDER_KEY_PROVIDER.ANTHROPIC, fast.fetch, undefined, FAST_CHOICE),
+  );
+  const fellBack = await step(
+    await stepModel(
+      refused,
+      PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      limitZero.fetch,
+      undefined,
+      FAST_CHOICE,
+    ),
+  );
+
+  assert.equal(ran, "Done.");
+  assert.equal(fellBack, "Done.");
+  assert.deepEqual(fast.keys, [ACCOUNT_KEY.ANTHROPIC]);
+  assert.deepEqual(limitZero.keys, [ACCOUNT_KEY.ANTHROPIC, ACCOUNT_KEY.ANTHROPIC]);
+  assert.equal(await rowFastAccess(granted), FAST_ACCESS.ENABLED);
+  assert.equal(await rowFastAccess(refused), FAST_ACCESS.NOT_ENABLED);
 });

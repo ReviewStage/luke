@@ -162,6 +162,27 @@ const updateStatus = SqlSchema.void({
     ),
 });
 
+const updateFastAccess = SqlSchema.void({
+  Request: Schema.Struct({
+    ...KeySchema.fields,
+    sealedKey: Schema.String,
+    fastAccess: FastAccessSchema,
+  }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ fastAccess: write.fastAccess })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.sealedKey, write.sealedKey),
+          ),
+        ),
+    ),
+});
+
 /** The wrap moved only where the row still holds the seal it was read with, so a key replaced meanwhile keeps its own. */
 const rewrapRow = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -223,6 +244,16 @@ export function setProviderKeyStatus(
   now: Date,
 ): PlanStoreEffect<void> {
   return updateStatus({ userId, provider, sealedKey, status, now });
+}
+
+/** Writes what a fast call on the key a step ran on showed of its organization, where the row still holds that key. */
+export function setProviderKeyFastAccess(
+  userId: string,
+  provider: ProviderKeyProvider,
+  sealedKey: string,
+  fastAccess: FastAccess,
+): PlanStoreEffect<void> {
+  return updateFastAccess({ userId, provider, sealedKey, fastAccess });
 }
 
 /** Every stored key of every account, sealed, for the rewrap alone. */

@@ -5,7 +5,12 @@ import {
   type ProviderKeyUnreadable,
 } from "@sidecar/database/models/provider-key-seal";
 import { MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
-import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import {
+  FAST_ACCESS,
+  type FastAccess,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeyStatus,
+} from "@sidecar/hosted/provider-key-wire";
 import {
   APICallError,
   type LanguageModel,
@@ -32,13 +37,15 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * planning brain does, and Anthropic for its summarized thinking on a
  * model that thinks whether asked or not. A fast version runs as its base
  * model asked for Anthropic's fast speed, the SDK sending the beta header
- * that speed needs, and on Luke's key alone: Anthropic's fast mode is a
- * research preview it grants organization by organization, so a step on an
- * account's own key is refused before any request. A fast call Anthropic
- * refuses with a 429, whether its organization was never granted fast mode
- * or is past its fast rate, runs again at standard speed, as Anthropic's
- * docs and Claude Code fall back, and the step's turn is marked so, which
- * its card says. The agent's
+ * that speed needs, on whichever key the step runs on: Anthropic's fast
+ * mode is a research preview it grants organization by organization, and
+ * the catalog offers it by whether the key's organization was granted it
+ * (`../model-catalog.ts`). A fast call Anthropic refuses with a 429,
+ * whether its organization was never granted fast mode or is past its fast
+ * rate, runs again at standard speed, as Anthropic's docs and Claude Code
+ * fall back, and the step's turn is marked so, which its card says; on the
+ * account's own key, what the fast call showed of its organization is
+ * written on the key's row, which the catalog then offers by. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
  * same provider door, always on Luke's own Anthropic key. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
@@ -72,6 +79,9 @@ const ANTHROPIC_SHOWN_THINKING = { type: "adaptive", display: "summarized" } as 
  * no one decided that. The next family that thinks by default joins here.
  */
 const THINKS_BY_DEFAULT = /^claude-[a-z]+-5(?:-|$)/u;
+
+/** Anthropic's words, in a 429's body, for an organization fast mode was never enabled for: a fast limit of 0. */
+const ANTHROPIC_FAST_LIMIT_ZERO = /rate limit of 0 fast mode/iu;
 
 /** Anthropic's word for a step on a model's fast mode. */
 const ANTHROPIC_FAST_SPEED = "fast";
@@ -107,6 +117,10 @@ interface AccountKeyStanding {
   readonly status: ProviderKeyStatus;
   /** Writes the status the provider's answer showed; a write that fails is the row's loss, never the step's. */
   readonly report: (status: ProviderKeyStatus) => Promise<void>;
+  /** Whether the key's organization may run fast mode, as its row says now; nothing where no fast request has answered. */
+  readonly fastAccess?: FastAccess;
+  /** Writes what a fast call showed of the key's organization, on the same terms as `report`. */
+  readonly reportFast?: (access: FastAccess) => Promise<void>;
 }
 
 /** The key one provider's steps run on, and, where it is the account's own, its standing. */
@@ -236,23 +250,35 @@ function atStandardSpeed(params: ModelCallOptions): ModelCallOptions {
  * it, so the meter in front counts the step once. A standard call that fails
  * fails the step as any call would. The prompt cache is keyed by speed, so
  * the standard call reads none of what the fast calls before it cached.
+ * What the fast call showed of the key's organization is handed to
+ * `onFastAccess`: granted where it ran, never granted where Anthropic
+ * refused it against a fast limit of 0, and nothing for a fast rate spent.
  */
-function fastFallbackMiddleware(onFastRefused: () => Promise<void>): LanguageModelMiddleware {
+function fastFallbackMiddleware(
+  onFastRefused: () => Promise<void>,
+  onFastAccess: (access: FastAccess) => Promise<void>,
+): LanguageModelMiddleware {
+  // A mark or a row's write is no reason to fail a step that answered.
+  const settle = (written: Promise<void>) => written.catch(() => undefined);
   const settled = async <A>(
     fast: () => PromiseLike<A>,
     standard: () => PromiseLike<A>,
   ): Promise<A> => {
     try {
-      return await fast();
+      const answer = await fast();
+      await settle(onFastAccess(FAST_ACCESS.ENABLED));
+      return answer;
     } catch (failure) {
       const refused =
         APICallError.isInstance(failure) &&
         failure.statusCode === PROVIDER_REFUSAL_STATUS.TOO_MANY_REQUESTS;
       if (!refused) throw failure;
+      if (ANTHROPIC_FAST_LIMIT_ZERO.test(failure.responseBody ?? "")) {
+        await settle(onFastAccess(FAST_ACCESS.NOT_ENABLED));
+      }
     }
     const answer = await standard();
-    // The mark is the turn card's note and no reason to fail a step that answered.
-    await onFastRefused().catch(() => undefined);
+    await settle(onFastRefused());
     return answer;
   };
   return {
@@ -260,6 +286,16 @@ function fastFallbackMiddleware(onFastRefused: () => Promise<void>): LanguageMod
       settled(doGenerate, () => model.doGenerate(atStandardSpeed(params))),
     wrapStream: ({ doStream, model, params }) =>
       settled(doStream, () => model.doStream(atStandardSpeed(params))),
+  };
+}
+
+/** Where what a fast call showed is written: the account's own key's row where it changes what the row says; nowhere on Luke's key, which the catalog asks of itself. */
+function fastAccessReport(
+  standing: AccountKeyStanding | undefined,
+): (access: FastAccess) => Promise<void> {
+  return async (access) => {
+    if (standing?.reportFast === undefined || access === standing.fastAccess) return;
+    await standing.reportFast(access);
   };
 }
 
@@ -284,7 +320,10 @@ function modelOnKey(
       ? createAnthropic(settings)(named.modelId)
       : createOpenAI(settings).responses(named.modelId);
   const model = named.fast
-    ? wrapLanguageModel({ model: provided, middleware: fastFallbackMiddleware(onFastRefused) })
+    ? wrapLanguageModel({
+        model: provided,
+        middleware: fastFallbackMiddleware(onFastRefused, fastAccessReport(key.account)),
+      })
     : provided;
   if (key.account === undefined) {
     return key.meter === undefined ? model : meteredModel(model, key.meter);
@@ -309,9 +348,8 @@ export function titleModel(
 
 /**
  * The choice as a step runs it, or why it cannot: a provider Luke does not
- * run, a fast version Luke cannot ask its provider for or would run on the
- * account's own key, an account's key that cannot be read, or no key at
- * all. `onFastRefused` marks the step's turn where a fast call of it ran at
+ * run, a fast version Luke cannot ask its provider for, an account's key
+ * that cannot be read, or no key at all. `onFastRefused` marks the step's turn where a fast call of it ran at
  * standard speed instead.
  */
 export function coderModel(
@@ -327,7 +365,6 @@ export function coderModel(
   const key = named.provider === MODEL_PROVIDER.ANTHROPIC ? keys.anthropic : keys.openAi;
   if (key === undefined) return Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY);
   if (key === PROVIDER_KEY_UNREADABLE) return Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE);
-  if (named.fast && key.account !== undefined) return Result.fail(CODER_REFUSAL.FAST_ON_OWN_KEY);
   return Result.succeed({
     model: modelOnKey(named, key, keys.fetch, onFastRefused),
     modelContextWindowTokens: contextWindowTokens,
