@@ -20,18 +20,18 @@ const SLACK = 0.02;
 const FILL = 0.8;
 
 /** How many numbers each path command takes per segment. */
-const ARITY: Readonly<Record<string, number>> = {
-  M: 2,
-  L: 2,
-  T: 2,
-  H: 1,
-  V: 1,
-  C: 6,
-  S: 4,
-  Q: 4,
-  A: 7,
-  Z: 0,
-};
+const ARITY = new Map([
+  ["M", 2],
+  ["L", 2],
+  ["T", 2],
+  ["H", 1],
+  ["V", 1],
+  ["C", 6],
+  ["S", 4],
+  ["Q", 4],
+  ["A", 7],
+  ["Z", 0],
+]);
 
 interface Bounds {
   minX: number;
@@ -57,7 +57,7 @@ function pathBounds(d: string, start: Bounds | undefined): Bounds | undefined {
   for (const [, letter = "", args = ""] of d.matchAll(/([MLHVCSQTAZ])([^MLHVCSQTAZ]*)/gi)) {
     const command = letter.toUpperCase();
     const relative = letter !== command;
-    const arity = ARITY[command];
+    const arity = ARITY.get(command);
     assert.ok(arity !== undefined, `unknown path command ${letter}`);
     if (command === "Z") {
       [x, y] = [startX, startY];
