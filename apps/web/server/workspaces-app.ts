@@ -7,7 +7,9 @@ import {
   type Workspace,
   workspaceOf,
 } from "@sidecar/database/models/workspace-store";
+import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
 import {
+  WORKSPACE_MEMBERS_QUERY,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
 } from "@sidecar/hosted/workspace-wire";
@@ -19,6 +21,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
+import { unparsedWire } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { logGitHubReadFailure } from "./github/github-refusal.js";
 import {
@@ -38,6 +41,7 @@ import {
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import type { StoreFailure } from "./hosted/store-failure.js";
+import { listMembers } from "./hosted/workspace-members.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -54,12 +58,15 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * which the Setup URL spends (`github-install-app.ts`); and
  * `.../disconnect` removes the workspace's connected installation; both take
  * an owner or admin of the workspace, and a workspace the account is not in
- * answers as none does. The bearer is resolved before any row is touched.
+ * answers as none does. `GET /api/workspaces/members` answers a workspace's
+ * members to a member of it; a personal one, whose members nobody manages,
+ * is not permitted. The bearer is resolved before any row is touched.
  */
 
 const WORKSPACES_PATH = "/api/workspaces";
 const GITHUB_CONNECT_PATH = "/api/workspaces/github/connect";
 const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
+const MEMBERS_PATH = "/api/workspaces/members";
 
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 
@@ -193,7 +200,28 @@ const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(fu
   });
 });
 
-/** The group: the workspaces path, the two GitHub paths, and the hosted vocabulary's own refusal for any other. */
+/** GET: a workspace's members, to a member of it; a personal one is not permitted. */
+const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const userId = yield* accountOf(seams);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.getAll(WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID);
+  const asked = readEither(workspaceIdSchema)(unparsedWire(named[0]));
+  if (named.length !== 1 || Result.isFailure(asked)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const workspace = yield* answeredWorkspace(userId, asked.success);
+  if (workspace.personal) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const members = yield* hostedStoreOrUnavailable(listMembers(workspace.id));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+});
+
+/** The group: the workspaces path, the two GitHub paths, the members path, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
@@ -201,6 +229,7 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH, hostedRefusing(workspacesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, GITHUB_CONNECT_PATH, hostedRefusing(connectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, GITHUB_DISCONNECT_PATH, hostedRefusing(disconnectEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, MEMBERS_PATH, hostedRefusing(membersEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

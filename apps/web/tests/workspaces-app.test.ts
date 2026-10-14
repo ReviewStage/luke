@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import { ensurePersonalWorkspace } from "@sidecar/database/models/workspace-store";
 import { member, organization, user } from "@sidecar/database/schemas/auth";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
@@ -498,6 +499,115 @@ it.effect("a plugin that refuses the personal workspace is answered as unavailab
           status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
           body: { error: HOSTED_API_ERROR.UNAVAILABLE },
         },
+      );
+    }).pipe(Effect.provide(database));
+  }),
+);
+
+/** The Better Auth API the plugin's tests stand over. */
+type WorkspacePluginApi = Effect.Success<typeof openWorkspacePlugin>["api"];
+
+/** A GitHub the account reaches nothing on: a members read asks GitHub nothing. */
+const NO_GITHUB_TO_READ = githubReaching([]);
+
+/** Where a workspace's members are read, the workspace named in the query. */
+const membersAt = (workspaceId: string) =>
+  `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${new URLSearchParams({ workspaceId })}`;
+
+/** A members read under the bearer's account, as its status and body. */
+const readMembers = (seams: WorkspaceSeams, userId: string, path: string) =>
+  Effect.map(send(seams, NO_GITHUB_TO_READ, bearerRequest(path, userId)), ({ status, body }) => ({
+    status,
+    body,
+  }));
+
+const refusedAs = (status: number, error: string) => ({ status, body: { error } });
+
+/** A shared workspace the owner makes through the plugin's server-only create, its teammates added under their roles through its server-only add. */
+const openTeam = (
+  api: WorkspacePluginApi,
+  ownerId: string,
+  teammates: readonly { readonly userId: string; readonly role: "admin" | "member" }[],
+) =>
+  Effect.gen(function* () {
+    const made = yield* Effect.promise(() =>
+      api.createOrganization({ body: { name: "Acme", slug: `acme-${ownerId}`, userId: ownerId } }),
+    );
+    for (const teammate of teammates) {
+      yield* Effect.promise(() =>
+        api.addMember({
+          body: { userId: teammate.userId, organizationId: made.id, role: teammate.role },
+        }),
+      );
+    }
+    return made.id;
+  });
+
+it.effect("a member reads the workspace's members, owners first, then admins, then members", () =>
+  Effect.gen(function* () {
+    const { api, seams, database } = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const grace = yield* openGithubAccount("Grace Hopper");
+      const alan = yield* openGithubAccount("Alan Turing");
+      const acme = yield* openTeam(api, ada, [
+        { userId: grace, role: "member" },
+        { userId: alan, role: "admin" },
+      ]);
+
+      const answered = yield* readMembers(seams, grace, membersAt(acme));
+
+      assert.deepEqual(answered, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: {
+          members: [
+            { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            { userId: alan, name: "Alan Turing", email: `${alan}@luke.test`, role: "admin" },
+            { userId: grace, name: "Grace Hopper", email: `${grace}@luke.test`, role: "member" },
+          ],
+        },
+      });
+    }).pipe(Effect.provide(database));
+  }),
+);
+
+it.effect(
+  "an account outside the workspace, or naming no workspace, reads none of its members",
+  () =>
+    Effect.gen(function* () {
+      const { api, seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(api, ada, []);
+
+        const outsider = yield* readMembers(seams, mallory, membersAt(acme));
+        const nowhere = yield* readMembers(seams, ada, membersAt("org-nowhere"));
+        const unnamed = yield* readMembers(seams, ada, HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS);
+
+        const notFound = refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(outsider, notFound);
+        assert.deepEqual(nowhere, notFound);
+        assert.deepEqual(
+          unnamed,
+          refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect("a personal workspace's members are not read", () =>
+  Effect.gen(function* () {
+    const { seams, database } = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const personal = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, seams));
+
+      const answered = yield* readMembers(seams, ada, membersAt(personal));
+
+      assert.deepEqual(
+        answered,
+        refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
       );
     }).pipe(Effect.provide(database));
   }),

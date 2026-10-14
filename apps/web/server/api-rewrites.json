@@ -236,6 +236,10 @@
     "dest": "/api/default.js?route=workspaces/github/disconnect"
   },
   {
+    "src": "/api/workspaces/members",
+    "dest": "/api/default.js?route=workspaces/members"
+  },
+  {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   }

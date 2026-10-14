@@ -271,6 +271,8 @@ const EFFECT_MODULE_SCHEMAS = {
     workspaceCreateRequestSchema: workspaceWire.workspaceCreateRequestSchema,
     workspaceGithubRequestSchema: workspaceWire.workspaceGithubRequestSchema,
     workspaceGithubConnectAnswerSchema: workspaceWire.workspaceGithubConnectAnswerSchema,
+    workspaceMemberSchema: workspaceWire.workspaceMemberSchema,
+    workspaceMembersAnswerSchema: workspaceWire.workspaceMembersAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;
 
