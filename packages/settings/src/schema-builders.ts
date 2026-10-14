@@ -209,8 +209,8 @@ export function choiceSetting<
 /**
  * A stored chord. Every hotkey is the same setting three times: the same
  * guard, the same reading for a count — a deleted key counts as off — and no
- * description, because the Shortcuts page draws the registered chord by hand
- * rather than as a schema row. The id is listed all the same, so the chord's
+ * description, because the Voice page draws the registered chord by hand
+ * rather than as a schema row, and resets it with the page's other settings. The id is listed all the same, so the chord's
  * page is named and a change to it can be counted.
  */
 export function hotkeySetting<Field extends string, Id extends AppSettingId>(spec: {
@@ -223,10 +223,10 @@ export function hotkeySetting<Field extends string, Id extends AppSettingId>(spe
     field: spec.field,
     default: undefined,
     guard: hotkey,
-    page: SETTINGS_PAGE.SHORTCUTS,
+    page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.MAIN,
     order: spec.order,
-    resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
+    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: spec.sideEffect,
     rows: SETTING_ROWS.BESPOKE,
     ids: [spec.id],

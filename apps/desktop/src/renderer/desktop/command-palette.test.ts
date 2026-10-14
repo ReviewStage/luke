@@ -101,20 +101,26 @@ function press(listed: string): void {
   act(() => row.click());
 }
 
+/** The Settings pages in the sidebar's order, which the palette lists them in. */
+const SETTINGS_PAGES = [
+  "Account",
+  "Workspace",
+  "Coding agents",
+  "Integrations",
+  "Plan template",
+  "Voice",
+  "Appearance",
+  "Notifications",
+  "This Mac",
+  "About",
+  "Keyboard shortcuts",
+];
+
 test("the Settings filter lists every Settings page by the sidebar's names, ahead of the settings", () => {
   openPalette();
   chooseFilter("Settings");
 
-  assert.deepEqual(rows().slice(0, 8), [
-    "General",
-    "Workspace",
-    "Voice",
-    "Appearance",
-    "Keyboard shortcuts",
-    "Plan template",
-    "Coding agents",
-    "Integrations",
-  ]);
+  assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
 });
 
 test("a page is found by its name, above every setting the query finds", () => {
@@ -125,15 +131,8 @@ test("a page is found by its name, above every setting the query finds", () => {
 
   // Note that the Settings shortcut's own row scores higher on the word than
   // any page does, and the pages still come first.
-  assert.deepEqual(rows().slice(0, 9), [
-    "General",
-    "Workspace",
-    "Voice",
-    "Appearance",
-    "Keyboard shortcuts",
-    "Plan template",
-    "Coding agents",
-    "Integrations",
+  assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length + 1), [
+    ...SETTINGS_PAGES,
     "Settings · Keyboard shortcuts",
   ]);
   type("coding");

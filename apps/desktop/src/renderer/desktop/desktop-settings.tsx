@@ -37,14 +37,14 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * Settings as a desktop app lays them out: the sidebar turns into the list of
  * pages, with the way back to plans at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
- * are the panel's own, drawn by `SettingsPanel`; its front-page index, with
- * the Voice row's attention mark, and its back buttons are this list's job
- * here. The page has no top bar: its title heads its column, under the
- * window's drag strip, and a page's reset ends the title's line. The plan
- * template is the one page drawn apart from the panel: it is a plan's page,
- * document and all (`../settings/plan-template-page.tsx`), and its version
- * history takes the whole window as a plan's does, Back and Escape leaving it
- * for the page.
+ * are the panel's own, drawn by `SettingsPanel`, and this list is the one
+ * index of them, the Voice row wearing its attention mark. Settings opens on
+ * Account, the list's first page. The page has no top bar: its title heads
+ * its column, under the window's drag strip, and a page's reset ends the
+ * title's line. The plan template is the one page drawn apart from the
+ * panel: it is a plan's page, document and all
+ * (`../settings/plan-template-page.tsx`), and its version history takes the
+ * whole window as a plan's does, Back and Escape leaving it for the page.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -90,11 +90,9 @@ export function DesktopSettings({
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
   const open = (view: SettingsView) => {
-    if (view !== SETTINGS_VIEW.ROOT) {
-      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
-        settings_view: SETTINGS_VIEW_COUNTED_AS[view],
-      });
-    }
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+      settings_view: SETTINGS_VIEW_COUNTED_AS[view],
+    });
     settings.onViewChange(view);
   };
   const changeQuery = (next: string) => {
@@ -201,7 +199,8 @@ export function DesktopSettings({
       ) : (
         <section className="settings-page" aria-label={shown.title}>
           <div className="desktop-drag-strip" />
-          <div className="settings-page-scroll">
+          {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
+          <div key={settings.view} className="settings-page-scroll">
             <header className="settings-page-head">
               <h1 className="settings-page-title">{shown.title}</h1>
               {reset}

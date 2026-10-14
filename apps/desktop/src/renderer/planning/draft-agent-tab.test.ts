@@ -164,7 +164,7 @@ test("a Start GitHub refused points to Settings, and Open Settings opens the acc
   await tab.press("Open Settings");
 
   assert.deepEqual(tab.links, [
-    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
   ]);
   assert.deepEqual(
     sent.filter(
@@ -243,7 +243,7 @@ test("the MCP popover's GitHub row opens Settings at Connected accounts and sign
   await settle();
 
   assert.deepEqual(tab.links, [
-    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
   ]);
   assert.equal(document.querySelector(".agent-servers-row"), null, "the popover gives way");
   assert.equal(

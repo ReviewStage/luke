@@ -176,7 +176,7 @@ test("GitHub, granted by the account's own GitHub, offers Connect GitHub, which 
   });
 
   assert.deepEqual(links, [
-    { page: SETTINGS_VIEW.ROOT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
+    { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.CONNECTED_ACCOUNTS },
   ]);
   assert.equal(
     sent.some((request) => request.kind === ACT_KIND.ACCOUNT_SIGN_IN_AGAIN),

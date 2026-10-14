@@ -17,7 +17,6 @@ import type { SettingsWrites } from "./writes";
 const RESET_NOTES = {
   [SETTINGS_RESET_SCOPE.VOICE]: "Voice settings reset",
   [SETTINGS_RESET_SCOPE.APPEARANCE]: "Appearance settings reset",
-  [SETTINGS_RESET_SCOPE.SHORTCUTS]: "Shortcuts reset",
 } as const satisfies Record<SettingsResetScope, string>;
 
 /** What the toast says when an Undo could not write a setting back. */
@@ -138,15 +137,12 @@ function ResetPageButton({
 }
 
 /**
- * Which page carries which group's reset.
- * Connections is absent rather than empty: the page holds keys and rows that
- * are not settings, and its one resettable group, Workspaces, carries its own
- * control on its own heading instead.
+ * Which page carries which group's reset. The Voice page's takes the talk and
+ * stop keys with the rest of the page.
  */
 const PAGE_RESET = {
   [SETTINGS_VIEW.VOICE]: SETTINGS_RESET_SCOPE.VOICE,
   [SETTINGS_VIEW.APPEARANCE]: SETTINGS_RESET_SCOPE.APPEARANCE,
-  [SETTINGS_VIEW.SHORTCUTS]: SETTINGS_RESET_SCOPE.SHORTCUTS,
 } satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 
 /** The reset a page's title line carries, absent while the page stands at its defaults. */
