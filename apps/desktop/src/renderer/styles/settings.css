@@ -248,10 +248,10 @@
   line-height: 1.4;
 }
 
-/* The panel's switches. On is the palette connected and complete
-   already use, so an item that is drawn reads the same way a provider that is
-   reachable does. Only the thumb moves, only by transform, and on
-   `--spring-fast` — the bounce every small element in the app rides. */
+/* The panel's switches. On is the accent (`--switch-on`), so a switch reads
+   as the primary button beside it does. Only the thumb moves, only by
+   transform, and on `--spring-fast` — the bounce every small element in the
+   app rides. */
 .switch {
   display: inline-flex;
   width: 34px;
