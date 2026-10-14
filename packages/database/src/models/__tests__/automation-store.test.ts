@@ -16,6 +16,7 @@ import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
+import { personalWorkspace } from "../../schemas/personal-workspace.js";
 import { plan } from "../../schemas/plan.js";
 import { getTestDB } from "../../testing/index.js";
 import {
@@ -159,6 +160,50 @@ it.layer(getTestDB())("the automation store", (it) => {
           "the automation follows its plan",
         );
         assert.deepEqual([older.organizationId, older.repositories], [elsewhere, ["acme/moved"]]);
+      }),
+  );
+
+  it.effect(
+    "a workspace automation whose plan moves into a personal workspace becomes personal, as everything there is",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const shared = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), scope: AUTOMATION_SCOPE.WORKSPACE }),
+        );
+        const personal = randomUUID();
+        const now = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db.insert(organization).values({
+            id: personal,
+            name: "Personal",
+            slug: `personal-${personal}`,
+            createdAt: now,
+          }),
+        );
+        yield* Database.use((db) =>
+          db.insert(member).values({
+            id: randomUUID(),
+            organizationId: personal,
+            userId: owner,
+            role: "owner",
+            createdAt: now,
+          }),
+        );
+        yield* Database.use((db) =>
+          db
+            .insert(personalWorkspace)
+            .values({ userId: owner, organizationId: personal, createdAt: now }),
+        );
+
+        yield* updatePlan(owner, planId, { organizationId: personal });
+
+        const moved = Option.getOrThrow(yield* readAutomation(owner, shared.id));
+        assert.deepEqual(
+          [moved.organizationId, moved.scope],
+          [personal, AUTOMATION_SCOPE.PERSONAL],
+        );
       }),
   );
 

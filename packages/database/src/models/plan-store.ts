@@ -1,3 +1,4 @@
+import { AUTOMATION_SCOPE } from "@sidecar/features/automation-wire";
 import type { PlanSectionWriter } from "@sidecar/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
 import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/features/plan-template";
@@ -8,12 +9,13 @@ import {
   type PlanSectionEdit,
   type PlanSummary,
 } from "@sidecar/features/plan-wire";
-import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
@@ -690,7 +692,8 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
 /**
  * The plan's automations moved along with it: their workspace and their
  * repository follow the plan's, so a plan moved to another workspace, or
- * given another repository, leaves no automation naming the old one.
+ * given another repository, leaves no automation naming the old one; one
+ * moved into a personal workspace becomes personal, as everything there is.
  */
 const followingAutomations = SqlSchema.void({
   Request: Schema.Struct({
@@ -702,7 +705,12 @@ const followingAutomations = SqlSchema.void({
     Database.use((db) =>
       db
         .update(automation)
-        .set({ organizationId, repositories: repository === null ? [] : [repository] })
+        .set({
+          organizationId,
+          repositories: repository === null ? [] : [repository],
+          // A personal workspace holds nothing shared, so an automation moved into one becomes its creator's.
+          scope: sql`case when exists (select 1 from ${personalWorkspace} where ${personalWorkspace.organizationId} = ${organizationId}) then ${AUTOMATION_SCOPE.PERSONAL} else ${automation.scope} end`,
+        })
         .where(eq(automation.planId, planId)),
     ),
 });
