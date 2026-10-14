@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@luke/ui";
+import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon, UserIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   LifeBuoyIcon,
@@ -16,7 +16,6 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { PersonAvatar } from "../person-avatar";
-import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";

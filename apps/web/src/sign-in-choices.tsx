@@ -1,6 +1,6 @@
+import { ProviderMark } from "@luke/ui";
 import type { createAuthClient } from "better-auth/react";
 import { useState } from "react";
-import { GitHubMark, GoogleMark } from "./account-marks";
 import { AUTH_BUTTON } from "./auth-surface";
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./sign-in-provider";
 
@@ -10,11 +10,6 @@ import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./s
  * A sign-in returns the browser to the address it left, so the page carries
  * on where it was once Better Auth hands it a session.
  */
-
-const PROVIDER_MARK = {
-  [SOCIAL_PROVIDER.GOOGLE]: GoogleMark,
-  [SOCIAL_PROVIDER.GITHUB]: GitHubMark,
-} as const satisfies Record<SocialProvider, typeof GitHubMark>;
 
 /** The one call the buttons make, which every Better Auth client has. */
 type SocialSignIn = Pick<ReturnType<typeof createAuthClient>, "signIn">;
@@ -38,7 +33,6 @@ export function SignInChoices({ client }: { readonly client: SocialSignIn }): Re
     <>
       <div className="mt-8 mb-4 grid gap-3">
         {Object.values(SOCIAL_PROVIDER).map((provider) => {
-          const Mark = PROVIDER_MARK[provider];
           return (
             <button
               key={provider}
@@ -47,7 +41,7 @@ export function SignInChoices({ client }: { readonly client: SocialSignIn }): Re
               disabled={pending !== undefined}
               onClick={() => void begin(provider)}
             >
-              <Mark className="size-[15px] shrink-0" />
+              <ProviderMark provider={provider} className="size-[15px] shrink-0" />
               {pending === provider
                 ? "Opening…"
                 : `Continue with ${SOCIAL_PROVIDER_LABEL[provider]}`}

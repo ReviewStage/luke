@@ -3,7 +3,7 @@
  * pulled from an icon set, so they share one weight and one box and are sized
  * by the headings, labels, and controls they sit in. They are ours, not
  * anyone's brand mark, so they inherit `currentColor` like any other text — a
- * provider's own mark lives in `provider-marks.tsx` and keeps its brand colour.
+ * provider's own mark lives in `marks/provider-mark.tsx` and keeps its brand colour.
  * The one exception is Luke's own mark, which is ours in both senses: it is a
  * brand mark, and it inherits `currentColor` like the rest.
  */

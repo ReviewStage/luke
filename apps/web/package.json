@@ -39,6 +39,7 @@
     "@luke/runtime": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/brand": "workspace:*",
+    "@luke/ui": "workspace:*",
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@tailwindcss/vite": "4.3.3",

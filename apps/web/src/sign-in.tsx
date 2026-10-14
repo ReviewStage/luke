@@ -1,14 +1,13 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
+import { ProviderMark } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { GitHubMark, GoogleMark } from "./account-marks";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
 import {
-  SOCIAL_PROVIDER,
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
   socialProviderFromState,
@@ -22,20 +21,6 @@ const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 function providerHint(): SocialProvider | undefined {
   return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
-}
-
-function ProviderMark({
-  provider,
-  className,
-}: {
-  provider: SocialProvider;
-  className?: string;
-}): React.JSX.Element {
-  return provider === SOCIAL_PROVIDER.GITHUB ? (
-    <GitHubMark className={className} />
-  ) : (
-    <GoogleMark className={className} />
-  );
 }
 
 function SignIn(): React.JSX.Element {

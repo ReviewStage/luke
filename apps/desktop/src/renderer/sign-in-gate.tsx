@@ -1,9 +1,8 @@
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@luke/brand";
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import { WingFace } from "@luke/ui";
+import { ProviderMark, WingFace } from "@luke/ui";
 import { useEffect, useId, useState } from "react";
-import { ProviderMark } from "./provider-marks";
 import { SpinnerRing } from "./spinner";
 
 /**
