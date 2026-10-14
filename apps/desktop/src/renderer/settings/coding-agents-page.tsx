@@ -10,6 +10,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -31,11 +32,14 @@ import {
   windowOf,
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { Segmented } from "../segmented";
+import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
+import { SwitchRow } from "./switch-row";
+import { useSettingWrite } from "./use-setting-write";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
@@ -58,7 +62,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * row is one over the two, the whole window the default, saying what it
  * costs past the standard one; a change of model keeps the standard window
  * where the next model offers two. A write is one ask of the service, the rows resting until
- * it answers and a refusal worded under them. With no account signed in
+ * it answers; Fast is a `SwitchRow` like every other settings switch, so its
+ * refusal is worded under its own row, and the other rows' under them all. With no account signed in
  * there is no default to show, and the page says so.
  */
 
@@ -76,6 +81,15 @@ const PROVIDER_NAME = {
   [MODEL_PROVIDER.ANTHROPIC]: "Anthropic",
   [MODEL_PROVIDER.OPENAI]: "OpenAI",
 } as const satisfies Record<ModelProvider, string>;
+
+/** A write the service kept. */
+const WRITE_ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/** A write the service refused or never answered. */
+const WRITE_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: PAGE_LINE.WRITE_FAILED,
+};
 
 /**
  * What the model row says under its name, where the key it runs on is the
@@ -109,8 +123,11 @@ function DefaultRows({
   /** How each provider the account holds a key of its own for last answered it. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
   busy: boolean;
-  onChange: (choice: ModelChoice) => void;
+  /** Asks the service to keep `choice`, answering whether it did. */
+  onChange: (choice: ModelChoice) => Promise<ActionResult>;
 }): React.JSX.Element {
+  // Fast's switch words its own refusal under its row; the picker's and the segments' is worded under them all.
+  const { rejection, run } = useSettingWrite(onChange);
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
   const note = modelRowNote(listed?.provider, ownKey);
@@ -170,54 +187,34 @@ function DefaultRows({
           // The pick keeps Fast where the model has a fast version, and drops it where it has none.
           const picked = offeredModels(models ?? []).find((each) => each.model.id === id);
           if (picked === undefined) return;
-          onChange(choiceAt(choiceModelId(picked, read.fast)));
+          run(choiceAt(choiceModelId(picked, read.fast)));
         }}
       />
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>{FAST_WORD}</strong>
-          {fastNote === undefined ? null : <small>{`${fastNote}.`}</small>}
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={read.fast}
-          aria-label={FAST_WORD}
-          className="switch"
-          {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_FAST)}
-          disabled={busy || base?.fast === undefined}
-          onClick={() => {
-            if (base !== undefined) onChange(choiceAt(choiceModelId(base, !read.fast)));
-          }}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
+      <SwitchRow
+        label={FAST_WORD}
+        detail={fastNote === undefined ? undefined : `${fastNote}.`}
+        checked={read.fast}
+        anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_FAST}
+        disabled={busy || base?.fast === undefined}
+        onChange={(fast) =>
+          base === undefined
+            ? Promise.resolve(WRITE_ACCEPTED)
+            : onChange(choiceAt(choiceModelId(base, fast)))
+        }
+      />
       {/* The segments wrap under the label where the row is narrow rather than clipping. */}
       <div className="settings-row settings-row-wrapping">
         <span className="settings-copy">
           <strong>Effort</strong>
         </span>
-        <fieldset
-          className="settings-segments"
-          {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
-        >
-          <legend className="visually-hidden">Effort</legend>
-          {efforts.map((effort) => (
-            <button
-              key={effort}
-              type="button"
-              className="settings-segment"
-              aria-pressed={effort === choice.effort}
-              disabled={busy}
-              onClick={() => {
-                if (effort !== choice.effort) onChange({ ...choice, effort });
-              }}
-            >
-              {effortLabel(effort)}
-            </button>
-          ))}
-        </fieldset>
+        <Segmented
+          legend="Effort"
+          options={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))}
+          value={choice.effort}
+          disabled={busy}
+          anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT}
+          onChange={(effort) => run({ ...choice, effort })}
+        />
       </div>
       {windows === undefined ? null : (
         <div className="settings-row settings-row-wrapping">
@@ -225,28 +222,23 @@ function DefaultRows({
             <strong>Context</strong>
             <small>{longWindowNote(windows)}</small>
           </span>
-          <fieldset className="settings-segments">
-            <legend className="visually-hidden">Context</legend>
-            {[
-              { id: CONTEXT_WINDOW.STANDARD, tokens: windows.standardTokens },
-              { id: CONTEXT_WINDOW.LONG, tokens: windows.longTokens },
-            ].map((each) => (
-              <button
-                key={each.id}
-                type="button"
-                className="settings-segment"
-                aria-pressed={each.id === window}
-                disabled={busy}
-                onClick={() => {
-                  if (each.id !== window) onChange(choiceOn(models ?? [], choice, each.id));
-                }}
-              >
-                {windowLabel(each.tokens)}
-              </button>
-            ))}
-          </fieldset>
+          <Segmented
+            legend="Context"
+            options={[
+              { value: CONTEXT_WINDOW.STANDARD, label: windowLabel(windows.standardTokens) },
+              { value: CONTEXT_WINDOW.LONG, label: windowLabel(windows.longTokens) },
+            ]}
+            value={window}
+            disabled={busy}
+            onChange={(each) => run(choiceOn(models ?? [], choice, each))}
+          />
         </div>
       )}
+      {rejection !== undefined ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -266,7 +258,6 @@ function CodingAgentsSection({
   const [modelsFailed, setModelsFailed] = useState(false);
   const [readFailed, setReadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
 
   // The page opening reads the default the service holds now, which a Start may just have written.
@@ -321,18 +312,15 @@ function CodingAgentsSection({
   }, [act, signedIn, attempt, keysRead, ownAnthropic, ownOpenAi]);
 
   const write = useCallback(
-    (next: ModelChoice) => {
+    (next: ModelChoice): Promise<ActionResult> => {
       setBusy(true);
-      setRejection(undefined);
-      act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, next)
+      return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, next)
         .catch(() => undefined)
         .then((answer) => {
           setBusy(false);
-          if (answer === undefined || "failure" in answer) {
-            setRejection(PAGE_LINE.WRITE_FAILED);
-            return;
-          }
+          if (answer === undefined || "failure" in answer) return WRITE_REFUSED;
           setChoice(answer.choice);
+          return WRITE_ACCEPTED;
         });
     },
     [act],
@@ -343,20 +331,13 @@ function CodingAgentsSection({
       {!signedIn ? (
         <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : choice !== undefined && (models !== undefined || modelsFailed) ? (
-        <>
-          <DefaultRows
-            choice={choice}
-            models={models}
-            ownKeys={ownKeys ?? new Map()}
-            busy={busy}
-            onChange={write}
-          />
-          {rejection !== undefined ? (
-            <p className="error-message" role="alert">
-              {rejection}
-            </p>
-          ) : null}
-        </>
+        <DefaultRows
+          choice={choice}
+          models={models}
+          ownKeys={ownKeys ?? new Map()}
+          busy={busy}
+          onChange={write}
+        />
       ) : readFailed ? (
         <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
       ) : (

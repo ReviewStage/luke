@@ -31,7 +31,9 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { ReadFailure } from "../read-failure";
+import { Segmented } from "../segmented";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
+import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
@@ -509,37 +511,22 @@ function FormField({
       return (
         <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
           <FieldName field={field} />
-          <fieldset className="settings-segments" aria-label={field.label}>
-            {(field.options ?? []).map((option) => (
-              <button
-                key={option}
-                type="button"
-                className="settings-segment"
-                aria-pressed={value === option}
-                disabled={disabled}
-                onClick={() => set(value === option ? undefined : option)}
-              >
-                {option}
-              </button>
-            ))}
-          </fieldset>
+          {/* An optional field's choice is taken back by pressing it again, its only way to be left unanswered. */}
+          <Segmented
+            legend={field.label}
+            options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
+            value={field.options?.find((option) => option === value)}
+            disabled={disabled}
+            clearable={field.required !== true}
+            onChange={set}
+          />
         </div>
       );
     case INBOX_FIELD.BOOLEAN:
       return (
         <div className="settings-row" data-inbox-field={field.type}>
           <FieldName field={field} />
-          <button
-            type="button"
-            role="switch"
-            aria-checked={value === true}
-            aria-label={field.label}
-            className="switch"
-            disabled={disabled}
-            onClick={() => set(value !== true)}
-          >
-            <span className="switch-thumb" />
-          </button>
+          <Switch checked={value === true} label={field.label} disabled={disabled} onChange={set} />
         </div>
       );
   }

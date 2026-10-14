@@ -1,6 +1,6 @@
 import type { ActionResult } from "@sidecar/wire";
 import { useId } from "react";
-import { searchAnchorProps } from "../settings-anchors";
+import { Switch } from "../switch";
 import { ChangedMark } from "./marks";
 import { useSettingWrite } from "./use-setting-write";
 
@@ -16,6 +16,7 @@ export function SwitchRow({
   checked,
   anchor,
   changed,
+  disabled,
   onChange,
 }: {
   label: string;
@@ -25,6 +26,8 @@ export function SwitchRow({
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
+  /** Whether the switch rests for a reason of its caller's, beside its own write in flight. */
+  disabled?: boolean;
   onChange: (enabled: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
@@ -39,19 +42,14 @@ export function SwitchRow({
           </strong>
           {detail ? <small id={detailId}>{detail}</small> : null}
         </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-label={label}
-          aria-describedby={detail ? detailId : undefined}
-          className="switch"
-          {...(anchor ? searchAnchorProps(anchor) : undefined)}
-          disabled={busy}
-          onClick={() => run(!checked)}
-        >
-          <span className="switch-thumb" />
-        </button>
+        <Switch
+          checked={checked}
+          label={label}
+          describedBy={detail ? detailId : undefined}
+          anchor={anchor}
+          disabled={busy || disabled}
+          onChange={run}
+        />
       </div>
       {rejection ? (
         <p className="error-message" role="alert">

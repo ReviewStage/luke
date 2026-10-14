@@ -248,10 +248,12 @@
   line-height: 1.4;
 }
 
-/* The panel's switches. On is the accent (`--switch-on`), so a switch reads
-   as the primary button beside it does. Only the thumb moves, only by
-   transform, and on `--spring-fast` — the bounce every small element in the
-   app rides. */
+/* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so
+   a switch reads as the primary button beside it does. Its state is keyed on
+   its own `data-checked`, so a switch drawn inside a row button that carries
+   `aria-checked` (a menu's switch row) takes this one rule too. Only the
+   thumb moves, only by transform, and on `--spring-fast` — the bounce every
+   small element in the app rides. */
 .switch {
   display: inline-flex;
   width: 34px;
@@ -263,7 +265,7 @@
   transition: background-color var(--duration-hover) ease;
 }
 
-.switch[aria-checked="true"] {
+.switch[data-checked="true"] {
   background: var(--switch-on);
 }
 
@@ -280,7 +282,7 @@
   transition: transform var(--duration-fast) var(--spring-fast);
 }
 
-.switch[aria-checked="true"] .switch-thumb {
+.switch[data-checked="true"] .switch-thumb {
   transform: translateX(14px);
 }
 
@@ -356,8 +358,8 @@
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
-/* A short set of values as one segmented control, in the look the side
-   panel's tabs have: the chosen segment filled, the rest quiet until
+/* A short set of values as one segmented control (`segmented.tsx`), in the
+   look the side panel's tabs have: the chosen segment filled, the rest quiet until
    hovered. The row it stands in wraps, so a narrow page drops the control
    under its label rather than clipping it or running it under the chip
    column. */
@@ -369,20 +371,18 @@
   flex: 1 1 200px;
 }
 
-.settings-segments {
+.segmented {
   display: inline-flex;
   min-inline-size: 0;
   flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 2px;
-  margin: 0;
   padding: var(--space-2);
-  border: 0;
   border-radius: var(--control-radius);
   background: var(--raised);
 }
 
-.settings-segment {
+.segment {
   /* Note that a segment draws the ring inside itself, because its trough
      leaves it no room for one outside. */
   --focus-ring-offset: calc(var(--focus-ring-width) * -1);
@@ -399,16 +399,16 @@
     color var(--duration-hover) ease;
 }
 
-.settings-segment:hover {
+.segment:hover {
   color: var(--text-primary);
 }
 
-.settings-segment[aria-pressed="true"] {
+.segment[aria-checked="true"] {
   background: var(--raised-strong);
   color: var(--text-primary);
 }
 
-.settings-segment:disabled {
+.segment:disabled {
   opacity: 0.4;
 }
 

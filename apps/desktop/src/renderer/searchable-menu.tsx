@@ -2,6 +2,7 @@ import { CheckIcon, ChevronRightIcon, SearchIcon } from "@sidecar/panel";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
 import { Shortcut } from "./shortcut";
+import { Switch } from "./switch";
 import { Tooltip } from "./tooltip";
 import { useClipped } from "./use-clipped";
 
@@ -607,9 +608,7 @@ export function SearchableMenu(props: {
                     <button {...shared} role="switch" aria-checked={row.toggle.on}>
                       {row.icon}
                       <span className="plan-compose-menu-name">{row.label}</span>
-                      <span className="switch plan-compose-menu-switch">
-                        <span className="switch-thumb" />
-                      </span>
+                      <Switch checked={row.toggle.on} className="plan-compose-menu-switch" />
                     </button>
                   );
                 return (

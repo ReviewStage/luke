@@ -1189,7 +1189,7 @@ body,
 .icon-button,
 .primary-button,
 .danger-button,
-.settings-segment,
+.segment,
 .desktop-toolbar-actions,
 .desktop-toolbar .file-breadcrumbs,
 .sidebar-new-plan,
@@ -1257,10 +1257,14 @@ body,
 }
 
 /* A state weighs a class and its pseudo-class alone, so a button that says
-   more of itself, Sign out's red hover or a toggle drawn on, still wins. A
-   button whose menu is open keeps its hover for as long as the menu stands. */
+   more of itself, Sign out's red hover or a muted call's tint, still wins. A
+   button whose menu is open keeps its hover for as long as the menu stands,
+   and a toggle (`aria-pressed`) is drawn on in the same fill for as long as
+   it is on: the summary's pin, the Inbox's Needs you, the file tree's
+   filter, the panel's full screen. */
 :is(.toolbar-button, .icon-button):hover:where(:not(:disabled, [aria-disabled="true"])),
-:is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]) {
+:is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]),
+:is(.toolbar-button, .icon-button):where([aria-pressed="true"]) {
   background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
   color: var(--text-primary);
 }
@@ -2195,22 +2199,12 @@ body,
   text-align: center;
 }
 
-/* A switch row: the panel's own switch at the row's end, keyed off the
-   row, which is the switch for the keyboard, or off the switch's own button
-   where the row holds other controls too (the MCP popover's); a row that
-   cannot be pressed is muted and takes no highlight. */
+/* A switch row: the app's own switch at the row's end, drawn inside the
+   row where the row is the switch for the keyboard, or its own button where
+   the row holds other controls too (the MCP popover's); a row that cannot be
+   pressed is muted and takes no highlight. */
 .plan-compose-menu-switch {
   margin-left: auto;
-}
-
-.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch,
-.agent-servers-switch[aria-checked="true"] .switch {
-  background: var(--switch-on);
-}
-
-.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb,
-.agent-servers-switch[aria-checked="true"] .switch-thumb {
-  transform: translateX(14px);
 }
 
 .plan-compose-menu-row[aria-disabled="true"] {
@@ -3355,15 +3349,6 @@ body:has(.app-stage[data-capture="true"])
 
 .plan-summary[data-mode="rail"] {
   width: var(--summary-rail-width);
-}
-
-/* The toolbar's button is drawn on while the summary is pinned, as it is
-   while the card it hangs stands, and the Inbox's Needs you while the list
-   holds only what needs the developer. */
-.summary-toggle[aria-pressed="true"],
-.inbox-needs-you-only[aria-pressed="true"] {
-  background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
-  color: var(--text-primary);
 }
 
 /* Needs you's glyph is the rows' dot in a ring: the dot filled in the
