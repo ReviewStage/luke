@@ -12,6 +12,7 @@
     "./models/abandoned-turns": "./src/models/abandoned-turns.js",
     "./models/account-store": "./src/models/account-store.js",
     "./models/asks": "./src/models/asks.js",
+    "./models/automation-store": "./src/models/automation-store.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
     "./models/board-store": "./src/models/board-store.js",
     "./models/child-titles": "./src/models/child-titles.js",
