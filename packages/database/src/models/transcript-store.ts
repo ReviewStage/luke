@@ -10,6 +10,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
+import { user } from "../schemas/auth.js";
 import { plan } from "../schemas/plan.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
@@ -103,11 +104,13 @@ const CallRecordRowSchema = Schema.Struct({
   closeReason: Schema.NullOr(Schema.Literals(Object.values(VOICE_CLOSE_REASON))),
   usage: Schema.NullOr(Schema.Struct({ seconds: Schema.Number, confirmed: Schema.Boolean })),
   model: Schema.NullOr(Schema.String),
+  callerId: Schema.NullOr(Schema.String),
+  callerName: Schema.NullOr(Schema.String),
 });
 
 type CallRecordRow = typeof CallRecordRowSchema.Type;
 
-/** What the session rows recorded of the calls named, whichever member made each: how each ended, what it metered, and its model. */
+/** What the session rows recorded of the calls named, whichever member made each: how each ended, what it metered, its model, and whose call it was. */
 const findCallRecords = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
   Result: CallRecordRowSchema,
@@ -120,8 +123,11 @@ const findCallRecords = SqlSchema.findAll({
           closeReason: voiceSessions.closeReason,
           usage: voiceSessions.usage,
           model: voiceSessions.model,
+          callerId: user.id,
+          callerName: user.name,
         })
         .from(voiceSessions)
+        .leftJoin(user, eq(user.id, voiceSessions.userId))
         .where(inArray(voiceSessions.id, [...ids])),
     ),
 });
@@ -141,7 +147,7 @@ interface CallRead {
   readonly ledger: TranscriptLedger;
 }
 
-/** What a call's record adds to its words: each field its row holds, and nothing where it holds none. */
+/** What a call's record adds to its words: each field its row holds, the caller among them, and nothing where it holds none. */
 function recordOf(row: CallRecordRow | undefined): Partial<TranscriptCall> {
   if (row === undefined) return {};
   return {
@@ -149,6 +155,9 @@ function recordOf(row: CallRecordRow | undefined): Partial<TranscriptCall> {
     ...(row.closeReason === null ? undefined : { ending: row.closeReason }),
     ...(row.usage === null ? undefined : { usage: row.usage }),
     ...(row.model === null ? undefined : { model: catalogIdOf(row.model) }),
+    ...(row.callerId === null || row.callerName === null
+      ? undefined
+      : { by: { userId: row.callerId, name: row.callerName } }),
   };
 }
 

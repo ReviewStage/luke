@@ -497,6 +497,7 @@ export function AgentMessage({
   todos = NO_TODOS,
   briefTitle,
   said = false,
+  sender,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -510,12 +511,15 @@ export function AgentMessage({
   todos?: TodosPlace;
   /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
   said?: boolean;
+  /** The teammate who wrote or said a developer's message, named over it; none for the reader's own. */
+  sender?: string | undefined;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
+        {sender === undefined ? null : <span className="message-sender">{sender}</span>}
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
           <>

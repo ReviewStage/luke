@@ -1,5 +1,6 @@
 import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { Schema as EffectSchema } from "effect";
+import { planEditorSchema } from "./plan-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -101,6 +102,14 @@ export const transcriptCallSchema = EffectSchema.Struct({
   ),
   /** The voice model the call ran on. */
   model: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The member whose call it was, by their account's id and the name it
+   * holds now, a member who has since left the workspace among them; absent
+   * once their account is gone, and from a service before it. A shared
+   * plan's transcript holds every member's calls, and the window names a
+   * teammate's while drawing the reader's own as theirs.
+   */
+  by: EffectSchema.optionalKey(planEditorSchema),
 });
 
 export type TranscriptCall = typeof transcriptCallSchema.Type;

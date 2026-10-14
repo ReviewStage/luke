@@ -261,7 +261,7 @@ function CodeFeedRun({
 }): React.JSX.Element {
   return (
     <>
-      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} />
+      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
       {call.showings.map((showing) => (
         <CodeCard key={showing.callId} showing={showing} onOpenFile={onOpenFile} />
       ))}

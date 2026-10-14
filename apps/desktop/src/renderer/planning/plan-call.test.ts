@@ -363,3 +363,25 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   act(() => row.click());
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.SHOWN_CODE, call: "c", ref }]);
 });
+
+test("a teammate's call is headed with their name and their lines carry it, and the reader's own carry none", () => {
+  const region = said(1);
+  const call = region.kind === TRANSCRIPT_REGION.READY ? region.calls[0] : undefined;
+  const drawn = (caller: string | undefined) =>
+    renderToStaticMarkup(
+      callTab({
+        region: {
+          kind: TRANSCRIPT_REGION.READY,
+          earlierOmitted: false,
+          calls: [{ ...call!, live: false, caller }],
+        },
+      }),
+    );
+
+  const teammates = drawn("Charles Pan");
+  assert.match(teammates, /Charles Pan&#x27;s call · /u);
+  assert.match(teammates, /<span class="message-sender">Charles Pan<\/span>/u);
+  const own = drawn(undefined);
+  assert.doesNotMatch(own, /&#x27;s call/u);
+  assert.doesNotMatch(own, /message-sender/u);
+});

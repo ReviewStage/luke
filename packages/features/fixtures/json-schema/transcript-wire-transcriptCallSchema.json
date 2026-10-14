@@ -120,6 +120,22 @@
     },
     "model": {
       "type": "string"
+    },
+    "by": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "name"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

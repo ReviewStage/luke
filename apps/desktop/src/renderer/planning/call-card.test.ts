@@ -21,7 +21,7 @@ const MINUTE_MS = 60_000;
 /** An hour after the epoch, so every time said is a day long past. */
 const ENDED_START = 60 * MINUTE_MS;
 
-/** A call Luke ended twelve minutes in, its record held; synthetic throughout. */
+/** A teammate's call Luke ended twelve minutes in, its record held; synthetic throughout. */
 const ENDED_CALL: TranscriptCallRow = {
   key: "call-ended",
   startedAt: ENDED_START,
@@ -29,6 +29,7 @@ const ENDED_CALL: TranscriptCallRow = {
   lukeEnded: true,
   record: { endedAt: ENDED_START + 12 * MINUTE_MS },
   messages: [],
+  caller: "Charles Pan",
 };
 
 /** A call standing now. */
@@ -84,7 +85,7 @@ function cardOf(line: HTMLElement): string | undefined {
     ?.outerHTML;
 }
 
-test("the Code tab begins and ends each call as the Call tab does: the same divider, live while it stands, and the same closing line hanging the call's card", () => {
+test("the Code tab begins and ends each call as the Call tab does: the same divider, naming a teammate's call, live while it stands, and the same closing line hanging the call's card", () => {
   const callTab = mounted(
     createElement(PlanCall, {
       region: { kind: TRANSCRIPT_REGION.READY, earlierOmitted: false, calls: CALLS },
@@ -108,6 +109,11 @@ test("the Code tab begins and ends each call as the Call tab does: the same divi
     [...tab.querySelectorAll("[data-checkpoint]")].map((each) => each.outerHTML);
   assert.equal(dividers(callTab).length, 2, "each call begins at a divider");
   assert.deepEqual(dividers(codeTab), dividers(callTab));
+  assert.match(
+    codeTab.querySelectorAll("[data-checkpoint]")[0]?.textContent ?? "",
+    /^Charles Pan's call · /u,
+    "a teammate's call is named over its code as over its lines",
+  );
   assert.match(
     codeTab.querySelectorAll("[data-checkpoint]")[1]?.textContent ?? "",
     /Live$/u,

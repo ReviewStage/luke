@@ -660,6 +660,7 @@ export function usePlansTab(input: {
     transcript: viewed.transcript,
     heard,
     lukeEndedCall: voice.view.lukeEndedCall,
+    readerId: input.accountId,
   });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
   const workers = useMemo(
