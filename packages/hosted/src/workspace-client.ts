@@ -30,6 +30,14 @@ import {
   type WorkspaceCallResult,
 } from "./workspace-call.js";
 import {
+  WORKSPACE_INVITATIONS_QUERY,
+  type WorkspaceInvitation,
+  workspaceInvitationAnswerSchema,
+  workspaceInvitationCancelSchema,
+  workspaceInvitationsAnswerSchema,
+  workspaceInviteRequestSchema,
+} from "./workspace-invitation-wire.js";
+import {
   WORKSPACE_MEMBERS_QUERY,
   type Workspace,
   type WorkspaceMember,
@@ -53,7 +61,8 @@ import {
  * write through Better Auth's own organization calls, so they carry the
  * Mac's Better Auth session rather than its OAuth token: with no session
  * yet, or one the service no longer takes, the call asks for one through
- * the browser's hand-off and is sent once more on it. A list that did not come back is
+ * the browser's hand-off and is sent once more on it. An owner's or an
+ * admin's invitations are made, read, and canceled the same way. A list that did not come back is
  * nothing, because the one thing a caller does without it is keep the
  * workspaces it last read; every other call answers a result, because its
  * caller draws why it did not happen: the account's role does not allow
@@ -69,10 +78,11 @@ export interface HostedWorkspaceClientOptions extends AccountToken, AccountSessi
 const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
 /** The refusals a workspace call names, by the service's own word for each. */
-const REFUSALS = {
-  [HOSTED_API_ERROR.NOT_PERMITTED]: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
-  [HOSTED_API_ERROR.NOT_FOUND]: WORKSPACE_CALL_FAILURE.NOT_FOUND,
-} as const satisfies Readonly<Partial<Record<HostedApiError, WorkspaceCallFailure>>>;
+const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
+  [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
+  [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
+  [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
+]);
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
 function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
@@ -82,10 +92,7 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-  const failure =
-    refusal === HOSTED_API_ERROR.NOT_PERMITTED || refusal === HOSTED_API_ERROR.NOT_FOUND
-      ? REFUSALS[refusal]
-      : undefined;
+  const failure = refusal === undefined ? undefined : REFUSALS.get(refusal);
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
@@ -207,6 +214,70 @@ export class HostedWorkspaceClient {
         this.#inSession(),
       ),
       (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
+    );
+  }
+
+  /** An invitation to the workspace for the address, as the role given, answering it with its accept link; an address the service would refuse by shape never travels. */
+  invite(
+    workspaceId: string,
+    email: string,
+    role: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceInvitation>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceInviteRequestSchema)({ workspaceId, email, role }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS,
+        body: JSON.stringify(admitted),
+      },
+      workspaceInvitationAnswerSchema,
+      (answer) => answer.invitation,
+      this.#inSession(),
+    );
+  }
+
+  /** The workspace's pending invitations, soonest to expire first, to an owner or an admin. */
+  invitations(
+    workspaceId: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly WorkspaceInvitation[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const query = new URLSearchParams({ [WORKSPACE_INVITATIONS_QUERY.WORKSPACE_ID]: workspaceId });
+    return this.#answered(
+      { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS}?${query}` },
+      workspaceInvitationsAnswerSchema,
+      (answer) => answer.invitations,
+      this.#inSession(),
+    );
+  }
+
+  /** A pending invitation canceled, answering those still pending; an id the service would refuse by shape never travels. */
+  cancelInvitation(
+    workspaceId: string,
+    invitationId: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly WorkspaceInvitation[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceInvitationCancelSchema)({ workspaceId, invitationId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
+        body: JSON.stringify(admitted),
+      },
+      workspaceInvitationsAnswerSchema,
+      (answer) => answer.invitations,
+      this.#inSession(),
     );
   }
 

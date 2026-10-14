@@ -11,7 +11,9 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * plugin's `removeMember` and `leaveOrganization`, called with the headers
  * of the request that asked, which carry the Mac's own Better Auth session
  * as a signed bearer token, so the plugin checks the caller's role and
- * membership itself. Each call is the auth service's promise, wrapped once
+ * membership itself. An invitation is made, listed, and canceled the same
+ * way, through `createInvitation`, `listInvitations`, and
+ * `cancelInvitation`. Each call is the auth service's promise, wrapped once
  * here the way `bearer.ts` wraps `oauth2UserInfo`. The auth service is
  * handed in rather than imported, so a route hands it `auth.api` and a test
  * the API of a Better Auth over its own database.
@@ -51,10 +53,25 @@ export interface WorkspaceCreation {
   readonly metadata: Readonly<Record<string, boolean>>;
 }
 
-/** A member write the plugin refused, by the HTTP status its refusal carries; its words stay with it. */
+/** A member write the plugin refused, by the HTTP status and the code its refusal carries; its words stay with it. */
 export class OrganizationRefused extends Data.TaggedError("OrganizationRefused")<{
   readonly status: number;
+  readonly code?: string | undefined;
 }> {}
+
+/** One invitation as the plugin holds it, in the fields Luke reads. */
+const InvitationSchema = Schema.Struct({
+  id: Schema.String,
+  email: Schema.String,
+  role: Schema.String,
+  status: Schema.String,
+  expiresAt: Schema.Union([Schema.Date, Schema.String]),
+});
+
+export type PluginInvitation = typeof InvitationSchema.Type;
+
+const decodeInvitation = Schema.decodeUnknownEffect(InvitationSchema);
+const decodeInvitations = Schema.decodeUnknownEffect(Schema.Array(InvitationSchema));
 
 /** One member removed from a workspace under the session the headers carry. */
 interface MemberRemoval {
@@ -77,14 +94,37 @@ export interface WorkspaceSeams {
   ) => Effect.Effect<{ readonly id: string }, Cause.UnknownError>;
 }
 
+/** An invitation made under the session the headers carry. */
+interface InvitationRequest {
+  readonly headers: Headers;
+  readonly organizationId: string;
+  readonly email: string;
+  readonly role: string;
+}
+
+/** One workspace's invitations, read or canceled under the session the headers carry. */
+interface InvitationsRead {
+  readonly headers: Headers;
+  readonly organizationId: string;
+}
+
+/** Every way a plugin call through these seams fails: its refusal, or anything else it threw or answered. */
+type MemberFailure = OrganizationRefused | Cause.UnknownError;
+
 /** The plugin's member writes the routes make under the Mac's session. */
 export interface MemberSeams {
-  readonly removeMember: (
-    removal: MemberRemoval,
-  ) => Effect.Effect<void, OrganizationRefused | Cause.UnknownError>;
-  readonly leaveOrganization: (
-    leaving: WorkspaceLeaving,
-  ) => Effect.Effect<void, OrganizationRefused | Cause.UnknownError>;
+  readonly inviteMember: (
+    request: InvitationRequest,
+  ) => Effect.Effect<PluginInvitation, MemberFailure>;
+  readonly listInvitations: (
+    read: InvitationsRead,
+  ) => Effect.Effect<readonly PluginInvitation[], MemberFailure>;
+  readonly cancelInvitation: (cancel: {
+    readonly headers: Headers;
+    readonly invitationId: string;
+  }) => Effect.Effect<void, MemberFailure>;
+  readonly removeMember: (removal: MemberRemoval) => Effect.Effect<void, MemberFailure>;
+  readonly leaveOrganization: (leaving: WorkspaceLeaving) => Effect.Effect<void, MemberFailure>;
 }
 
 /** The part of a Better Auth `api` with the organization plugin that the workspace seam calls. */
@@ -96,6 +136,18 @@ export interface OrganizationAuthApi {
 
 /** The part of a Better Auth `api` with the organization plugin that the member seams call. */
 export interface MemberAuthApi {
+  readonly createInvitation: (input: {
+    headers: Headers;
+    body: { email: string; role: "admin" | "member"; organizationId: string };
+  }) => Promise<object | null>;
+  readonly listInvitations: (input: {
+    headers: Headers;
+    query: { organizationId: string };
+  }) => Promise<object | null>;
+  readonly cancelInvitation: (input: {
+    headers: Headers;
+    body: { invitationId: string };
+  }) => Promise<object | null>;
   readonly removeMember: (input: {
     headers: Headers;
     body: { memberIdOrEmail: string; organizationId: string };
@@ -111,20 +163,33 @@ export interface MemberAuthApi {
  * refusals are that error, and this package reaches no Better Auth of its
  * own to name the class by.
  */
-const decodeRefusal = Schema.decodeUnknownOption(Schema.Struct({ statusCode: Schema.Number }));
+const decodeRefusal = Schema.decodeUnknownOption(
+  Schema.Struct({
+    statusCode: Schema.Number,
+    body: Schema.optionalKey(Schema.Struct({ code: Schema.optionalKey(Schema.String) })),
+  }),
+);
 
-/** A plugin member write, its refusal kept by status and anything else an unknown failure. */
-function memberWrite(
+/** A plugin call's answer, its refusal kept by status and code and anything else an unknown failure. */
+function pluginCall(
   write: () => Promise<object | null>,
-): Effect.Effect<void, OrganizationRefused | Cause.UnknownError> {
+): Effect.Effect<object | null, MemberFailure> {
   return Effect.tryPromise({
     try: write,
-    catch: (thrown): OrganizationRefused | Cause.UnknownError =>
+    catch: (thrown): MemberFailure =>
       Option.match(decodeRefusal(thrown), {
         onNone: () => new Cause.UnknownError(thrown),
-        onSome: ({ statusCode }) => new OrganizationRefused({ status: statusCode }),
+        onSome: ({ statusCode, body }) =>
+          new OrganizationRefused({ status: statusCode, code: body?.code }),
       }),
-  }).pipe(Effect.asVoid);
+  });
+}
+
+/** An answer the plugin's own shape did not hold, read as the unknown failure it is. */
+function unreadable<A>(
+  read: Effect.Effect<A, Schema.SchemaError>,
+): Effect.Effect<A, MemberFailure> {
+  return Effect.mapError(read, (failure) => new Cause.UnknownError(failure));
 }
 
 /** The workspace writes over one auth service: `auth.api` on a deployment. */
@@ -147,19 +212,56 @@ export function workspaceSeams(api: OrganizationAuthApi): WorkspaceSeams {
 /** The member writes over one auth service: `auth.api` on a deployment. */
 export function memberSeams(api: MemberAuthApi): MemberSeams {
   return {
+    inviteMember: (request) =>
+      Effect.flatMap(
+        pluginCall(() =>
+          api.createInvitation({
+            headers: request.headers,
+            body: {
+              email: request.email,
+              role: request.role === "admin" ? "admin" : "member",
+              organizationId: request.organizationId,
+            },
+          }),
+        ),
+        (answer) => unreadable(decodeInvitation(answer)),
+      ),
+    listInvitations: (read) =>
+      Effect.flatMap(
+        pluginCall(() =>
+          api.listInvitations({
+            headers: read.headers,
+            query: { organizationId: read.organizationId },
+          }),
+        ),
+        (answer) => unreadable(decodeInvitations(answer)),
+      ),
+    cancelInvitation: (cancel) =>
+      Effect.asVoid(
+        pluginCall(() =>
+          api.cancelInvitation({
+            headers: cancel.headers,
+            body: { invitationId: cancel.invitationId },
+          }),
+        ),
+      ),
     removeMember: (removal) =>
-      memberWrite(() =>
-        api.removeMember({
-          headers: removal.headers,
-          body: { memberIdOrEmail: removal.memberId, organizationId: removal.organizationId },
-        }),
+      Effect.asVoid(
+        pluginCall(() =>
+          api.removeMember({
+            headers: removal.headers,
+            body: { memberIdOrEmail: removal.memberId, organizationId: removal.organizationId },
+          }),
+        ),
       ),
     leaveOrganization: (leaving) =>
-      memberWrite(() =>
-        api.leaveOrganization({
-          headers: leaving.headers,
-          body: { organizationId: leaving.organizationId },
-        }),
+      Effect.asVoid(
+        pluginCall(() =>
+          api.leaveOrganization({
+            headers: leaving.headers,
+            body: { organizationId: leaving.organizationId },
+          }),
+        ),
       ),
   };
 }

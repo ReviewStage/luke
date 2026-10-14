@@ -34,6 +34,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -86,6 +87,8 @@ export const HOSTED_REFUSAL = {
   PLAN_ARCHIVED: { error: HOSTED_API_ERROR.PLAN_ARCHIVED },
   /** The account's role in the workspace, or the workspace being personal, does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+  /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
+  ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**
