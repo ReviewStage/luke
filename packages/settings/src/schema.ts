@@ -145,6 +145,22 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: voiceControlDrawn,
   }),
+  voiceVideo: toggleSetting({
+    field: "voiceVideo",
+    id: APP_SETTING_ID.VOICE_VIDEO,
+    label: "Video calls",
+    detail:
+      "Calls open with Luke on video in the call window. Keyframe Labs animates him from his " +
+      "voice, so what he says about your plan reaches Keyframe. Your own voice never does.",
+    default: false,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 55,
+    resetScope: SETTINGS_RESET_SCOPE.VOICE,
+    // Nothing to run per write: the host reads the setting as each call comes to stand.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: voiceControlDrawn,
+  }),
   voiceHotkey: hotkeySetting({
     field: "voiceHotkey",
     id: APP_SETTING_ID.TALK_HOTKEY,

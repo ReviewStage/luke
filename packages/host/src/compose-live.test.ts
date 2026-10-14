@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -13,6 +14,8 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
 import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
+import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { HostedLiveSessionSource } from "@sidecar/voice";
 import {
   AVATAR_START_BOUND,
@@ -23,11 +26,14 @@ import {
 import { type FakeLiveSocket, scriptedOpenSocket } from "@sidecar/voice/testing";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { Effect, Fiber, Stream } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
 import { composeLive } from "./compose-live.js";
 import { HostKernelTag } from "./effect/kernel.js";
 import { hostKernelOver } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
+import { SettingsStore } from "./settings-store.js";
 
 /**
  * The video toggle over the hosted source and its scripted socket: what the
@@ -56,8 +62,30 @@ function settle() {
   });
 }
 
+/** A settings store of this test's own, in a directory it made, holding nothing until a test writes it. */
+function settingsStore() {
+  return Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-live-settings-");
+    return new SettingsStore({
+      directory: () => directory,
+      cipher: {
+        isAvailable: () => false,
+        encrypt: () => Buffer.alloc(0),
+        decrypt: () => "",
+      },
+      overrides: { voice: undefined },
+      fileSystem: yield* FileSystem.FileSystem,
+      path: yield* Path.Path,
+    });
+  }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer]));
+}
+
 function subject(options: { videoOnCall?: boolean } = {}) {
   return Effect.gen(function* () {
+    const store = yield* settingsStore();
+    if (options.videoOnCall) {
+      yield* Effect.orDie(store.set(APP_SETTING_SCHEMA.voiceVideo.field, true));
+    }
     const answerCreate = (socket: FakeLiveSocket) => {
       socket.onSent((data) => {
         if (JSON.parse(data).type !== VOICE_SERVICE_FRAME.SESSION_CREATE) return;
@@ -98,7 +126,7 @@ function subject(options: { videoOnCall?: boolean } = {}) {
       composeLive({
         settings: {
           recordProductEvent: () => undefined,
-          videoOnCall: Effect.succeed(options.videoOnCall ?? false),
+          store,
         },
         account: { agentTrace: undefined, voiceCapabilities: { liveSessions: source } },
         activePlanId: () => PLAN_ID,
@@ -155,7 +183,7 @@ function subject(options: { videoOnCall?: boolean } = {}) {
         const bytes = JSON.stringify(value);
         return bytes.includes(TOKEN) || bytes.includes(SECOND_TOKEN);
       });
-    return { live, call, refusal, openCall, states, grants, tokenCrossedGateway };
+    return { live, store, call, refusal, openCall, states, grants, tokenCrossedGateway };
   });
 }
 
@@ -479,13 +507,29 @@ it.effect("a call opens with the avatar asked for where video is on for calls", 
   }),
 );
 
-it.effect("a call opens with no avatar where video is off for calls", () =>
+it.effect("a call opens with no avatar while the video setting stands at its default", () =>
   Effect.gen(function* () {
     const f = yield* subject();
     const socket = yield* f.openCall;
 
     assert.deepEqual(avatarSends(socket), []);
     assert.deepEqual(statuses(f.states), [LIVE_AVATAR_STATUS.OFF]);
+  }),
+);
+
+it.effect("the video setting turned on during a call opens the next call with the avatar", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const first = yield* f.openCall;
+    yield* Effect.orDie(f.store.set(APP_SETTING_SCHEMA.voiceVideo.field, true));
+    first.closeFromServer({ code: 1000 });
+    yield* settle();
+
+    const second = yield* f.openCall;
+
+    // The call already standing is not changed: the setting is read as a call comes to stand.
+    assert.deepEqual(avatarSends(first), []);
+    assert.deepEqual(avatarSends(second), [start("request-1")]);
   }),
 );
 
