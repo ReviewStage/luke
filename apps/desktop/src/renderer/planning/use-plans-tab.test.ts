@@ -38,7 +38,7 @@ import {
 } from "#shared/messages/voice-view";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { ToastHost } from "../toast";
 import { PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
@@ -943,6 +943,88 @@ test("Workspace settings opens Settings on the listed workspace's page", () => {
   act(() => tab.control().onOpenWorkspaceSettings());
 
   assert.deepEqual(tab.links, [{ page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id }]);
+});
+
+test("Connect GitHub under a plan opens Settings on the plan's workspace's GitHub, read off the open document where the list did not land", () => {
+  const tab = mount({
+    shown: true,
+    planning: {
+      ...OPEN,
+      listStatus: PLANNING_READ.FAILED,
+      workspaces: [PERSONAL, ACME],
+      document: { status: PLANNING_READ.READY, plan: { ...PLAN, workspaceId: ACME.id } },
+    },
+  });
+
+  act(() => tab.control().onOpenWorkspaceGitHub(PLAN.id));
+
+  assert.deepEqual(tab.links, [
+    {
+      page: SETTINGS_VIEW.WORKSPACE,
+      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+      workspaceId: ACME.id,
+    },
+  ]);
+});
+
+test("a plan moved lists the workspace it moved to while it is still open, and a move answered after another plan opened leaves the sidebar where it is", async () => {
+  const answers: ((answer: { workspaceId: string }) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+
+  const staying = tab.control().onMovePlan("billing", ACME.id);
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "notes" } });
+  answers[0]?.({ workspaceId: ACME.id });
+  await settle();
+  const late = tab.control().workspace?.id;
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  const moved = tab.control().onMovePlan("billing", ACME.id);
+  answers[1]?.({ workspaceId: ACME.id });
+  await settle();
+
+  assert.equal(await staying, true);
+  assert.equal(
+    late,
+    PERSONAL.id,
+    "the plan open when the move landed is another than the one moved",
+  );
+  assert.equal(await moved, true);
+  assert.equal(tab.control().workspace?.id, ACME.id);
+});
+
+test("a move pressed before the workspaces were read still lists the workspace it moved to once they land", async () => {
+  const answers: ((answer: { workspaceId: string }) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+
+  const moved = tab.control().onMovePlan("billing", ACME.id);
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  answers[0]?.({ workspaceId: ACME.id });
+  await settle();
+
+  assert.equal(await moved, true);
+  assert.equal(tab.control().workspace?.id, ACME.id);
+});
+
+test("a workspace chosen while a move is out, even the first chosen after the workspaces land, stays listed when the move lands", async () => {
+  const answers: ((answer: { workspaceId: string }) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+
+  const moved = tab.control().onMovePlan("billing", ACME.id);
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  answers[0]?.({ workspaceId: ACME.id });
+  await settle();
+
+  assert.equal(await moved, true);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
 test("the listed workspace left lists the first one again, and another workspace left keeps the one listed", () => {

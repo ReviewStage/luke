@@ -9,11 +9,20 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@sidecar/hosted/integration-wire";
+import {
+  REPOSITORY_UNREACHED,
+  type RepositoryUnreached,
+} from "@sidecar/hosted/repository-reach-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import { installEditorBundle, installEditorLayout, pressInComposer } from "#testing/composer";
+import {
+  composerEditor,
+  installEditorBundle,
+  installEditorLayout,
+  pressInComposer,
+} from "#testing/composer";
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import type { Failure } from "../failure-remedy";
@@ -22,14 +31,20 @@ import { OpenSettingsProvider } from "../open-settings";
 import type { SettingsLink } from "../settings-views";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
+import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
 import type { AgentDraft } from "./use-coding-agents";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
- * refused Start offers Retry; a server the agent has on whose sign-in
- * expired is offered to reconnect in place; and the MCP popover's GitHub
- * row connects the account's GitHub in place.
+ * refused Start offers Retry; a Start refused for a repository out of reach
+ * says why, naming the repository, and offers the press that mends it; a
+ * server the agent has on whose sign-in expired is offered to reconnect in
+ * place; and the MCP popover's GitHub row connects the account's GitHub in
+ * place.
  */
+
+const PLAN_ID = "plan-1";
+const RELAY = "Acme/Relay";
 
 /** Where the account's Slack connection stands at the service; every other provider but GitHub is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
@@ -133,6 +148,17 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     },
   });
   const github = { connects: 0 };
+  /** What each repository remedy's door was asked, in order. */
+  const remedies: string[] = [];
+  const doors: RepositoryRemedyDoors = {
+    openWorkspaceGitHub: (planId) => remedies.push(`workspace-github:${planId}`),
+    openGitHub: (url) => remedies.push(`github:${url}`),
+    chooseRepository: (planId) => remedies.push(`choose:${planId}`),
+    movePlan: (planId, workspaceId) => {
+      remedies.push(`move:${planId}:${workspaceId}`);
+      return Promise.resolve(true);
+    },
+  };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -154,7 +180,11 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
               disconnect: () => Promise.resolve(false),
             },
           },
-          createElement(DraftAgentTab, { draft, control }),
+          createElement(
+            RepositoryRemedyProvider,
+            { value: doors },
+            createElement(DraftAgentTab, { draft, control }),
+          ),
         ),
       ),
     ),
@@ -168,6 +198,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     );
   return {
     starts,
+    remedies,
     links,
     settings,
     github,
@@ -176,6 +207,9 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
       await settle();
     },
     note: () => container.querySelector(".agent-composer-note")?.textContent ?? undefined,
+    words: () =>
+      container.querySelector(".agent-composer-note .failure-note-words")?.textContent ?? undefined,
+    draft: () => composerEditor(container).textContent,
     button,
     press: async (words: string) => {
       const found = button(words);
@@ -187,12 +221,123 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
 }
 
 test("a refused Start offers Retry, which sends the message again", async () => {
-  const tab = mount([startFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), undefined]);
+  const tab = mount([
+    startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, PLAN_ID),
+    undefined,
+  ]);
   await tab.send();
   assert.match(tab.note() ?? "", /could not be started/u);
 
   await tab.press("Retry");
   assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+});
+
+/** A Start refused for the repository out of reach, as the host hears the service say why. */
+const unreachable = (unreached: RepositoryUnreached): Failure =>
+  startFailureNote(
+    { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached },
+    PLAN_ID,
+  );
+
+test("a Start refused because the workspace has no GitHub connected names the repository, and Connect GitHub opens the plan's workspace's GitHub with Retry beside it", async () => {
+  const tab = mount([
+    unreachable({ reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY }),
+    undefined,
+  ]);
+  await tab.send();
+
+  assert.equal(
+    tab.words(),
+    "This workspace isn't connected to GitHub, so Luke can't reach Acme/Relay.",
+  );
+  assert.equal(tab.draft(), DRAFT.task, "the words stay in the box");
+  await tab.press("Connect GitHub");
+  assert.deepEqual(tab.remedies, [`workspace-github:${PLAN_ID}`]);
+  await tab.press("Retry");
+  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+});
+
+test("a Start refused because the workspace's GitHub was removed or suspended offers Reconnect GitHub", async () => {
+  const tab = mount([
+    unreachable({ reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED, repository: RELAY }),
+  ]);
+  await tab.send();
+
+  assert.equal(
+    tab.words(),
+    "This workspace's GitHub connection was removed or suspended, so Luke can't reach Acme/Relay.",
+  );
+  await tab.press("Reconnect GitHub");
+  assert.deepEqual(tab.remedies, [`workspace-github:${PLAN_ID}`]);
+  assert.ok(tab.button("Retry"));
+});
+
+test("a Start refused because the installation was not given the repository opens its settings on GitHub to add it, with Retry beside it", async () => {
+  const settingsUrl = "https://github.com/organizations/Acme/settings/installations/7";
+  const tab = mount([
+    unreachable({ reason: REPOSITORY_UNREACHED.NOT_SELECTED, repository: RELAY, settingsUrl }),
+  ]);
+  await tab.send();
+
+  assert.equal(tab.words(), "Luke on GitHub doesn't have access to Acme/Relay.");
+  await tab.press("Add Acme/Relay to Luke on GitHub");
+  assert.deepEqual(tab.remedies, [`github:${settingsUrl}`]);
+  assert.ok(tab.button("Retry"));
+});
+
+test("a Start refused because the repository is under another account than the workspace's GitHub, or was renamed, transferred, or deleted, offers to choose a repository, and no Retry", async () => {
+  const tab = mount([
+    unreachable({
+      reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+      repository: RELAY,
+      connectedTo: "octo-org",
+    }),
+    unreachable({ reason: REPOSITORY_UNREACHED.GONE, repository: RELAY }),
+  ]);
+  await tab.send();
+
+  assert.equal(
+    tab.words(),
+    "Acme/Relay isn't under octo-org, the GitHub account this workspace is connected to.",
+  );
+  assert.equal(tab.button("Retry"), undefined);
+  await tab.press("Choose a repository");
+  await tab.send();
+  assert.equal(tab.words(), "Acme/Relay was renamed, transferred, or deleted on GitHub.");
+  await tab.press("Choose a repository");
+  assert.deepEqual(tab.remedies, [`choose:${PLAN_ID}`, `choose:${PLAN_ID}`]);
+});
+
+test("a Start refused because the repository's owner is connected to another workspace moves the plan there, and starts again by itself once it moved", async () => {
+  const tab = mount([
+    unreachable({
+      reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE,
+      repository: RELAY,
+      workspace: { id: "team-1", name: "Acme Team" },
+    }),
+    undefined,
+  ]);
+  await tab.send();
+
+  assert.equal(tab.words(), "Acme/Relay is connected to Acme Team, not this workspace.");
+  await tab.press("Move plan to Acme Team");
+  assert.deepEqual(tab.remedies, [`move:${PLAN_ID}:team-1`]);
+  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.equal(tab.note(), undefined);
+});
+
+test("a Start GitHub did not answer says so and offers Retry alone, and one from a service that gave no reason says the repository is out of reach", async () => {
+  const tab = mount([
+    startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }, PLAN_ID),
+    startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE }, PLAN_ID),
+  ]);
+  await tab.send();
+
+  assert.equal(tab.words(), "GitHub didn't answer. Try again.");
+  await tab.press("Retry");
+  assert.equal(tab.words(), "Luke can't reach this plan's repository on GitHub.");
+  assert.ok(tab.button("Retry"));
+  assert.deepEqual(tab.remedies, []);
 });
 
 test("a server the agent has on whose sign-in expired is offered to reconnect under the box, and one it has off is not", async () => {

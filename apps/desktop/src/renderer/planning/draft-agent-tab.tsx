@@ -24,8 +24,9 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * tab is away. A
  * send that did not start it
  * leaves the words in the box with why under it and what mends it: Retry,
- * which asks again under the draft's own key, or the GitHub connect a
- * refusal needs, after which it asks again by itself. Closing the tab lets the draft go, and since
+ * which asks again under the draft's own key, or, for a repository out of
+ * reach, the press its reason names, a move of the plan asking again by
+ * itself once it lands. Closing the tab lets the draft go, and since
  * nothing was started, nothing is left behind. While the plan is archived,
  * nothing starts on it, so the box gives way to the note that offers
  * Unarchive, and the words written wait in the draft until it is back.

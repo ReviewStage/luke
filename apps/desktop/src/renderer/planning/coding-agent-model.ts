@@ -30,6 +30,10 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
+import {
+  REPOSITORY_UNREACHED,
+  type RepositoryUnreached,
+} from "@sidecar/hosted/repository-reach-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
@@ -181,6 +185,7 @@ export const START_ARCHIVED = "Unarchive the plan to start a coding agent.";
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
     "Luke can't reach this plan's repository on GitHub.",
+  [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer. Try again.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
@@ -201,6 +206,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
@@ -244,14 +250,80 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
+/** A refused start or message as the view hears it: why, and why the repository is out of reach where it is and the service said. */
+export interface RefusedCall {
+  readonly failure: CodingAgentCallFailure;
+  readonly unreached?: RepositoryUnreached | undefined;
+}
+
 /** What a Start that did not start says beside the button, and what mends it. */
-export function startFailureNote(failure: CodingAgentCallFailure): Failure {
-  return callFailure(startFailureWords(failure));
+export function startFailureNote(refused: RefusedCall, planId: string): Failure {
+  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
+    ? unreachedFailure(refused.unreached, planId)
+    : callFailure(startFailureWords(refused.failure));
 }
 
 /** A refused call's words, which trying again mends. */
 function callFailure(text: string): Failure {
   return { reason: FAILURE_REASON.OTHER, text };
+}
+
+/**
+ * A repository out of reach, said by why with the repository named, and
+ * the press that mends it: GitHub connected, or connected again, in
+ * Settings; the repository given to Luke on GitHub; another repository
+ * chosen; or the plan moved to the workspace whose GitHub reaches it. A
+ * service that said nothing more says the bare sentence, which Retry
+ * answers.
+ */
+function unreachedFailure(unreached: RepositoryUnreached | undefined, planId: string): Failure {
+  if (unreached === undefined) {
+    return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
+  }
+  const { repository } = unreached;
+  switch (unreached.reason) {
+    case REPOSITORY_UNREACHED.NOT_CONNECTED:
+      return {
+        reason: FAILURE_REASON.CONNECT_GITHUB,
+        text: `This workspace isn't connected to GitHub, so Luke can't reach ${repository}.`,
+        planId,
+      };
+    case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
+      return {
+        reason: FAILURE_REASON.RECONNECT_GITHUB,
+        text: `This workspace's GitHub connection was removed or suspended, so Luke can't reach ${repository}.`,
+        planId,
+      };
+    case REPOSITORY_UNREACHED.OTHER_OWNER:
+      return {
+        reason: FAILURE_REASON.CHOOSE_REPOSITORY,
+        text:
+          unreached.connectedTo === undefined
+            ? `${repository} isn't under the GitHub account this workspace is connected to.`
+            : `${repository} isn't under ${unreached.connectedTo}, the GitHub account this workspace is connected to.`,
+        planId,
+      };
+    case REPOSITORY_UNREACHED.NOT_SELECTED:
+      return {
+        reason: FAILURE_REASON.ADD_REPOSITORY,
+        text: `Luke on GitHub doesn't have access to ${repository}.`,
+        repository,
+        settingsUrl: unreached.settingsUrl,
+      };
+    case REPOSITORY_UNREACHED.GONE:
+      return {
+        reason: FAILURE_REASON.CHOOSE_REPOSITORY,
+        text: `${repository} was renamed, transferred, or deleted on GitHub.`,
+        planId,
+      };
+    case REPOSITORY_UNREACHED.OTHER_WORKSPACE:
+      return {
+        reason: FAILURE_REASON.MOVE_PLAN,
+        text: `${repository} is connected to ${unreached.workspace.name}, not this workspace.`,
+        planId,
+        workspace: unreached.workspace,
+      };
+  }
 }
 
 /** What a Start that did not start says, by why. */
@@ -266,6 +338,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "The agent could not be started. Try again.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
@@ -275,12 +348,14 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
 }
 
 /** What a message that did not reach the agent says under the composer, and what mends it. */
-export function messageFailureNote(failure: CodingAgentCallFailure): Failure {
-  return callFailure(messageFailureWords(failure));
+export function messageFailureNote(refused: RefusedCall, planId: string): Failure {
+  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
+    ? unreachedFailure(refused.unreached, planId)
+    : callFailure(messageFailureWords(refused.failure));
 }
 
-/** What a message that did not reach the agent says, by why. */
-function messageFailureWords(failure: CodingAgentCallFailure): string {
+/** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */
+export function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
@@ -292,6 +367,7 @@ function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back. Retry sends it again, once.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:

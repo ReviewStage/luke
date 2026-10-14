@@ -16,7 +16,7 @@ import {
   knownBlock,
 } from "@sidecar/hosted/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { messageFailureNote } from "./coding-agent-model";
+import { messageFailureWords } from "./coding-agent-model";
 import {
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
@@ -281,7 +281,7 @@ export function usePlanInbox(input: {
             return next;
           });
           if ("failure" in answer) {
-            note(item.id, messageFailureNote(answer.failure).text);
+            note(item.id, messageFailureWords(answer.failure));
             return;
           }
           // An answer landing after the window moved to another plan is that plan's no longer.

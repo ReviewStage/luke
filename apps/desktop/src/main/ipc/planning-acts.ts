@@ -11,6 +11,8 @@ import type {
   PlanningGitHubDisconnectAnswer,
   PlanningGitHubPageAnswer,
   PlanningMessagesParams,
+  PlanningMoveAnswer,
+  PlanningMoveParams,
   PlanningPageAnswer,
   PlanningPageParams,
   PlanningPageSourceAnswer,
@@ -83,6 +85,7 @@ export interface PlanningActsDependencies {
     planningSetRepository(
       params: PlanningSetRepositoryParams,
     ): Effect.Effect<PlanningSetRepositoryAnswer>;
+    planningMove(params: PlanningMoveParams): Effect.Effect<PlanningMoveAnswer>;
     planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
     planningWorkEarlier(): Effect.Effect<void>;
@@ -151,6 +154,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_ARCHIVE
   | typeof ACT_KIND.PLANNING_REPOSITORIES
   | typeof ACT_KIND.PLANNING_SET_REPOSITORY
+  | typeof ACT_KIND.PLANNING_MOVE
   | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.WEB_OPEN
@@ -309,6 +313,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_SET_REPOSITORY]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SET_REPOSITORY, sender);
       return host.planningSetRepository(params);
+    },
+    [ACT_KIND.PLANNING_MOVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_MOVE, sender);
+      return host.planningMove(params);
     },
     [ACT_KIND.PLANNING_EDIT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_EDIT, sender);

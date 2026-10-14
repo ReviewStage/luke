@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
@@ -10,6 +10,7 @@ import {
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
 } from "./provider-key-wire.js";
+import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -55,6 +56,7 @@ it.effect(
         ],
         [HOSTED_API_ERROR.INVALID_REQUEST, CODING_AGENT_CALL_FAILURE.INVALID_CHOICE],
         [HOSTED_API_ERROR.PLAN_ARCHIVED, CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED],
+        [HOSTED_API_ERROR.GITHUB_UNANSWERED, CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
         [HOSTED_API_ERROR.UNAVAILABLE, CODING_AGENT_CALL_FAILURE.UNANSWERED],
       ] as const;
 
@@ -72,6 +74,53 @@ it.effect(
         const refused = yield* Effect.provide(client().start(PLAN_ID, request), refusing.layer);
         assert.deepEqual(refused, { failure }, error);
       }
+    }),
+);
+
+it.effect(
+  "a Start refused for a repository out of reach carries why, and a reason this build cannot read is the bare refusal",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1" };
+      const refusingWith = (unreached: JsonValue) =>
+        fakeCloudApi({
+          [`POST /api/plans/${PLAN_ID}/agents`]: {
+            answer: () => ({ error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached }),
+            status: HTTP_STATUS.FORBIDDEN,
+          },
+        });
+      const unreached = {
+        reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE,
+        repository: "Acme/Relay",
+        workspace: { id: "team-1", name: "Acme Team" },
+      };
+
+      const named = yield* Effect.provide(
+        client().start(PLAN_ID, request),
+        refusingWith(unreached).layer,
+      );
+      const newer = yield* Effect.provide(
+        client().start(PLAN_ID, request),
+        refusingWith({ reason: "a-reason-from-later", repository: "Acme/Relay" }).layer,
+      );
+      const elsewhere = yield* Effect.provide(
+        client().start(PLAN_ID, request),
+        refusingWith({
+          reason: REPOSITORY_UNREACHED.NOT_SELECTED,
+          repository: "Acme/Relay",
+          settingsUrl: "https://example.test/settings",
+        }).layer,
+      );
+
+      assert.deepEqual(named, {
+        failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        unreached,
+      });
+      assert.deepEqual(newer, { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+      // A settings page off GitHub is not one the desktop would open.
+      assert.deepEqual(elsewhere, {
+        failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      });
     }),
 );
 

@@ -35,6 +35,7 @@ import {
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
+  workspaceIdSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
@@ -513,6 +514,14 @@ export const planningSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type PlanningSetRepositoryParams = typeof planningSetRepositoryParamsSchema.Type;
 
+/** Moving a plan to another of the account's workspaces: the plan, and the workspace it moves to. */
+export const planningMoveParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  workspaceId: workspaceIdSchema,
+});
+
+export type PlanningMoveParams = typeof planningMoveParamsSchema.Type;
+
 /** A plan's board as the panel asks it saved: the whole scene, and the number of Luke's drawing it holds. */
 export const planningBoardSaveParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
@@ -573,6 +582,14 @@ export const planningSetRepositoryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningSetRepositoryAnswer = typeof planningSetRepositoryAnswerSchema.Type;
+
+/** A plan moved, as the window hears it: the workspace it now belongs to, or why it stands where it was. */
+export const planningMoveAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ workspaceId: EffectSchema.String }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(Object.values(PLAN_CALL_FAILURE)) }),
+]);
+
+export type PlanningMoveAnswer = typeof planningMoveAnswerSchema.Type;
 
 /** The developer's edit of a plan's document, as the window asks it saved: the plan, and the edit as the service takes it. */
 export const planningEditParamsSchema = EffectSchema.Struct({

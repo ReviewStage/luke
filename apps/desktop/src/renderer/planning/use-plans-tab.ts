@@ -26,7 +26,7 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
-import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useStateWithRef } from "../use-state-with-ref";
 import { managesWorkspace } from "../workspace-role";
@@ -314,6 +314,14 @@ export interface PlansControl {
   onSetRepository: (planId: string, repository: string | null) => Promise<string | undefined>;
   /** Opens a plan's repository on GitHub in the browser. */
   onOpenOnGitHub: (planId: string) => void;
+  /** Opens Settings › Workspace at its GitHub, for the workspace the plan belongs to. */
+  onOpenWorkspaceGitHub: (planId: string) => void;
+  /**
+   * Moves a plan to another of the account's workspaces, whose GitHub
+   * reaches its repository, and lists that workspace so the plan stays in
+   * sight; answers whether it moved, a refusal saying why in a toast.
+   */
+  onMovePlan: (planId: string, workspaceId: string) => Promise<boolean>;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Opens the New plan dialog over whatever stands open, which it leaves standing. */
@@ -421,6 +429,9 @@ const PLAN_COPIED_NOTE = "Plan copied";
 
 /** What the toast says once a plan is deleted. */
 const PLAN_DELETED_NOTE = "Plan deleted";
+
+/** What the toast says when the service did not move a plan, which stays where it was. */
+const MOVE_REFUSED_NOTE = "The plan could not be moved. Try again.";
 
 /** Why a delete the service did not carry was refused. */
 const DELETE_REFUSED_NOTE = "The plan could not be deleted. Try again.";
@@ -573,6 +584,16 @@ export function usePlansTab(input: {
   // else that finds a plan, the palette, the inbox, and the history, finds
   // it among them all; with no workspace listed yet, every plan is listed.
   const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
+  // Every workspace listed by a choice is counted, so a move answered late can tell whether one was made since it was pressed.
+  const workspaceChoices = useRef(0);
+  const listWorkspace = workspace.choose;
+  const chooseListed = useCallback(
+    (workspaceId: string) => {
+      workspaceChoices.current += 1;
+      listWorkspace(workspaceId);
+    },
+    [listWorkspace],
+  );
   const listedWorkspace = workspace.chosen;
   const sidebar = sidebarPlans(planning.plans);
   const listedSidebar = sidebarPlans(
@@ -762,7 +783,7 @@ export function usePlansTab(input: {
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
   // A plan opened from another workspace, from the palette, the inbox, or
   // the history, lists its workspace, so the sidebar holds the plan open.
-  const chooseWorkspace = workspace.choose;
+  const chooseWorkspace = chooseListed;
   const listedId = listedWorkspace?.id;
   const plansNow = planning.plans;
   const workspacesNow = viewed.workspaces;
@@ -1102,7 +1123,7 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
       (created) => {
-        workspace.choose(created.id);
+        chooseListed(created.id);
         return undefined;
       },
       (refused: Error) => refused.message,
@@ -1119,6 +1140,29 @@ export function usePlansTab(input: {
       (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
+  };
+
+  // A fixture's plans move nowhere, as they are read from nowhere. Note that
+  // the workspace moves with the plan, because the sidebar lists one
+  // workspace's plans and the open plan must not drop out of it, but only
+  // while that plan is still open and no workspace was chosen since, so a
+  // move answered late never undoes where the developer went meanwhile.
+  const movePlan = (planId: string, workspaceId: string): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
+    const choicesThen = workspaceChoices.current;
+    return act(ACT_KIND.PLANNING_MOVE, { planId, workspaceId })
+      .catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }) as const)
+      .then((answer) => {
+        if (!("failure" in answer)) {
+          // A first workspace read landing meanwhile lists one too, but nobody chose it.
+          if (openNow.current === planId && workspaceChoices.current === choicesThen) {
+            listWorkspace(answer.workspaceId);
+          }
+          return true;
+        }
+        toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        return false;
+      });
   };
 
   // A fixture's plans are read from nowhere, so an edit of one is never saved.
@@ -1376,7 +1420,7 @@ export function usePlansTab(input: {
     },
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
-    onChooseWorkspace: workspace.choose,
+    onChooseWorkspace: chooseListed,
     onCreateWorkspace: createWorkspace,
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({
@@ -1385,7 +1429,7 @@ export function usePlansTab(input: {
       }),
     onLeftWorkspace: (workspaceId) => {
       const next = viewed.workspaces.find((each) => each.id !== workspaceId);
-      if (next !== undefined && listedWorkspace?.id === workspaceId) workspace.choose(next.id);
+      if (next !== undefined && listedWorkspace?.id === workspaceId) chooseListed(next.id);
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
@@ -1532,6 +1576,20 @@ export function usePlansTab(input: {
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
+    onMovePlan: movePlan,
+    onOpenWorkspaceGitHub: (planId) => {
+      // The open document names its workspace where the list read did not land.
+      const workspaceId =
+        planning.plans.find((plan) => plan.id === planId)?.workspaceId ??
+        (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
+          ? region.plan.workspaceId
+          : undefined);
+      input.onOpenSettings({
+        page: SETTINGS_VIEW.WORKSPACE,
+        section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+        ...(workspaceId === undefined ? undefined : { workspaceId }),
+      });
+    },
     onOpenOnGitHub: (planId) => {
       const repository = repositoryOf(planId);
       if (repository !== null) openGitHub(repositoryPageUrl(repository));

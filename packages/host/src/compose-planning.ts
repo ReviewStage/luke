@@ -42,6 +42,7 @@ import {
   type PlanningFileAnswer,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningMoveAnswer,
   type PlanningPageAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -64,6 +65,7 @@ import {
   planningEditParamsSchema,
   planningFileParamsSchema,
   planningMessagesParamsSchema,
+  planningMoveParamsSchema,
   planningPageParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
@@ -277,6 +279,7 @@ export type PlanningClient = Pick<
   | "restore"
   | "repositories"
   | "setRepository"
+  | "move"
   | "edit"
 > & {
   /** The account's workspaces, the ones it may join, and their members. */
@@ -1410,6 +1413,30 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
               return carried<PlanningSetRepositoryAnswer>({ failure: changed.failure });
             takeAnswered(changed.answer);
             return carried<PlanningSetRepositoryAnswer>({ repository: changed.answer.repository });
+          }),
+        );
+      }),
+    // The service answers the plan as moved, so the list's row and the open
+    // document take its workspace in place and nothing is read again.
+    [GATEWAY_METHOD.PLANNING_MOVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningMoveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("moving a plan names the plan and the workspace");
+        }
+        if (!gate()) {
+          return carried<PlanningMoveAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const { planId, workspaceId } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const moved = yield* Effect.provide(
+              client.move(planId, workspaceId),
+              FetchHttpClient.layer,
+            );
+            if (!moved.ok) return carried<PlanningMoveAnswer>({ failure: moved.failure });
+            takeAnswered(moved.answer);
+            return carried<PlanningMoveAnswer>({ workspaceId: moved.answer.workspaceId });
           }),
         );
       }),

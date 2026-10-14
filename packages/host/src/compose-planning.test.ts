@@ -489,6 +489,17 @@ function fakeService(plans: Plan[]): FakeService {
         );
         return { ok: true, answer: changed };
       }),
+    // The service moves the plan and answers it whole.
+    move: (planId, workspaceId) =>
+      Effect.sync((): PlanCallResult<Plan, PlanCallFailure> => {
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        if (found === undefined) return { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND };
+        const moved = { ...found, workspaceId };
+        service.plans = service.plans.map((candidate) =>
+          candidate.id === planId ? moved : candidate,
+        );
+        return { ok: true, answer: moved };
+      }),
     // The service re-titles the document with the name, as the store does.
     rename: (planId, { name }) =>
       Effect.sync(() => {
@@ -1652,4 +1663,31 @@ it.effect("the repository chip's read names the workspace it is for to the servi
 
     assert.deepEqual(service.reads, [`repositories:${ACME.id}`, "repositories"]);
   }),
+);
+
+it.effect(
+  "a plan moved to another workspace answers that workspace, and the list and the open document take it in place",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const { call, last } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const moved = yield* call(GATEWAY_METHOD.PLANNING_MOVE, {
+        planId: INVITES,
+        workspaceId: ACME.id,
+      });
+
+      assert.deepEqual(moved, { workspaceId: ACME.id });
+      assert.deepEqual(
+        last()?.plans.map((each) => each.workspaceId),
+        [ACME.id],
+      );
+      const open = last()?.document;
+      assert.equal(
+        open?.status === PLANNING_READ.READY ? open.plan?.workspaceId : undefined,
+        ACME.id,
+      );
+    }),
 );

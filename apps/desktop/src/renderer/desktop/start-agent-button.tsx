@@ -5,6 +5,7 @@ import { FailureNote } from "../failure-note";
 import { FAILURE_REASON } from "../failure-remedy";
 import { choiceLabel } from "../planning/coding-agent-model";
 import { ModelMenu, settledChoice } from "../planning/model-menu";
+import { useRepositoryRemedy } from "../planning/repository-remedy";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -28,6 +29,7 @@ import { useDisclosure } from "../use-disclosure";
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
   const { start } = control;
+  const repositoryRemedy = useRepositoryRemedy();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
@@ -116,11 +118,13 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   return (
     <div className="start-agent" ref={root} data-unavailable={String(unavailable)}>
       {start.note !== undefined ? (
-        // A Start a GitHub connect mended is pressed again by itself.
+        // Start itself is the retry of a plain refusal; a repository's remedy keeps Retry
+        // beside it where it is finished elsewhere, and a move presses Start again by itself.
         <FailureNote
           failure={start.note}
           className="error-message"
           onRetry={start.note.reason === FAILURE_REASON.OTHER ? undefined : () => press()}
+          onRemedy={repositoryRemedy(start.note, () => press())}
         />
       ) : null}
       <div className="start-agent-split">

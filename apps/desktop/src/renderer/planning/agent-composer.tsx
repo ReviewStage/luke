@@ -39,6 +39,7 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { DictateButton, DictationStrip } from "./dictation-strip";
+import { useRepositoryRemedy } from "./repository-remedy";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -73,8 +74,9 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * one Stop the tab has. A message that did not go stays in the box with why under the card
  * and what mends it (`../failure-note.tsx`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
- * once, or the GitHub connect a refusal needs, after which it is sent again
- * by itself; an agent that takes no message any more keeps the box,
+ * once, or, for a repository out of reach, the press its reason names
+ * (`repository-remedy.tsx`), a move of the plan sending it again by itself
+ * once it lands; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
  * the agent has on whose sign-in expired is offered to reconnect, in place, as
@@ -231,6 +233,17 @@ export function AgentComposer({
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === composer.note;
+  const repositoryRemedy = useRepositoryRemedy();
+  const remedy =
+    note === undefined
+      ? undefined
+      : note.reason === FAILURE_REASON.RECONNECT_INTEGRATION
+        ? () => reconnect(note.provider)
+        : // Note that a move's retry is the box's as the move lands, and only while the refusal it
+          // was pressed for still stands, so an edit or a later send meanwhile is never sent over.
+          repositoryRemedy(note, () => {
+            if (latest.current.note === note) latest.current.retry();
+          });
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
   const dictation = useDictation({ editor, keywords, onNote: setRefusal });
@@ -422,7 +435,7 @@ export function AgentComposer({
           failure={note}
           className="error-message agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
-          onRemedy={lapsed === undefined ? undefined : () => reconnect(lapsed)}
+          onRemedy={remedy}
         />
       ) : null}
     </div>

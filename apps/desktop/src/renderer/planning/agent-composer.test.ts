@@ -5,6 +5,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
+import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -20,6 +21,7 @@ import {
 } from "#testing/composer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
+import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
 import type { SkillOption } from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
@@ -73,6 +75,7 @@ async function settle(): Promise<void> {
 function Box({ sender }: { sender: MessageSender }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
+    planId: "plan-1",
     messages: [],
     send: sender,
     onStatus: ignore,
@@ -313,4 +316,98 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   assert.deepEqual(box.sent, [], "the Enter finished the dictation rather than sending");
   typeInComposer(box.container, " again");
   assert.equal(box.shown(), "Fix the bug in again this later", "the caret stands after the words");
+});
+
+/** The box under the window's repository doors, its one message refused for a repository its owner's other workspace reaches, and every later one taken. */
+async function mountedRefusedForMove() {
+  const sent: { text: string; clientKey: string }[] = [];
+  const moves: { resolve: (moved: boolean) => void }[] = [];
+  const sender: MessageSender = (_agentId, text, clientKey) => {
+    sent.push({ text, clientKey });
+    return Promise.resolve(
+      sent.length === 1
+        ? {
+            failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+            unreached: {
+              reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE,
+              repository: "Acme/Relay",
+              workspace: { id: "team-1", name: "Acme Team" },
+            },
+          }
+        : { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    );
+  };
+  const doors: RepositoryRemedyDoors = {
+    openWorkspaceGitHub: ignore,
+    openGitHub: ignore,
+    chooseRepository: ignore,
+    movePlan: () => new Promise<boolean>((resolve) => moves.push({ resolve })),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      createElement(RepositoryRemedyProvider, { value: doors }, createElement(Box, { sender })),
+    ),
+  );
+  await settle();
+  typeInComposer(container, "Rebase on main");
+  pressInComposer(container, "Enter");
+  await settle();
+  const move =
+    [...container.querySelectorAll("button")].find(
+      (each) => each.textContent === "Move plan to Acme Team",
+    ) ?? assert.fail("the note offers the move");
+  act(() => move.click());
+  await settle();
+  return {
+    container,
+    sent,
+    landMove: async () => {
+      act(() => moves[0]?.resolve(true));
+      await settle();
+    },
+  };
+}
+
+test("a message refused for a repository its owner's other workspace reaches moves the plan, then sends the same words again under the same key", async () => {
+  const box = await mountedRefusedForMove();
+  assert.equal(composerEditor(box.container).textContent, "Rebase on main");
+
+  await box.landMove();
+
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Rebase on main", "Rebase on main"],
+  );
+  assert.equal(box.sent[1]?.clientKey, box.sent[0]?.clientKey);
+});
+
+test("words edited while the move is out are never overwritten by the words that were refused", async () => {
+  const box = await mountedRefusedForMove();
+  typeInComposer(box.container, " and fix CI");
+
+  await box.landMove();
+
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Rebase on main"],
+  );
+  assert.equal(composerEditor(box.container).textContent, "Rebase on main and fix CI");
+});
+
+test("a message sent and refused while the move is out is not sent again when the move lands", async () => {
+  const box = await mountedRefusedForMove();
+  typeInComposer(box.container, " and fix CI");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.landMove();
+
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Rebase on main", "Rebase on main and fix CI"],
+  );
 });

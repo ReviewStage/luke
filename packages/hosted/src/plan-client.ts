@@ -139,6 +139,13 @@ const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
+/** The refusals a move can answer with: the plan or the workspace not the account's, the plan archived, or the workspace not reaching its repository. */
+const MOVE_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: PLAN_CALL_FAILURE.PLAN_ARCHIVED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+} as const;
+
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
 function refusedAs<Failure extends PlanCallFailure>(
   payload: UnparsedWireValue,
@@ -300,6 +307,35 @@ export class HostedPlanClient {
         return changed === undefined ? UNANSWERED : succeeded(changed.plan);
       }
       return refusedAs(payload, REPOSITORY_REFUSALS);
+    });
+  }
+
+  /**
+   * Moves one plan to another of the account's workspaces, answering the
+   * plan as moved; or why it stands where it was: the service did not
+   * answer, the plan or the workspace is not the account's to move it to,
+   * the plan is archived, or the workspace does not reach its repository.
+   */
+  move(
+    planId: string,
+    workspaceId: string,
+  ): Effect.Effect<PlanCallResult<Plan, PlanCallFailure>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planUpdateRequestSchema)({ workspaceId }));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const call = this.#call;
+    return Effect.gen(function* () {
+      const answer = yield* call.send({
+        method: HTTP_METHOD.PATCH,
+        path: planPath(planId),
+        body: JSON.stringify(admitted),
+      });
+      if (!callAnswered(answer)) return UNANSWERED;
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (answer.response.ok) {
+        const moved = Result.getOrUndefined(readServiceAnswer(planAnswerSchema)(payload));
+        return moved === undefined ? UNANSWERED : succeeded(moved.plan);
+      }
+      return refusedAs(payload, MOVE_REFUSALS);
     });
   }
 
