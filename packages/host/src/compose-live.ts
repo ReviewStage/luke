@@ -20,6 +20,7 @@ import {
   type PlanDraftFrame,
   type PlanWorkFrame,
 } from "@sidecar/hosted";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
@@ -28,6 +29,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag } from "./effect/kernel.js";
+import type { SettingsStore } from "./settings-store.js";
 
 export interface LiveComposer extends Composer {
   readonly service: LiveSessionHolder;
@@ -35,8 +37,8 @@ export interface LiveComposer extends Composer {
 
 export interface LiveDependencies {
   settings: Pick<SettingsComposer, "recordProductEvent"> & {
-    /** Whether a call opens with Luke's avatar, read as each call comes to stand. */
-    readonly videoOnCall: Effect.Effect<boolean>;
+    /** Where the `voiceVideo` setting is read, as each call comes to stand. */
+    readonly store: Pick<SettingsStore, "get">;
   };
   account: Pick<AccountComposer, "agentTrace"> & {
     readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
@@ -83,7 +85,11 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
   const service = yield* LiveSessionHolder.make({
     source: () => account.voiceCapabilities.liveSessions,
     createId: kernel.createId,
-    videoOnCall: settings.videoOnCall,
+    // Note that a settings file that cannot be read opens the call without
+    // video, because each avatar is a Keyframe session the plan pays for.
+    videoOnCall: settings.store
+      .get(APP_SETTING_SCHEMA.voiceVideo.field)
+      .pipe(Effect.orElseSucceed(() => APP_SETTING_SCHEMA.voiceVideo.default)),
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {

@@ -688,6 +688,19 @@ only when you press Send.
   stores and logs neither the recording nor the text, and counts only the clip
   and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
+- Keyframe Labs, for video calls, only while Video calls is on in Settings ›
+  Voice, which it is not until you turn it on. Each call that shows Luke on
+  video opens one avatar session at Keyframe: our service asks Keyframe for it
+  on our key, naming the stock persona Luke appears as and nothing about you,
+  and hands the session's one-time pass to your Mac, where only the floating
+  call window holds it. The call window then sends Keyframe Luke's synthesized
+  voice as he speaks, which carries what he says about your plan, and plays back
+  the video and audio Keyframe renders from it. Your microphone never reaches
+  Keyframe, nor does anything else on your Mac or in your account: the voice it
+  receives is Luke's alone. Our service logs only whether a session started, the
+  Keyframe server it opened on, and, when one could not, why, and keeps, with
+  the call's record, when each session started and ended, its length, and why it
+  ended. Keyframe keeps what it receives under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the anonymous exception, process-session, and native crash
