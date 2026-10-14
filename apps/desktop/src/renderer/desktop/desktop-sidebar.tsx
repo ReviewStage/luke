@@ -17,7 +17,7 @@ import {
 import { sameTab } from "@luke/ui/tab-strip-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { HouseIcon, InboxIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
@@ -44,7 +44,7 @@ import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
-import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
@@ -544,6 +544,73 @@ function SidebarInboxRow({
   );
 }
 
+/** What the sidebar is drawn with while it floats, or could. */
+interface FloatingSidebar {
+  readonly ref: React.RefObject<HTMLElement | null>;
+  /** Whether the sidebar is on screen: pinned, or floating over the work. */
+  readonly inSight: boolean;
+  /** A choice made in the sidebar, which puts a floating sidebar away once made. */
+  readonly chosen: <A extends unknown[]>(go: (...args: A) => void) => (...args: A) => void;
+  readonly onPress: () => void;
+  readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
+  readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+}
+
+/**
+ * The floating sidebar's doors: a press in a peek opens it, the pointer
+ * leaving a peek puts it away, though not for the toggle standing over its
+ * head, and Escape puts it away while no menu in it took the key first.
+ * Opened from away, it takes the keyboard, which Escape gives back.
+ */
+function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
+  const ref = useRef<HTMLElement | null>(null);
+  const handBack = useRef<HTMLElement | null>(null);
+  const was = useRef(sidebar.overlay);
+  const { overlay, onOverlay } = sidebar;
+  const floating = overlay !== SIDEBAR_OVERLAY.CLOSED;
+  useEffect(() => {
+    const from = was.current;
+    was.current = overlay;
+    const held = ref.current;
+    if (overlay !== SIDEBAR_OVERLAY.OPEN || from !== SIDEBAR_OVERLAY.CLOSED || held === null) {
+      return;
+    }
+    handBack.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const first =
+      held.querySelector<HTMLElement>('[aria-current="page"]') ??
+      held.querySelector<HTMLElement>(".sidebar-new-plan");
+    first?.focus();
+  }, [overlay]);
+  return {
+    ref,
+    inSight: !sidebar.collapsed || floating,
+    chosen:
+      (go) =>
+      (...args) => {
+        go(...args);
+        if (floating) onOverlay(SIDEBAR_OVERLAY.CLOSED);
+      },
+    onPress: () => {
+      if (overlay === SIDEBAR_OVERLAY.PEEK) onOverlay(SIDEBAR_OVERLAY.OPEN);
+    },
+    onPointerLeave: (event) => {
+      if (overlay !== SIDEBAR_OVERLAY.PEEK) return;
+      const to = event.relatedTarget;
+      if (to instanceof Element && to.closest(".title-bar-controls") !== null) return;
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+    },
+    onKeyDown: (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented || !floating) return;
+      // Note that the window's layered Escape stands down for a key already taken.
+      event.preventDefault();
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+      handBack.current?.focus();
+      handBack.current = null;
+    },
+  };
+}
+
 /**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan of the workspace chosen, headed by
@@ -568,7 +635,13 @@ function SidebarInboxRow({
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
  * folds it away. Folded away, it is inert as well as out of sight, so no key
- * reaches a row nobody can see.
+ * reaches a row nobody can see, until it floats open over the work
+ * (`sidebar-collapse.ts`). A floating sidebar is put away by a choice in it,
+ * by Escape, or once the pointer leaves a peek; a press in a peek opens it,
+ * so a menu it raises outlasts the pointer. Opened from away, it takes the
+ * keyboard at the row it marks, else at New plan, and Escape gives the
+ * keyboard back where it was. Floating, it has no edge to drag, since only a
+ * pinned sidebar is resized.
  */
 export function DesktopSidebar({
   sidebar,
@@ -580,6 +653,7 @@ export function DesktopSidebar({
   updates,
   onSignOut,
   call,
+  onPressWithin,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
@@ -592,8 +666,11 @@ export function DesktopSidebar({
   onSignOut: () => Promise<void>;
   /** The call card, at the column's foot above the account row, while one is to be drawn here. */
   call: CallCardInput | undefined;
+  /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
+  onPressWithin: () => void;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
+  const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox stands in the plan's place, so while it does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
   // A press in the list is always about plans, so it brings the Plans tab
@@ -648,15 +725,16 @@ export function DesktopSidebar({
       pin.plan === chosenPin.plan &&
       pin.at === chosenPin.at,
   )?.pin;
+  const { chosen } = overlay;
   const context: RowContext = {
     plans,
     current,
     marked: (planId, pin) =>
       pinMarked === undefined ? pin === undefined && current(planId) : pin === pinMarked,
-    onOpen: openPlan,
+    onOpen: chosen(openPlan),
     unread,
     now,
-    inSight: !sidebar.collapsed,
+    inSight: overlay.inSight,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
   // an agent's or the Inbox in the plan's own column, any other in the side panel. The
@@ -702,7 +780,17 @@ export function DesktopSidebar({
   useAppCommand(APP_COMMAND.NEXT_PLAN, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
   return (
-    <aside className="desktop-sidebar" inert={sidebar.collapsed}>
+    <aside
+      ref={overlay.ref}
+      className="desktop-sidebar"
+      inert={!overlay.inSight}
+      onPointerDown={() => {
+        onPressWithin();
+        overlay.onPress();
+      }}
+      onPointerLeave={overlay.onPointerLeave}
+      onKeyDown={overlay.onKeyDown}
+    >
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} />
       <LukeIdentity />
@@ -712,7 +800,7 @@ export function DesktopSidebar({
         className="sidebar-new-plan"
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
         disabled={!plans.signedIn}
-        onClick={newPlan}
+        onClick={chosen(newPlan)}
       >
         <ComposeIcon />
         New plan
@@ -724,7 +812,7 @@ export function DesktopSidebar({
         type="button"
         className="sidebar-search"
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-        onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
+        onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
       >
         <SearchIcon />
         Search
@@ -733,17 +821,17 @@ export function DesktopSidebar({
           className="row-shortcut"
         />
       </button>
-      <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={goHome} />
+      <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={chosen(goHome)} />
       <SidebarInboxRow
         waiting={plans.signedIn ? waitingItems(plans) : 0}
         current={inInbox}
         disabled={!plans.signedIn}
-        onOpen={openInbox}
+        onOpen={chosen(openInbox)}
       />
       <hr className="sidebar-rule" />
       {/* The workspace the list is, while an account is signed in; it
           stands over the scroller, so it never scrolls away. */}
-      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
+      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={overlay.inSight} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
@@ -754,7 +842,7 @@ export function DesktopSidebar({
             folds={folds}
             shown={pinnedShown}
             context={context}
-            onOpenTab={openPinnedTab}
+            onOpenTab={chosen(openPinnedTab)}
           />
         ) : null}
         {/* The rule above heads the list, so it carries no heading of its
@@ -784,7 +872,7 @@ export function DesktopSidebar({
                   : repositoryLabel(group.repository, groups)
               }
               folds={folds}
-              onNewPlanIn={newPlanIn}
+              onNewPlanIn={chosen(newPlanIn)}
               context={context}
             />
           ))}
@@ -797,14 +885,14 @@ export function DesktopSidebar({
         <SidebarFoot
           account={account}
           updates={updates}
-          shown={!sidebar.collapsed}
+          shown={overlay.inSight}
           settingsOpen={tab === PANEL_TAB.SETTINGS}
-          onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
+          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
           onSignOut={onSignOut}
         />
       </div>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
-      <SidebarResizeEdge edge={edge} />
+      {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>
   );
 }

@@ -17,6 +17,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopSettings } from "./desktop-settings";
+import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
@@ -111,7 +112,16 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
 function SettingsHarness(): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ACCOUNT);
   return createElement(DesktopSettings, {
-    sidebar: { collapsed: false, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+    sidebar: {
+      collapsed: false,
+      compact: false,
+      overlay: SIDEBAR_OVERLAY.CLOSED,
+      width: 264,
+      onToggle: ignore,
+      onOverlay: ignore,
+      onResize: ignore,
+      staged: false,
+    },
     history: {
       canGoBack: false,
       canGoForward: false,

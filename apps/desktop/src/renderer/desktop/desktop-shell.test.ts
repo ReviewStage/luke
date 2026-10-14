@@ -20,6 +20,7 @@ import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
+import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -143,7 +144,16 @@ function mount(
         onForward: ignore,
         onLeaveVersionHistory: ignore,
       },
-      sidebar: { collapsed: true, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+      sidebar: {
+        collapsed: true,
+        compact: false,
+        overlay: SIDEBAR_OVERLAY.CLOSED,
+        width: 264,
+        onToggle: ignore,
+        onOverlay: ignore,
+        onResize: ignore,
+        staged: false,
+      },
       call: undefined,
       captions: {
         caption: { content: undefined, shown: false },

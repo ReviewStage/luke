@@ -25,6 +25,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
+import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse";
 import { PANEL_TAB } from "./panel-tabs";
 import { AgentChangesTab } from "./planning/agent-changes-tab";
 import { ApiKeysSection } from "./settings/api-keys-section";
@@ -141,7 +142,16 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
   let retried = 0;
   const page = await mount(
     createElement(DesktopSidebar, {
-      sidebar: { collapsed: false, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+      sidebar: {
+        collapsed: false,
+        compact: false,
+        overlay: SIDEBAR_OVERLAY.CLOSED,
+        width: 264,
+        onToggle: ignore,
+        onOverlay: ignore,
+        onResize: ignore,
+        staged: false,
+      },
       history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
       plans: plansControl({
         listFailed: true,
@@ -151,6 +161,7 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
       }),
       tab: PANEL_TAB.PLANS,
       onTabChange: ignore,
+      onPressWithin: ignore,
       account: {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",
