@@ -18,13 +18,15 @@ import {
   type ActResultFor,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
-import { MembersSection, type WorkspaceSettingsControl } from "./members-section";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
- * Settings' Workspace section over a bridge answering as the host would: the
- * chosen team workspace's members are read and listed, an owner or an admin
- * is offered Remove for anyone but an owner, a member leaves and the
- * personal workspace is listed again, and a refusal the role earns says so.
+ * Settings' Workspace page over a bridge answering as the host would: the
+ * picker chooses the workspace the page shows, a team workspace's members
+ * are read and listed, an owner or an admin is offered Remove for anyone but
+ * an owner, a member leaves, a refusal the role earns says so, and an owner
+ * or admin connects or disconnects the workspace's GitHub repositories.
  * Synthetic accounts.
  */
 
@@ -85,6 +87,8 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WORKSPACE_GITHUB_DISCONNECT:
+    case ACT_KIND.WORKSPACE_INVITE:
+    case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -94,6 +98,7 @@ function answer(request: Act): Promise<ActOutcome> {
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installScrollIntoView();
   stored = [OWNER, MEMBER];
   sent = [];
   refuseRemoval = false;
@@ -114,29 +119,33 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The section over `workspace`, keeping how often it asked to fall back and to connect GitHub. */
-async function mount(workspace: Workspace | undefined) {
-  const pressed = { left: 0, connected: 0 };
-  const control: WorkspaceSettingsControl = {
-    workspace,
-    onLeft: () => {
-      pressed.left += 1;
-    },
-    onConnectGitHub: () => {
-      pressed.connected += 1;
-    },
-  };
+/** The page over `workspace` beside the personal one, its picker choosing for itself, and how often a leave asked to fall back. */
+async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
+  const pressed = { left: 0 };
+  const workspaces = [PERSONAL, workspace, ...others].filter(
+    (each, at, all) => all.findIndex((other) => other.id === each.id) === at,
+  );
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(MembersSection, { control })));
+  const render = (workspaceId: string) => {
+    const control: WorkspaceSettingsControl = {
+      workspaces,
+      workspaceId,
+      onChooseWorkspace: (chosen) => render(chosen),
+      onLeft: () => {
+        pressed.left += 1;
+      },
+    };
+    act(() => root.render(createElement(WorkspacePage, { control })));
+  };
+  render(workspace.id);
   await settle();
-  /** Stands the section again over another listed workspace, as a switch in the sidebar does. */
+  /** Stands the page again over another workspace, as a link naming it does. */
   const relist = async (next: Workspace) => {
-    act(() =>
-      root.render(createElement(MembersSection, { control: { ...control, workspace: next } })),
-    );
+    workspaces.push(next);
+    render(next.id);
     await settle();
   };
   return { page: container, pressed, relist };
@@ -235,11 +244,17 @@ test("a member leaves after confirming, which lists the personal workspace again
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the personal workspace, having no team, draws no section and reads nothing", async () => {
+test("the personal workspace says it is yours, lists no members, and offers its owner GitHub repositories", async () => {
   const { page } = await mount(PERSONAL);
 
   assert.deepEqual(sent, []);
-  assert.equal(page.textContent, "");
+  assert.equal(
+    page.querySelector(".workspace-identity small")?.textContent,
+    "Your personal workspace. Its plans are yours alone.",
+  );
+  assert.equal(page.querySelector(".workspace-member"), null);
+  assert.deepEqual(buttons(page, "Invite people…"), []);
+  assert.ok(page.querySelector(".workspace-github"), "the owner is offered GitHub repositories");
 });
 
 test("an admin sees the team's GitHub organization and disconnects it after confirming", async () => {
@@ -254,7 +269,7 @@ test("an admin sees the team's GitHub organization and disconnects it after conf
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT);
   await confirm("Disconnect");
 
-  assert.equal(row.querySelector("strong")?.textContent, "GitHub: acme");
+  assert.equal(row.querySelector("strong")?.textContent, "Repositories from acme");
   assert.equal(askedFirst, true);
   assert.deepEqual(
     sent
@@ -264,13 +279,71 @@ test("an admin sees the team's GitHub organization and disconnects it after conf
   );
 });
 
-test("an owner of a workspace with no GitHub organization is offered Connect, and a member sees no GitHub row", async () => {
+test("an owner of a workspace with no GitHub organization is offered Connect, a connected one Choose repositories on GitHub, and a member sees no GitHub repositories", async () => {
   const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  act(() => button(owner.page, "Connect GitHub org…").click());
+  act(() => button(owner.page, "Connect…").click());
+  const admin = await mount({
+    ...ACME,
+    role: WORKSPACE_ROLE.ADMIN,
+    github: { login: "acme", active: true },
+  });
+  const choose =
+    admin.page.querySelector(".workspace-github-choose") ?? assert.fail("no Choose row");
+  act(() => button(choose, "Open GitHub…").click());
   const member = await mount({ ...ACME, github: { login: "acme", active: true } });
+  await settle();
 
-  assert.equal(owner.pressed.connected, 1);
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id }, { workspaceId: ACME.id }],
+  );
   assert.equal(member.page.querySelector(".workspace-github"), null);
+});
+
+test("the picker shows another workspace on the page, its name, the account's role, and its own members", async () => {
+  const beta: Workspace = {
+    ...ACME,
+    id: "workspace-beta",
+    name: "Beta",
+    role: WORKSPACE_ROLE.ADMIN,
+  };
+  const { page } = await mount(ACME, [beta]);
+  const chip =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Workspace: acme"]') ??
+    assert.fail("no picker naming acme");
+
+  act(() => chip.click());
+  const option =
+    [...page.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (each) => each.textContent === "Beta",
+    ) ?? assert.fail("no Beta in the picker");
+  act(() => option.click());
+  await settle();
+
+  assert.equal(page.querySelector(".workspace-identity strong")?.textContent, "Beta");
+  assert.equal(page.querySelector(".workspace-identity small")?.textContent, "Your role: Admin");
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id }, { workspaceId: beta.id }],
+  );
+});
+
+test("Invite people opens the service's invite page for the workspace the page shows", async () => {
+  const { page } = await mount(ACME);
+
+  act(() => button(page, "Invite people…").click());
+  await settle();
+
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id }],
+  );
 });
 
 test("a Disconnect asked for one workspace does not stand over another listed in its place", async () => {

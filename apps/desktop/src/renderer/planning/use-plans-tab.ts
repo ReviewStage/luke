@@ -25,6 +25,7 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
+import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useStateWithRef } from "../use-state-with-ref";
 import {
@@ -197,14 +198,12 @@ export interface PlansControl {
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new plan in it. */
   onChooseWorkspace: (workspaceId: string) => void;
-  /** Lists the personal workspace again, once the one listed is left. */
-  onLeftWorkspace: () => void;
+  /** Lists the personal workspace again where the workspace left is the one listed. */
+  onLeftWorkspace: (workspaceId: string) => void;
   /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
   onCreateWorkspace: (name: string) => Promise<string | undefined>;
-  /** Opens the service's invite page for the listed workspace in the browser, or says in a toast why not. */
-  onInviteToWorkspace: () => void;
-  /** Opens GitHub to connect an organization to the listed workspace, or says in a toast why not. */
-  onConnectGitHub: () => void;
+  /** Opens Settings on its Workspace page, showing the listed workspace. */
+  onOpenWorkspaceSettings: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -481,6 +480,8 @@ export function usePlansTab(input: {
   onOpenIntegrations: () => void;
   /** Opens Settings on its Coding agents page, where the developer's API keys are. */
   onOpenApiKeys: () => void;
+  /** Opens Settings at the place the link names. */
+  onOpenSettings: (link: SettingsLink) => void;
 }): PlansControl {
   const { shown, voice } = input;
   const { act, tell } = input.acts;
@@ -1065,18 +1066,6 @@ export function usePlansTab(input: {
       (refused: Error) => refused.message,
     );
   };
-  const refusedInToast = (refused: Error) =>
-    toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-  const inviteToWorkspace = () => {
-    if (fixture !== undefined || listedWorkspace === undefined) return;
-    act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: listedWorkspace.id }).catch(refusedInToast);
-  };
-  const connectGitHub = () => {
-    if (fixture !== undefined || listedWorkspace === undefined) return;
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: listedWorkspace.id }).catch(
-      refusedInToast,
-    );
-  };
 
   // A fixture's plans are given no repository, as they are read from nowhere.
   const setRepository = (
@@ -1348,11 +1337,16 @@ export function usePlansTab(input: {
     workspace: listedWorkspace,
     onChooseWorkspace: workspace.choose,
     onCreateWorkspace: createWorkspace,
-    onInviteToWorkspace: inviteToWorkspace,
-    onConnectGitHub: connectGitHub,
-    onLeftWorkspace: () => {
+    onOpenWorkspaceSettings: () =>
+      input.onOpenSettings({
+        page: SETTINGS_VIEW.WORKSPACE,
+        ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
+      }),
+    onLeftWorkspace: (workspaceId) => {
       const personal = viewed.workspaces.find((each) => each.personal);
-      if (personal !== undefined) workspace.choose(personal.id);
+      if (personal !== undefined && listedWorkspace?.id === workspaceId) {
+        workspace.choose(personal.id);
+      }
     },
     activePlanId: planning.activePlanId,
     boundFor,

@@ -22,12 +22,12 @@ import type {
 } from "./controls";
 import { IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
-import { MembersSection, type WorkspaceSettingsControl } from "./members-section";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { VoiceSection } from "./voice-page";
+import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 import { useSettingsWrites } from "./writes";
 
 /**
@@ -55,7 +55,7 @@ export interface SettingsPanelProps {
   updates: UpdateControl;
   settings?: AppSettingsView;
   shortcuts: ShortcutControl;
-  /** The workspace the sidebar lists, its members, and the install, drawn while an account is signed in. */
+  /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
 }
 
@@ -163,11 +163,10 @@ export function SettingsPanel({
         </section>
       ) : null}
 
-      {/* Under the index, so the sidebar's Members… lands in sight of it. */}
-      {view === SETTINGS_VIEW.ROOT &&
+      {view === SETTINGS_VIEW.WORKSPACE &&
       workspace !== undefined &&
       account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-        <MembersSection control={workspace} />
+        <WorkspacePage control={workspace} />
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE && panelView ? (

@@ -13,10 +13,9 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * The head of the sidebar's plans as the developer meets it: the workspace
- * listed, and the menu of every workspace, New workspace…, and for a team's
- * workspace Invite people…, Members…, and its GitHub organization for an
- * owner or admin. Each press is written down where the sidebar would hand it
- * on.
+ * listed, and the menu of every workspace, New workspace…, and Workspace
+ * settings…, whoever the account is in the workspace. Each press is written
+ * down where the sidebar would hand it on.
  */
 
 const PERSONAL: Workspace = {
@@ -46,14 +45,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The switcher over the plans given, in sight or folded away, its Members… presses counted. */
+/** The switcher over the plans given, in sight or folded away. */
 function mount(plans: Partial<PlansControl>) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const opened = { members: 0 };
   const render = (inSight: boolean) =>
     act(() =>
       root.render(
@@ -62,16 +60,12 @@ function mount(plans: Partial<PlansControl>) {
           createElement(WorkspaceSwitcher, {
             plans: { ...plansControl(), ...plans },
             inSight,
-            onOpenMembers: () => {
-              opened.members += 1;
-            },
           }),
         ),
       ),
     );
   render(true);
   return {
-    opened,
     switcher: () => container.querySelector<HTMLButtonElement>(".sidebar-workspace-toggle"),
     fold: () => render(false),
   };
@@ -95,57 +89,38 @@ function choose(label: string): void {
   act(() => item.click());
 }
 
-test("the head names the workspace listed, and its menu lists every workspace, New workspace…, and a team's Invite, Members, and connected GitHub organization", () => {
+test("the menu offers the workspaces, the listed one checked, New workspace…, and Workspace settings…, and nothing else", () => {
   const pressed: string[] = [];
   const page = mount({
     workspaces: [PERSONAL, CONNECTED],
     workspace: CONNECTED,
     onChooseWorkspace: (workspaceId) => pressed.push(`choose:${workspaceId}`),
-    onInviteToWorkspace: () => pressed.push("invite"),
+    onOpenWorkspaceSettings: () => pressed.push("settings"),
   });
 
   open(page.switcher());
   const offered = menuItems().map((item) => [item.textContent, item.querySelector("svg") !== null]);
   choose("Personal");
   open(page.switcher());
-  choose("Invite people…");
-  open(page.switcher());
-  choose("Members…");
-  open(page.switcher());
-  choose("GitHub: acme");
+  choose("Workspace settings…");
 
   assert.equal(page.switcher()?.textContent, "acme");
   assert.deepEqual(offered, [
     ["Personal", false],
     ["acme", true],
     ["New workspace…", true],
-    ["Invite people…", true],
-    ["Members…", true],
-    ["GitHub: acme", true],
+    ["Workspace settings…", true],
   ]);
-  assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, "invite"]);
-  assert.equal(page.opened.members, 2, "Members… and the connected organization open Settings");
+  assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, "settings"]);
 });
 
-test("an admin of a team with no GitHub organization is offered Connect GitHub org…, and a member is offered none", () => {
-  let connects = 0;
-  const admin = mount({
-    workspaces: [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.ADMIN }],
-    workspace: { ...ACME, role: WORKSPACE_ROLE.ADMIN },
-    onConnectGitHub: () => {
-      connects += 1;
-    },
-  });
-  open(admin.switcher());
-  choose("Connect GitHub org…");
-  for (const root of roots.splice(0)) act(() => root.unmount());
+test("a member of a team is offered the same three kinds of item as its admin", () => {
   const member = mount({ workspaces: [PERSONAL, ACME], workspace: ACME });
   open(member.switcher());
 
-  assert.equal(connects, 1);
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Personal", "acme", "New workspace…", "Invite people…", "Members…"],
+    ["Personal", "acme", "New workspace…", "Workspace settings…"],
   );
 });
 
@@ -184,7 +159,7 @@ test("New workspace… asks a name and creates it, and a refusal is said on the 
   assert.ok(create, "the card offers Create");
   await act(async () => create.click());
 
-  assert.deepEqual(offered, ["Personal", "New workspace…"]);
+  assert.deepEqual(offered, ["Personal", "New workspace…", "Workspace settings…"]);
   assert.deepEqual(asked, ["Platform", "Platform"]);
   assert.equal(refused, "Could not make that workspace on this system.");
   assert.equal(
@@ -207,6 +182,6 @@ test("the workspace menu closes when the sidebar folds away", () => {
 
   page.fold();
 
-  assert.equal(opened, 5);
+  assert.equal(opened, 4);
   assert.deepEqual(menuItems(), []);
 });

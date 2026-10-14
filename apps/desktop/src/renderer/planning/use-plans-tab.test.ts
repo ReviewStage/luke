@@ -38,6 +38,7 @@ import {
 } from "#shared/messages/voice-view";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
+import { SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { ToastHost } from "../toast";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { MAIN_TAB } from "./use-main-tabs";
@@ -105,6 +106,7 @@ function mount(
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
   const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
+  const links: SettingsLink[] = [];
   const record = (kind: ActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
@@ -164,6 +166,7 @@ function mount(
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
+      onOpenSettings: (link) => links.push(link),
     });
     return null;
   }
@@ -181,6 +184,8 @@ function mount(
     shownInboxes,
     voiceCommands,
     payloads,
+    /** Every Settings link the tab followed, in order. */
+    links,
     control: () => {
       assert.ok(control);
       return control;
@@ -257,11 +262,6 @@ function _row(
     repository: null,
     ...marks,
   };
-}
-
-/** What the newest toast says, while one stands. */
-function toast(): string | undefined {
-  return newestToastSays();
 }
 
 /** A plan's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
@@ -845,52 +845,26 @@ test("a workspace made is asked for by its name and listed at once, and a refusa
   assert.equal(tab.control().workspace?.id, PLATFORM.id);
 });
 
-test("Invite people and Connect GitHub org name the listed workspace, a refusal says why in a toast, and a fixture asks nothing", async () => {
-  const tab = mount(
-    { shown: true, planning: TWO_WORKSPACES },
-    {
-      [ACT_KIND.WORKSPACE_INVITE]: () => Promise.resolve(undefined),
-      [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: () =>
-        Promise.reject(new Error("Could not connect GitHub to that workspace on this system.")),
-    },
-  );
-  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+test("Workspace settings opens Settings on the listed workspace's page", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
 
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  act(() => tab.control().onInviteToWorkspace());
-  act(() => tab.control().onConnectGitHub());
-  await settle();
-  act(() => fixture.control().onInviteToWorkspace());
-  act(() => fixture.control().onConnectGitHub());
+  act(() => tab.control().onOpenWorkspaceSettings());
 
-  assert.deepEqual(
-    tab.payloads
-      .filter(
-        (asked) =>
-          asked.kind === ACT_KIND.WORKSPACE_INVITE ||
-          asked.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT,
-      )
-      .map((asked) => [
-        asked.kind,
-        Option.getOrUndefined(readWorkspaceNamed(asked.payload))?.workspaceId,
-      ]),
-    [
-      [ACT_KIND.WORKSPACE_INVITE, ACME.id],
-      [ACT_KIND.WORKSPACE_GITHUB_CONNECT, ACME.id],
-    ],
-  );
-  assert.equal(toast(), "Could not connect GitHub to that workspace on this system.");
-  assert.deepEqual(fixture.told, []);
+  assert.deepEqual(tab.links, [{ page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id }]);
 });
 
-test("a workspace left lists the personal one again", () => {
+test("the listed workspace left lists the personal one again, and another workspace left keeps the one listed", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(ACME.id));
   const chosen = tab.control().workspace?.id;
 
-  act(() => tab.control().onLeftWorkspace());
+  act(() => tab.control().onLeftWorkspace("workspace-elsewhere"));
+  const keptOnAnother = tab.control().workspace?.id;
+  act(() => tab.control().onLeftWorkspace(ACME.id));
 
   assert.equal(chosen, ACME.id);
+  assert.equal(keptOnAnother, ACME.id);
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 

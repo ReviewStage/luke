@@ -143,13 +143,17 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   signed-in account sees the list headed by the workspace it lists, the
   personal one until another is chosen. Its menu lists every workspace the
   account is a member of, the listed one checked, then "New workspace…",
-  which asks a name and lists the workspace made. For a team's workspace it
-  adds "Invite people…", which opens the service's invite page in the
-  browser, "Members…", which opens Settings on that workspace's members
-  (`settings/members-section.tsx`), where an owner or admin removes a member
-  and anyone but an owner leaves, and, for an owner or admin, "Connect
-  GitHub org…" or the connected organization's login, disconnected in
-  Settings. The list, Pinned, Archived, and the command palette hold the
+  which asks a name and lists the workspace made, and "Workspace settings…",
+  which opens Settings' Workspace page on the listed workspace; nothing else
+  stands in it. That page (`settings/workspace-page.tsx`) has a picker of
+  the account's workspaces, the workspace's name and the account's role,
+  and for a team's workspace its members: Invite people opens the service's
+  invite page, an owner or admin removes a member, and anyone but an owner
+  leaves. For an owner or admin it holds GitHub repositories: Connect, or the
+  connected account's repositories with Disconnect and "Choose repositories
+  on GitHub". Every way into Settings at a place takes one typed link,
+  `SettingsLink` (`settings-views.ts`: a page, a section, a workspace),
+  followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
   chosen workspace's plans alone, New plan starts in it, the repository chip
   lists its repositories, and the choice is remembered on this Mac.
 - Clicking a row opens that plan on the document page (see "Leaving and

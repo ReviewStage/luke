@@ -37,7 +37,8 @@ import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { settingsRowsInput } from "./settings/settings-panel";
-import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { followSettingsLink } from "./settings-link";
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { fixtureUpdate } from "./update-row";
@@ -76,6 +77,8 @@ export function App(): React.JSX.Element {
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  /** The workspace Settings' Workspace page shows, where a link or its picker named one; the sidebar's otherwise. */
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string>();
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -121,6 +124,21 @@ export function App(): React.JSX.Element {
       });
     },
     [setSettingsView, setTab],
+  );
+  /**
+   * Opens Settings at the place a link names: its page, the workspace the
+   * Workspace page shows, and its section, which is looked for once drawn
+   * and given up on by itself.
+   */
+  const openSettings = useCallback(
+    (link: SettingsLink) => {
+      followSettingsLink(link, {
+        changeTab,
+        changeView: setSettingsView,
+        changeWorkspace: setSettingsWorkspaceId,
+      });
+    },
+    [changeTab, setSettingsView],
   );
 
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
@@ -220,6 +238,7 @@ export function App(): React.JSX.Element {
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
+    onOpenSettings: (link) => openSettings(link),
     // Arriving at Settings lands on its front page, so the page is turned after.
     onOpenIntegrations: () => {
       changeTab(PANEL_TAB.SETTINGS);
@@ -511,11 +530,15 @@ export function App(): React.JSX.Element {
             updates,
             settings,
             shortcuts,
-            // The workspace Settings shows members of is the one the sidebar lists.
+            // The Workspace page shows the workspace a link or its picker chose, the sidebar's otherwise.
             workspace: {
-              workspace: plans.workspace,
-              onLeft: plans.onLeftWorkspace,
-              onConnectGitHub: plans.onConnectGitHub,
+              workspaces: plans.workspaces,
+              workspaceId: settingsWorkspaceId ?? plans.workspace?.id,
+              onChooseWorkspace: setSettingsWorkspaceId,
+              onLeft: (workspaceId) => {
+                plans.onLeftWorkspace(workspaceId);
+                setSettingsWorkspaceId(undefined);
+              },
             },
           }}
         />

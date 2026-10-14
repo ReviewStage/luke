@@ -8,6 +8,7 @@ import {
   PlugIcon,
   SpeakerIcon,
   TerminalIcon,
+  UserIcon,
 } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
@@ -44,6 +45,10 @@ export const SETTINGS_PAGE = {
   [SETTINGS_VIEW.INTEGRATIONS]: {
     title: "Integrations",
     icon: <PlugIcon />,
+  },
+  [SETTINGS_VIEW.WORKSPACE]: {
+    title: "Workspace",
+    icon: <UserIcon />,
   },
 };
 
