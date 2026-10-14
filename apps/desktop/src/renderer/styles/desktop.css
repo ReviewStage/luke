@@ -3821,6 +3821,11 @@ body:has(.app-stage[data-capture="true"])
   font-size: 13px;
 }
 
+.chat-ask-values {
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-16);
+}
+
 .chat-ask-settled-note {
   color: var(--text-primary);
 }
