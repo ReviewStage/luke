@@ -147,9 +147,11 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   which opens Settings' Workspace page on the listed workspace; nothing else
   stands in it. That page (`settings/workspace-page.tsx`) has a picker of
   the account's workspaces, the workspace's name and the account's role,
-  and for a team's workspace its members: Invite people opens the service's
-  invite page, an owner or admin removes a member, and anyone but an owner
-  leaves. For an owner or admin it holds GitHub repositories: Connect, or the
+  and for a team's workspace its members: an owner or admin invites an
+  address as a member or an admin and sees the invitations still pending,
+  each with its accept link to copy and send and a Cancel, under the Mac's
+  own Better Auth session; an owner or admin removes a member, and anyone but
+  an owner leaves. For an owner or admin it holds GitHub repositories: Connect, or the
   connected account's repositories with Disconnect and "Choose repositories
   on GitHub". Every way into Settings at a place takes one typed link,
   `SettingsLink` (`settings-views.ts`: a page, a section, a workspace),
@@ -1228,7 +1230,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace made, its invite page opened, its GitHub organization connected and disconnected, its members read and removed, and one left (`workspace.create`, `workspace.invite`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/hosted/src/plan-markdown.ts`). |

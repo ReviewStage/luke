@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
+import {
+  fakeCloudApi,
+  HTTP_STATUS,
+  jsonResponse,
+  recordingHttpClient,
+} from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
-import { HostedWorkspaceClient } from "./workspace-client.js";
+import { HostedWorkspaceClient, type HostedWorkspaceClientOptions } from "./workspace-client.js";
 import { WORKSPACE_ROLE } from "./workspace-wire.js";
 
 const PERSONAL = {
@@ -23,12 +28,37 @@ const ACME = {
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=opaque-intent";
 
-function client(): HostedWorkspaceClient {
+/** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
+function client(
+  session: Pick<HostedWorkspaceClientOptions, "readSessionToken" | "obtainSession"> = {
+    readSessionToken: () => Effect.succeed("session-1"),
+    obtainSession: () => Effect.void,
+  },
+): HostedWorkspaceClient {
   return new HostedWorkspaceClient({
     serviceBaseUrl: "https://tryluke.dev",
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
+    readAccountKey: () => Effect.succeed("ada@example.com"),
+    ...session,
   });
+}
+
+/** A session the hand-off replaces: none or `before` until asked for, then `after`. */
+function handedOff(before: string | undefined, after: string) {
+  let current = before;
+  let asked = 0;
+  return {
+    session: {
+      readSessionToken: () => Effect.sync(() => current),
+      obtainSession: () =>
+        Effect.sync(() => {
+          asked += 1;
+          current = after;
+        }),
+    },
+    asked: () => asked,
+  };
 }
 
 /** A service that refuses the request with the word given. */
@@ -175,6 +205,8 @@ it.effect(
 
       assert.deepEqual(remaining, { ok: true, answer: [ADA] });
       assert.deepEqual(left, { ok: true, answer: ACME.id });
+      // Both write through Better Auth, so both carry the Mac's session, never its OAuth token.
+      assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
       assert.deepEqual(
         api.requests().map(({ method, pathname, body }) => ({
           route: `${method} ${pathname}`,
@@ -225,5 +257,140 @@ it.effect(
       assert.deepEqual(yield* both(notPermitted.layer), [refused, refused]);
       assert.deepEqual(yield* both(notFound.layer), [outside, outside]);
       assert.deepEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
+    }),
+);
+
+it.effect(
+  "with no session yet, a removal asks for one through the hand-off and is sent on it",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/workspaces/members/remove": { answer: () => ({ members: [ADA] }) },
+      });
+      const handOff = handedOff(undefined, "session-2");
+
+      const remaining = yield* Effect.provide(
+        client(handOff.session).removeMember(ACME.id, GRACE.userId),
+        api.layer,
+      );
+
+      assert.deepEqual(remaining, { ok: true, answer: [ADA] });
+      assert.equal(handOff.asked(), 1);
+      assert.deepEqual(api.credentials(), ["session-2"]);
+    }),
+);
+
+it.effect(
+  "a session the service no longer takes is replaced through the hand-off, and the leave sent once more",
+  () =>
+    Effect.gen(function* () {
+      const service = recordingHttpClient((request) =>
+        request.authorization === "Bearer session-2"
+          ? jsonResponse({ workspaceId: ACME.id })
+          : jsonResponse({ error: HOSTED_API_ERROR.INVALID_TOKEN }, HTTP_STATUS.UNAUTHORIZED),
+      );
+      const handOff = handedOff("session-1", "session-2");
+
+      const left = yield* Effect.provide(client(handOff.session).leave(ACME.id), service.layer);
+
+      assert.deepEqual(left, { ok: true, answer: ACME.id });
+      assert.equal(handOff.asked(), 1);
+      assert.deepEqual(
+        service.requests.map((request) => request.authorization),
+        ["Bearer session-1", "Bearer session-2"],
+      );
+    }),
+);
+
+it.effect("a hand-off that leaves no session sends nothing and answers unanswered", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "POST /api/workspaces/leave": { answer: () => ({ workspaceId: ACME.id }) },
+    });
+    const withdrawn = {
+      readSessionToken: () => Effect.succeed(undefined),
+      obtainSession: () => Effect.void,
+    };
+
+    const left = yield* Effect.provide(client(withdrawn).leave(ACME.id), api.layer);
+
+    assert.deepEqual(left, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+    assert.equal(api.requests().length, 0);
+  }),
+);
+
+const INVITATION = {
+  id: "inv-1",
+  email: "alan@example.com",
+  role: WORKSPACE_ROLE.MEMBER,
+  expiresAt: "2026-10-16T12:00:00.000Z",
+  acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-1&email=alan%40example.com",
+};
+
+it.effect(
+  "invites, reads pending invitations, and cancels one, every call under the Mac's session",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/workspaces/invitations": {
+          answer: () => ({ invitation: INVITATION }),
+          status: 201,
+        },
+        "GET /api/workspaces/invitations": { answer: () => ({ invitations: [INVITATION] }) },
+        "POST /api/workspaces/invitations/cancel": { answer: () => ({ invitations: [] }) },
+      });
+      const workspaces = client();
+
+      const made = yield* Effect.provide(
+        workspaces.invite(ACME.id, " alan@example.com ", WORKSPACE_ROLE.MEMBER),
+        api.layer,
+      );
+      const pending = yield* Effect.provide(workspaces.invitations(ACME.id), api.layer);
+      const left = yield* Effect.provide(
+        workspaces.cancelInvitation(ACME.id, INVITATION.id),
+        api.layer,
+      );
+
+      assert.deepEqual(made, { ok: true, answer: INVITATION });
+      assert.deepEqual(pending, { ok: true, answer: [INVITATION] });
+      assert.deepEqual(left, { ok: true, answer: [] });
+      assert.deepEqual(api.credentials(), ["session-1", "session-1", "session-1"]);
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        workspaceId: ACME.id,
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+      });
+      assert.equal(api.requests()[1]?.searchParams.get("workspaceId"), ACME.id);
+    }),
+);
+
+it.effect(
+  "an address already in or invited is named, and an address or role the service would refuse never travels",
+  () =>
+    Effect.gen(function* () {
+      const api = refusing(
+        "POST /api/workspaces/invitations",
+        HOSTED_API_ERROR.ALREADY_INVITED,
+        HTTP_STATUS.CONFLICT,
+      );
+      const workspaces = client();
+
+      const again = yield* Effect.provide(
+        workspaces.invite(ACME.id, "alan@example.com", WORKSPACE_ROLE.MEMBER),
+        api.layer,
+      );
+      const notAnAddress = yield* Effect.provide(
+        workspaces.invite(ACME.id, "alan", WORKSPACE_ROLE.MEMBER),
+        api.layer,
+      );
+      const asOwner = yield* Effect.provide(
+        workspaces.invite(ACME.id, "alan@example.com", WORKSPACE_ROLE.OWNER),
+        api.layer,
+      );
+
+      assert.deepEqual(again, { ok: false, failure: WORKSPACE_CALL_FAILURE.ALREADY_INVITED });
+      assert.deepEqual(notAnAddress, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asOwner, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1);
     }),
 );

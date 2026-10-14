@@ -1,10 +1,15 @@
+import { Schema as EffectSchema } from "effect";
+import { workspaceIdSchema } from "./plan-wire.js";
+import { WORKSPACE_ROLE } from "./workspace-wire.js";
+
 /**
- * workspace-invitation-wire.ts -- the two web pages a workspace invitation passes through, and the query each reads.
+ * workspace-invitation-wire.ts -- a workspace invitation as the Mac asks for, lists, and cancels it, and the web page its invitee accepts it on.
  *
- * An owner or an admin opens the invite page from the Mac for the workspace
- * it names; the page asks Better Auth for the invitation and shows the
- * accept page's address, which the invitee opens to accept it. Both pages
- * talk to Better Auth's organization endpoints on the browser's own session.
+ * An owner or an admin invites people from Settings on the Mac, under its
+ * own Better Auth session, through Luke's routes over the organization
+ * plugin's invitation calls; each pending invitation comes back with the
+ * accept page's address, which the owner copies and sends by hand, and the
+ * invitee opens to accept it on the browser's own session.
  *
  * The accept address carries the invited address beside the invitation's
  * id, because Better Auth reads an invitation to its recipient alone: a
@@ -14,19 +19,12 @@
  * only names it; who may accept is the plugin's check, not the page's.
  */
 
-/** The page an owner or an admin invites people from, and lists and cancels pending invitations on. */
-export const WORKSPACE_INVITE_PAGE = {
-  PATH: "/invite.html",
-  /** The id of the workspace to invite people to. */
-  WORKSPACE_PARAM: "workspace",
-} as const;
-
 /** The page an invitee accepts an invitation on. */
 const INVITATION_ACCEPT_PAGE = {
   PATH: "/accept-invitation.html",
   /** Better Auth's id of the invitation. */
   ID_PARAM: "id",
-  /** The address the invitation was made for, as the invite page knew it. */
+  /** The address the invitation was made for. */
   EMAIL_PARAM: "email",
 } as const;
 
@@ -52,3 +50,67 @@ export function invitationAcceptQuery(search: string): InvitationAcceptQuery {
     email: params.get(INVITATION_ACCEPT_PAGE.EMAIL_PARAM) || undefined,
   };
 }
+
+/**
+ * The roles an invitation may carry. A workspace has one owner, its
+ * creator, so nobody is invited as one.
+ */
+export const INVITATION_ROLE = {
+  ADMIN: WORKSPACE_ROLE.ADMIN,
+  MEMBER: WORKSPACE_ROLE.MEMBER,
+} as const;
+
+const INVITATION_BOUNDS = {
+  /** The most characters an address may spell (RFC 5321's path limit). */
+  MAX_EMAIL_CHARS: 254,
+} as const;
+
+/** One address, its ends trimmed: something before an `@` and a dotted domain after it. */
+const invitedEmailSchema = EffectSchema.Trim.check(
+  EffectSchema.isMaxLength(INVITATION_BOUNDS.MAX_EMAIL_CHARS),
+  EffectSchema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u),
+);
+
+const invitationRoleSchema = EffectSchema.Literals(Object.values(INVITATION_ROLE));
+
+/**
+ * One pending invitation as the Mac shows it: whom it is for, as what, until
+ * when, and the accept link to copy, which only the invited address's
+ * account accepts.
+ */
+export const workspaceInvitationSchema = EffectSchema.Struct({
+  id: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+  email: EffectSchema.String,
+  role: invitationRoleSchema,
+  /** When the invitation stops being accepted, as an ISO 8601 instant. */
+  expiresAt: EffectSchema.String,
+  acceptUrl: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+export type WorkspaceInvitation = typeof workspaceInvitationSchema.Type;
+
+/** An invitation asked for (POST), by an owner or an admin of a team's workspace. */
+export const workspaceInviteRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  email: invitedEmailSchema,
+  role: invitationRoleSchema,
+});
+
+/** The invitation made. */
+export const workspaceInvitationAnswerSchema = EffectSchema.Struct({
+  invitation: workspaceInvitationSchema,
+});
+
+/** A workspace's pending invitations, soonest to expire first (GET, and after a cancel). */
+export const workspaceInvitationsAnswerSchema = EffectSchema.Struct({
+  invitations: EffectSchema.Array(workspaceInvitationSchema),
+});
+
+/** The query an invitations read names its workspace under. */
+export const WORKSPACE_INVITATIONS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
+
+/** A pending invitation canceled (POST), answered with those still pending. */
+export const workspaceInvitationCancelSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  invitationId: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});

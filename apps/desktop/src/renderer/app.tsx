@@ -240,8 +240,15 @@ export function App(): React.JSX.Element {
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
-    onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
-    onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
+    // Arriving at Settings lands on Account, so the page is turned after.
+    onOpenIntegrations: () => {
+      changeTab(PANEL_TAB.SETTINGS);
+      setSettingsView(SETTINGS_VIEW.INTEGRATIONS);
+    },
+    onOpenApiKeys: () => {
+      changeTab(PANEL_TAB.SETTINGS);
+      setSettingsView(SETTINGS_VIEW.CODING_AGENTS);
+    },
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
   // Read through a ref, because the tab hands a new closure each render and

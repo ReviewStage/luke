@@ -89,7 +89,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...planningActRows({
       host: operator.host,
       openExternal: config.openExternal,
-      serviceBaseUrl: config.hostedServiceBaseUrl,
       activePlanId: () => state.snapshot().planning.activePlanId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });

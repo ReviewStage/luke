@@ -4,20 +4,17 @@ import { member, user } from "@sidecar/database/schemas/auth";
 import type { WorkspaceMember, WorkspaceRole } from "@sidecar/hosted/workspace-wire";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { and, asc, eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
 /**
- * workspace-members.ts -- who is in a workspace, and the removals and leavings that change it.
+ * workspace-members.ts -- who is in a workspace, read off the organization plugin's own rows.
  *
- * A member is the organization plugin's `member` row, read here through
- * Drizzle as `workspace-store.ts` reads it, since the plugin's own
- * `listMembers` takes a session cookie a desktop's bearer never carries. A
- * removal and a leaving are the plugin's `removeMember` and
- * `leaveOrganization` in kind, but both take the same cookie, so the row is
- * deleted here instead: no organization hook is configured that the
- * plugin's own delete would have run. Who may do which is the caller's to
- * decide.
+ * A member is the plugin's `member` row, read here through Drizzle as
+ * `workspace-store.ts` reads it, since the list is read under the Mac's
+ * OAuth token, which no plugin call takes. Removing a member and leaving
+ * are the plugin's own calls under the Mac's session (`workspace-seams.ts`);
+ * the one thing read here for them is the member id the plugin removes by.
  */
 
 /** The order roles are listed in: owners, then admins, then members. */
@@ -46,13 +43,16 @@ const findMembers = SqlSchema.findAll({
     ),
 });
 
-const deleteMemberRow = SqlSchema.void({
+const findMemberId = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, organizationId }) =>
     Database.use((db) =>
       db
-        .delete(member)
-        .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId))),
+        .select({ id: member.id })
+        .from(member)
+        .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
+        .limit(1),
     ),
 });
 
@@ -66,7 +66,13 @@ export function listMembers(
   });
 }
 
-/** The account's member row in the workspace deleted; an account not in it deletes nothing. */
-export function removeMember(userId: string, organizationId: string): WorkspaceStoreEffect<void> {
-  return deleteMemberRow({ userId, organizationId });
+/** The plugin's member id for the account in the workspace, or none where it is not a member. */
+export function memberIdOf(
+  userId: string,
+  organizationId: string,
+): WorkspaceStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findMemberId({ userId, organizationId }),
+    Option.map((row) => row.id),
+  );
 }

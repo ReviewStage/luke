@@ -33,7 +33,7 @@ const MICROPHONE_STATUS_COUNTED_AS = {
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
 
 /**
- * Where Help > Email writes to: the address the site's footer, the
+ * Where Contact us > Email writes to: the address the site's footer, the
  * privacy policy, and the security policy all name. Held here rather than
  * sent by the panel, so the act can open no other address.
  */

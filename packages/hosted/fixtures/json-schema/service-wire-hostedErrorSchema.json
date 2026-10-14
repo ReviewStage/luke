@@ -22,7 +22,8 @@
         "agent-not-ready",
         "agent-retired",
         "plan-archived",
-        "not-permitted"
+        "not-permitted",
+        "already-invited"
       ]
     }
   },

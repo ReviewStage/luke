@@ -1,5 +1,17 @@
+import { desktopSessionPageUrl } from "@sidecar/hosted/desktop-session-wire";
 import { singleFlightEffect } from "@sidecar/runtime/effect";
-import { Cause, Data, Effect, Fiber, PubSub, Result, type Scope, Stream } from "effect";
+import {
+  Cause,
+  Data,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  PubSub,
+  Result,
+  type Scope,
+  Stream,
+} from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -24,8 +36,14 @@ import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./sn
 /** Why a sign-in again that landed on another account is refused. */
 const OTHER_ACCOUNT = "That sign-in is a different Luke account.";
 
+/** Why a session hand-off from a browser signed in as someone else is refused. */
+const OTHER_BROWSER_ACCOUNT = "That browser is signed in to a different Luke account.";
+
 /** The path the hosted authorize route sends the code back to. */
 const CALLBACK_PATH = "/callback";
+
+/** The path the hand-off page sends the session code back to. */
+const SESSION_CALLBACK_PATH = "/session";
 
 /**
  * The landing cards this sign-in leaves the browser on. Every string is fixed
@@ -41,6 +59,21 @@ const SIGN_IN_PAGES = {
     badge: "Not completed",
     title: "Sign-in was not completed",
     body: "Return to Luke and try again.",
+  },
+} as const;
+
+/**
+ * The landing cards the session hand-off leaves the browser on. A sign-in
+ * that continues into the hand-off ends on these rather than on the
+ * sign-in's own, so a hand-off that fails says the account is signed in
+ * all the same.
+ */
+const SESSION_PAGES = {
+  granted: SIGN_IN_PAGES.granted,
+  notGranted: {
+    badge: "Not completed",
+    title: "Workspace access was not completed",
+    body: "You're signed in to Luke. To manage a workspace's members, return to Luke and try again.",
   },
 } as const;
 
@@ -139,6 +172,8 @@ export class AccountSessionManager {
     | { readonly provider: AccountProvider; readonly fiber: Fiber.Fiber<boolean, SignInFailed> }
     | undefined;
   #cancelSignIn: (() => void) | undefined;
+  #sessionRunning: Fiber.Fiber<LoopbackConsentOutcome<AccountSnapshot>> | undefined;
+  #cancelSession: (() => void) | undefined;
 
   private constructor(
     options: AccountSessionManagerOptions,
@@ -183,6 +218,12 @@ export class AccountSessionManager {
           "Account token revocation failed",
         );
       }
+      if (options.revokeRemote && stored?.sessionToken) {
+        yield* reportingFailure(
+          this.#options.client.endSession(stored.sessionToken),
+          "Account session sign-out failed",
+        );
+      }
       return this.#account;
     });
   }
@@ -191,6 +232,7 @@ export class AccountSessionManager {
   #clearAccount(): Effect.Effect<StoredAccount | undefined> {
     return Effect.gen({ self: this }, function* () {
       this.#generation += 1;
+      this.#cancelSession?.();
       this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
       yield* this.#publishChange();
       const stored = yield* this.#options.store.readAccount();
@@ -403,6 +445,132 @@ export class AccountSessionManager {
     );
   }
 
+  /**
+   * A session of the Mac's own asked for apart from a sign-in: for an
+   * account signed in before the Mac held one, or one whose session the
+   * service no longer takes. Opens the hand-off page in the browser, which
+   * signs a signed-out browser in first, and answers whether a session
+   * landed; an ask while one is under way joins it.
+   */
+  obtainSession(): Effect.Effect<boolean, SignInFailed> {
+    // The same one uninterruptible decide-fork-store as `beginSignIn`'s.
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.gen({ self: this }, function* () {
+        if (this.#account.status !== ACCOUNT_STATUS.SIGNED_IN) return false;
+        const fiber =
+          this.#sessionRunning ??
+          (yield* this.#startSession(this.#generation, (url) => this.#options.openExternal(url)));
+        const outcome = yield* restore(Fiber.join(fiber));
+        if (!("reason" in outcome)) return true;
+        if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return false;
+        return yield* Effect.fail(new SignInFailed({ message: outcome.reason }));
+      }),
+    );
+  }
+
+  /**
+   * Where a sign-in sends the browser once its tokens are stored: on to the
+   * hand-off page, through a session trip whose page is handed to the
+   * sign-in's own redirect rather than opened in a tab of its own, so the
+   * whole sign-in is one trip through the browser. An account that already
+   * holds a session, a trip already under way, and a trip that could not
+   * listen all answer nothing, and the sign-in ends on its own card.
+   */
+  #continueToSession(): Effect.Effect<string | undefined> {
+    return Effect.gen({ self: this }, function* () {
+      const stored = yield* this.#options.store.readAccount();
+      if (!stored || stored.sessionToken !== undefined || this.#sessionRunning) return undefined;
+      const page = yield* Deferred.make<string | undefined>();
+      const settle = (url: string | undefined) => {
+        Deferred.doneUnsafe(page, Exit.succeed(url));
+      };
+      yield* this.#startSession(this.#generation, settle, () => settle(undefined));
+      return yield* Deferred.await(page);
+    });
+  }
+
+  /** Forks one session trip under the generation it was asked in, and holds it until it ends. */
+  #startSession(
+    generation: number,
+    openExternal: (url: string) => void | Promise<void>,
+    onEnd?: () => void,
+  ): Effect.Effect<Fiber.Fiber<LoopbackConsentOutcome<AccountSnapshot>>> {
+    return Effect.gen({ self: this }, function* () {
+      const consent = this.#sessionConsent(generation, openExternal);
+      const cancel = () => consent.cancel();
+      this.#cancelSession = cancel;
+      const fiber = yield* Effect.forkDetach(
+        Effect.scoped(consent.signInEffect()).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (this.#cancelSession === cancel) {
+                this.#cancelSession = undefined;
+                this.#sessionRunning = undefined;
+              }
+              onEnd?.();
+            }),
+          ),
+        ),
+      );
+      this.#sessionRunning = fiber;
+      return fiber;
+    });
+  }
+
+  #sessionConsent(
+    generation: number,
+    openExternal: (url: string) => void | Promise<void>,
+  ): LoopbackConsent<AccountSnapshot> {
+    return loopbackConsent<AccountSnapshot>({
+      callbackPath: SESSION_CALLBACK_PATH,
+      pages: SESSION_PAGES,
+      reasons: {
+        refused: "Workspace access was not completed.",
+        timedOut: "Workspace access timed out.",
+      },
+      authorizationUrl: ({ state, redirectUri, codeChallenge }) =>
+        desktopSessionPageUrl(this.#options.hostedServiceBaseUrl, {
+          state,
+          codeChallenge,
+          returnTo: redirectUri,
+        }),
+      exchange: (input) => this.#exchangeSession(generation, input),
+      openExternal,
+    });
+  }
+
+  /**
+   * Trades the hand-off's code for the Mac's session and keeps it beside the
+   * tokens. A session for anyone but the stored account is refused, since a
+   * browser signed in as someone else hands that someone's session over, and
+   * a session nobody keeps — refused, or landed after a sign-out — is ended
+   * on the service rather than left live.
+   */
+  #exchangeSession(
+    generation: number,
+    input: LoopbackExchange,
+  ): Effect.Effect<LoopbackConsentOutcome<AccountSnapshot>> {
+    return Effect.gen({ self: this }, function* () {
+      const session = yield* this.#options.client.exchangeSessionCode({
+        code: input.code,
+        state: input.state,
+        codeVerifier: input.codeVerifier,
+      });
+      const stored = yield* this.#options.store.readAccount();
+      const ours = stored?.id !== undefined && stored.id === session.userId;
+      const kept =
+        stored !== undefined &&
+        ours &&
+        (yield* this.#storeCurrent(generation, { ...stored, sessionToken: session.sessionToken }));
+      if (kept) return this.#account;
+      yield* reportingFailure(
+        this.#options.client.endSession(session.sessionToken),
+        "Refused account session sign-out failed",
+      );
+      return { reason: ours ? LOOPBACK_CONSENT_CANCELLED : OTHER_BROWSER_ACCOUNT };
+    }).pipe(Effect.catch((error) => Effect.succeed({ reason: error.message })));
+  }
+
   #consent(
     provider: AccountProvider,
     generation: number,
@@ -426,6 +594,7 @@ export class AccountSessionManager {
           codeChallenge,
         }),
       exchange: (input) => this.#exchange(provider, generation, input, options),
+      continueTo: () => this.#continueToSession(),
       openExternal: (url) => this.#options.openExternal(url),
     });
   }
@@ -459,7 +628,10 @@ export class AccountSessionManager {
           // Note that a sign-in again takes the generation from the session it
           // replaces, so a refresh of the old one still out stores nothing over it.
           const current = options.again ? ++this.#generation : generation;
-          if (!(yield* this.#storeCurrent(current, { ...tokens, ...identity }))) {
+          // The same person's session outlives a sign-in again, which renews
+          // only the OAuth grant.
+          const session = replaced?.sessionToken ? { sessionToken: replaced.sessionToken } : {};
+          if (!(yield* this.#storeCurrent(current, { ...tokens, ...identity, ...session }))) {
             return yield* Effect.fail(new SignInCancelled());
           }
           if (replaced?.refreshToken) {
@@ -527,6 +699,7 @@ function mergedIdentity(stored: StoredAccount, identity: AccountIdentity): Store
   return {
     accessToken: stored.accessToken,
     refreshToken: stored.refreshToken,
+    ...(stored.sessionToken ? { sessionToken: stored.sessionToken } : undefined),
     ...identity,
   };
 }

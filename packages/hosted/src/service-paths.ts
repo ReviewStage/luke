@@ -132,6 +132,14 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The account leaves a workspace it does not own (POST). */
   WORKSPACES_LEAVE: "/api/workspaces/leave",
+  /**
+   * A workspace's pending invitations, to an owner or an admin (GET, the
+   * workspace named in `workspace-invitation-wire.ts`'s
+   * `WORKSPACE_INVITATIONS_QUERY`), or an invitation made (POST).
+   */
+  WORKSPACES_INVITATIONS: "/api/workspaces/invitations",
+  /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
+  WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
 } as const;
 
 /**

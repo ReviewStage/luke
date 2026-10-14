@@ -72,6 +72,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
   /** The account left one workspace on the service; the view's workspaces and plans are read again. */
   WORKSPACES_LEAVE: "workspaces.leave",
+  /** One workspace's pending invitations, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_INVITATIONS: "workspaces.invitations",
+  /** An invitation to a workspace made on the service, answered with its accept link. */
+  WORKSPACES_INVITE: "workspaces.invite",
+  /** A pending invitation canceled on the service, answered with those still pending. */
+  WORKSPACES_INVITATION_CANCEL: "workspaces.invitationCancel",
   /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
   GITHUB_CONNECT: "github.connect",
   /** The page that disconnects the account's GitHub, which asks the service nothing; the next workspaces read is owed at once. */

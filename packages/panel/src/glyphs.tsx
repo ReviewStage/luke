@@ -182,7 +182,7 @@ export function EllipsisIcon(): React.JSX.Element {
   );
 }
 
-/** Points back: the control that returns to where the window was. */
+/** Points back out of one: the control that returns to the front page. */
 export function BackIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

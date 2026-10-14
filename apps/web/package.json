@@ -27,6 +27,7 @@
     "@ai-sdk/anthropic": "4.0.78",
     "@ai-sdk/openai": "4.0.91",
     "@better-auth/drizzle-adapter": "1.7.7",
+    "@better-auth/electron": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",

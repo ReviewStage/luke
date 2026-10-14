@@ -8,7 +8,11 @@ export {
   fixedBearer,
   NO_CREDENTIAL,
 } from "./account-call.js";
-export { AccountRefreshFailed, type AccountToken } from "./account-token.js";
+export {
+  AccountRefreshFailed,
+  type AccountSessionToken,
+  type AccountToken,
+} from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
   HostedCodingAgentClient,
