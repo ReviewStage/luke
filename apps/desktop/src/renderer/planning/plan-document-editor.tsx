@@ -16,7 +16,6 @@ import { RetryButton } from "../retry-button";
 import { type MentionDoors, MentionNodeChip, retargetedMention } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
-import { useLentPlanText } from "./plan-mentions";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
@@ -543,7 +542,6 @@ export function PlanDocumentEditor({
   const chips = useEditorMentions();
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
-  useLentPlanText(text);
   const picker = useMentionPicker({
     source: { planId: plan.id, planName: plan.name, repository: plan.repository, text },
     room,

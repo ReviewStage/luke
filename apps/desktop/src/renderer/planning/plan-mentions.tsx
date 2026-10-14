@@ -1,15 +1,8 @@
-import {
-  createContext,
-  type ReactNode,
-  type RefObject,
-  useContext,
-  useEffect,
-  useRef,
-} from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import type { MentionDoors } from "./mention-chip";
 
 /**
- * plan-mentions.tsx -- what a plan's page hands every place on it that picks or draws a mention: the plan, its text as it stands, and what opening a mention does.
+ * plan-mentions.tsx -- what a plan's page hands every place on it that picks or draws a mention: the plan, its saved text, and what opening a mention does.
  *
  * The plan's own words draw their mentions through the document
  * (`plan-body.tsx`); an agent's message box on the same page picks them with
@@ -20,7 +13,7 @@ import type { MentionDoors } from "./mention-chip";
  * picks no mention, and draws a mention's link as words.
  */
 
-/** A plan's page's mentions: the plan, its text as it stands now, and the doors its chips open through. */
+/** A plan's page's mentions: the plan, its text as saved, and the doors its chips open through. */
 export interface PlanMentionsValue {
   readonly planId: string;
   readonly planName: string;
@@ -30,17 +23,13 @@ export interface PlanMentionsValue {
   readonly doors: MentionDoors;
 }
 
-/** The page's mentions as places under it read them, and where the plan's open editor lends its text. */
-interface PlanMentionsPage extends PlanMentionsValue {
-  readonly lent: RefObject<(() => string) | undefined>;
-}
-
-const PlanMentionsContext = createContext<PlanMentionsPage | undefined>(undefined);
+const PlanMentionsContext = createContext<PlanMentionsValue | undefined>(undefined);
 
 /**
  * Hands every place under it the plan's page's mentions. Note that the text
- * is the open editor's where one stands, because its words are saved only
- * once typing pauses, and a section just written is one to mention.
+ * is the plan's saved words, never an open editor's, because the agent is
+ * handed the sections of the plan as saved, and a section the box offered
+ * that the send cannot find would reach the agent as gone.
  */
 export function PlanMentions({
   value,
@@ -49,27 +38,10 @@ export function PlanMentions({
   value: PlanMentionsValue;
   children: ReactNode;
 }): React.JSX.Element {
-  const lent = useRef<(() => string) | undefined>(undefined);
-  const page: PlanMentionsPage = { ...value, text: () => lent.current?.() ?? value.text(), lent };
-  return <PlanMentionsContext.Provider value={page}>{children}</PlanMentionsContext.Provider>;
+  return <PlanMentionsContext.Provider value={value}>{children}</PlanMentionsContext.Provider>;
 }
 
 /** The plan's page's mentions; nothing off a plan's page. */
 export function usePlanMentions(): PlanMentionsValue | undefined {
   return useContext(PlanMentionsContext);
-}
-
-/** Lends the page the plan's open editor's text, read before the plan's saved words for as long as the editor stands. */
-export function useLentPlanText(read: () => string): void {
-  const lent = useContext(PlanMentionsContext)?.lent;
-  const latest = useRef(read);
-  latest.current = read;
-  useEffect(() => {
-    if (lent === undefined) return;
-    const lending = () => latest.current();
-    lent.current = lending;
-    return () => {
-      if (lent.current === lending) lent.current = undefined;
-    };
-  }, [lent]);
 }

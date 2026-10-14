@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@sidecar/hosted/coding-agent-view";
 import { MENTION_KIND, type Mention, mentionMarkdown } from "@sidecar/hosted/mention-link";
 import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
-import { act, createElement, Fragment, type ReactNode } from "react";
+import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
@@ -18,7 +18,7 @@ import {
 } from "#testing/composer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
-import { PlanMentions, type PlanMentionsValue, useLentPlanText } from "./plan-mentions";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import type { SkillSource } from "./skill-picker";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
@@ -146,23 +146,14 @@ function drawn(node: ReactNode, page: PlanMentionsValue | undefined): HTMLElemen
   return drawing(node, page).container;
 }
 
-/** The plan's open editor, lending the page its text as it stands. */
-function Editing({ text }: { text: string }): ReactNode {
-  useLentPlanText(() => text);
-  return null;
-}
-
-/** The box drawn, beside what else is given, every message it sends written down. */
-async function box(page: PlanMentionsValue | undefined, beside: ReactNode = null) {
+/** The box drawn, every message it sends written down. */
+async function box(page: PlanMentionsValue | undefined) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
     return new Promise<CodingAgentAgentAnswer>(ignore);
   };
-  const { container, redraw } = drawing(
-    createElement(Fragment, null, beside, createElement(Box, { sender })),
-    page,
-  );
+  const { container, redraw } = drawing(createElement(Box, { sender }), page);
   await settle();
   return { container, sent, redraw };
 }
@@ -241,18 +232,6 @@ test("off a plan's page a sent message's mention is drawn as its words, not a ch
   assert.equal(container.querySelector(".mention-chip"), null);
   assert.equal(carryingTarget(container), undefined);
   assert.equal(container.textContent, "Follow @Rollout.");
-});
-
-test("a section the plan's open editor holds, before its words are saved, is offered in the box", async () => {
-  const { container } = await box(
-    planPage([]),
-    createElement(Editing, { text: `${PLAN_TEXT}\n## Launch\n\nSoon.\n` }),
-  );
-
-  typeInComposer(container, "Follow @lau");
-  await settle();
-
-  assert.deepEqual(listed(container), ["Launch"]);
 });
 
 test("once the plan's repository changes, the box offers the new repository's files", async () => {
