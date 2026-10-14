@@ -111,6 +111,34 @@
   --code-line-number-pointed: rgba(230, 237, 243, 0.8);
   --code-pointed: rgba(56, 139, 253, 0.16);
   --code-pointed-edge: #388bfd;
+  /* A Terminal tab's screen (`terminal/`): the side panel's well for its
+     ground, the code's ink for its words and cursor, its selection in the
+     code's blue, and the sixteen ANSI colours a program prints in, from the
+     same GitHub theme the code is coloured with. The terminal draws on a
+     canvas, which reads none of this itself, so the bundle reads each one
+     off the host and draws again when the appearance flips
+     (`terminal/terminal-theme.ts`). */
+  --terminal-ground: var(--desktop-well);
+  --terminal-text: var(--code-text);
+  --terminal-cursor: var(--code-text);
+  --terminal-selection: rgba(56, 139, 253, 0.4);
+  --terminal-scrollbar: var(--scrollbar);
+  --terminal-black: #484f58;
+  --terminal-red: #ff7b72;
+  --terminal-green: #3fb950;
+  --terminal-yellow: #d29922;
+  --terminal-blue: #58a6ff;
+  --terminal-magenta: #bc8cff;
+  --terminal-cyan: #39c5cf;
+  --terminal-white: #b1bac4;
+  --terminal-bright-black: #6e7681;
+  --terminal-bright-red: #ffa198;
+  --terminal-bright-green: #56d364;
+  --terminal-bright-yellow: #e3b341;
+  --terminal-bright-blue: #79c0ff;
+  --terminal-bright-magenta: #d2a8ff;
+  --terminal-bright-cyan: #56d4dd;
+  --terminal-bright-white: #ffffff;
   /* A file's type icon in the file tree's own palette (`@pierre/trees`),
      which its shadow root keeps to itself, said again for a file drawn
      outside the tree (`planning.css`). */
@@ -212,6 +240,23 @@
     --code-line-number-pointed: rgba(31, 35, 40, 0.85);
     --code-pointed: rgba(9, 105, 218, 0.08);
     --code-pointed-edge: #0969da;
+    --terminal-selection: rgba(9, 105, 218, 0.2);
+    --terminal-black: #24292f;
+    --terminal-red: #cf222e;
+    --terminal-green: #116329;
+    --terminal-yellow: #4d2d00;
+    --terminal-blue: #0969da;
+    --terminal-magenta: #8250df;
+    --terminal-cyan: #1b7c83;
+    --terminal-white: #6e7781;
+    --terminal-bright-black: #57606a;
+    --terminal-bright-red: #a40e26;
+    --terminal-bright-green: #1a7f37;
+    --terminal-bright-yellow: #633c01;
+    --terminal-bright-blue: #218bff;
+    --terminal-bright-magenta: #a475f9;
+    --terminal-bright-cyan: #3192aa;
+    --terminal-bright-white: #8c959f;
     --file-icon-gray: #84848a;
     --file-icon-red: #d52c36;
     --file-icon-vermilion: #ff8c5b;

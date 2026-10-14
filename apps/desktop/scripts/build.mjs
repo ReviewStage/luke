@@ -264,6 +264,30 @@ await Promise.all([
     logLevel: "info",
     define: { "process.env.NODE_ENV": '"production"' },
   }),
+  // A Terminal tab's screen, its own bundle and stylesheet so the bundle
+  // every window parses never carries xterm.js; the tab loads both the first
+  // time a terminal is shown (`src/renderer/terminal/contract.ts`). It draws
+  // on its own canvas, so no React rides along.
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/terminal/index.ts")],
+    outfile: path.join(outputRoot, "renderer/terminal.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+  }),
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/terminal/index.css")],
+    outfile: path.join(outputRoot, "renderer/terminal.css"),
+    bundle: true,
+    target: "chrome140",
+    minify: true,
+    logLevel: "info",
+  }),
   // Session replay's recorder, its own bundle so the bundle every window
   // parses never carries rrweb; session replay loads it before it starts the
   // client, in a window that records (`src/renderer/session-recorder/contract.ts`).
