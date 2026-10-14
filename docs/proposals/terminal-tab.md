@@ -1,8 +1,36 @@
 # Proposal: a Terminal tab into the coding agent's sandbox
 
-Status: proposed, revised on 2026-10-14 after Dean's direction. Waiting on his
-decisions (see "Questions for Dean" at the end). No product code until he
-answers.
+Status: decided by Dean on 2026-10-14. The architecture is
+`docs/proposals/terminal-architecture.md`. Where the two differ, the
+architecture's text stands.
+
+## Decisions (Dean, 2026-10-14)
+
+1. **One Terminal tab per coding agent's sandbox.** It reuses the agent tab's
+   components: its look (`tabLook` AGENT, i.e. `AgentGlyph` and the agent's
+   name), `AgentRef`, and the agent tab's hover card. "Terminal" is the
+   tab's detail.
+2. **Vercel's experimental `openInteractive` is the transport,** with the
+   documented `runCommand` path kept as the fallback. Vercel is not asked
+   first.
+3. **Terminals connect on demand and disconnect when unused.** This
+   replaces §3's "hold for 15 minutes after the last detach". The rule
+   (architecture §3):
+   - a terminal connects when its tab is opened or shown;
+   - it disconnects when the tab closes, or after 15 minutes without typing
+     (output doesn't count);
+   - the sandbox then stops on its normal schedule: at the turn's end, or 2
+     minutes after the last terminal disconnects when no turn runs.
+4. **A stopped sandbox resumes only on a click** ("Resume and open a
+   shell").
+5. **GitHub access stays live while a terminal is connected.**
+6. **The agent is not told** a human was in its sandbox. That is dropped
+   from the plan.
+7. **The two AGENTS.md lines are approved:** terminal output goes only to
+   the tab that opened it, and the relay function is a runtime edge. They
+   are added in the implementing PR.
+8. **⌘J** opens the current or most recent agent's terminal, and ⌘K stays
+   the palette inside it.
 
 ## What Dean asked for
 
