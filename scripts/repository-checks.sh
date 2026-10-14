@@ -5,12 +5,12 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-find "$SIDECAR_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
+find "$LUKE_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
     while IFS= read -r -d '' script; do
         bash -n "$script"
     done
 
-git -C "$SIDECAR_REPO_ROOT" diff --check
+git -C "$LUKE_REPO_ROOT" diff --check
 
 # The Node major is stated in more than one place because different readers look
 # in different files, so they have to agree. `.nvmrc` is what local shells and
@@ -20,11 +20,11 @@ git -C "$SIDECAR_REPO_ROOT" diff --check
 # therefore fails nothing and announces nothing local, and quietly ships
 # production on a major no test ever ran on, which is how `22.x` outlived the
 # move to 24. `.nvmrc` is the source; every declared major is checked against it.
-nvmrc_major=$(sed -E 's/^v?([0-9]+).*$/\1/' "$SIDECAR_REPO_ROOT/.nvmrc" | head -1)
+nvmrc_major=$(sed -E 's/^v?([0-9]+).*$/\1/' "$LUKE_REPO_ROOT/.nvmrc" | head -1)
 engines_drift=""
-for manifest in "$SIDECAR_REPO_ROOT/package.json" \
-    "$SIDECAR_REPO_ROOT"/apps/*/package.json \
-    "$SIDECAR_REPO_ROOT"/packages/*/package.json; do
+for manifest in "$LUKE_REPO_ROOT/package.json" \
+    "$LUKE_REPO_ROOT"/apps/*/package.json \
+    "$LUKE_REPO_ROOT"/packages/*/package.json; do
     declared=$(node -e 'const n = require(process.argv[1]).engines?.node; if (n) process.stdout.write(n)' \
         "$manifest")
     if [[ -z "$declared" ]]; then
@@ -32,7 +32,7 @@ for manifest in "$SIDECAR_REPO_ROOT/package.json" \
     fi
     declared_major=$(printf '%s' "$declared" | grep -oE '[0-9]+' | head -1)
     if [[ "$declared_major" != "$nvmrc_major" ]]; then
-        engines_drift+="${manifest#"$SIDECAR_REPO_ROOT/"}: engines.node \"$declared\" is not Node $nvmrc_major"$'\n'
+        engines_drift+="${manifest#"$LUKE_REPO_ROOT/"}: engines.node \"$declared\" is not Node $nvmrc_major"$'\n'
     fi
 done
 if [[ -n "$engines_drift" ]]; then
@@ -74,25 +74,25 @@ node --input-type=module -e '
     );
     process.exit(1);
   }
-' "$SIDECAR_REPO_ROOT"
+' "$LUKE_REPO_ROOT"
 
 # The brand artwork has one source and committed outputs cut from it: the
 # SVGs, the face the renderer draws, the motions it plays, and the motion
 # tokens, layout sizes, and provider-mark path data the desktop renderer and
 # the marketing mock share. If a copy no longer matches the source, it is
 # telling a story the artwork does not; --check fails on any drift.
-pnpm --dir "$SIDECAR_REPO_ROOT" --filter @luke/brand --silent check
+pnpm --dir "$LUKE_REPO_ROOT" --filter @luke/brand --silent check
 
 # The vercel.json rewrites are what land a route on its grouped function, and
 # they are generated from server/routes/; --check fails if a rewrite went stale.
-pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
+pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404 (LUKE-186). Every /api/ literal and path builder under
 # apps/desktop/src, packages/*/src, scripts, and tools must resolve
 # to a rewrite of the table or an extensionless alias the Build Output emits.
-pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
+pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
 # Every relative import the Vercel builder compiles must carry its .js
 # extension. The builder compiles this TypeScript into the web functions but
@@ -110,8 +110,8 @@ pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 # — a door is spelled `import "…"` with no names, and an extensionless one fails
 # exactly the same way.
 extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
-    "$SIDECAR_REPO_ROOT"/packages/*/src \
-    "$SIDECAR_REPO_ROOT"/apps/web/server |
+    "$LUKE_REPO_ROOT"/packages/*/src \
+    "$LUKE_REPO_ROOT"/apps/web/server |
     grep -vE '\.(js|css)"' || true)
 if [[ -n "$extensionless_imports" ]]; then
     printf 'error: relative imports in packages/ and the web function sources must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
@@ -147,11 +147,11 @@ undeclared_packages() {
     done <<<"$named"
     printf '%s' "$undeclared"
 }
-undeclared_web_packages=$(undeclared_packages "$SIDECAR_REPO_ROOT/apps/web/package.json" \
-    "$SIDECAR_REPO_ROOT/apps/web/server" "$SIDECAR_REPO_ROOT/apps/web/src" "$SIDECAR_REPO_ROOT/apps/web/scripts")
+undeclared_web_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/package.json" \
+    "$LUKE_REPO_ROOT/apps/web/server" "$LUKE_REPO_ROOT/apps/web/src" "$LUKE_REPO_ROOT/apps/web/scripts")
 for service in eve coder; do
-    undeclared_service_packages=$(undeclared_packages "$SIDECAR_REPO_ROOT/apps/web/$service/package.json" \
-        "$SIDECAR_REPO_ROOT/apps/web/$service")
+    undeclared_service_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/$service/package.json" \
+        "$LUKE_REPO_ROOT/apps/web/$service")
     if [[ -n "$undeclared_service_packages" ]]; then
         undeclared_web_packages+="apps/web/$service: $undeclared_service_packages"
     fi
@@ -168,7 +168,7 @@ fi
 # Every name the app re-exports originates in a package; import it from the
 # defining package instead.
 package_app_imports=$(grep -rEn '(from|import) "[^"]*apps/[^"]*"' \
-    "$SIDECAR_REPO_ROOT"/packages/*/src || true)
+    "$LUKE_REPO_ROOT"/packages/*/src || true)
 if [[ -n "$package_app_imports" ]]; then
     printf 'error: packages must not import from apps/ (the path import hides a package → app → package cycle from the declared dependency graph):\n%s\n' \
         "$package_app_imports" >&2
@@ -186,7 +186,7 @@ fi
 # the bundle, so a `node:assert` import is its whole point. The main-process
 # door stays shut for it either way — a renderer test that needs main is
 # testing the wrong side.
-renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
+renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$LUKE_REPO_ROOT/apps/desktop/src/renderer" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
     printf 'error: the renderer is sandboxed — it reaches the main process only through the shared bridge and wire modules:\n%s\n' \
@@ -200,7 +200,7 @@ fi
 # rule is that nothing drawn reads them.
 drawn_hosted_quota=$(grep -rnaE --include='*.ts' --include='*.tsx' \
     'requestHostedUsage|hostedUsage|<meter\b|quota\.(used|limit|remaining|resetsAt)' \
-    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" |
     grep -vE '\.test\.tsx?:' || true)
 if [[ -n "$drawn_hosted_quota" ]]; then
     printf 'error: hosted quota values must not reach the customer-facing renderer:\n%s\n' \
@@ -220,7 +220,7 @@ fi
 # export.
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
     'mkdtemp' \
-    "$SIDECAR_REPO_ROOT/apps/desktop/src" "$SIDECAR_REPO_ROOT/packages/host/src" || true)
+    "$LUKE_REPO_ROOT/apps/desktop/src" "$LUKE_REPO_ROOT/packages/host/src" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
     printf 'error: test files import temporaryDirectory from @luke/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
@@ -232,7 +232,7 @@ fi
 # domain logic would bypass the manifest's sender and wire guards, and an act
 # registered on a channel of its own would bypass the router.
 direct_ipc_registration=$(grep -rnaE --exclude-dir=node_modules --include='*.ts' 'ipcMain\.(handle|on)\(' \
-    "$SIDECAR_REPO_ROOT/apps/desktop/src" |
+    "$LUKE_REPO_ROOT/apps/desktop/src" |
     grep -v '/main/bridge-host.ts:' || true)
 if [[ -n "$direct_ipc_registration" ]]; then
     printf 'error: Electron IPC handlers must be registered through registerBridgeHost:\n%s\n' \
@@ -244,7 +244,7 @@ fi
 # parser throws on any other shape — at module load in the browser, which no
 # build step executes. This check is what keeps a malformed heading out of a
 # visitor's tab.
-malformed_release_headings=$(grep -E '^## ' "$SIDECAR_REPO_ROOT/CHANGELOG.md" |
+malformed_release_headings=$(grep -E '^## ' "$LUKE_REPO_ROOT/CHANGELOG.md" |
     grep -vE '^## [0-9]+\.[0-9]+\.[0-9]+ — [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
 if [[ -n "$malformed_release_headings" ]]; then
     printf 'error: CHANGELOG.md release headings must read "## <version> — <YYYY-MM-DD>":\n%s\n' \
@@ -256,8 +256,8 @@ fi
 # requiring the changelog to name the packaged version makes the version-bump
 # change carry the release's notes, which the landing page renders at
 # /changelog. See .github/RELEASE.md.
-desktop_version=$(node -p "require('$SIDECAR_REPO_ROOT/apps/desktop/package.json').version")
-if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$SIDECAR_REPO_ROOT/CHANGELOG.md"; then
+desktop_version=$(node -p "require('$LUKE_REPO_ROOT/apps/desktop/package.json').version")
+if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$LUKE_REPO_ROOT/CHANGELOG.md"; then
     printf 'error: CHANGELOG.md has no entry for version %s — every release adds its notes before its tag is pushed\n' \
         "$desktop_version" >&2
     exit 1
@@ -270,7 +270,7 @@ fi
 # copy.
 literal_effect_versions=$(grep -rnE '"effect": *"[^c]' --include=package.json \
     --exclude-dir=node_modules \
-    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" || true)
+    "$LUKE_REPO_ROOT/apps" "$LUKE_REPO_ROOT/packages" "$LUKE_REPO_ROOT/tools" || true)
 if [[ -n "$literal_effect_versions" ]]; then
     printf 'error: "effect" must be declared as "catalog:", never a literal version:\n%s\n' \
         "$literal_effect_versions" >&2
@@ -348,7 +348,7 @@ node --input-type=module -e '
     );
     process.exit(1);
   }
-' "$SIDECAR_REPO_ROOT"
+' "$LUKE_REPO_ROOT"
 
 # The root `vitest.config.ts` names every workspace with tests, which is what
 # `pnpm exec vitest run <path>` from the root reads, and each of those
@@ -392,7 +392,7 @@ node --input-type=module -e '
     );
     process.exit(1);
   }
-' "$SIDECAR_REPO_ROOT"
+' "$LUKE_REPO_ROOT"
 
 # `@effect/platform-node` and `effect/sql` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
@@ -403,7 +403,7 @@ node --input-type=module -e '
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
     '"(@effect/platform-node|effect/sql)' \
-    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" || true)
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" || true)
 if [[ -n "$node_reaching_effect" ]]; then
     printf 'error: @effect/platform-node and effect/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
