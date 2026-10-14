@@ -82,9 +82,9 @@ node --input-type=module -e '
 # does not.
 node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 
-# Motion tokens, layout sizes, provider-mark path data, and session labels are
-# the same contract between the desktop renderer and the marketing mock. One
-# source, four committed outputs in @sidecar/surface; --check fails if any drifted.
+# Motion tokens, layout sizes, and provider-mark path data are the same contract
+# between the desktop renderer and the marketing mock. One source, three
+# committed outputs in @sidecar/surface; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
 # The vercel.json rewrites are what land a route on its grouped function, and

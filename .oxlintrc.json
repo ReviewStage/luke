@@ -1,17 +1,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
-    ".agent/**",
     ".agents/**",
     ".claude/**",
     ".codex/**",
-    ".continue/**",
     ".cursor/**",
-    ".gemini/**",
     ".opencode/**",
-    ".pi/**",
-    ".roo/**",
-    ".windsurf/**",
     "tools/oxlint/anti-slop/**"
   ],
   "jsPlugins": [
