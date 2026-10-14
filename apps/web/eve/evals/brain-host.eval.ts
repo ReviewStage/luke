@@ -30,6 +30,7 @@ import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import { startPlan } from "../../tests/support/workspaces";
 import {
+  SCRIPTED_CUT,
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_PLANNING_REPLY,
@@ -43,7 +44,8 @@ import {
  * document as the notetaker saved it, and the relay writes the turn into the
  * store through the writer. A read of the repository on a plan that has none
  * is refused ahead of any sandbox, in words the model repeats, so the eval
- * opens no Vercel Sandbox and needs no GitHub. The eve server runs in this process with the database the
+ * opens no Vercel Sandbox and needs no GitHub. A turn proposing the rollout
+ * writes none of it: the cut reaches the plan only as the notetaker's notes. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
@@ -66,6 +68,10 @@ const PLAN_TEXT =
 const PLAN_SAVED = { body: PLAN_TEXT, assumptions: [] } as const;
 const PLAN_WORDS = {
   FIRST: "Any member should be able to invite, not only admins.",
+  CUT:
+    "Three PRs. 1, the invite table, on main: green alone with its migration test. " +
+    "2, the invite route, on 1: green on the table with its route tests. " +
+    "3, the invite email, on 1: it needs the table and not the route.",
 } as const;
 
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
@@ -211,6 +217,22 @@ export default defineEval({
       );
       const runtimeSessionId = await readConversationRuntimeSessionId(run, planConversationId);
       assert.equal(runtimeSessionId, planning.sessionId);
+
+      // A turn proposing a three-PR rollout answers in words and saves
+      // nothing: the plan holds no rollout and the same document after it,
+      // since the notetaker alone writes the cut once the developer takes it.
+      const cutPlan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      await run(savePlanText(LOCAL_DEV_PRINCIPAL, cutPlan.id, PLAN_TEXT));
+      const cutConversationId = await planConversation(run, cutPlan.id);
+      const cut = await openSession(cutConversationId, `${SCRIPTED_CUT}${PLAN_WORDS.CUT}`);
+      const cutSession = await t.target.attachSession(cut.sessionId);
+      cutSession.succeeded();
+      const cutTurn = await readTurnById(run, hostTurnId(cut.sessionId, "turn_0"));
+      assert.equal(cutTurn?.status, TURN_STATUS.SETTLED);
+      const cutStored = await run(readPlan(LOCAL_DEV_PRINCIPAL, cutPlan.id));
+      assert.ok(Option.isSome(cutStored));
+      assert.deepEqual(cutStored.value.plan.rollout, []);
+      assert.deepEqual(cutStored.value.plan.document, PLAN_SAVED);
 
       // Research handed to the worker subagent returns a receipt at once, and
       // the planning turn stays open until the worker's result reaches the

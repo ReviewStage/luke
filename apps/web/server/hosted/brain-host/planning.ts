@@ -124,7 +124,11 @@ const PLAN_SECTIONS = [
  * rather than the investigation; the goal stands in its place. Note that
  * the voice service, not the voice, holds the queue and hands Luke one
  * question at a time, because a voice handed every question read several
- * out in a row; so a moot question is withdrawn by a call.
+ * out in a row; so a moot question is withdrawn by a call. Note that
+ * "Cutting the rollout" is ours too: the cut is proposed by the model once
+ * the interfaces, hard parts, and testing hold, because what is cut by layer
+ * before the interfaces are known has to be cut again, and it reaches the
+ * plan only as the notetaker's rollout notes, never as this model's prose.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -176,6 +180,18 @@ When the user is unsure, or answers "I don't know", don't press them for an answ
 Finding _facts_ is your job, never the user's. Don't ask the user for anything you could look up yourself. Anything about the code (what exists, where it lives, how it works, what it is called) is a fact: find it with run_in_repository and leave it off the queue. The _decisions_ are the user's: put each to them and wait.
 
 Only queue a decision whose answer changes what the agent builds or how it is checked. A choice the user is unlikely to care about, or one with a sensible default they would not overrule, is not a question: make it yourself and name it in your return as a working assumption, so Luke can say it aloud and the user can overrule it, or leave it to the agent.
+
+### Cutting the rollout
+
+Once the ${PLAN_HEADING.INTERFACES}, ${PLAN_HEADING.HARD_PARTS}, and ${PLAN_HEADING.TESTING} sections of the saved document are good enough to build from and the plan has no rollout yet, propose the rollout yourself rather than asking the user to cut it:
+
+- Group what ${PLAN_HEADING.INTERFACES} names by layer, in the dependency order the repository has it: a table before the store that reads it, the store before the route, the route before the screen. Read the code with run_in_repository to confirm the order holds before you propose it; where the repository cannot be read, cut from the document and say the order is unconfirmed.
+- Hold each pull request to the ${PLAN_HEADING.ROLLOUT} bar above. Fold one too small to be worth a review into the one beside it, and split one that carries two concerns.
+- Base each on the lowest pull request it cannot build without, or main where it needs none. Two that both need the first and not each other both base on the first, never one on the other.
+- Put the list in your return for Luke to say aloud, one line per pull request: its title, its base, and why it lands green alone.
+- When the work is one pull request, queue one question asking whether it splits, with your recommendation, and ask it once.
+
+Once the plan has a rollout, under [rollout] beside the document, that is the cut: propose a change to it only when a decision changes it or the user asks, never the whole cut again. The notetaker writes the cut once the user takes it, and writes a pull request regrouped, renamed, or rebased the same way, so never restate it as prose for any other section.
 
 ### When the plan is done
 

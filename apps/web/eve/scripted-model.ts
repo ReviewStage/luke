@@ -28,7 +28,8 @@ import {
  * it hands it to the worker through its delegate and says so, and the worker,
  * running on the same model, looks it up; told to read something, it runs
  * that command in the plan's repository and says what it read, or why it
- * read nothing, in the tool's own words. It is selected only by the
+ * read nothing, in the tool's own words; told to cut, it proposes the rest
+ * as the rollout in words and notes nothing. It is selected only by the
  * fixture's own environment variable and a deployment never names it.
  */
 
@@ -49,6 +50,8 @@ const SCRIPTED_DRAWN_REPLY = "It's on the board.";
 export const SCRIPTED_READ = "Read: ";
 /** The reply to a command that ran: its stdout follows. */
 export const SCRIPTED_READ_REPLY = "The repository says:";
+/** What a developer's words start with when they ask the scripted planner to propose the rest as the rollout, said back as its reply. */
+export const SCRIPTED_CUT = "Cut: ";
 /** The reply to a command that did not run: the tool's own reason follows, so nothing unread is described as read. */
 export const SCRIPTED_NOT_READ_REPLY = "I could not read the repository.";
 
@@ -126,6 +129,9 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
   if (request.lastUserMessage?.startsWith(SCRIPTED_READ)) {
     const command = request.lastUserMessage.slice(SCRIPTED_READ.length);
     return { toolCalls: [{ name: RUN_IN_REPOSITORY_TOOL.name, input: { command } }] };
+  }
+  if (request.lastUserMessage?.startsWith(SCRIPTED_CUT)) {
+    return { text: request.lastUserMessage.slice(SCRIPTED_CUT.length) };
   }
   return { text: SCRIPTED_PLANNING_REPLY };
 }
