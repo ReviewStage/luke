@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The desktop's Node kernel: everything that executes, persists, schedules, or holds an account, reached only through the Gateway",
   "exports": {
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js"

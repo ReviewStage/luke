@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The live voice orchestrator: the call, its socket, and the live session source it opens",
   "exports": {
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js",

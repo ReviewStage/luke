@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The planner's eve service root: Luke's planning brain on the web deployment",
   "engines": {
     "node": "24.x"
   },
