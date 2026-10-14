@@ -7,7 +7,8 @@
  * the query. That token may reach the call window and never a crash report,
  * so a breadcrumb that names one anywhere it carries text is dropped whole
  * rather than redacted: a URL or a console line is free text, and a pattern
- * that missed one spelling would send the rest.
+ * that missed one spelling would send the rest. Every renderer's page and its
+ * preload both report, so both drop them.
  */
 
 import type { Breadcrumb } from "@sentry/electron/renderer";

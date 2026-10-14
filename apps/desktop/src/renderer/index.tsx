@@ -4,11 +4,11 @@ import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
+import { withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 import { App } from "./app";
 import { callAvatarAtom } from "./call/call-avatar";
 import { CallWindowCard } from "./call/call-card";
 import { rendererRegistry } from "./renderer-runtime";
-import { withoutAccessTokens } from "./sentry-breadcrumbs";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
 

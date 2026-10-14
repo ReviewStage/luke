@@ -2,8 +2,9 @@ import * as Sentry from "@sentry/electron/renderer";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { contextBridge, ipcRenderer } from "electron";
 import { type AppBridge, bridgeEntries } from "#shared/bridge";
+import { withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 
-Sentry.init();
+Sentry.init({ beforeBreadcrumb: withoutAccessTokens });
 
 const bridge: Record<string, CallableFunction> = {};
 
