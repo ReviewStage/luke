@@ -1,5 +1,7 @@
 import { Schema as EffectSchema } from "effect";
+import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
+import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
  * automation-wire.ts -- an automation as the service keeps it: what fires it, what it starts, the guards on how often, and each run it made.
@@ -18,11 +20,11 @@ import { modelChoiceSchema } from "./models-wire.js";
  * routes answer, declared once.
  */
 
-const AUTOMATION_BOUNDS = {
+export const AUTOMATION_BOUNDS = {
   /** The most characters an automation's name may spell. */
   MAX_NAME_CHARS: 80,
-  /** The most characters of a prompt, the same bound a coding agent's task is held to. */
-  MAX_PROMPT_CHARS: 20_000,
+  /** The most characters of a prompt: under a coding agent's task bound, with room for what Luke adds about the firing. */
+  MAX_PROMPT_CHARS: 12_000,
   /** The most characters of a cron expression. */
   MAX_CRON_CHARS: 120,
   /** The most characters of an IANA time zone name. */
@@ -35,6 +37,10 @@ const AUTOMATION_BOUNDS = {
   MAX_CONCURRENT_RUNS: 5,
   /** The most runs one automation may start in a day. */
   MAX_DAILY_RUNS: 50,
+  /** The most characters of a "Run now" key. */
+  MAX_KEY_CHARS: 128,
+  /** The most runs one history read answers. */
+  MAX_RUNS_READ: 100,
 } as const;
 
 /** What fires an automation. */
@@ -66,6 +72,11 @@ export const AUTOMATION_ACTION = {
   /** A coding agent on the plan's repository, handed the prompt as its task. */
   CODING_AGENT: "coding-agent",
 } as const;
+
+const nameSchema = EffectSchema.Trim.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_NAME_CHARS),
+);
 
 const filterValuesSchema = EffectSchema.Array(
   EffectSchema.Trim.check(
@@ -252,3 +263,103 @@ export const automationRunReasonSchema = EffectSchema.Literals(
   Object.values(AUTOMATION_RUN_REASON),
 );
 export const automationPauseSchema = EffectSchema.Literals(Object.values(AUTOMATION_PAUSE));
+
+/** The query an automation list may narrow by: one plan's automations alone. */
+export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId" } as const;
+
+/**
+ * One run as the history shows it: what fired it, where it stands, why
+ * where it did not start, and the agent it started with that agent's own
+ * status and title as its tab reads them, null where it started none or
+ * the agent is gone. Instants are epoch milliseconds.
+ */
+const automationRunSummarySchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  firing: automationFiringSchema,
+  status: automationRunStatusSchema,
+  reason: EffectSchema.NullOr(automationRunReasonSchema),
+  agent: EffectSchema.NullOr(
+    EffectSchema.Struct({
+      id: wireUuidSchema,
+      title: EffectSchema.NullOr(EffectSchema.String),
+      status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+    }),
+  ),
+  firedAt: countedNumber,
+  settledAt: EffectSchema.NullOr(countedNumber),
+});
+
+export type AutomationRunSummary = typeof automationRunSummarySchema.Type;
+
+/**
+ * One automation as the list shows it: the plan it works on, whether it
+ * runs and why not where the service paused it, what fires it and what it
+ * starts, its guards, when a schedule is next due, and its newest run.
+ */
+const automationSummarySchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  planId: wireUuidSchema,
+  planName: EffectSchema.String,
+  name: EffectSchema.String,
+  enabled: EffectSchema.Boolean,
+  pausedReason: EffectSchema.NullOr(automationPauseSchema),
+  trigger: automationTriggerSchema,
+  action: automationActionSchema,
+  guards: automationGuardsSchema,
+  nextRunAt: EffectSchema.NullOr(countedNumber),
+  lastRun: EffectSchema.NullOr(automationRunSummarySchema),
+  createdAt: countedNumber,
+});
+
+export type AutomationSummary = typeof automationSummarySchema.Type;
+
+/** The account's automations, newest first (GET). */
+export const automationListAnswerSchema = EffectSchema.Struct({
+  automations: EffectSchema.Array(automationSummarySchema),
+});
+
+/**
+ * One automation as a write answers it; a webhook trigger's secret rides
+ * along only on the answer that made it, the one time it is shown.
+ */
+export const automationAnswerSchema = EffectSchema.Struct({
+  automation: automationSummarySchema,
+  webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/** An automation to make (POST): its plan, name, trigger, and action, and its guards or the defaults. */
+export const automationCreateRequestSchema = EffectSchema.Struct({
+  planId: wireUuidSchema,
+  name: nameSchema,
+  trigger: automationTriggerSchema,
+  action: automationActionSchema,
+  guards: EffectSchema.optionalKey(automationGuardsSchema),
+});
+
+/** A change to an automation (PATCH): any of its fields, a field left out standing as it was. */
+export const automationChangeRequestSchema = EffectSchema.Struct({
+  name: EffectSchema.optionalKey(nameSchema),
+  enabled: EffectSchema.optionalKey(EffectSchema.Boolean),
+  trigger: EffectSchema.optionalKey(automationTriggerSchema),
+  action: EffectSchema.optionalKey(automationActionSchema),
+  guards: EffectSchema.optionalKey(automationGuardsSchema),
+});
+
+/**
+ * A "Run now" (POST), under the client's own key, a UUID, so a retry after a
+ * lost answer is the same run and the key can never be the instant a
+ * schedule's own run is recorded under.
+ */
+export const automationRunRequestSchema = EffectSchema.Struct({
+  idempotencyKey: wireUuidSchema,
+});
+
+/** The run a "Run now" made, as it came out. */
+export const automationRunAnswerSchema = EffectSchema.Struct({
+  run: automationRunSummarySchema,
+});
+
+/** An automation's runs, newest first (GET). */
+export const automationRunsAnswerSchema = EffectSchema.Struct({
+  runs: EffectSchema.Array(automationRunSummarySchema),
+});

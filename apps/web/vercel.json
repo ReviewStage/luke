@@ -141,6 +141,18 @@
           "dest": "/api/default.js?route=inbox/item&id=$1"
         },
         {
+          "src": "/api/automations/([^/]+)/runs",
+          "dest": "/api/default.js?route=automations/runs&id=$1"
+        },
+        {
+          "src": "/api/automations/([^/]+)/run",
+          "dest": "/api/default.js?route=automations/run&id=$1"
+        },
+        {
+          "src": "/api/automations/([^/]+)",
+          "dest": "/api/default.js?route=automations/automation&id=$1"
+        },
+        {
           "src": "/api/account/delete",
           "dest": "/api/default.js?route=account/delete"
         },
@@ -187,6 +199,10 @@
         {
           "src": "/api/admin/users",
           "dest": "/api/default.js?route=admin/users"
+        },
+        {
+          "src": "/api/automations",
+          "dest": "/api/default.js?route=automations"
         },
         {
           "src": "/api/dictation",

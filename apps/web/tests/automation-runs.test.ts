@@ -14,6 +14,7 @@ import {
 } from "@sidecar/database/models/automation-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { automationRun } from "@sidecar/database/schemas/automation";
+import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -26,9 +27,10 @@ import {
   type AutomationGuards,
 } from "@sidecar/hosted/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
-import { executeAutomationRun } from "../server/hosted/automation-runs";
+import { executeAutomationRun, recoverStrandedRun } from "../server/hosted/automation-runs";
 import { sweepAutomations } from "../server/hosted/automation-sweep";
 import {
   EVE_CANCEL_OUTCOME,
@@ -375,6 +377,84 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.equal(first?.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(again, first, "the same agent, not a skip");
         assert.equal(eve.opened.filter((each) => each.account === automation.userId).length, 1);
+      }),
+  );
+
+  it.effect(
+    "two acts on one automation's runs at once, a sweep's and a Run now's, start one agent under a concurrency of one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({
+          guards: { maxConcurrentRuns: 1, dailyRunCap: 10 },
+        });
+        const eve = fakeEve();
+        const first = yield* runNow(automation);
+        const second = yield* runNow(automation);
+
+        const outcomes = yield* Effect.all(
+          [first, second].map((run) =>
+            executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
+          ),
+          { concurrency: 2 },
+        );
+
+        assert.deepEqual(outcomes.map((outcome) => outcome?.status).sort(), [
+          AUTOMATION_RUN_STATUS.SKIPPED,
+          AUTOMATION_RUN_STATUS.STARTED,
+        ]);
+        assert.equal(eve.opened.filter((each) => each.account === owner).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a run claimed and left without its agent is settled as the agent its key made where its session ran, or failed where none did",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const started = yield* runNow(automation);
+        const outcome = yield* executeAutomationRun(eve.eveFor, started).pipe(
+          Effect.provide(services),
+        );
+        // Its session ran a turn, as eve opening it does.
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+        yield* Database.use((db) =>
+          db.insert(turns).values({
+            userId: owner,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.RUNNING,
+          }),
+        );
+        const unopened = yield* runNow(automation);
+        yield* executeAutomationRun(eve.eveFor, unopened).pipe(Effect.provide(services));
+        const orphan = yield* runNow(automation);
+        // Both left as a function that died after its claim would leave them.
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: null })
+            .where(eq(automationRun.automationId, automation.id)),
+        );
+
+        for (const run of [started, unopened, orphan]) {
+          yield* recoverStrandedRun({ id: run.id, automationId: automation.id, userId: owner });
+        }
+
+        const runs = new Map(
+          (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
+        );
+        assert.equal(runs.get(started.id)?.status, AUTOMATION_RUN_STATUS.STARTED);
+        assert.notEqual(runs.get(started.id)?.codingAgentId, null, "its agent is found by its key");
+        assert.equal(
+          runs.get(unopened.id)?.status,
+          AUTOMATION_RUN_STATUS.FAILED,
+          "an agent made but never opened is no start",
+        );
+        assert.equal(runs.get(orphan.id)?.status, AUTOMATION_RUN_STATUS.FAILED);
+        assert.equal(runs.get(orphan.id)?.reason, AUTOMATION_RUN_REASON.UNAVAILABLE);
       }),
   );
 });
