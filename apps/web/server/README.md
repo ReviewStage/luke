@@ -885,8 +885,8 @@ vercel connect create mcp.linear.app --name linear             # Linear; prints 
 vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create granola --name granola                   # Granola
-vercel connect create mcp.mercury.com --name mercury           # Mercury
-vercel connect create mcp.neon.tech --name neon                # Neon
+vercel connect create mcp.mercury.com --name luke-mercury      # Mercury, whose clients' names may not begin with "Mercury"
+# Neon: an OAuth connector over a client registered by hand, below
 vercel connect create posthog --name posthog                   # PostHog
 vercel connect create supabase --name supabase                 # Supabase
 vercel connect create vercel --target mcp --name vercel        # Vercel, through Connect's own Vercel MCP target
@@ -900,16 +900,43 @@ clients itself, so Connect registers its own client and no app of ours is
 needed; a provider in Connect's catalog is created by its catalog name, the
 rest by their server's address. Vercel's MCP server accepts only the clients
 Vercel has reviewed, which is why it is created through Connect's own Vercel
-target rather than by address. A connector's user scopes are every scope
-its server publishes (`scopes_supported` in the server's
-`/.well-known/oauth-protected-resource`), so a grant is bounded by what the
-developer allows on the provider's consent page alone: check them with
-`vercel api /v1/connect/connectors/<connector-id>` after the create, and set
-any missing one as Slack's are set below. Neon's consent page asks whether
-to allow writes, and Mercury's `transactions:request` and
-`transfers:request` scopes request a payment or transfer that an approver
-still confirms in Mercury. Y Combinator's server serves only accounts YC
-has enabled MCP access for.
+target rather than by address. A connector created this way asks for no
+scopes, and the provider grants its own default, which is enough for
+Linear, Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
+and a refresh token (`offline_access`), only when asked; Y Combinator's
+server asks for `mcp:access`; and PostHog's and Supabase's granular scopes
+are better asked for in full than left to a default. Those four connectors
+ask for every scope their server publishes (`scopes_supported` in its
+`/.well-known/oauth-protected-resource`), set on the connector's
+`data.userAuthorization.scopes`:
+
+```
+vercel connect list                                        # the connector's scl_ id
+vercel api /v1/connect/connectors/<connector-id>           # what it stands at now
+# ~/scopes.json: {"data":{"userAuthorization":{"enabled":true,"scopes":["read","offline_access",…]}}}
+vercel api /v2/connect/connectors/<connector-id> -X PATCH --input ~/scopes.json
+```
+
+A grant is then bounded by what the developer allows on the provider's
+consent page alone. Mercury's `transactions:request` and `transfers:request`
+scopes request a payment or transfer that an approver still confirms in
+Mercury. Y Combinator's server serves only accounts YC has enabled MCP
+access for.
+
+**Neon's connector.** Neon's registration endpoint refuses a client that
+does not name its `response_types`, which Connect's registration leaves
+out, so Neon's client is registered by hand at that endpoint and the
+connector is a plain OAuth connector over it, with Neon's two scopes
+(Neon's consent page still asks whether to allow writes):
+
+```
+curl -s https://mcp.neon.tech/api/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"client_secret_post","scope":"read write"}' > ~/neon-client.json
+# ~/neon.json, from its client_id and client_secret:
+# {"serverUrl":"https://mcp.neon.tech","clientId":"…","clientSecret":"…","tokenEndpointAuthMethod":"client_secret_post","pkceRequired":true,"userAuthorization":{"enabled":true,"scopes":["read","write"]},"refreshTokens":{"enabled":true}}
+vercel connect create mcp.neon.tech --name neon --connector-type oauth --data @"$HOME/neon.json" --json
+rm ~/neon-client.json ~/neon.json
+vercel connect attach <connector-uid> --yes
+```
 
 Then set the provider's variable (`GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
