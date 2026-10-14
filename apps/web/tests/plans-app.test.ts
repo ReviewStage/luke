@@ -747,12 +747,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
             {
               id: ownersCall,
               startedAt: 1_000_000,
-              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.")],
+              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.", [0, 500])],
             },
             {
               id: teammatesCall,
               startedAt: 2_000_000,
-              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "After seven days.")],
+              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "After seven days.", [0, 500])],
               endedAt: 2_060_000,
               ending: VOICE_CLOSE_REASON.CONNECTION_LOST,
               usage: { seconds: 60, confirmed: false },

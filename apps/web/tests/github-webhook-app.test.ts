@@ -262,7 +262,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           metadata: {},
         });
         const now = yield* DateTime.nowAsDate;
-        yield* Database.use((db) =>
+        yield* Database.use((_db) =>
           Database.use((db) =>
             db.insert(githubInstallation).values({
               organizationId: workspaceId,

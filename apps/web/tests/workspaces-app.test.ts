@@ -248,7 +248,7 @@ it.effect(
           ["Ada Lovelace", "Acme Platform", "Acme Platform"],
         );
         assert.deepEqual(
-          yield* Database.use((db) =>
+          yield* Database.use((_db) =>
             Database.use((db) =>
               db
                 .select({ userId: member.userId, role: member.role })
