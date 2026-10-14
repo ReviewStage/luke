@@ -130,21 +130,25 @@ function updateNamesAChange(update: {
   repository?: string | null;
   pinned?: boolean;
   archived?: boolean;
+  workspaceId?: string;
 }): boolean {
   return Object.keys(update).length > 0;
 }
 
 /**
  * Changing a plan (PATCH): its name, its repository, whether it is pinned,
- * whether it is archived, or any of them at once. A rename is one of these;
- * a repository is confirmed reachable by the account before it is kept, and
- * null clears it.
+ * whether it is archived, the workspace it moves to, or any of them at once.
+ * A rename is one of these; a repository is confirmed reachable by the
+ * workspace before it is kept, and null clears it. A move is the plan's
+ * owner's alone, into a workspace they are a member of whose GitHub reaches
+ * the plan's repository.
  */
 export const planUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   pinned: EffectSchema.optionalKey(EffectSchema.Boolean),
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
+  workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange));
 
 export type PlanUpdateRequest = typeof planUpdateRequestSchema.Type;

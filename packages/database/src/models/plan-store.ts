@@ -79,6 +79,8 @@ export interface LabelledAgentEdit extends PlanAgentEdit {
  */
 export interface StoredPlan {
   readonly plan: Plan;
+  /** The account that started the plan, the one that may move it to another workspace. */
+  readonly ownerId: string;
   /** The plan's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
@@ -96,9 +98,15 @@ export interface NewPlan {
   readonly repository?: string | null;
 }
 
-/** What a change to a plan names: a new name, a repository or null to clear it, pinned or not, archived or not, or any of them at once. */
+/**
+ * What a change to a plan names: a new name, a repository or null to clear
+ * it, pinned or not, archived or not, the workspace it moves to, or any of
+ * them at once. A move is its owner's alone, into a workspace they are a
+ * member of, which the caller confirms first.
+ */
 export interface PlanChanges {
   readonly name?: string;
+  readonly organizationId?: string;
   readonly repository?: string | null;
   readonly pinned?: boolean;
   readonly archived?: boolean;
@@ -261,6 +269,7 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         document: { body: row.document, assumptions: [] },
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
+      ownerId: row.userId,
       text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
@@ -379,12 +388,13 @@ const lockPlan = SqlSchema.findOneOption({
     ),
 });
 
-/** The row changed: whichever of the name, the repository, the pin, and the archive the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace, the repository, the pin, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     planId: Schema.String,
     name: Schema.optionalKey(Schema.String),
+    organizationId: Schema.optionalKey(Schema.String),
     repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
     pinnedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
@@ -689,13 +699,19 @@ export function updatePlan(
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return Option.none();
         const stillArchived = locked.value.archivedAt !== null && changes.archived !== false;
-        const reworded = changes.name !== undefined || changes.repository !== undefined;
+        const reworded =
+          changes.name !== undefined ||
+          changes.repository !== undefined ||
+          changes.organizationId !== undefined;
         if (stillArchived && reworded) return yield* new PlanArchived();
         const now = yield* DateTime.nowAsDate;
         const row = yield* applyChanges({
           userId,
           planId,
           ...(changes.name === undefined ? undefined : { name: changes.name }),
+          ...(changes.organizationId === undefined
+            ? undefined
+            : { organizationId: changes.organizationId }),
           ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
           ...(changes.pinned === undefined
             ? undefined

@@ -37,6 +37,7 @@ import {
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { REPOSITORY_UNREACHED } from "@sidecar/hosted/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
@@ -80,7 +81,11 @@ import {
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { LINK_OUTCOME, linkInstallation } from "../server/hosted/github-installations";
+import {
+  disconnectInstallation,
+  LINK_OUTCOME,
+  linkInstallation,
+} from "../server/hosted/github-installations";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
@@ -93,7 +98,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
-import { fakeWorkspaceSeams, joinWorkspace, startPlan } from "./support/workspaces";
+import { fakeWorkspaceSeams, joinWorkspace, openWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -509,7 +514,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start on a plan named before its workspace connected another installation is refused as not reachable, and opens nothing",
+    "a Start on a plan whose workspace since connected an installation GitHub does not know is refused as a connection that lapsed, and opens nothing",
     () =>
       Effect.gen(function* () {
         const { owner, plan, installation, eve, ask } = yield* openPlan();
@@ -523,9 +528,86 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         const started = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
 
+        assert.deepEqual(started, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: {
+              reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED,
+              repository: RELAY_FULL_NAME,
+            },
+          },
+        });
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a Start on a plan whose workspace has nothing connected names the owner's other workspace connected to the repository's owner, where the plan can move, and a teammate hears only that nothing is connected",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const teammate = yield* openGithubUser();
+        const plan = yield* startPlan(owner, {
+          name: "Teammate invitations",
+          repository: RELAY_FULL_NAME,
+        });
+        yield* joinWorkspace(plan.workspaceId, teammate);
+        const team = yield* openWorkspace(owner);
+        const installation = freshInstallation();
+        assert.equal(yield* connectWorkspaceGitHub(team, installation), LINK_OUTCOME.LINKED);
+        const eve = fakeEve();
+        const { ask } = yield* standing(
+          new Map([
+            [`Bearer ${owner}`, owner],
+            [`Bearer ${teammate}`, teammate],
+          ]),
+          githubReaching([installation]),
+          eve,
+          false,
+        );
+
+        const byOwner = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+        const byTeammate = yield* ask(startAs(teammate, plan.id, { idempotencyKey: randomUUID() }));
+
+        assert.deepEqual(byOwner, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: {
+              reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE,
+              repository: RELAY_FULL_NAME,
+              workspace: { id: team, name: "Test Workspace" },
+            },
+          },
+        });
+        assert.deepEqual(byTeammate, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY_FULL_NAME },
+          },
+        });
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a Start while GitHub does not answer is refused as GitHub unanswered, which a retry may get past, and opens nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan({
+          github: (sent) =>
+            new URL(sent.url).pathname.startsWith("/app/installations/")
+              ? Response.json({ message: "Service Unavailable" }, { status: 503 })
+              : undefined,
+        });
+
+        const started = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+
         assert.deepEqual(
           started,
-          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+          refusal(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.GITHUB_UNANSWERED),
         );
         assert.deepEqual(eve.opened, []);
       }),
@@ -793,6 +875,29 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           lines: [SNAPSHOT, "Rename the subject line too."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
+      }),
+  );
+
+  it.effect(
+    "a message to an agent whose plan's workspace was disconnected since is refused, saying nothing is connected, and sends nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: true });
+        yield* disconnectInstallation(plan.workspaceId);
+
+        const sent = yield* ask(
+          messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
+        );
+
+        assert.deepEqual(sent, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY_FULL_NAME },
+          },
+        });
+        assert.deepEqual(eve.sent, []);
       }),
   );
 

@@ -6,10 +6,11 @@ import {
   type GitHubAccountType,
   type GitHubInstallationStatus,
 } from "@sidecar/database/github-installation-vocabulary";
+import { member, organization } from "@sidecar/database/schemas/auth";
 import { githubInstallIntent } from "@sidecar/database/schemas/github-install-intent";
 import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
-import { and, eq, gt, ne, or } from "drizzle-orm";
+import { and, eq, gt, ne, or, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import type { StoreFailure } from "./store-failure.js";
@@ -189,6 +190,32 @@ const upsertInstallation = SqlSchema.void({
   },
 });
 
+const findMemberWorkspaceOnOwner = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    owner: Schema.String,
+    excludingOrganizationId: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  execute: ({ userId, owner, excludingOrganizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: organization.id, name: organization.name })
+        .from(githubInstallation)
+        .innerJoin(organization, eq(organization.id, githubInstallation.organizationId))
+        .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
+        .where(
+          and(
+            eq(member.userId, userId),
+            ne(githubInstallation.organizationId, excludingOrganizationId),
+            eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.ACTIVE),
+            sql`lower(${githubInstallation.accountLogin}) = lower(${owner})`,
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 const findInstallationOfWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ installationId: Schema.Number }),
@@ -326,4 +353,19 @@ export function installationOfWorkspace(
     findInstallationOfWorkspace(organizationId),
     Option.map((row) => row.installationId),
   );
+}
+
+/**
+ * The workspace, other than the one given, whose active installation is on
+ * the GitHub account given, where the account asking is a member of it:
+ * where a plan of the one given could move to reach that account's
+ * repositories. One installation stands for one workspace, so there is at
+ * most one.
+ */
+export function memberWorkspaceOnOwner(
+  userId: string,
+  owner: string,
+  excludingOrganizationId: string,
+): Effect.Effect<Option.Option<{ id: string; name: string }>, StoreFailure, DatabaseServices> {
+  return findMemberWorkspaceOnOwner({ userId, owner, excludingOrganizationId });
 }

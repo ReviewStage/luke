@@ -10,6 +10,7 @@ import {
   deletePlan,
   listPlans,
   readPlan,
+  type StoredPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
 import { standingSessionsNamed } from "@sidecar/database/models/recorded-session";
@@ -321,14 +322,34 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.fullName;
 });
 
-/** The workspace the account's plan belongs to, or not found for a plan it does not own. */
-const planWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+/** The account's plan, or not found for a plan it does not reach. */
+const reachedPlan = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   planId: string,
-): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<StoredPlan, HostedRefusal, DatabaseServices> {
   const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
   if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return opened.value.plan.workspaceId;
+  return opened.value;
+});
+
+/**
+ * The workspace a plan moves to, confirmed: the plan is the account's own,
+ * since a teammate's plan moved out of a shared workspace would leave the
+ * teammates who wrote it behind; the account is a member of the workspace,
+ * which answers as none where it is not; and the workspace's GitHub reaches
+ * the plan's repository, where it names one, so a move never strands one.
+ */
+const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  stored: StoredPlan,
+  workspaceId: string,
+): Effect.fn.Return<string, HostedRefusal, GitHubApp | HttpClient.HttpClient | DatabaseServices> {
+  if (stored.ownerId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, workspaceId));
+  if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { repository } = stored.plan;
+  if (repository !== null) yield* workspaceRepository(workspaceId, repository);
+  return workspaceId;
 });
 
 /**
@@ -403,9 +424,11 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
 });
 
 /**
- * PATCH: the plan's name, its repository, its pin, its archive, or any of
- * them changed, answered with its document. A repository is confirmed before
- * the row is touched, so a refused one leaves the rest unchanged too.
+ * PATCH: the plan's name, its repository, its pin, its archive, its
+ * workspace, or any of them changed, answered with its document. A
+ * repository and a move are confirmed before the row is touched, so a
+ * refused one leaves the rest unchanged too; a repository named beside a
+ * move is confirmed in the workspace the plan moves to.
  */
 const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -415,13 +438,20 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const update = readEither(planUpdateRequestSchema)(body);
   if (Result.isFailure(update)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const changes = update.success;
+  const organizationId =
+    changes.workspaceId === undefined
+      ? undefined
+      : yield* movedToWorkspace(userId, yield* reachedPlan(userId, planId), changes.workspaceId);
+  const workspace =
+    organizationId === undefined
+      ? Effect.map(reachedPlan(userId, planId), (stored) => stored.plan.workspaceId)
+      : Effect.succeed(organizationId);
   const repository =
-    "repository" in changes
-      ? yield* reachableRepository(planWorkspace(userId, planId), changes.repository)
-      : undefined;
+    "repository" in changes ? yield* reachableRepository(workspace, changes.repository) : undefined;
   const plan = yield* hostedStoreOrArchived(
     updatePlan(userId, planId, {
       ...("name" in changes ? { name: changes.name } : undefined),
+      ...(organizationId === undefined ? undefined : { organizationId }),
       ...(repository === undefined ? undefined : { repository }),
       ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
       ...("archived" in changes ? { archived: changes.archived } : undefined),

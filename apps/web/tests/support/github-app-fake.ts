@@ -148,6 +148,10 @@ export interface InstallationFixture {
   readonly accountType?: "User" | "Organization";
   readonly repositories: readonly RepositoryFixture[];
   readonly permissions?: Readonly<Record<string, string>>;
+  /** Whether it was given every repository of its account or a chosen few; a chosen few when unsaid. */
+  readonly repositorySelection?: "all" | "selected";
+  /** When its account suspended it, ISO; running when unsaid. */
+  readonly suspendedAt?: string;
 }
 
 /** What an installation grants the App where a test says nothing: what every installation of the App granted before CI read was added. */
@@ -212,9 +216,10 @@ function installationJson(installation: InstallationFixture) {
       id: installation.accountId ?? 50_000 + installation.id,
       type: installation.accountType ?? "User",
     },
-    repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+    repository_selection: installation.repositorySelection ?? GITHUB_REPOSITORY_SELECTION.SELECTED,
     permissions: installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS,
     app_id: Number(GITHUB_FIXTURE.APP_ID),
+    suspended_at: installation.suspendedAt ?? null,
   };
 }
 
