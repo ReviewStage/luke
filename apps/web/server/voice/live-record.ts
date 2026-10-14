@@ -5,10 +5,10 @@ import type {
   VoiceWriter,
 } from "@sidecar/database/models/voice-writer";
 import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
+import type { LiveServerEvent } from "@sidecar/live";
 import { causeKind, serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
-import type { LiveServerEvent } from "../live.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over

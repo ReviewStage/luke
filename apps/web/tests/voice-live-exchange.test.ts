@@ -7,7 +7,15 @@ import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-st
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
-import { LIVE_DEFAULTS } from "@sidecar/live";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_CLOSE_REASON,
+  LIVE_DEFAULTS,
+  LIVE_SERVER_EVENT,
+  type LiveAppendEvent,
+  type LiveClientEvent,
+  type LiveServerEventType,
+} from "@sidecar/live";
 import { sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
@@ -29,14 +37,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import {
-  LIVE_CLIENT_EVENT,
-  LIVE_CLOSE_REASON,
-  LIVE_SERVER_EVENT,
-  type LiveAppendEvent,
-  type LiveClientEvent,
-  type LiveServerEventType,
-} from "../server/live";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";

@@ -7,6 +7,17 @@ import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-st
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_SERVER_EVENT,
+  LIVE_VOICE,
+  type LiveClientEvent,
+  planningOpeningInstruction,
+  SEED_CONTENT_TYPE,
+  SEED_ITEM_TYPE,
+  SEED_ROLE,
+  sessionInstructions,
+} from "@sidecar/live";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
@@ -21,17 +32,6 @@ import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import {
-  LIVE_CLIENT_EVENT,
-  LIVE_SERVER_EVENT,
-  LIVE_VOICE,
-  type LiveClientEvent,
-  planningOpeningInstruction,
-  SEED_CONTENT_TYPE,
-  SEED_ITEM_TYPE,
-  SEED_ROLE,
-  sessionInstructions,
-} from "../server/live";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";

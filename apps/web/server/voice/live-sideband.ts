@@ -1,7 +1,7 @@
+import type { LiveServerEvent } from "@sidecar/live";
 import { holdSocket, type LiveSideband, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { Effect, type Scope, Stream } from "effect";
 import type { RawData, WebSocket } from "ws";
-import type { LiveServerEvent } from "../live.js";
 import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 /**

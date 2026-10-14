@@ -13,7 +13,12 @@ import {
   storeWriter,
 } from "@sidecar/database/models/writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
-import { LIVE_DEFAULTS } from "@sidecar/live";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_DEFAULTS,
+  type LiveAppendEvent,
+  type LiveClientEvent,
+} from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -41,7 +46,6 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { LIVE_CLIENT_EVENT, type LiveAppendEvent, type LiveClientEvent } from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

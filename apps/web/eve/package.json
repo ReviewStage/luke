@@ -10,6 +10,12 @@
     "test:agent": "LUKE_BRAIN_MODEL_FIXTURE=scripted eve eval"
   },
   "dependencies": {
+    "@sidecar/database": "workspace:*",
+    "@sidecar/hosted": "workspace:*",
+    "@sidecar/wire": "workspace:*",
+    "ai": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
     "eve": "0.74.0"
   }
 }

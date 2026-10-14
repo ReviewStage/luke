@@ -7,7 +7,17 @@ import { voiceSessionRecord } from "@sidecar/database/models/voice-session-recor
 import { type VoiceTarget, voiceWriter } from "@sidecar/database/models/voice-writer";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
-import { LIVE_DEFAULTS } from "@sidecar/live";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_DEFAULTS,
+  LIVE_SERVER_EVENT,
+  type LiveClientEvent,
+  type LiveServerEvent,
+  TRANSCRIPT_SPEAKER,
+  TranscriptLedger,
+  type TranscriptSpeaker,
+  UTTERANCE_GAP_MS,
+} from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -36,16 +46,6 @@ import {
   sessionKey,
   UI_PART_TYPE,
 } from "../server/core";
-import {
-  LIVE_CLIENT_EVENT,
-  LIVE_SERVER_EVENT,
-  type LiveClientEvent,
-  type LiveServerEvent,
-  TRANSCRIPT_SPEAKER,
-  TranscriptLedger,
-  type TranscriptSpeaker,
-  UTTERANCE_GAP_MS,
-} from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

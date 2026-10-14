@@ -6,19 +6,6 @@ import type {
 } from "@sidecar/database/models/voice-session-record";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import { Effect, Option, type Schema, type Scope } from "effect";
-import type { WebSocket } from "ws";
-import {
-  HOSTED_API_ERROR,
-  type HostedApiError,
-  HTTP_STATUS,
-  type SessionAttachedFrame,
-  type SessionAttachFrame,
-  type SessionCreatedFrame,
-  type SessionCreateFrame,
-  sessionOpeningFrameFromWire,
-  VOICE_SERVICE_FRAME,
-} from "../core.js";
 import {
   decodeLivePayload,
   developerSeedItem,
@@ -32,7 +19,20 @@ import {
   startupPrefix,
   startupTokens,
   withinStartupBound,
-} from "../live.js";
+} from "@sidecar/live";
+import { Effect, Option, type Schema, type Scope } from "effect";
+import type { WebSocket } from "ws";
+import {
+  HOSTED_API_ERROR,
+  type HostedApiError,
+  HTTP_STATUS,
+  type SessionAttachedFrame,
+  type SessionAttachFrame,
+  type SessionCreatedFrame,
+  type SessionCreateFrame,
+  sessionOpeningFrameFromWire,
+  VOICE_SERVICE_FRAME,
+} from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
