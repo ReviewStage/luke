@@ -266,6 +266,7 @@ export function DesktopShell({
     tab === PANEL_TAB.PLANS && !plans.inboxView.open && region.kind === DOCUMENT_REGION.READY
       ? region.plan
       : undefined,
+    plans.me,
   );
   if (gated) {
     return (

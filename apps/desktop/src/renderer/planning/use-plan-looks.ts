@@ -162,8 +162,20 @@ function newestSaveOf(plan: Plan): number {
   );
 }
 
-/** A visit to the plan as it opens: each section someone else saved after the last look; none while no plan is drawn. */
-function visited(plan: Plan | undefined): Visit {
+/**
+ * Whether a section's save is the reader's own, which they need not be shown
+ * as changed: a developer's save naming the reader. Note that a developer's
+ * save naming nobody, or read with no account id, counts as theirs, as every
+ * developer's save did before saves named their member, because a save the
+ * window cannot place is as likely the reader's as anyone's.
+ */
+function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolean {
+  if (edit.actor !== PLAN_ACTOR.DEVELOPER) return false;
+  return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
+}
+
+/** A visit to the plan as it opens: each section someone else, a teammate or Luke or an agent, saved after the last look; none while no plan is drawn. */
+function visited(plan: Plan | undefined, readerId: string | undefined): Visit {
   if (plan === undefined)
     return { planId: undefined, token: { planId: undefined }, changed: NOTHING_CHANGED };
   const mark = readLooks()[plan.id];
@@ -172,7 +184,7 @@ function visited(plan: Plan | undefined): Visit {
       ? NOTHING_CHANGED
       : new Set(
           sectionSavesOf(plan)
-            .filter((edit) => edit.actor !== PLAN_ACTOR.DEVELOPER && edit.at > mark)
+            .filter((edit) => !readersOwn(edit, readerId) && edit.at > mark)
             .map((edit) => edit.section),
         );
   return { planId: plan.id, token: { planId: plan.id }, changed };
@@ -185,14 +197,14 @@ function visited(plan: Plan | undefined): Visit {
  * shell rather than the plan's page, because the plan's version history
  * standing in the page's place is still a stay on the plan.
  */
-export function usePlanLooks(plan: Plan | undefined): PlanLooks {
-  const [visit, setVisit] = useState(() => visited(plan));
+export function usePlanLooks(plan: Plan | undefined, readerId: string | undefined): PlanLooks {
+  const [visit, setVisit] = useState(() => visited(plan, readerId));
   const [look, restartLook] = useAtom(lookAtom);
   const keep = useAtomSet(looksAtom);
   const watch = useAtomSet(watchedAtom);
   let current = visit;
   if (visit.planId !== plan?.id) {
-    current = visited(plan);
+    current = visited(plan, readerId);
     setVisit(current);
   }
   const { token } = current;
