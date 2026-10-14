@@ -162,11 +162,17 @@ const saveEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!(yield* brake.check(userId))) {
     return yield* keysResponse(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
   }
-  const checked = yield* checkProviderKey(provider, key);
+  // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none Luke runs.
+  const [checked, fastAccess] = yield* Effect.all(
+    [
+      checkProviderKey(provider, key),
+      provider === PROVIDER_KEY_PROVIDER.ANTHROPIC
+        ? checkFastAccess(key)
+        : Effect.succeed(undefined),
+    ],
+    { concurrency: "unbounded" },
+  );
   if (checked !== PROVIDER_KEY_CHECK.ACCEPTED) return yield* keysResponse(userId, ring, checked);
-  // An Anthropic key is asked about fast mode too, which the catalog offers by; OpenAI has none Luke runs.
-  const fastAccess =
-    provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? yield* checkFastAccess(key) : undefined;
   const sealed = sealProviderKey(ring, { userId, provider }, key);
   const now = yield* DateTime.nowAsDate;
   yield* hostedStoreOrUnavailable(

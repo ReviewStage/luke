@@ -23,10 +23,11 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
  * anywhere, so an Anthropic key pasted into OpenAI's row never reaches
  * OpenAI.
  *
- * An Anthropic key the provider accepts is also asked whether its
- * organization may run fast mode, which Anthropic grants organization by
- * organization and offers no read of: one fast request for one output
- * token, a fraction of a cent on the key. A 200 is an organization granted
+ * An Anthropic key is also asked whether its organization may run fast
+ * mode, which Anthropic grants organization by organization and offers no
+ * read of: one fast request for one output token, a fraction of a cent on
+ * the key, sent beside the check above rather than after it, so a save
+ * waits on the slower of the two and stays inside the desktop's deadline. A 200 is an organization granted
  * fast mode, and Anthropic's 429 against a fast limit of 0 is one never
  * granted it; anything else says neither, and the key is kept without an
  * answer. That 429's body is read for its words and for nothing else.
@@ -57,6 +58,9 @@ const FAST_CHECK = {
 
 /** Anthropic's words, in a 429's body, for an organization fast mode was never enabled for: a fast limit of 0. */
 const FAST_LIMIT_ZERO = /rate limit of 0 fast mode/iu;
+
+/** How long a fast check is given: less than the check's own, so the save it rides beside answers inside the desktop's deadline even where both are slow. */
+const FAST_CHECK_TIMEOUT = Duration.seconds(8);
 
 /** How long the provider is given to answer before the save is answered unreachable. */
 const CHECK_TIMEOUT = Duration.seconds(10);
@@ -149,6 +153,8 @@ export const checkProviderKey = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const checkFastAccess = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: Redacted.Redacted<string>,
 ): Effect.fn.Return<FastAccess | undefined, never, HttpClient.HttpClient> {
+  // A key spelled as OpenAI's is never sent to Anthropic, as the check above refuses it unsent.
+  if (spelledForOther(PROVIDER_KEY_PROVIDER.ANTHROPIC, Redacted.value(key))) return undefined;
   const client = yield* HttpClient.HttpClient;
   // The key is revealed here alone, into the one header the provider reads it from.
   const request = HttpClientRequest.post(FAST_CHECK.URL).pipe(
@@ -169,7 +175,7 @@ export const checkFastAccess = /* @__PURE__ */ Effect.fnUntraced(function* (
         : Effect.succeed(response.status === HTTP_STATUS.OK ? FAST_ACCESS.ENABLED : undefined),
     ),
     Effect.scoped,
-    Effect.timeout(CHECK_TIMEOUT),
+    Effect.timeout(FAST_CHECK_TIMEOUT),
     Effect.option,
   );
   return Option.getOrUndefined(answered);

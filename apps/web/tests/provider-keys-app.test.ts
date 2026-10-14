@@ -238,10 +238,10 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         assert.deepEqual(keysOf(read), keysOf(saved));
         for (const answered of [saved, read]) assert.ok(!answered.text.includes(KEY.ANTHROPIC));
         assert.deepEqual(
-          checks.map((check) => [check.url, keyOf(check.headers)]),
+          checks.map((check) => [check.url, keyOf(check.headers)]).sort(),
           [
-            [PROVIDER_URL[PROVIDER_KEY_PROVIDER.ANTHROPIC], KEY.ANTHROPIC],
             [FAST_CHECK_URL, KEY.ANTHROPIC],
+            [PROVIDER_URL[PROVIDER_KEY_PROVIDER.ANTHROPIC], KEY.ANTHROPIC],
           ],
           "the provider is asked once whether it accepts the key and once about fast mode, with the key",
         );
@@ -338,6 +338,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         const invalid = yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, refused));
         const unreachable = yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, failing));
         const misplaced = yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.ANTHROPIC));
+        const reversed = yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.OPENAI));
 
         assert.deepEqual(keysOf(invalid), { keys: [], rejected: PROVIDER_KEY_REJECTION.INVALID });
         assert.deepEqual(keysOf(unreachable), {
@@ -348,9 +349,17 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           keys: [],
           rejected: PROVIDER_KEY_REJECTION.WRONG_PROVIDER,
         });
+        assert.deepEqual(keysOf(reversed), {
+          keys: [],
+          rejected: PROVIDER_KEY_REJECTION.WRONG_PROVIDER,
+        });
         assert.ok(
           checks.every((check) => keyOf(check.headers) !== KEY.ANTHROPIC),
           "an Anthropic key is never sent to OpenAI",
+        );
+        assert.ok(
+          checks.every((check) => keyOf(check.headers) !== KEY.OPENAI),
+          "an OpenAI key is never sent to Anthropic, not even to ask about fast mode",
         );
         for (const key of [refused, failing, KEY.ANTHROPIC]) {
           assert.ok(
