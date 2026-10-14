@@ -523,6 +523,7 @@ export class VoiceService {
             type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
             planId: opened.planId,
             document: draft.document,
+            rollout: draft.rollout,
             readAt: draft.readAt,
             ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
             ...(draft.sectionEdits === undefined

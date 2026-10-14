@@ -4,11 +4,11 @@ import { ROLLOUT_BASE, type Rollout } from "@sidecar/hosted/plan-wire";
 import { eq } from "drizzle-orm";
 
 /**
- * plan-rollouts.ts -- a stored plan's rollout, as no service path writes one yet.
+ * plan-rollouts.ts -- a stored plan's rollout, written straight into its column.
  *
- * The rollout stands beside a plan's document in a column of its own, and
- * until the notetaker takes rollout notes nothing in production writes it,
- * so a test writes the column itself.
+ * The rollout stands beside a plan's document in a column of its own, which
+ * production writes only through rollout notes, so a test that needs a cut
+ * rollout and is not about the notes writes the column itself.
  */
 
 /** Three pull requests: a table on main, then a route and a screen that each need only the table. */
