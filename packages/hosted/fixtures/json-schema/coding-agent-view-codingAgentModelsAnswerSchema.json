@@ -63,6 +63,9 @@
                 "enum": [
                   "own-key"
                 ]
+              },
+              "fastNotEnabled": {
+                "type": "boolean"
               }
             },
             "required": [

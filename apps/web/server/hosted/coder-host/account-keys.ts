@@ -1,4 +1,5 @@
-import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
+import type { DatabaseServices } from "@sidecar/database/core/query";
+import type { PlanStoreEffect, PlanStoreFailure } from "@sidecar/database/models/plan-store";
 import {
   type KeyRing,
   openProviderKey,
@@ -8,13 +9,18 @@ import {
 import {
   listProviderKeyRows,
   type ProviderKeyRow,
+  setProviderKeyFastAccess,
   setProviderKeyStatus,
 } from "@sidecar/database/models/provider-key-store";
-import type { ModelProvider } from "@sidecar/hosted/models-wire";
-import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
+import {
+  type FastAccess,
+  PROVIDER_KEY_PROVIDER,
+  type ProviderKeyProvider,
+} from "@sidecar/hosted/provider-key-wire";
 import { DateTime, Effect, type Redacted, Result } from "effect";
 import type { WebStoreRun } from "../../runtime.js";
 import type { MeterSeams } from "../agent-runtime/meter.js";
+import { ModelCatalog } from "../model-catalog.js";
 import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
 
 /**
@@ -66,6 +72,9 @@ function keyOf(
             setProviderKeyStatus(userId, provider, row.sealedKey, status, now),
           ),
         ),
+      ...(row.fastAccess === null ? undefined : { fastAccess: row.fastAccess }),
+      reportFast: (access) =>
+        seams.run(setProviderKeyFastAccess(userId, provider, row.sealedKey, access)),
     },
   };
 }
@@ -98,10 +107,20 @@ export function accountProviderKeys(
   });
 }
 
-/** The providers the account runs on a key of its own: each it holds a row for, readable or not, as a step would. */
-export function ownKeyProviders(userId: string): PlanStoreEffect<ReadonlySet<ModelProvider>> {
-  return Effect.map(
-    listProviderKeyRows(userId),
-    (rows) => new Set(rows.map((row) => row.provider)),
-  );
+/**
+ * Whether the Anthropic key the account's steps run on may run fast mode, as
+ * a step would choose that key: its own key's answer where it holds a row,
+ * readable or not, and the instance's answer for Luke's key where it holds
+ * none; nothing where no fast request has answered.
+ */
+export function anthropicFastAccess(
+  userId: string,
+): Effect.Effect<FastAccess | undefined, PlanStoreFailure, DatabaseServices | ModelCatalog> {
+  return Effect.gen(function* () {
+    const rows = yield* listProviderKeyRows(userId);
+    const own = rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
+    if (own !== undefined) return own.fastAccess ?? undefined;
+    const catalog = yield* ModelCatalog;
+    return yield* catalog.lukeFastAccess;
+  });
 }

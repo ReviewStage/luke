@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
-import { type JsonValue, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
-import { Effect, Layer, Result } from "effect";
+import { FAST_ACCESS } from "@sidecar/hosted/provider-key-wire";
+import {
+  type JsonValue,
+  jsonResponse,
+  type RecordedRequest,
+  recordingHttpClient,
+} from "@sidecar/wire/testing";
+import { Effect, Layer, Redacted, Result } from "effect";
+import { TestClock } from "effect/testing";
+import { HostedEnvironment } from "../server/hosted/environment";
 import {
   ModelCatalog,
   modelCatalogLayer,
@@ -85,10 +93,28 @@ const CATALOG: JsonValue = {
   ],
 };
 
-/** The catalog layer over a gateway answering as scripted, with the requests it saw. */
-function gateway(answers: () => Response) {
+/** The deployment's environment as the catalog reads it: Luke's own Anthropic key, where it holds one. */
+function environment(anthropicKey?: string): Layer.Layer<HostedEnvironment> {
+  return Layer.succeed(HostedEnvironment, {
+    openAiKey: undefined,
+    anthropicKey: anthropicKey === undefined ? undefined : Redacted.make(anthropicKey),
+    posthogPersonalApiKey: undefined,
+    posthogProjectId: undefined,
+    posthogApiHost: undefined,
+    posthogProjectApiKey: undefined,
+    posthogIngestHost: undefined,
+    cronSecret: undefined,
+    githubWebhookSecret: undefined,
+    providerKeyEncryptionKeys: undefined,
+  });
+}
+
+/** The catalog layer over a gateway answering as scripted, with the requests it saw, on a deployment holding Luke's key where one is given. */
+function gateway(answers: (request: RecordedRequest) => Response, anthropicKey?: string) {
   const http = recordingHttpClient(answers);
-  const layer = modelCatalogLayer.pipe(Layer.provide(http.layer));
+  const layer = modelCatalogLayer.pipe(
+    Layer.provide(Layer.merge(http.layer, environment(anthropicKey))),
+  );
   return { http, layer };
 }
 
@@ -103,4 +129,49 @@ it.effect("the default choice is one the catalog as published accepts", () =>
       Result.succeed(CODING_AGENT_DEFAULT_CHOICE),
     );
   }),
+);
+
+/** Anthropic's refusal of a fast request for an organization fast mode was never enabled for, as production met it. */
+const FAST_LIMIT_ZERO: JsonValue = {
+  type: "error",
+  error: {
+    type: "rate_limit_error",
+    message:
+      "This request would exceed your organization's rate limit of 0 fast mode input tokens per minute (model: claude-opus-5-5).",
+  },
+};
+
+const readLukeFastAccess = Effect.flatMap(ModelCatalog, (catalog) => catalog.lukeFastAccess);
+
+it.effect(
+  "Luke's own key is asked once an hour whether its organization runs fast mode, with Luke's key, and a deployment holding none asks nothing",
+  () =>
+    Effect.gen(function* () {
+      const held = gateway(() => jsonResponse(FAST_LIMIT_ZERO, 429), "sk-ant-luke-fixture");
+      const none = gateway(() => jsonResponse(FAST_LIMIT_ZERO, 429));
+
+      const answers = yield* Effect.gen(function* () {
+        const first = yield* readLukeFastAccess;
+        const again = yield* readLukeFastAccess;
+        yield* TestClock.adjust("61 minutes");
+        const later = yield* readLukeFastAccess;
+        return [first, again, later];
+      }).pipe(Effect.provide(held.layer));
+      const unheld = yield* readLukeFastAccess.pipe(Effect.provide(none.layer));
+
+      assert.deepEqual(answers, [
+        FAST_ACCESS.NOT_ENABLED,
+        FAST_ACCESS.NOT_ENABLED,
+        FAST_ACCESS.NOT_ENABLED,
+      ]);
+      assert.deepEqual(
+        held.http.requests.map((request) => [request.url, request.headers.get("x-api-key")]),
+        [
+          ["https://api.anthropic.com/v1/messages", "sk-ant-luke-fixture"],
+          ["https://api.anthropic.com/v1/messages", "sk-ant-luke-fixture"],
+        ],
+      );
+      assert.equal(unheld, undefined);
+      assert.deepEqual(none.http.requests, []);
+    }),
 );

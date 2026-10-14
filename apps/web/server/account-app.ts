@@ -4,9 +4,10 @@ import type {
   AccountPreferencesWrite,
   AccountSeamEffect,
 } from "@sidecar/database/models/account-store";
+import type { PlanStoreFailure } from "@sidecar/database/models/plan-store";
 import type { StandingSession } from "@sidecar/database/models/recorded-session";
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -17,6 +18,7 @@ import {
   planTemplateWriteRequestSchema,
 } from "@sidecar/hosted/plan-document-template";
 import { planRevisionSeqSchema } from "@sidecar/hosted/plan-wire";
+import type { FastAccess } from "@sidecar/hosted/provider-key-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
@@ -107,8 +109,10 @@ export interface AccountAppSeams extends EveReach {
   /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
-  /** The providers the account runs on a key of its own, whose fast versions its coding-agent choice may not name. */
-  ownKeyProviders: (userId: string) => AccountSeamEffect<ReadonlySet<ModelProvider>>;
+  /** Whether the Anthropic key the account's agents run on may run fast mode, by which its coding-agent choice may name a fast version (`offeredToAccount`). */
+  anthropicFastAccess: (
+    userId: string,
+  ) => Effect.Effect<FastAccess | undefined, PlanStoreFailure, DatabaseServices | ModelCatalog>;
   /** Writes each part the write carries and answers the snapshot as it then stands. */
   writePreferences: (
     userId: string,
@@ -254,8 +258,8 @@ const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog | DatabaseServices> {
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const own = yield* hostedStoreOrUnavailable(seams.ownKeyProviders(userId));
-  return yield* acceptedModelChoice(read.success, own).pipe(
+  const fastAccess = yield* hostedStoreOrUnavailable(seams.anthropicFastAccess(userId));
+  return yield* acceptedModelChoice(read.success, fastAccess).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
       Effect.logWarning(
