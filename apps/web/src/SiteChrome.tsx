@@ -126,6 +126,14 @@ export function SiteFooter(): React.JSX.Element {
         >
           Changelog
         </a>
+        {/* The changelog's feed, as quiet as the rest of the footer: a reader
+            subscribes once, so it needs a way in, not a call to action. */}
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/changelog/rss.xml"
+        >
+          RSS
+        </a>
         <a
           className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
           href="/privacy"

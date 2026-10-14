@@ -39,3 +39,21 @@ for (const route of SAMPLES) {
     assert.deepEqual(errors, []);
   });
 }
+
+test("the pager's arrows are named for where they go, not for which way they point", () => {
+  const page = ROUTES.find((route) => route.path === "/changelog/page/2");
+  const release = ROUTES.find((route) => route.path === `/changelog/${RELEASES[1]?.version}`);
+  assert.ok(page !== undefined && release !== undefined);
+  const named = (view: (typeof ROUTES)[number]["view"]) => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToString(createElement(ChangelogPage, { view }));
+    return Array.from(root.querySelectorAll("nav a[rel]")).map((link) =>
+      link.getAttribute("aria-label"),
+    );
+  };
+  assert.deepEqual(named(page.view), ["Newer page", "Older page"]);
+  assert.deepEqual(named(release.view), [
+    `Newer release, v${RELEASES[0]?.version}`,
+    `Older release, v${RELEASES[2]?.version}`,
+  ]);
+});
