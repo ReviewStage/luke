@@ -1,7 +1,8 @@
+import { electron } from "@better-auth/electron";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
+import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
@@ -13,11 +14,13 @@ import {
 } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
+  DESKTOP_SESSION,
   DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
   ORGANIZATION_OPTIONS,
+  SESSION_BEARER,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 
@@ -106,5 +109,10 @@ export const auth = betterAuth({
     }),
     // A workspace is an organization: its members plan together.
     organization(ORGANIZATION_OPTIONS),
+    // The Mac's own session beside its OAuth token, so the organization
+    // endpoints that take a session answer it: minted from the signed-in
+    // browser by the Electron plugin, carried as a signed bearer token.
+    electron(DESKTOP_SESSION),
+    bearer(SESSION_BEARER),
   ],
 });
