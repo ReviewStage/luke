@@ -39,6 +39,7 @@ export * from "@sidecar/features";
 // above re-exports nothing of.
 export * from "@sidecar/features/plan-wire";
 export * from "@sidecar/runtime/vocabulary";
-export * from "@sidecar/session";
-export * from "@sidecar/session/ui-messages";
 export * from "@sidecar/wire";
+export * from "@sidecar/wire/conversation";
+export * from "@sidecar/wire/provider-identity";
+export * from "@sidecar/wire/ui-messages";

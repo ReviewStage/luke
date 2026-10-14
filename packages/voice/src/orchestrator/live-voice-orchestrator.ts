@@ -6,7 +6,7 @@ import {
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
 } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/wire/conversation";
 import { type Context, Deferred, Duration, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import type {
   LiveCaptionRow,

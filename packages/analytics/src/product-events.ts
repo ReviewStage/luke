@@ -1,4 +1,3 @@
-import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -13,6 +12,7 @@ import {
   type AppPanelTab,
   type AppSettingId,
 } from "@sidecar/wire/app-settings";
+import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/wire/provider-identity";
 import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 

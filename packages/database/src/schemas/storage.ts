@@ -1,5 +1,4 @@
 import type { BrainModelUsage, BrainRunUsage } from "@sidecar/brain";
-import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   type MessageRole,
   type StoredMessageMetadata,
@@ -7,6 +6,7 @@ import {
   type TurnOrigin,
   type TurnStatus,
 } from "@sidecar/wire";
+import type { StoredUIMessage } from "@sidecar/wire/ui-messages";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,

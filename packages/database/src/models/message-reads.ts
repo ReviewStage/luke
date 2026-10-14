@@ -1,10 +1,5 @@
 import { toolPartType } from "@sidecar/brain";
 import {
-  readStoredUIMessages,
-  type StoredUIMessage,
-  UNREGISTERED_TOOL_PART,
-} from "@sidecar/session/ui-messages";
-import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type SchemaPath,
@@ -16,6 +11,11 @@ import {
   type WireBoundaryInput,
   WireValueSchema,
 } from "@sidecar/wire";
+import {
+  readStoredUIMessages,
+  type StoredUIMessage,
+  UNREGISTERED_TOOL_PART,
+} from "@sidecar/wire/ui-messages";
 import type { ToolSet } from "ai";
 import {
   and,

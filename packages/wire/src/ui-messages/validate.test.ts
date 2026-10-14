@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { unparsedWire, type WireBoundaryInput, type WireRecord, wireRecord } from "@sidecar/wire";
-import { runTest } from "@sidecar/wire/testing";
 import { type ToolSet, tool } from "ai";
 import { Result } from "effect";
 import { test } from "vitest";
 import { z } from "zod";
+import { unparsedWire, type WireBoundaryInput, type WireRecord, wireRecord } from "../index.js";
+import { runTest } from "../testing/index.js";
 import { TOOL_PART_STATE } from "./tool-parts.js";
 import {
   readStoredUIMessages,

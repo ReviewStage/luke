@@ -159,9 +159,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../../packages/session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../../packages/settings
@@ -339,9 +336,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../../packages/session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../../packages/settings
@@ -508,9 +502,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -536,9 +527,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -607,9 +595,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
@@ -869,31 +854,6 @@ importers:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/session:
-    dependencies:
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      ai:
-        specifier: 'catalog:'
-        version: 7.0.135(zod@4.5.4)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
-      zod:
-        specifier: 4.5.4
-        version: 4.5.4
-
   packages/settings:
     dependencies:
       '@sidecar/analytics':
@@ -945,9 +905,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
@@ -973,6 +930,9 @@ importers:
 
   packages/wire:
     dependencies:
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -986,6 +946,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
 
   tools/anti-slop:
     dependencies:

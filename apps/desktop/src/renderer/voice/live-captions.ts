@@ -4,8 +4,8 @@ import {
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
 } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/session";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
+import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/wire/conversation";
 
 const ENTRY_KIND_OF = {
   [TRANSCRIPT_SPEAKER.USER]: CONVERSATION_ENTRY_KIND.ASK,
