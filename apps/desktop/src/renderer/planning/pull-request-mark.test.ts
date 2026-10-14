@@ -95,6 +95,18 @@ test("a closed pull request whose checks failed wears one mark wherever it is dr
   for (const [place, element] of drawn) assert.deepEqual(markOf(element), expected, place);
 });
 
+test("the agent's chip, which names the pull request in words of its own, says its checks failed too", () => {
+  const chip = places(pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)).get(
+    "agent chip",
+  );
+  assert.ok(chip !== undefined);
+  const page = new DOMParser().parseFromString(renderToStaticMarkup(chip), "text/html");
+  assert.equal(
+    page.querySelector("button")?.getAttribute("aria-label"),
+    "Pull request #42, open, checks failing",
+  );
+});
+
 test("a merged pull request wears the merge glyph wherever it is drawn, its checks unsaid", () => {
   const drawn = places(pullRequest(PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING));
   const expected = {

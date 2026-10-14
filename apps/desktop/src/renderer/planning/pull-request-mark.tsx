@@ -36,6 +36,14 @@ const PULL_REQUEST_GLYPH = {
 /** What a failed check run adds to the mark's words for a reader who cannot see its colour. */
 const CHECKS_FAILING_WORDS = ", checks failing";
 
+/** A pull request's words for a reader who cannot see its mark: its number, where it stands, and that its checks failed where they did; a control naming the pull request says the same. */
+export function pullRequestMarkLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "number" | "state" | "checks">,
+): string {
+  const failing = pullRequest.checks === CHECK_SUMMARY.FAILING;
+  return `${pullRequestPillLabel(pullRequest)}${failing ? CHECKS_FAILING_WORDS : ""}`;
+}
+
 /** A pull request's mark: its glyph for where it stands, coloured for it, red where its checks failed, and named for a reader who cannot see it. */
 export function PullRequestMark({
   pullRequest,
@@ -53,7 +61,7 @@ export function PullRequestMark({
       data-pull-request-state={pullRequest.state}
       data-failing={String(failing)}
       role="img"
-      aria-label={`${pullRequestPillLabel(pullRequest)}${failing ? CHECKS_FAILING_WORDS : ""}`}
+      aria-label={pullRequestMarkLabel(pullRequest)}
     />
   );
 }

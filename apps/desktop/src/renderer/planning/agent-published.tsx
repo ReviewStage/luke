@@ -20,10 +20,9 @@ import {
   checkoutCommand,
   publishedUrl,
   pullRequestNumberLabel,
-  pullRequestPillLabel,
   pullRequestStateWord,
 } from "./coding-agent-model";
-import { PullRequestMark } from "./pull-request-mark";
+import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
 
 /**
  * agent-published.tsx -- what an agent published, on its tab: the pull request or branch chip at the box's foot, and the pull request's row at a finished transcript's end.
@@ -113,7 +112,7 @@ export function PublishedChip({
   const url = published === undefined ? undefined : publishedUrl(published);
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
-  const label = pullRequest !== null ? pullRequestPillLabel(pullRequest) : (branch ?? "");
+  const label = pullRequest !== null ? pullRequestMarkLabel(pullRequest) : (branch ?? "");
   return (
     <>
       <Tooltip label={OPEN_HINT}>
