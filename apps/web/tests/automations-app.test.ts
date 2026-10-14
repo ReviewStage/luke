@@ -402,4 +402,67 @@ it.layer(getTestDB())("the automation routes", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "a webhook sent again keeps its secret, the owner's own pause clears why the service paused it, a prompt at its bound fits however JSON spells it, and a Run now key must be a UUID",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const hooked = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: { ...weekdays(plan.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+          }),
+        ).automation;
+        const hashOf = (id: string) =>
+          Effect.map(
+            Database.use((db) =>
+              db
+                .select({ hash: automationTable.webhookSecretHash })
+                .from(automationTable)
+                .where(eq(automationTable.id, id)),
+            ),
+            (rows) => rows[0]?.hash,
+          );
+        const before = yield* hashOf(hooked.id);
+
+        const resent = yield* ask(automationPath(hooked.id), owner, {
+          method: "PATCH",
+          body: { name: "Renamed", trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+        });
+        assert.equal(resent.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* hashOf(hooked.id), before, "the secret stands");
+
+        yield* pauseAutomation(hooked.id, AUTOMATION_PAUSE.FAILURES);
+        const pausedByOwner = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(hooked.id), owner, {
+            method: "PATCH",
+            body: { enabled: false },
+          }),
+        ).automation;
+        assert.equal(pausedByOwner.pausedReason, null);
+
+        const escaped = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+          method: "POST",
+          body: {
+            ...weekdays(plan.id),
+            action: {
+              kind: AUTOMATION_ACTION.CODING_AGENT,
+              prompt: `${"\u0001".repeat(19_999)}x`,
+            },
+          },
+        });
+        assert.equal(escaped.status, HOSTED_HTTP_STATUS.CREATED);
+
+        const notUuid = yield* ask(automationRunPath(hooked.id), owner, {
+          method: "POST",
+          body: { idempotencyKey: "2026-10-15T09:00:00.000Z" },
+        });
+        assert.deepEqual(notUuid.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+      }),
+  );
 });

@@ -92,8 +92,12 @@ const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH", DELETE: "DELETE"
 
 const QUERY = { ID: "id" } as const;
 
-/** A body past this is no automation: the prompt's bound and the rest of the frame with room. */
-const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 4 + 8_192;
+/**
+ * A body past this is no automation: the prompt's bound at six bytes a
+ * character, which is the most JSON spends on one (`\u0000`), and the rest of
+ * the frame with room, so every prompt the schema takes fits.
+ */
+const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
 
 /** How many runs a history read answers. */
 const RUNS_READ = 50;
@@ -305,8 +309,9 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
  * The store's changes for a request against the automation as it stands:
  * the trigger and model checked, the due instant computed afresh whenever
  * the automation ends up enabled with a schedule and either was resumed or
- * given a new trigger, cleared while paused, and a resume clearing why the
- * service paused it. A trigger becoming a webhook mints its secret.
+ * given a new trigger, cleared while paused, and the owner's pause or resume
+ * clearing why the service paused it. A webhook sent again is no change; a
+ * trigger becoming a webhook mints its secret.
  */
 const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -318,21 +323,29 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   DatabaseServices | ModelCatalog
 > {
   const now = yield* Clock.currentTimeMillis;
-  const trigger = asked.trigger ?? standing.trigger;
+  // A webhook sent again is no change, since a webhook names nothing but its kind, so its secret
+  // survives a form that sends the whole automation back.
+  const newTrigger =
+    asked.trigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
+    standing.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK
+      ? undefined
+      : asked.trigger;
+  const trigger = newTrigger ?? standing.trigger;
   const enabled = asked.enabled ?? standing.enabled;
   const due = yield* firstDue(trigger, now);
   const action =
     asked.action === undefined ? undefined : yield* checkedAction(userId, asked.action);
   const becameWebhook =
-    asked.trigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
+    newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
   const webhook = becameWebhook ? mintWebhookSecret() : undefined;
-  const reschedules = asked.trigger !== undefined || asked.enabled !== undefined;
+  const reschedules = newTrigger !== undefined || asked.enabled !== undefined;
   const changes: AutomationChanges = {
     ...(asked.name === undefined ? undefined : { name: asked.name }),
     ...(asked.enabled === undefined ? undefined : { enabled: asked.enabled }),
-    ...(asked.enabled === true ? { pausedReason: null } : undefined),
-    ...(asked.trigger === undefined ? undefined : { trigger: asked.trigger }),
+    // The owner resuming or pausing it is the owner's word, so why the service paused it goes.
+    ...(asked.enabled === undefined ? undefined : { pausedReason: null }),
+    ...(newTrigger === undefined ? undefined : { trigger: newTrigger }),
     ...(action === undefined ? undefined : { action }),
     ...(asked.guards === undefined ? undefined : { guards: asked.guards }),
     ...(reschedules ? { nextRunAt: enabled ? due : null } : undefined),

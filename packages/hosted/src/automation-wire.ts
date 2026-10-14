@@ -345,12 +345,13 @@ export const automationChangeRequestSchema = EffectSchema.Struct({
   guards: EffectSchema.optionalKey(automationGuardsSchema),
 });
 
-/** A "Run now" (POST), under the client's own key, so a retry after a lost answer is the same run. */
+/**
+ * A "Run now" (POST), under the client's own key, a UUID, so a retry after a
+ * lost answer is the same run and the key can never be the instant a
+ * schedule's own run is recorded under.
+ */
 export const automationRunRequestSchema = EffectSchema.Struct({
-  idempotencyKey: EffectSchema.Trim.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_KEY_CHARS),
-  ),
+  idempotencyKey: wireUuidSchema,
 });
 
 /** The run a "Run now" made, as it came out. */
