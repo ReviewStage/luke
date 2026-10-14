@@ -401,7 +401,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     kinds: [],
     workers,
     files: [],
-    changes: changesOffers(plans.agents),
+    changes: changesOffers(plans.agents, plans.sidePanel.changes),
     standing: true,
   }).map((entry) => ({
     ...entry,

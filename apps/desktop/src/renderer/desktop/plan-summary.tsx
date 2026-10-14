@@ -406,7 +406,7 @@ function summarySections(
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(workRowsOf(work.conversation, work.callLive));
   const files = shownFiles(plans.shownCode ?? []);
-  const changes = changesOffers(agents);
+  const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
     inboxHolds || mainTabs.tabs.includes(MAIN_TAB.INBOX)

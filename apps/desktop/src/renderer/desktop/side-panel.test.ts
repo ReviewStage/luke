@@ -71,13 +71,29 @@ test('an agent\'s Changes chip opens the one tab the "+" offers for its pull req
   assert.deepEqual(offered, [{ changes: FIRST.id }, { changes: THIRD.id }]);
   // The second agent shares the first's pull request, so its chip opens the first's tab.
   assert.deepEqual(
-    [FIRST, SECOND, THIRD].map((each) => changesTabOf(control, each.id)),
+    [FIRST, SECOND, THIRD].map((each) => changesTabOf(control, each.id, [])),
     [{ changes: FIRST.id }, { changes: FIRST.id }, { changes: THIRD.id }],
   );
   // An agent whose pull request is not held yet opens its own.
-  assert.deepEqual(changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id), {
+  assert.deepEqual(changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id, []), {
     changes: SECOND.id,
   });
+});
+
+test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {
+  const control = agents();
+  const open = [{ changes: SECOND.id }];
+  assert.deepEqual(
+    [FIRST, SECOND].map((each) => changesTabOf(control, each.id, open)),
+    [{ changes: SECOND.id }, { changes: SECOND.id }],
+  );
+  assert.deepEqual(
+    changesOffers(control, open).map((offer) => [offer.agentId, offer.label]),
+    [
+      [SECOND.id, "Invite fixes"],
+      [THIRD.id, "Expiry job"],
+    ],
+  );
 });
 
 test("a Changes card names the coding agent whose pull request it is, wearing its glyph, under the pull request", () => {

@@ -233,37 +233,67 @@ export interface ChangesOffer {
   readonly pullRequest: CodingAgentPullRequest;
 }
 
+/** No Changes tab open on the plan, the same array every render. */
+const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
+
+/**
+ * The agent whose Changes tab stands for the agent's pull request: among the
+ * agents on that pull request, in the order started, the first whose tab is
+ * open on the plan (`open`), else the first; the agent itself where its pull
+ * request is not yet held. Note that an open tab is preferred, because the
+ * agents' pull requests are read apart, so a later agent's may land first
+ * and its tab be opened before an earlier one shares it.
+ */
+function changesAgentOf(
+  agents: CodingAgentsControl,
+  agentId: string,
+  open: readonly ChangesStripTab[],
+): string {
+  const url = agents.pullRequests.get(agentId)?.url;
+  if (url === undefined) return agentId;
+  const sharing = (agents.agents ?? []).filter(
+    (agent) => agents.pullRequests.get(agent.id)?.url === url,
+  );
+  const opened = sharing.find((agent) => open.some((tab) => tab.changes === agent.id));
+  return (opened ?? sharing[0])?.id ?? agentId;
+}
+
 /**
  * The plan's agents' Changes tabs on offer, in the order the agents
  * started: one for each agent with a pull request, its tab open in the
  * plan's column or not, and none for an agent that has opened none yet,
  * whose tab would only say so. Note that two agents on one pull request
- * offer it once, under the first, because a row is named by the pull
- * request and both tabs would draw the same files.
+ * offer it once, under the agent whose tab stands for it (`changesAgentOf`),
+ * because a row is named by the pull request and both tabs would draw the
+ * same files. `open` is the Changes tabs open on the plan.
  */
-export function changesOffers(agents: CodingAgentsControl): readonly ChangesOffer[] {
+export function changesOffers(
+  agents: CodingAgentsControl,
+  open: readonly ChangesStripTab[] = NO_OPEN_CHANGES,
+): readonly ChangesOffer[] {
   const offered = new Set<string>();
-  return (agents.agents ?? []).flatMap((agent) => {
-    const pullRequest = agents.pullRequests.get(agent.id);
+  return (agents.agents ?? []).flatMap((each) => {
+    const pullRequest = agents.pullRequests.get(each.id);
     if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
     offered.add(pullRequest.url);
+    const agentId = changesAgentOf(agents, each.id, open);
+    const agent = agents.agents?.find((other) => other.id === agentId) ?? each;
     return [{ agentId: agent.id, agent, label: agentTabLabel(agent, agents.models), pullRequest }];
   });
 }
 
 /**
- * The Changes tab an agent's Changes chip opens: the tab of the first agent,
- * in the order started, on the same pull request, as `changesOffers` offers
- * it, so the chip and the "+" never stand two tabs on one pull request's
- * files; the agent's own where no other shares its pull request, or where
- * its pull request is not yet held.
+ * The Changes tab an agent's Changes chip opens: the one that stands for its
+ * pull request (`changesAgentOf`), as `changesOffers` offers it, so the chip
+ * and the "+" never stand two tabs on one pull request's files, whichever
+ * agent's read landed first. `open` is the Changes tabs open on the plan.
  */
-export function changesTabOf(agents: CodingAgentsControl, agentId: string): ChangesStripTab {
-  const url = agents.pullRequests.get(agentId)?.url;
-  const first = (agents.agents ?? []).find(
-    (agent) => url !== undefined && agents.pullRequests.get(agent.id)?.url === url,
-  );
-  return { changes: first?.id ?? agentId };
+export function changesTabOf(
+  agents: CodingAgentsControl,
+  agentId: string,
+  open: readonly ChangesStripTab[],
+): ChangesStripTab {
+  return { changes: changesAgentOf(agents, agentId, open) };
 }
 
 /** The empty panel's row that opens a tab of the kind. */
@@ -684,7 +714,7 @@ function PanelTabs({
           kinds: SIDE_PANEL_TABS,
           workers,
           files: shownFiles,
-          changes: changesOffers(agents),
+          changes: changesOffers(agents, changes),
           pages: offeredPages,
           standing: false,
         })}
