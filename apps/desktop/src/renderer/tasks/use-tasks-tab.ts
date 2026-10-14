@@ -337,6 +337,8 @@ interface ChatViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
+  /** Opens it on a place, from wherever the window stands: what a chat notice's Open in Chat asks. */
+  readonly onShow: (place: ChatPlace) => void;
   /** Posts a message as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
@@ -2576,6 +2578,10 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
         ),
+      onShow: (place) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.CHAT, place });
+      },
       onPost: (post) => stage((held, staging) => staging.stagedPost(held, post, Date.now())),
       onAnswer: (answer) =>
         stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),

@@ -4,6 +4,7 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -568,6 +569,17 @@ function PlanDocument({
       }
     }
   };
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = tasks.chatView.chat;
+  const chat =
+    chatRead === undefined
+      ? undefined
+      : {
+          chat: chatRead.answer,
+          names: chatNames(tasks.tasks, chatRead.agents, undefined),
+          onOpen: tasks.chatView.onShow,
+        };
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = taskCards({
@@ -800,6 +812,7 @@ function PlanDocument({
                         onOpenPullRequest={openPullRequest}
                         onOpenTarget={openTarget}
                         cards={cards}
+                        chat={chat}
                       />
                     )}
                   </FindScope>

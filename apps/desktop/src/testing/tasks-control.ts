@@ -296,6 +296,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      onShow: ignore,
       onPost: () => Promise.resolve(undefined),
       onAnswer: () => Promise.resolve(undefined),
     },
