@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { PlanMention } from "@luke/features/mention-link";
+import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
@@ -267,6 +267,21 @@ export function App(): React.JSX.Element {
       window.luke.onShowAgent(({ planId, agentId }) => {
         changeTab(PANEL_TAB.PLANS);
         showAgent.current(planId, agentId);
+      }),
+    [changeTab],
+  );
+  // A Luke link the system handed the app: the Plans tab, on its plan, scrolled to its section.
+  const showMention = useRef(plans.onShowMention);
+  showMention.current = plans.onShowMention;
+  useEffect(
+    () =>
+      window.luke.onShowLink(({ planId, anchor }) => {
+        changeTab(PANEL_TAB.PLANS);
+        showMention.current(
+          anchor === undefined
+            ? { kind: MENTION_KIND.PLAN, planId }
+            : { kind: MENTION_KIND.SECTION, planId, anchor },
+        );
       }),
     [changeTab],
   );
