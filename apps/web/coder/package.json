@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The coding agent's eve service root: a coding agent's run in a sandbox on the web deployment",
   "engines": {
     "node": "24.x"
   },

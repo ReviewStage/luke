@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "Effect infrastructure: storage, timers, serial queues, single-flight, execution, and test support",
   "exports": {
     "./effect": "./src/effect/index.js",
     "./testing": "./src/testing/index.js",

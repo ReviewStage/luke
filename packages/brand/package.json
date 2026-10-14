@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "Luke's brand: the design sources, the generators, and the generated art, motion tokens, and geometry",
   "exports": {
     ".": "./src/index.js",
     "./assets-directory": "./scripts/assets-directory.mjs",

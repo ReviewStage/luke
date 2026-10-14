@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The client side of the hosted service: its paths and wire, its clients, the plan and board domain, the planner's run vocabulary, product events, and feedback delivery",
   "exports": {
     ".": "./src/index.js",
     "./account-inbox-wire": "./src/account-inbox-wire.js",
