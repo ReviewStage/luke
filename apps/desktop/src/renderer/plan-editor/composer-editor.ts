@@ -272,7 +272,7 @@ function sameTrigger(a: ComposerTrigger | undefined, b: ComposerTrigger | undefi
 }
 
 /** The `skill` chip: an atom read out as `/name`, its look the panel's (`drawChip`), its name in the node and never in the DOM's attributes. */
-function skillNode(drawChip: ComposerEditorProps["drawChip"]) {
+function skillNode(drawChip: ComposerEditorProps["drawChip"], known: (name: string) => boolean) {
   return Node.create({
     name: SKILL_NODE,
     group: "inline",
@@ -282,12 +282,16 @@ function skillNode(drawChip: ComposerEditorProps["drawChip"]) {
     addAttributes() {
       return { name: { default: "", rendered: false } };
     },
-    // Note that a chip copied out and pasted back is read by its words, since its name is in no attribute.
+    // Note that a chip copied out and pasted back is read by its words, since its name is in no
+    // attribute, and stays words where this repository keeps no skill of that name.
     parseHTML() {
       return [
         {
           tag: "span[data-chip]",
-          getAttrs: (element) => ({ name: (element.textContent ?? "").replace(/^\//u, "") }),
+          getAttrs: (element) => {
+            const name = (element.textContent ?? "").replace(/^\//u, "");
+            return known(name) ? { name } : false;
+          },
         },
       ];
     },
@@ -310,7 +314,10 @@ function skillNode(drawChip: ComposerEditorProps["drawChip"]) {
 }
 
 /** What the box may hold: paragraphs, text, a hard break, and undo, StarterKit's and nothing more, and the chip. */
-function composerExtensions(drawChip: ComposerEditorProps["drawChip"]): AnyExtension[] {
+function composerExtensions(
+  drawChip: ComposerEditorProps["drawChip"],
+  known: (name: string) => boolean,
+): AnyExtension[] {
   const kit = StarterKit.configure({
     blockquote: false,
     bold: false,
@@ -330,7 +337,7 @@ function composerExtensions(drawChip: ComposerEditorProps["drawChip"]): AnyExten
     underline: false,
     trailingNode: false,
   });
-  return [kit, skillNode(drawChip)];
+  return [kit, skillNode(drawChip, known)];
 }
 
 /** What a mounted box keeps between its events: the skills it chips, whether it takes words, the last words and word it reported, and its marks. */
@@ -434,6 +441,11 @@ function composerProps(state: ComposerState, props: ComposerEditorProps): Editor
         return false;
       },
       focus: (view) => {
+        reported(view, state, props.onTrigger);
+        return false;
+      },
+      // The words scrolling under a list move the slash it stands over, with no change to the state.
+      scroll: (view) => {
         reported(view, state, props.onTrigger);
         return false;
       },
@@ -556,7 +568,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
   const editor = new Editor({
     element: host,
     extensions: [
-      ...composerExtensions(props.drawChip),
+      ...composerExtensions(props.drawChip, (name) => state.skills.has(name)),
       Extension.create({ name: "composerGuard", addProseMirrorPlugins: () => [guard] }),
     ],
     editorProps: composerProps(state, props),

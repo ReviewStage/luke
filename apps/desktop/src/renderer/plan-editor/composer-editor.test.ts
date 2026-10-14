@@ -86,14 +86,17 @@ function mounted(text: string, overrides: Partial<ComposerEditorProps> = {}) {
   };
 }
 
-/** A paste of the words and files given, as the system's clipboard hands one over. */
-function paste(host: HTMLElement, text: string, files: readonly File[] = []): void {
+/** A paste of the words and files given, as the system's clipboard hands one over, with the markup a copy from an editor carries beside them. */
+function paste(host: HTMLElement, text: string, files: readonly File[] = [], html = ""): void {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
     value: {
       files,
-      types: text === "" ? [] : ["text/plain"],
-      getData: (type: string) => (type === "text/plain" ? text : ""),
+      types: [...(text === "" ? [] : ["text/plain"]), ...(html === "" ? [] : ["text/html"])],
+      getData: (type: string) => {
+        if (type === "text/plain") return text;
+        return type === "text/html" ? html : "";
+      },
     },
   });
   composerEditor(host).dispatchEvent(event);
@@ -252,4 +255,30 @@ test("a /name typed or read later becomes its chip once the caret has left it, a
   later.handle.setSkills(SKILLS);
   assert.deepEqual(later.chips(), ["/release"]);
   assert.deepEqual(later.drafts, [], "the words are the same words");
+});
+
+test("a chip copied from a box is a chip again where its skill is known, and words where it is not", () => {
+  const box = mounted("");
+  const copied = (name: string) => `<p>Run <span data-chip="skill">/${name}</span> now</p>`;
+
+  paste(box.host, "Run /release now", [], copied("release"));
+  assert.deepEqual(box.chips(), ["/release"]);
+  paste(box.host, " and /elsewhere", [], copied("elsewhere"));
+  assert.deepEqual(box.chips(), ["/release"], "a skill this repository keeps none of stays words");
+  assert.equal(box.drafts.at(-1), "Run /release nowRun /elsewhere now");
+});
+
+test("the list's word is reported again as the words scroll under it", () => {
+  const box = mounted("");
+  typeInComposer(box.host, "Run /rel");
+  assert.equal(box.triggers.at(-1)?.rect.top, 0);
+
+  // The words scrolled up: the slash now stands 40 pixels lower in the window.
+  Range.prototype.getBoundingClientRect = () => new DOMRect(10, 40, 0, 16);
+  composerEditor(box.host).dispatchEvent(new Event("scroll"));
+  assert.deepEqual(box.triggers.at(-1), {
+    start: 4,
+    query: "rel",
+    rect: { left: 10, top: 40, bottom: 56 },
+  });
 });
