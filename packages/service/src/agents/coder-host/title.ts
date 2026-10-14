@@ -4,6 +4,7 @@ import { type CodingAgent, fillCodingAgentTitle } from "@luke/database/models/co
 import {
   listMessagesPast,
   listRecentMessages,
+  listTurnOpeners,
   turnsBefore,
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
@@ -130,6 +131,69 @@ function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
   return !("channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.CHAT);
 }
 
+/** What the line before an answer is known to be, in the window a title reads. */
+const HEARD = {
+  /** No answer yet in the window: the line an answer answers may lie before it. */
+  UNKNOWN: "unknown",
+  /** A line of the developer's since the answer before. */
+  DEVELOPER: "developer",
+  /** No line of the developer's since the answer before. */
+  OTHER: "other",
+} as const;
+
+type Heard = (typeof HEARD)[keyof typeof HEARD];
+
+/**
+ * The agent's latest answer to the developer: one that follows a line of
+ * the developer's since the answer before it, or, before any answer in the
+ * window, one whose turn a chat notice did not open, since the line it
+ * answers may lie before the window. Note that an answer a chat notice
+ * alone prompted is left out, because it speaks to another member of the
+ * chat, while one to a developer's line a notice was steered in after
+ * still answers the developer.
+ */
+function answerToDeveloper<
+  Row extends { readonly message: StoredUIMessage; readonly turnId?: string },
+>(records: readonly Row[], noticed: ReadonlySet<string>): Row | undefined {
+  let heard: Heard = HEARD.UNKNOWN;
+  let answer: Row | undefined;
+  for (const record of records) {
+    if (saidByDeveloper(record.message)) heard = HEARD.DEVELOPER;
+    if (record.message.role !== MESSAGE_ROLE.ASSISTANT) continue;
+    const prompted = record.turnId !== undefined && noticed.has(record.turnId);
+    if (heard === HEARD.DEVELOPER || (heard === HEARD.UNKNOWN && !prompted)) answer = record;
+    heard = HEARD.OTHER;
+  }
+  return answer;
+}
+
+/**
+ * The turns among the answers a chat notice opened. Note that the line
+ * that opened a turn is read by the turn's id rather than from the window,
+ * because notices a turn took in mid-run can push it out of the window, and
+ * a line taken in mid-run names no turn. Nothing where the read is refused,
+ * so every answer stands.
+ */
+function turnsNoticed(
+  target: ConversationTarget,
+  records: readonly { readonly message: StoredUIMessage; readonly turnId?: string }[],
+): Effect.Effect<ReadonlySet<string>, QueryError | Schema.SchemaError, DatabaseServices> {
+  const turnIds = records.flatMap((record) =>
+    record.message.role === MESSAGE_ROLE.ASSISTANT && record.turnId !== undefined
+      ? [record.turnId]
+      : [],
+  );
+  return Effect.map(
+    listTurnOpeners(target.userId, target.conversationId, CODER_TOOL_SET, [...new Set(turnIds)]),
+    (openers) =>
+      new Set(
+        (openers.ok ? openers.value : []).flatMap((opener) =>
+          opener.turnId === undefined || saidByDeveloper(opener.message) ? [] : [opener.turnId],
+        ),
+      ),
+  );
+}
+
 /**
  * What an agent is named from: the developer's first message, or an
  * automation's prompt alone where its run started the agent, their latest
@@ -159,7 +223,7 @@ function agentExchange(
     const first = opening.read.ok ? opening.read.value[0] : undefined;
     const newest = recent.ok ? recent.value : [];
     const said = newest.findLast((record) => saidByDeveloper(record.message));
-    const answered = newest.findLast((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
+    const answered = answerToDeveloper(newest, yield* turnsNoticed(target, newest));
     const opened = saidByDeveloper(first?.message) ? first : undefined;
     return [
       {

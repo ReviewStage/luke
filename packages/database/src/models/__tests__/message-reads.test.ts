@@ -18,6 +18,7 @@ import { getTestDB } from "../../testing/index.js";
 import {
   listMessagesBefore,
   listMessagesPast,
+  listTurnOpeners,
   messageCursorNow,
   messageSeqOf,
   runningChildTurns,
@@ -62,6 +63,33 @@ const writeLine = (userId: string, conversationId: string, seq: number) =>
       metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
       createdAt: new Date(),
       placedAt: new Date(),
+    }),
+  );
+
+/** A finished row of a turn, or of none for a line a turn took in mid-run. */
+const writeTurnRow = (
+  userId: string,
+  conversationId: string,
+  seq: number,
+  turnId: string | null,
+  role: typeof MESSAGE_ROLE.USER | typeof MESSAGE_ROLE.ASSISTANT,
+) =>
+  Database.use((db) =>
+    db.insert(messages).values({
+      userId,
+      conversationId,
+      seq,
+      turnId,
+      clientId: randomUUID(),
+      role,
+      parts: [{ type: "text", text: `Line ${seq}` }],
+      metadata:
+        role === MESSAGE_ROLE.USER
+          ? { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED }
+          : { author: MESSAGE_AUTHOR.BRAIN },
+      createdAt: new Date(),
+      placedAt: new Date(),
+      finishedAt: new Date(),
     }),
   );
 
@@ -146,6 +174,37 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
           yield* messageSeqOf(other, conversation, second.id, MESSAGE_ROLE.USER),
           Option.none(),
         );
+      }),
+  );
+
+  it.effect(
+    "a turn's opener is the first line that names it, never a line it took in mid-run or its answer, and none for another account",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const conversation = yield* openConversation(owner);
+        const first = yield* openTurn(owner, conversation, TURN_STATUS.SETTLED);
+        const second = yield* openTurn(owner, conversation, TURN_STATUS.SETTLED);
+        yield* writeTurnRow(owner, conversation, 1, first, MESSAGE_ROLE.USER);
+        yield* writeTurnRow(owner, conversation, 2, null, MESSAGE_ROLE.USER);
+        yield* writeTurnRow(owner, conversation, 3, first, MESSAGE_ROLE.ASSISTANT);
+        yield* writeTurnRow(owner, conversation, 4, second, MESSAGE_ROLE.USER);
+        yield* writeTurnRow(owner, conversation, 5, second, MESSAGE_ROLE.USER);
+        yield* writeTurnRow(owner, conversation, 6, second, MESSAGE_ROLE.ASSISTANT);
+
+        const read = yield* listTurnOpeners(owner, conversation, {}, [second, first]);
+        assert.ok(read.ok);
+        assert.deepEqual(
+          read.value.map((row) => [row.seq, row.turnId]),
+          [
+            [1, first],
+            [4, second],
+          ],
+        );
+        const foreign = yield* listTurnOpeners(other, conversation, {}, [first, second]);
+        assert.ok(foreign.ok);
+        assert.deepEqual(foreign.value, []);
       }),
   );
 
