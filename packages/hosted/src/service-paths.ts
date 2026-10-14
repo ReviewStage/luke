@@ -61,6 +61,12 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /**
+   * The account's automations: list them, newest first, or one plan's where
+   * `planId` names it (GET), or make one (POST). `automation-wire.ts`
+   * declares the bodies.
+   */
+  AUTOMATIONS: "/api/automations",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -177,6 +183,21 @@ export function integrationCancelPath(provider: IntegrationProvider): string {
 /** Ends the account's connection to one provider (POST); what agents already did there stands. */
 export function integrationDisconnectPath(provider: IntegrationProvider): string {
   return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
+}
+
+/** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
+export function automationPath(automationId: string): string {
+  return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
+}
+
+/** An automation's "Run now" (POST), answered with the run as it came out. */
+export function automationRunPath(automationId: string): string {
+  return `${automationPath(automationId)}/run`;
+}
+
+/** An automation's runs, newest first (GET). */
+export function automationRunsPath(automationId: string): string {
+  return `${automationPath(automationId)}/runs`;
 }
 
 /** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */

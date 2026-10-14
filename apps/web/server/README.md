@@ -2837,3 +2837,33 @@ A refused start is a failed run with one fixed word
 automation (`paused_reason` `failures`, `next_run_at` cleared). The agent's
 questions reach the Inbox and its end the finished-agent notification as
 any agent's do.
+
+The routes are `server/automations-app.ts`, under the account bearer, every
+row gated by the store on the account owning the automation and still
+reaching its plan, so another account's automation, or one on a plan of a
+workspace the account left, is `not-found`:
+
+- `GET /api/automations` answers the account's automations newest first,
+  or one plan's under `?planId=`, each with its newest run;
+  `POST /api/automations` makes one (`201`). A schedule that does not
+  read (five-field cron, a known zone, no more often than every fifteen
+  minutes), a model the catalog does not offer the account, or a key the
+  frame does not name is `invalid-request`; a plan with no repository is
+  `no-repository`. A webhook trigger's secret is minted here, answered
+  once as `webhookSecret`, and kept only as its SHA-256.
+- `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
+  delete one. A resume, or a new trigger, computes a schedule's next due
+  instant afresh, a pause clears it, and a resume clears why the service
+  paused it.
+- `POST /api/automations/{id}/run` takes `{ idempotencyKey }`, records a
+  manual firing under it, and acts on it at once through the same guards
+  and start a scheduled run takes, reaching eve as the developer under the
+  request's own bearer; `201` with the run, or `200` with the run the same
+  key made before, starting nothing again.
+- `GET /api/automations/{id}/runs` answers its runs newest first, fifty at
+  most, each with its agent's title and status as the agent's tab reads
+  them.
+
+`@sidecar/hosted/automation-wire` declares every body and `service-paths.ts`
+the addresses; `tests/automations-app.test.ts` holds the routes over a fake
+eve, a scripted GitHub, a fixed catalog, and PGlite.

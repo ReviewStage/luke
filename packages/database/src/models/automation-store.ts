@@ -339,25 +339,63 @@ const writeRunOutcome = SqlSchema.findAll({
     ),
 });
 
+const HistoryRowSchema = Schema.Struct({
+  ...RunRowSchema.fields,
+  agentConversationId: Schema.NullOr(Schema.String),
+  agentTitle: Schema.NullOr(Schema.String),
+  agentCreatedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+/** One run as the history reads it, with the conversation, title, and start of the agent it started where that agent stands. */
+export type AutomationRunInHistory = typeof HistoryRowSchema.Type;
+
+/** The account's runs of one automation it still reaches, with each one's agent, newest first. */
+function historyOf(userId: string, automationId: string): SQL {
+  return inArray(
+    automationRun.automationId,
+    queryBuilder
+      .select({ id: automation.id })
+      .from(automation)
+      .where(ownedAndReachable(userId, automationId)),
+  );
+}
+
+const HISTORY_COLUMNS = {
+  ...RUN_COLUMNS,
+  agentConversationId: codingAgent.conversationId,
+  agentTitle: codingAgent.title,
+  agentCreatedAt: codingAgent.createdAt,
+};
+
 const findRuns = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, automationId: Schema.String, limit: Schema.Int }),
-  Result: RunRowSchema,
+  Result: HistoryRowSchema,
   execute: ({ userId, automationId, limit }) =>
     Database.use((db) =>
       db
-        .select(RUN_COLUMNS)
+        .select(HISTORY_COLUMNS)
         .from(automationRun)
-        .where(
-          inArray(
-            automationRun.automationId,
-            queryBuilder
-              .select({ id: automation.id })
-              .from(automation)
-              .where(ownedAndReachable(userId, automationId)),
-          ),
-        )
+        .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .where(historyOf(userId, automationId))
         .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
         .limit(limit),
+    ),
+});
+
+const findRunByKey = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    automationId: Schema.String,
+    dedupeKey: Schema.String,
+  }),
+  Result: HistoryRowSchema,
+  execute: ({ userId, automationId, dedupeKey }) =>
+    Database.use((db) =>
+      db
+        .select(HISTORY_COLUMNS)
+        .from(automationRun)
+        .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .where(and(historyOf(userId, automationId), eq(automationRun.dedupeKey, dedupeKey))),
     ),
 });
 
@@ -661,13 +699,22 @@ export function settleAutomationRun(
   });
 }
 
-/** The automation's runs, newest first, as many as asked up to the bound; none for an automation that is not the account's. */
+/** The automation's runs, newest first, each with its agent, as many as asked up to the bound; none for an automation that is not the account's. */
 export function listAutomationRuns(
   userId: string,
   automationId: string,
   limit: number = MAX_RUNS_READ,
-): PlanStoreEffect<readonly AutomationRun[]> {
+): PlanStoreEffect<readonly AutomationRunInHistory[]> {
   return findRuns({ userId, automationId, limit: Math.min(Math.max(limit, 1), MAX_RUNS_READ) });
+}
+
+/** The account's run of the automation recorded under the key, as the history reads it; nothing where none was. */
+export function automationRunByKey(
+  userId: string,
+  automationId: string,
+  dedupeKey: string,
+): PlanStoreEffect<Option.Option<AutomationRunInHistory>> {
+  return findRunByKey({ userId, automationId, dedupeKey });
 }
 
 /** The automation's runs fired at or after the instant, newest first, which its guards count. */
