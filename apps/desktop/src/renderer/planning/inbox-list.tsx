@@ -2,7 +2,7 @@ import { INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
-import { ArrowDownNarrowWideIcon, CircleDotIcon, SlidersHorizontalIcon } from "lucide-react";
+import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
 import { ActionMenu, dropBelow, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
@@ -51,7 +51,9 @@ import { cardTitle } from "./tool-call-model";
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
  * developer, the way a mail app shows unread mail only, its glyph the
- * rows' dot in a ring, filled blue while pressed; and one whose menu says
+ * Inbox's own wearing the rows' blue dot while anything needs the
+ * developer, filtered out or not, its pressed fill alone saying the filter
+ * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
  * checked; both are kept across launches. The plan page's own Inbox lists
  * one plan's items, so its list has neither head nor groups. Either list
@@ -61,6 +63,12 @@ import { cardTitle } from "./tool-call-model";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
+
+/** What a press on Needs you does, as its tooltip says: list only what needs the developer, or everything again. */
+const NEEDS_YOU_PRESS = {
+  ONLY: "Show only what needs you",
+  ALL: "Show all",
+} as const;
 
 /**
  * What the list leaves the pane beside it, in CSS pixels: the list is
@@ -206,24 +214,30 @@ function ViewOptions({
   );
 }
 
-/** The head's button that lists only what needs the developer while it is pressed. */
+/** The head's button that lists only what needs the developer while it is pressed, its glyph wearing the rows' dot while anything does. */
 function NeedsYouOnly({
+  waiting,
   waitingOnly,
   onWaitingOnly,
 }: {
+  waiting: boolean;
   waitingOnly: boolean;
   onWaitingOnly: (waitingOnly: boolean) => void;
 }): React.JSX.Element {
   return (
-    <Tooltip label={NEEDS_YOU.LABEL}>
+    <Tooltip label={waitingOnly ? NEEDS_YOU_PRESS.ALL : NEEDS_YOU_PRESS.ONLY}>
       <button
         type="button"
         className="icon-button inbox-needs-you-only"
         aria-label={NEEDS_YOU.LABEL}
         aria-pressed={waitingOnly}
+        data-waiting={String(waiting)}
         onClick={() => onWaitingOnly(!waitingOnly)}
       >
-        <CircleDotIcon className="icon-button-glyph" />
+        <InboxIcon className="icon-button-glyph">
+          {/* Note that the dot's place and size are desktop.css's, beside the cut it stands in. */}
+          {waiting ? <circle className="inbox-needs-you-dot" /> : null}
+        </InboxIcon>
       </button>
     </Tooltip>
   );
@@ -238,9 +252,11 @@ function NeedsYouOnly({
 function ListHead({
   shown,
   choices,
+  waiting,
 }: {
   shown: boolean;
   choices: InboxViewChoices;
+  waiting: boolean;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar inbox-plans-bar">
@@ -248,7 +264,11 @@ function ListHead({
         <h1 className="desktop-toolbar-title">Inbox</h1>
       </div>
       <div className="desktop-toolbar-actions">
-        <NeedsYouOnly waitingOnly={choices.waitingOnly} onWaitingOnly={choices.onWaitingOnly} />
+        <NeedsYouOnly
+          waiting={waiting}
+          waitingOnly={choices.waitingOnly}
+          onWaitingOnly={choices.onWaitingOnly}
+        />
         <ViewOptions shown={shown} grouping={choices.grouping} onGrouping={choices.onGrouping} />
       </div>
     </header>
@@ -261,6 +281,8 @@ export interface InboxListHead {
   readonly shown: boolean;
   readonly choices: InboxViewChoices;
   readonly folds: InboxPlanFolds;
+  /** Whether any item needs the developer, filtered out or not, for Needs you's dot. */
+  readonly waiting: boolean;
 }
 
 /** The list: its head where it has one, then each plan's group of rows, or every row in one run, or a line where nothing is listed. */
@@ -304,7 +326,9 @@ export function InboxList({
   );
   return (
     <nav className="inbox-plans" aria-label="Inbox items" style={{ width: drawnWidth(width) }}>
-      {head === undefined ? null : <ListHead shown={head.shown} choices={head.choices} />}
+      {head === undefined ? null : (
+        <ListHead shown={head.shown} choices={head.choices} waiting={head.waiting} />
+      )}
       <div className="inbox-plans-scroll">
         {view.grouping === INBOX_GROUPING.NEWEST ? (
           <ul className="sidebar-plans">{view.items.map(row)}</ul>

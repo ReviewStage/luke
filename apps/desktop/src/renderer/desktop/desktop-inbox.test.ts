@@ -538,6 +538,43 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything);
 });
 
+test("Needs you's glyph wears the rows' dot while anything needs you, the filter on or off, and none while nothing does; its pressed fill says the filter is on, and its tooltip what a press does", async () => {
+  const answered = { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] };
+  const settled = { ...EXPIRY, status: INBOX_STATUS.ANSWERED, answer: answered };
+  inboxes.set(INVITES.id, [settled]);
+  inboxes.set(BILLING.id, [RETRY]);
+  const { page } = mount();
+  await settle();
+  const button = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+  assert.ok(button, "the head offers Needs you");
+  const worn = () => {
+    act(() => {
+      button.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    return {
+      pressed: button.getAttribute("aria-pressed"),
+      dot: button.querySelector(".inbox-needs-you-dot") !== null,
+      tooltip: document.querySelector('[role="tooltip"]')?.textContent,
+    };
+  };
+  assert.deepEqual(worn(), { pressed: "false", dot: false, tooltip: "Show only what needs you" });
+  act(() => button.click());
+  assert.deepEqual(worn(), { pressed: "true", dot: false, tooltip: "Show all" });
+
+  // Another plan's agent asks again, as main says that plan changed.
+  inboxes.set(INVITES.id, [{ ...EXPIRY, updatedAt: 6_000 }]);
+  act(() =>
+    setHolding([
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { planId: BILLING.id, items: 1, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(worn(), { pressed: "true", dot: true, tooltip: "Show all" });
+  act(() => button.click());
+  assert.deepEqual(worn(), { pressed: "false", dot: true, tooltip: "Show only what needs you" });
+});
+
 test("a folded plan counts what in it needs you, and one where nothing does counts nothing", async () => {
   const { page } = mount();
   await settle();
