@@ -106,7 +106,7 @@ export type PromptInputTextareaProps = ComponentProps<"textarea">;
 export function PromptInputTextarea({
   onKeyDown,
   className,
-  placeholder = "What would you like to know?",
+  placeholder,
   ...props
 }: PromptInputTextareaProps): ReactNode {
   const [isComposing, setIsComposing] = useState(false);

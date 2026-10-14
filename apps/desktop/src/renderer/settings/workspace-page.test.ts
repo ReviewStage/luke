@@ -458,7 +458,7 @@ test("a member reads whose repositories the workspace has, or is told to ask an 
 
   assert.equal(
     unconnectedRow.querySelector("small")?.textContent,
-    "No GitHub connected. Ask an owner or admin.",
+    "Not connected. Ask an owner or admin.",
   );
   for (const row of [connectedRow, unconnectedRow]) {
     assert.equal(row.querySelector("button"), null);

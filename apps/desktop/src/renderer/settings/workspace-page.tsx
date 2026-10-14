@@ -66,8 +66,8 @@ const GITHUB_SUSPENDED = "Suspended or removed on GitHub.";
 
 /** What GitHub repositories says where no GitHub is connected, by who is reading it. */
 const GITHUB_UNCONNECTED = {
-  MANAGES: "Not connected. Connect one to use its repositories in this workspace.",
-  MEMBER: "No GitHub connected. Ask an owner or admin.",
+  MANAGES: "Not connected.",
+  MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
 
 /**

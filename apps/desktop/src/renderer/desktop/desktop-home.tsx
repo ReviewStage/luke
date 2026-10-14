@@ -50,10 +50,6 @@ import { PlanStatusMark } from "./plan-card";
 /** How many plans Recent lists. */
 const RECENT_COUNT = 6;
 
-/** What the welcome says Luke does. */
-const WELCOME_LINE =
-  "Talk a feature through with Luke. He writes the plan down as you go, and a coding agent can build it.";
-
 /** The rows the arrow keys move through: every plan's and item's, and Search all. */
 const HOME_ROWS = ".sidebar-plan, .home-more";
 
@@ -230,7 +226,7 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
   );
 }
 
-/** A new account's welcome: Luke's face, what he does, and New plan. */
+/** A new account's welcome: Luke's face and New plan. */
 function Welcome({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
     <section className="home-welcome" aria-label="Welcome">
@@ -238,7 +234,6 @@ function Welcome({ plans }: { plans: PlansControl }): React.JSX.Element {
         <WingFace />
       </span>
       <h1 className="home-title">Plan your first feature</h1>
-      <p className="home-lede">{WELCOME_LINE}</p>
       <NewPlanButton plans={plans} />
     </section>
   );

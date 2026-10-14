@@ -85,7 +85,7 @@ type TemplateRead = (typeof TEMPLATE_READ)[keyof typeof TEMPLATE_READ];
 
 const RESET_QUESTION: DialogQuestion = {
   title: "Reset plan template?",
-  body: "Your template is replaced by the default. Existing plans don't change, and your template stays in its version history, so you can restore it.",
+  body: "Your current template stays in its version history.",
   verb: "Reset",
   running: "Resetting",
 };

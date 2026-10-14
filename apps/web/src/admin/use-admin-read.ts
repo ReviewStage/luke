@@ -57,7 +57,7 @@ export interface AdminReadHandle<T> {
 
 /** The detail every failed read that is not the endpoint's own carries. */
 const ADMIN_READ_ERROR = {
-  UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
+  UNAVAILABLE: "The service did not answer.",
   PROTECTED:
     "The request was redirected before it reached the dashboard. A preview deployment behind Vercel Deployment Protection intercepts the API call; disable protection for this deployment, or use a production URL.",
 } as const;

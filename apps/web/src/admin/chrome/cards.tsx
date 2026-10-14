@@ -38,9 +38,6 @@ export function SignInCard(): React.JSX.Element {
           <LukeMark className="h-auto w-full" />
         </div>
         <h1 className="mt-4 mb-2 text-[1.75rem] leading-[1.15] font-semibold">Luke admin</h1>
-        <p className="m-0 text-muted-foreground">
-          Sign in with the account this dashboard is restricted to.
-        </p>
         <div className="mt-8 mb-4 grid gap-3">
           <button
             type="button"
@@ -105,9 +102,8 @@ export function ForbiddenCard({
 }): React.JSX.Element {
   return (
     <Centered title="Not authorized">
-      You are signed in{email ? ` as ${email}` : ""}, but this account does not have the admin role.
-      Admin access is the <code className="font-mono">admin</code> role on your account, set
-      directly in the database.
+      {email ? `${email} does not` : "This account does not"} have the{" "}
+      <code className="font-mono">admin</code> role. It is set in the database.
       <div className="mt-6">
         <button type="button" className={PLAIN_BUTTON} onClick={onSignOut}>
           Sign out

@@ -55,7 +55,7 @@ const UNARCHIVE_LABEL = "Unarchive";
 function archiveQuestion(name: string): DialogQuestion {
   return {
     title: `Stop and archive ${name}?`,
-    body: "The agent stops the turn it is on. Its transcript and pull request are kept, and you can unarchive it from the plan's summary.",
+    body: "Its transcript and pull request are kept.",
     verb: "Stop and archive",
     running: "Archiving…",
   };

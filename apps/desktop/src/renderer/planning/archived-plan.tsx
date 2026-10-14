@@ -17,7 +17,6 @@ import { BusyLabel } from "../spinner";
 /** What the banner and the composer's note say, worded once. */
 const ARCHIVED_PLAN_COPY = {
   TITLE: "This plan is archived",
-  DETAIL: "Unarchive it to edit, talk with Luke, or start agents.",
   COMPOSER: "Unarchive to send messages",
   UNARCHIVE: "Unarchive",
 } as const;
@@ -31,7 +30,6 @@ export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): Re
       </span>
       <div className="document-banner-words">
         <p className="document-banner-title">{ARCHIVED_PLAN_COPY.TITLE}</p>
-        <p className="document-banner-detail">{ARCHIVED_PLAN_COPY.DETAIL}</p>
       </div>
       <button type="button" className="primary-button" onClick={onUnarchive}>
         {ARCHIVED_PLAN_COPY.UNARCHIVE}

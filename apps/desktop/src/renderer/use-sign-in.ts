@@ -52,7 +52,7 @@ export function useSignIn(): SignIn {
         () => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
-          setSignInFailure("Sign-in did not finish. Try again when you’re ready.");
+          setSignInFailure("Sign-in didn't finish. Try again.");
           tell(ACT_KIND.WINDOW_FOCUS_PANEL);
         },
       );

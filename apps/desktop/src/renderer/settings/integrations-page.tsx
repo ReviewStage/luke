@@ -97,9 +97,6 @@ const ROW_ACT = {
   RECONNECT: "Reconnect",
 } as const;
 
-/** What GitHub's row says it is for, since its grant is the account's own GitHub rather than a sign-in at a provider. */
-const GITHUB_DESCRIPTION = "Lets agents use GitHub tools as you.";
-
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** What a row's line looks like: connected with its dot, a problem in the attention tint, a wait with its ring, or plain. */
@@ -377,7 +374,6 @@ function IntegrationRow({
           <strong>
             <Highlighted text={name} tokens={tools.tokens} />
           </strong>
-          {bySignIn ? <small>{GITHUB_DESCRIPTION}</small> : null}
           {connected && tools.all.length > 0 ? (
             <ToolsLine name={name} panelId={panelId} tools={tools} />
           ) : line === undefined ? null : (
@@ -432,9 +428,9 @@ function IntegrationRow({
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,
-          body: bySignIn
-            ? "Your account's GitHub is disconnected with it, so coding agents lose GitHub until you connect it again. What Luke already did there stays."
-            : "What Luke already did there stays.",
+          ...(bySignIn
+            ? { body: "Coding agents lose GitHub until you connect it again." }
+            : undefined),
           verb: "Disconnect",
           running: "Disconnecting…",
         }}

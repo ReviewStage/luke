@@ -47,7 +47,7 @@ const DICTATION_NOTE = {
   MICROPHONE_DENIED:
     "Luke can't use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
   MICROPHONE_FAILED: "The microphone couldn't be opened.",
-  BOX_FULL: "The box is full, so the words couldn't go in.",
+  BOX_FULL: "There is no room for the dictated words.",
   NO_WORDS: "No words were heard.",
   FAILED: "The recording couldn't be transcribed. Try again.",
 } as const;

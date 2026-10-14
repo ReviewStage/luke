@@ -5029,14 +5029,6 @@ body:has(.app-stage[data-capture="true"])
   height: 34px;
 }
 
-.home-lede {
-  max-width: 380px;
-  margin: 0 0 var(--space-8);
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-
 /* New plan (`new-plan-dialog.tsx`): the dialog's card, its one-line name in
    the feedback note's well, and its foot led by the repository chip with
    the answers at its end. New workspace's name is the same field. */

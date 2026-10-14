@@ -20,7 +20,7 @@ import {
   useAdminRead,
 } from "../use-admin-read";
 
-const METRICS_ERROR = "The metrics endpoint did not answer. Try again shortly.";
+const METRICS_ERROR = "The metrics endpoint did not answer.";
 
 // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
 const readMetrics: AdminReader<AdminMetrics> = async (response) =>
@@ -121,7 +121,6 @@ export function DashboardScreen({
           title="Dashboard"
           account={account}
           onSignOut={signOut}
-          loading="Reading the service's own tables."
           controls={
             <>
               <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />

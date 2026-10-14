@@ -140,10 +140,7 @@ async function readInvitation(query: InvitationAcceptQuery, signedIn: string): P
 async function accept(offer: { id: string; name: string }, addresses: Addresses): Promise<View> {
   const accepted = await authClient.organization.acceptInvitation({ invitationId: offer.id });
   if (accepted.error) return refused(accepted.error, addresses);
-  return said(
-    `You joined ${offer.name}`,
-    "Return to Luke: the workspace appears in your workspace switcher. You can close this tab.",
-  );
+  return said(`You joined ${offer.name}`, "Return to Luke. You can close this tab.");
 }
 
 function AcceptInvitation(): React.JSX.Element {
@@ -160,8 +157,8 @@ function AcceptInvitation(): React.JSX.Element {
         signIn(
           "Sign in to accept your invitation",
           query.email === undefined
-            ? "Sign in with the account at the address you were invited at, and you'll come back here."
-            : `Sign in with the account that uses ${query.email}, and you'll come back here.`,
+            ? "Sign in with the account at the address you were invited at."
+            : `Sign in with the account that uses ${query.email}.`,
         ),
       );
       return;

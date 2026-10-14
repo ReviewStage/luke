@@ -13,7 +13,6 @@ export function PageSkeleton({
   account,
   onSignOut,
   controls,
-  loading,
   back,
   shapes,
 }: {
@@ -21,8 +20,6 @@ export function PageSkeleton({
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   controls: React.ReactNode;
-  /** What the visually hidden line says this page is reading. */
-  loading: string;
   back?: { tab: AdminTab; label: string; onBack: () => void };
   shapes: readonly SkeletonShape[];
 }): React.JSX.Element {
@@ -38,7 +35,7 @@ export function PageSkeleton({
         onSignOut={onSignOut}
         controls={controls}
       />
-      <p className="sr-only">Loading. {loading}</p>
+      <p className="sr-only">Loading…</p>
       {back === undefined ? null : (
         <a
           href={tabHref(back.tab)}

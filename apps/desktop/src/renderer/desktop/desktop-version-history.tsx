@@ -115,9 +115,7 @@ export interface VersionSubject {
 }
 
 /** What the page says while the subject has no revision yet. */
-function noHistoryLine(noun: string): string {
-  return `Versions appear here as the ${noun} is written.`;
-}
+const NO_HISTORY_LINE = "No versions yet.";
 
 /** What the menu item that opens a revision's sections says. */
 const SECTIONS_LABEL = "Show changes";
@@ -568,7 +566,7 @@ function VersionPage({
             place={READ_FAILURE_PLACE.CENTRED}
           />
         ) : (
-          <p>{noHistoryLine(subject.noun)}</p>
+          <p>{NO_HISTORY_LINE}</p>
         )}
       </div>
     </>

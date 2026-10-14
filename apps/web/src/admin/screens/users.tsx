@@ -31,7 +31,7 @@ import {
   useAdminWrite,
 } from "../use-admin-read";
 
-const USERS_ERROR = "The users endpoint did not answer. Try again shortly.";
+const USERS_ERROR = "The users endpoint did not answer.";
 
 // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
 const readUserList: AdminReader<AdminUserList> = async (response) =>
@@ -138,7 +138,6 @@ export function UsersScreen({
           title="Users"
           account={account}
           onSignOut={signOut}
-          loading="Reading the service's own tables."
           controls={
             <>
               <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />

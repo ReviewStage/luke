@@ -32,7 +32,7 @@ interface Landing {
 }
 
 const BACK_TO_LUKE = {
-  SETTLED: "You can return to Luke.",
+  SETTLED: "Return to Luke. You can close this tab.",
   RETRY: "Return to Luke to try again.",
 } as const;
 

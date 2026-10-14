@@ -12,7 +12,7 @@ import { accountHref, dayReadPath, plainLeftClick, tabHref } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
-const DAY_ERROR = "The day endpoint did not answer. Try again shortly.";
+const DAY_ERROR = "The day endpoint did not answer.";
 
 // SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
 const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
@@ -145,7 +145,6 @@ export function DayScreen({
           title="Day"
           account={account}
           onSignOut={signOut}
-          loading="Reading the day's own rows."
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
           back={{ tab: "dashboard", label: "Dashboard", onBack }}
           shapes={daySkeletonShapes(day)}

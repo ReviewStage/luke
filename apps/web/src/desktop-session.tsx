@@ -71,7 +71,7 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
       ? {
           kind: VIEW.SIGN_IN,
           title: "Sign in to finish",
-          body: "Sign in with the account you use in Luke, and you'll come back here.",
+          body: "Sign in with the account you use in Luke.",
         }
       : said("Luke could not be reached", "Return to Luke and sign in again.");
   }

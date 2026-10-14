@@ -32,7 +32,7 @@ import { actionRejection } from "./use-setting-write";
 
 /* What a talk key may be: offered the moment recording starts, and restated
    in the error line for the keystroke that was not one. */
-const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
+const SHORTCUT_HINT = "Hold ⌃, ⌥, or ⌘, optionally with ⇧, and press a letter or Space.";
 
 /** Why a chord the window already answers cannot become a Luke key. */
 function windowChordRefusal(command: KeyedCommand): string {
@@ -301,8 +301,8 @@ export function ShortcutSection({
         // presses alone would leave them holding it and wondering.
         detail={
           shortcuts.voiceHotkeyHeld
-            ? "Hold to talk from any app; the microphone is open only while the key is down."
-            : "Press to start talking, again to stop. Luke's key helper could not start, so the key cannot tell when it is let go of."
+            ? "Hold to talk from any app."
+            : "Press to start talking, again to stop. Luke's key helper could not start."
         }
         {...(shownTalk ? { shown: shownTalk } : undefined)}
         chosen={shortcuts.voiceChosen}

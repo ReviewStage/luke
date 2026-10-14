@@ -984,8 +984,7 @@ App is configured. The token handed to eve is said to expire inside
 `userToken`'s refresh margin, so eve asks again, and the token is refreshed
 if need be, before it lapses. What the agents reach is what the App reaches
 for the account, under the App's permissions, on the repositories it is
-installed on. Settings › Integrations' GitHub row ("Lets agents use GitHub
-tools as you") is where an account links its own GitHub, through the connect
+installed on. Settings › Integrations' GitHub row is where an account links its own GitHub, through the connect
 page, or disconnects it, under the Mac's session; that link reaches no
 repository of a workspace's, which comes from the workspace's installation
 alone. The grant ends with the account's GitHub, when the developer

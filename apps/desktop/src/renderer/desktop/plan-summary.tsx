@@ -118,7 +118,7 @@ const SECTION_ORDER = [
 ] as const;
 
 /** What the summary says on a plan that holds nothing yet to list. */
-const NOTHING_YET_LINE = "Board, code, agents, and files appear here as you plan.";
+const NOTHING_YET_LINE = "Nothing yet.";
 
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";

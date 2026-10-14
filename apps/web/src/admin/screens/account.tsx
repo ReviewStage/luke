@@ -14,7 +14,7 @@ import { accountReadPath, plainLeftClick, tabHref } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, useAdminRead } from "../use-admin-read";
 
-const ACCOUNT_ERROR = "The account endpoint did not answer. Try again shortly.";
+const ACCOUNT_ERROR = "The account endpoint did not answer.";
 
 // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
 const readUserDetail: AdminReader<AdminUserDetail> = async (response) =>
@@ -73,7 +73,6 @@ export function AccountScreen({
           title="Account"
           account={account}
           onSignOut={signOut}
-          loading="Reading the account's own rows."
           controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
           back={{ tab: "users", label: "All users", onBack }}
           shapes={ACCOUNT_SHAPES}

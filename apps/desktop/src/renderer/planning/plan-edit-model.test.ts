@@ -63,7 +63,7 @@ test("a failed save keeps the words, says why, and waits to be tried again or ty
   });
   assert.deepEqual(tooLong.state, {
     kind: DOCUMENT_EDITOR_STATE.FAILED,
-    note: "Not saved: the plan would be longer than a plan may be.",
+    note: "Not saved: the plan is too long.",
   });
   assert.equal(pendingSave(unanswered), undefined);
   assert.equal(editorCloses(editorCloseAsked(unanswered)), false);

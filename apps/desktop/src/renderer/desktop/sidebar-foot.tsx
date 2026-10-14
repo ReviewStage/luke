@@ -196,7 +196,7 @@ function AccountMenu({
       } catch {
         return {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "Luke could not log out, so you are still signed in. Try again in a moment.",
+          reason: "Luke could not log out. Try again.",
         };
       }
     },
@@ -229,7 +229,6 @@ function AccountMenu({
         confirm={logOut}
         question={{
           title: signedIn ? `Log out of ${account.email}?` : "Log out?",
-          body: "Your plans stay with your account. Signing back in takes a trip through the browser.",
           verb: "Log out",
           running: "Logging out",
           tone: DIALOG_TONE.PRIMARY,
