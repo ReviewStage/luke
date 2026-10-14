@@ -10,6 +10,7 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { InboxList } from "../planning/inbox-list";
 import {
+  anyNeedsYou,
   firstChoice,
   type InboxListed,
   type InboxPlanItems,
@@ -166,7 +167,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
       <InboxList
         view={list}
         chosen={chosen?.item.id}
-        head={{ shown: plans.shown, choices, folds }}
+        head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
         models={named.models}
         note={
           <ListNote

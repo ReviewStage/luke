@@ -340,6 +340,11 @@ export function inboxList(
   return { grouping: INBOX_GROUPING.NEWEST, items };
 }
 
+/** Whether any plan's item needs the developer, listed or filtered out. */
+export function anyNeedsYou(plans: readonly InboxPlanItems[]): boolean {
+  return plans.some(({ items }) => items.some((item) => item.status === INBOX_STATUS.OPEN));
+}
+
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
