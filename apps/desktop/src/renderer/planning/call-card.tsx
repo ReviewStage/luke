@@ -2,9 +2,9 @@ import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@sidecar/live";
 import type { ReactNode } from "react";
 import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
-import { callHeading, spanText, useMinute } from "./plan-time";
+import { callHeading, useMinute } from "./plan-time";
 import type { CallRecord } from "./transcript-model";
-import { TurnModel } from "./turn-card";
+import { RUN_CARD, RunCard } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 
 /**
@@ -15,13 +15,12 @@ import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time
  * time it ended, worded as a call's header words it: "Call ended · 12m 34s
  * · Today, 3:04 PM", set at the column's start in the type and colour a
  * turn's line is. The whole line hangs the call's card while the pointer
- * rests on it, drawn as the turn's card is (`turn-card.tsx`): the voice
- * model at its head wearing its provider's mark as a turn's model does,
- * and at the head's right how the call ended where it
- * did not simply hang up; under it, when it began and ended, in full; and
- * under a hairline, the seconds the Live API metered it for, where they
- * differ from the time it ran, marked estimated where the call's close
- * never confirmed them. The Live API meters a call by its seconds alone, so
+ * rests on it, which is the turn's card (`turn-card.tsx`'s `RunCard`): the
+ * voice model at its head wearing its provider's mark as a turn's model
+ * does, when it began and ended, in full, under it, and at the head's right
+ * how the call ended where it did not simply hang up; and under a hairline,
+ * the seconds the Live API metered it for, where they differ from the time
+ * it ran, marked estimated where the call's close never confirmed them. The Live API meters a call by its seconds alone, so
  * the card has no tokens, and no price is said. Only what the call's record
  * holds is said, so a call recorded before a field was has no row for it,
  * and a call whose end is not on record yet closes with the bare line.
@@ -44,10 +43,13 @@ const METERED_LABEL = {
   ESTIMATED: "Metered (estimated)",
 } as const;
 
+/** What the card's figures are, for a reader. */
+const USAGE_LABEL = "Usage";
+
 /** The effort a call says, which the label leaves unsaid: a voice model has none. */
 const NO_EFFORT = "";
 
-/** The card: the model and how the call ended, when it ran, and its metered time where that is not the time it ran. */
+/** The card: the voice model and how the call ended, when it ran, and its metered time where that is not the time it ran. */
 function CallCard({
   startedAt,
   endedAt,
@@ -61,31 +63,29 @@ function CallCard({
   const endingWord = ending === undefined ? undefined : ENDING_WORD[ending];
   const metered = usage === undefined ? undefined : workingTime(usage.seconds * SECOND_MS);
   // Note that the two are compared as said, because a row reading what the line already reads tells nothing.
-  const meteredRow = metered !== undefined && metered !== workingTime(endedAt - startedAt);
+  const figures =
+    usage === undefined || metered === undefined || metered === workingTime(endedAt - startedAt)
+      ? undefined
+      : {
+          label: USAGE_LABEL,
+          rows: [
+            [usage.confirmed ? METERED_LABEL.CONFIRMED : METERED_LABEL.ESTIMATED, metered],
+          ] as const,
+        };
   return (
-    <div className="turn-card" data-call-card="">
-      {model === undefined && endingWord === undefined ? null : (
-        <div className="turn-card-head">
-          {model === undefined ? null : <TurnModel model={model} effort={NO_EFFORT} models={[]} />}
-          {endingWord === undefined ? null : (
-            <span className="turn-card-ending" data-ending={ending}>
-              {endingWord}
-            </span>
-          )}
-        </div>
-      )}
-      <p className="turn-card-when">
-        <time dateTime={new Date(startedAt).toISOString()}>{spanText(startedAt, endedAt)}</time>
-      </p>
-      {usage === undefined || !meteredRow ? null : (
-        <dl className="turn-card-tokens" aria-label="Usage">
-          <div className="turn-card-token">
-            <dt>{usage.confirmed ? METERED_LABEL.CONFIRMED : METERED_LABEL.ESTIMATED}</dt>
-            <dd>{metered}</dd>
-          </div>
-        </dl>
-      )}
-    </div>
+    <RunCard
+      kind={RUN_CARD.CALL}
+      model={model === undefined ? undefined : { id: model, effort: NO_EFFORT, models: [] }}
+      startedAt={startedAt}
+      endedAt={endedAt}
+      ending={
+        ending === undefined || endingWord === undefined
+          ? undefined
+          : { reason: ending, word: endingWord }
+      }
+      note={undefined}
+      figures={figures}
+    />
   );
 }
 

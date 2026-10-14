@@ -1,6 +1,6 @@
 import type { CodingAgentMessage, CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
-import { useClipped } from "../use-clipped";
+import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { agentParts, agentStillWriting, isDelegation } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { useMinute } from "./plan-time";
@@ -82,43 +82,30 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
   switch (corner.kind) {
     case CARD_CORNER.WORKING:
       return (
-        <span className="tab-card-time">
+        <>
           {WORKING_WORD}
           {corner.startedAt === undefined ? null : <WorkingTime startedAt={corner.startedAt} />}
-        </span>
+        </>
       );
     case CARD_CORNER.ENDED:
       return (
-        <span className="tab-card-time">
+        <>
           {corner.state}
           {corner.state === undefined || corner.at === undefined ? null : ENDED_SEPARATOR}
           {corner.at === undefined ? null : <RelativeTime at={corner.at} now={now} hint={false} />}
-        </span>
+        </>
       );
     case CARD_CORNER.NONE:
       return null;
   }
 }
 
-/** The name: a title wrapped to two lines, or a task standing in for one on a single line, faded where it is cut short. */
-function CardName({ name, untitled }: { name: string; untitled: boolean }): React.JSX.Element {
-  const [line, clipped] = useClipped();
-  return untitled ? (
-    <span ref={line} className="tab-card-name" data-untitled="" data-overflow={String(clipped)}>
-      {name}
-    </span>
-  ) : (
-    <span className="tab-card-name">{name}</span>
-  );
-}
-
 /** The one line of the latest step, faded at its end where it is cut short. */
 function ActivityLine({ transcript }: { transcript: CopiedTranscript }): React.JSX.Element | null {
-  const [line, clipped] = useClipped();
   const activity = latestActivity(transcript);
   if (activity === undefined) return null;
   return (
-    <p ref={line} className="tab-card-preview" data-overflow={String(clipped)}>
+    <CardNote oneLine>
       {activity.kind === LATEST_ACTIVITY.WORDS ? (
         activity.text
       ) : (
@@ -128,7 +115,7 @@ function ActivityLine({ transcript }: { transcript: CopiedTranscript }): React.J
           {activity.code ? <code>{activity.subject}</code> : activity.subject}
         </>
       )}
-    </p>
+    </CardNote>
   );
 }
 
@@ -210,19 +197,14 @@ export function AgentTabCard({
 }): React.JSX.Element {
   const { corner, choice, transcript } = read();
   return (
-    <div className="tab-card" data-tab-card="">
-      <div className="tab-card-head">
-        <div className="tab-card-title">
-          <CardName name={name} untitled={untitled} />
-          {choice === undefined ? null : (
-            <span className="tab-card-model">
-              <ModelLabel choice={choice} models={models} />
-            </span>
-          )}
-        </div>
-        <Corner corner={corner} />
-      </div>
+    <HoverCard data-tab-card="">
+      <CardHead
+        name={name}
+        oneLine={untitled}
+        sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
+        corner={corner.kind === CARD_CORNER.NONE ? undefined : <Corner corner={corner} />}
+      />
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
-    </div>
+    </HoverCard>
   );
 }

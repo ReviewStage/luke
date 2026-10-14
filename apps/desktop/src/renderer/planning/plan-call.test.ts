@@ -290,8 +290,8 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     const card = document.querySelector(".tooltip-card [data-tab-card]");
     assert.ok(card, "the row hangs a tab's card");
     return [
-      card.querySelector(".tab-card-name")?.textContent,
-      card.querySelector(".tab-card-time")?.textContent,
+      card.querySelector(".card-name")?.textContent,
+      card.querySelector(".card-corner")?.textContent,
     ];
   };
   assert.deepEqual(cardOn(page.querySelector("button[data-subagent-row]")), [

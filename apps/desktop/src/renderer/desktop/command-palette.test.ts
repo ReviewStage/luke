@@ -279,8 +279,8 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = document.querySelector(".tooltip-card [data-tab-card]");
-  assert.equal(card?.querySelector(".tab-card-name")?.textContent, "Invoice export");
-  assert.equal(card?.querySelector(".tab-card-time")?.textContent, "Working…");
+  assert.equal(card?.querySelector(".card-name")?.textContent, "Invoice export");
+  assert.equal(card?.querySelector(".card-corner")?.textContent, "Working…");
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });

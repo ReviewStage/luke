@@ -1,6 +1,7 @@
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
@@ -224,45 +225,45 @@ export function PlanCard({
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
   return (
-    <div className="plan-card" data-plan-card="">
-      <div className="plan-card-heading">
-        <div className="plan-card-head">
-          <span className="plan-card-name">{plan.name}</span>
-          <RelativeTime className="plan-card-time" at={plan.updatedAt} now={now} hint={false} />
-        </div>
-        {repository === null ? null : (
-          <RepositoryDetail
-            repository={repository}
-            pictures={pictures}
-            onOpenGitHub={onOpenGitHub}
-          />
-        )}
-      </div>
+    <HoverCard data-plan-card="">
+      <CardHead
+        name={plan.name}
+        corner={<RelativeTime at={plan.updatedAt} now={now} hint={false} />}
+      />
+      {repository === null ? null : (
+        <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />
+      )}
       {agents === undefined || agentRows.length === 0 ? null : (
-        <ul className="plan-card-lines" aria-label="Agents">
-          {agentRows.map((agent) => (
-            <AgentLine
-              key={agent.id}
-              agent={agent}
-              models={models}
-              onShow={() => onShowAgent(agent.id)}
-            />
-          ))}
-          <More total={agents.total} shown={agentRows.length} />
-        </ul>
+        <>
+          <CardRule />
+          <ul className="plan-card-rows" aria-label="Agents">
+            {agentRows.map((agent) => (
+              <AgentLine
+                key={agent.id}
+                agent={agent}
+                models={models}
+                onShow={() => onShowAgent(agent.id)}
+              />
+            ))}
+            <More total={agents.total} shown={agentRows.length} />
+          </ul>
+        </>
       )}
       {agents === undefined || pullRequestRows.length === 0 ? null : (
-        <ul className="plan-card-lines" aria-label="Pull requests">
-          {pullRequestRows.map((pullRequest) => (
-            <PullRequestLine
-              key={pullRequest.url ?? pullRequest.number}
-              pullRequest={pullRequest}
-              onOpenGitHub={onOpenGitHub}
-            />
-          ))}
-          <More total={agents.pullRequestTotal} shown={pullRequestRows.length} />
-        </ul>
+        <>
+          <CardRule />
+          <ul className="plan-card-rows" aria-label="Pull requests">
+            {pullRequestRows.map((pullRequest) => (
+              <PullRequestLine
+                key={pullRequest.url ?? pullRequest.number}
+                pullRequest={pullRequest}
+                onOpenGitHub={onOpenGitHub}
+              />
+            ))}
+            <More total={agents.pullRequestTotal} shown={pullRequestRows.length} />
+          </ul>
+        </>
       )}
-    </div>
+    </HoverCard>
   );
 }

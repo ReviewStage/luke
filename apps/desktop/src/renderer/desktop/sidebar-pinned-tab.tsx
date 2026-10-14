@@ -3,6 +3,7 @@ import type { PlanAgentLine, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { CopyIcon, DocumentIcon, UnpinIcon } from "@sidecar/panel";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { shownFiles } from "../planning/code-pane-model";
 import { isAgentTab, isChangesTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
@@ -182,24 +183,24 @@ function PinnedTabCard({
   const { repository } = plan;
   const { openGitHub, pictures } = plans.repositories;
   return (
-    <div className="plan-card" data-pinned-tab-card="">
-      <div className="plan-card-heading">
-        <div className="plan-card-head">
-          <span className="plan-card-glyph">{pinnedTabIcon(pin, agent)}</span>
-          <span className="plan-card-name">{pin.label}</span>
-        </div>
+    <HoverCard data-pinned-tab-card="">
+      <CardHead glyph={pinnedTabIcon(pin, agent)} name={pin.label} />
+      <div className="plan-card-rows">
         <CardDetail glyph={<DocumentIcon />} label={plan.name} onPress={onOpenPlan} />
         {repository === null ? null : (
           <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
         )}
-        {gone ? <p className="plan-card-more">{GONE_NOTE}</p> : null}
       </div>
+      {gone ? <CardNote>{GONE_NOTE}</CardNote> : null}
       {pullRequest === undefined ? null : (
-        <ul className="plan-card-lines" aria-label="Pull request">
-          <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
-        </ul>
+        <>
+          <CardRule />
+          <ul className="plan-card-rows" aria-label="Pull request">
+            <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
+          </ul>
+        </>
       )}
-    </div>
+    </HoverCard>
   );
 }
 

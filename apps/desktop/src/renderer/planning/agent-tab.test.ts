@@ -284,8 +284,8 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   const card = document.querySelector(".tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
-    card.querySelector(".tab-card-name")?.textContent,
-    card.querySelector(".tab-card-time")?.textContent,
+    card.querySelector(".card-name")?.textContent,
+    card.querySelector(".card-corner")?.textContent,
   ];
 }
 
