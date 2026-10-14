@@ -742,8 +742,9 @@ it.effect(
       const f = yield* standingWithAvatar;
       f.call.reportRemoteAudioLevel(true);
       f.call.reportRemoteAudioLevel(false);
-      yield* advance(500);
-      // Still speaking by the status's hangover, but quiet on the meter.
+      // Quiet past the gate's 800 ms, the meter's own hangover counted in, yet
+      // still speaking by the status's longer hangover.
+      yield* advance(800 - VOICE_ACTIVITY_HANGOVER_MS);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
       f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
       yield* settle;
@@ -751,5 +752,23 @@ it.effect(
       f.tee.emit(AUDIO);
       f.tee.emit(TURN_END);
       assert.deepEqual(f.fed, [AUDIO, TURN_END]);
+    }),
+);
+
+it.effect(
+  "a tee standing in a pause inside Luke's turn leaves the rest of that turn on the element",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* standingWithAvatar;
+      f.call.reportRemoteAudioLevel(true);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(800 - VOICE_ACTIVITY_HANGOVER_MS - 1);
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      yield* settle;
+      assert.equal(f.avatarVoiced(), false);
+      f.tee.emit(AUDIO);
+      f.tee.emit(TURN_END);
+      assert.deepEqual(f.fed, []);
+      assert.equal(f.avatarVoiced(), true);
     }),
 );

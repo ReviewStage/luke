@@ -45,6 +45,7 @@ import {
   type Scope,
 } from "effect";
 import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "#shared/messages/avatar";
+import { PCM_SAMPLE_RATE } from "../avatar-feed/contract";
 import {
   AVATAR_HANDOVER_DIRECT,
   type AvatarHandover,
@@ -55,6 +56,7 @@ import {
   handoverOnTee,
 } from "../avatar-feed/handover";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
+import { TURN_GATE } from "../avatar-feed/turn-gate";
 import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
@@ -100,6 +102,16 @@ const BARGE_IN = {
 } as const;
 
 const BARGE_IN_WAIT_MS = Math.max(0, BARGE_IN.QUIET_MS - VOICE_ACTIVITY_HANGOVER_MS);
+
+/**
+ * How long after the meter reports Luke quiet his turn still stands, by the
+ * tee's own reckoning: the gate closes a turn on its quiet, and the meter's
+ * report already comes its own hangover late.
+ */
+const TURN_QUIET_WAIT_MS = Math.max(
+  0,
+  (TURN_GATE.QUIET_SAMPLES * 1_000) / PCM_SAMPLE_RATE - VOICE_ACTIVITY_HANGOVER_MS,
+);
 
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
@@ -249,10 +261,14 @@ export class LiveCall implements LiveVoiceCall {
   #tee: Fiber.Fiber<void> | undefined;
   #talkKeyDown = false;
   /**
-   * Whether the meter hears Luke's track now, on its own short hangover rather
-   * than the status's: a tee standing up in the status's long tail meets no turn.
+   * Whether Luke is in a turn as the tee's gate would count it: from the
+   * meter hearing him until his track has been as long quiet as the gate's
+   * quiet. A tee standing up inside a pause meets the turn the pause is in,
+   * and one standing up after it, though still in the status's longer
+   * hangover, meets none.
    */
-  #directActive = false;
+  #directInTurn = false;
+  #directTurnQuiet: Fiber.Fiber<void> | undefined;
   /** Whether Luke's track has been quiet for the barge-in's bound, which it has before he first speaks. */
   #directQuietLong = true;
   #directQuiet: Fiber.Fiber<void> | undefined;
@@ -798,10 +814,11 @@ export class LiveCall implements LiveVoiceCall {
     this.#captionTick = undefined;
     if (this.#speakingHangover !== undefined) this.#disarm(this.#speakingHangover);
     this.#speakingHangover = undefined;
-    for (const bound of [this.#directQuiet, this.#interruptCooling]) {
+    for (const bound of [this.#directQuiet, this.#directTurnQuiet, this.#interruptCooling]) {
       if (bound !== undefined) this.#disarm(bound);
     }
     this.#directQuiet = undefined;
+    this.#directTurnQuiet = undefined;
     this.#interruptCooling = undefined;
     this.#settleSwitch(false);
     Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
@@ -854,7 +871,7 @@ export class LiveCall implements LiveVoiceCall {
 
   /** The tee up: the status is applied again, now that the avatar can be fed. */
   #onTeeStanding(): void {
-    const standing = handoverOnTee(this.#handover, true, this.#directActive);
+    const standing = handoverOnTee(this.#handover, true, this.#directInTurn);
     this.#route(handoverOnStatus(standing, this.#avatarStatus));
   }
 
@@ -879,14 +896,23 @@ export class LiveCall implements LiveVoiceCall {
     this.#interrupt();
   }
 
-  /** Luke's track heard or gone quiet, timed for the barge-in. */
+  /** Luke's track heard or gone quiet, timed for the barge-in and for the turn a late tee meets. */
   #noteDirectLevel(active: boolean): void {
     if (!this.#options.avatarFeed || this.#ended) return;
-    if (this.#directQuiet !== undefined) this.#disarm(this.#directQuiet);
+    for (const bound of [this.#directQuiet, this.#directTurnQuiet]) {
+      if (bound !== undefined) this.#disarm(bound);
+    }
     this.#directQuiet = undefined;
+    this.#directTurnQuiet = undefined;
     this.#directQuietLong = false;
-    this.#directActive = active;
-    if (active) return;
+    if (active) {
+      this.#directInTurn = true;
+      return;
+    }
+    this.#directTurnQuiet = this.#arm(TURN_QUIET_WAIT_MS, () => {
+      this.#directTurnQuiet = undefined;
+      this.#directInTurn = false;
+    });
     this.#directQuiet = this.#arm(BARGE_IN_WAIT_MS, () => {
       this.#directQuiet = undefined;
       this.#directQuietLong = true;
