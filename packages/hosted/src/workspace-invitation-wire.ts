@@ -3,12 +3,13 @@ import { workspaceIdSchema } from "./plan-wire.js";
 import { WORKSPACE_ROLE } from "./workspace-wire.js";
 
 /**
- * workspace-invitation-wire.ts -- a workspace invitation as the Mac asks for, lists, and cancels it, and the web pages it passes through.
+ * workspace-invitation-wire.ts -- a workspace invitation as the Mac asks for, lists, and cancels it, and the web page its invitee accepts it on.
  *
- * An owner or an admin opens the invite page from the Mac for the workspace
- * it names; the page asks Better Auth for the invitation and shows the
- * accept page's address, which the invitee opens to accept it. Both pages
- * talk to Better Auth's organization endpoints on the browser's own session.
+ * An owner or an admin invites people from Settings on the Mac, under its
+ * own Better Auth session, through Luke's routes over the organization
+ * plugin's invitation calls; each pending invitation comes back with the
+ * accept page's address, which the owner copies and sends by hand, and the
+ * invitee opens to accept it on the browser's own session.
  *
  * The accept address carries the invited address beside the invitation's
  * id, because Better Auth reads an invitation to its recipient alone: a
@@ -18,19 +19,12 @@ import { WORKSPACE_ROLE } from "./workspace-wire.js";
  * only names it; who may accept is the plugin's check, not the page's.
  */
 
-/** The page an owner or an admin invites people from, and lists and cancels pending invitations on. */
-export const WORKSPACE_INVITE_PAGE = {
-  PATH: "/invite.html",
-  /** The id of the workspace to invite people to. */
-  WORKSPACE_PARAM: "workspace",
-} as const;
-
 /** The page an invitee accepts an invitation on. */
 const INVITATION_ACCEPT_PAGE = {
   PATH: "/accept-invitation.html",
   /** Better Auth's id of the invitation. */
   ID_PARAM: "id",
-  /** The address the invitation was made for, as the invite page knew it. */
+  /** The address the invitation was made for. */
   EMAIL_PARAM: "email",
 } as const;
 
@@ -84,7 +78,7 @@ const invitationRoleSchema = EffectSchema.Literals(Object.values(INVITATION_ROLE
  * when, and the accept link to copy, which only the invited address's
  * account accepts.
  */
-const workspaceInvitationSchema = EffectSchema.Struct({
+export const workspaceInvitationSchema = EffectSchema.Struct({
   id: EffectSchema.String.check(EffectSchema.isNonEmpty()),
   email: EffectSchema.String,
   role: invitationRoleSchema,

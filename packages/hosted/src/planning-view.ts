@@ -39,6 +39,11 @@ import {
 import { planTranscriptSchema } from "./transcript-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import {
+  workspaceInvitationCancelSchema,
+  workspaceInvitationSchema,
+  workspaceInviteRequestSchema,
+} from "./workspace-invitation-wire.js";
+import {
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -727,7 +732,7 @@ export const planningWorkspaceCreateParamsSchema = workspaceCreateRequestSchema;
 
 export type PlanningWorkspaceCreateParams = typeof planningWorkspaceCreateParamsSchema.Type;
 
-/** One workspace, as the window names it to invite people to, or to connect or disconnect its GitHub organization. */
+/** One workspace, as the window names it to read its invitations, or to connect or disconnect its GitHub organization. */
 export const planningWorkspaceParamsSchema = workspaceGithubRequestSchema;
 
 export type PlanningWorkspaceParams = typeof planningWorkspaceParamsSchema.Type;
@@ -780,6 +785,34 @@ export const planningWorkspaceLeaveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningWorkspaceLeaveAnswer = typeof planningWorkspaceLeaveAnswerSchema.Type;
+
+/** An invitation, as the window asks for it: the workspace, the address, and the role. */
+export const planningWorkspaceInviteParamsSchema = workspaceInviteRequestSchema;
+
+export type PlanningWorkspaceInviteParams = typeof planningWorkspaceInviteParamsSchema.Type;
+
+/** An invitation made, as the window hears it: the invitation with its accept link, or why none was. */
+export const planningWorkspaceInvitationAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ invitation: workspaceInvitationSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceInvitationAnswer = typeof planningWorkspaceInvitationAnswerSchema.Type;
+
+/** A pending invitation canceled, as the window asks it: the workspace and the invitation. */
+export const planningWorkspaceInvitationCancelParamsSchema = workspaceInvitationCancelSchema;
+
+export type PlanningWorkspaceInvitationCancelParams =
+  typeof planningWorkspaceInvitationCancelParamsSchema.Type;
+
+/** A workspace's pending invitations, as the window hears them after a read or a cancel, or why there are none. */
+export const planningWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ invitations: EffectSchema.Array(workspaceInvitationSchema) }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceInvitationsAnswer =
+  typeof planningWorkspaceInvitationsAnswerSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
 export const planningGitHubPageAnswerSchema = EffectSchema.Union([

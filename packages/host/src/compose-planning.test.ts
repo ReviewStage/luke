@@ -49,6 +49,7 @@ import {
   type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import type { WorkspaceInvitation } from "@sidecar/hosted/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -157,6 +158,8 @@ interface FakeService extends PlanningClient {
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
+  /** Each workspace's pending invitations, by its id. */
+  invitations: Record<string, WorkspaceInvitation[]>;
   /** Whether a write is refused as the account's role not allowing it. */
   notPermitted: boolean;
   /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
@@ -267,6 +270,7 @@ function fakeService(plans: Plan[]): FakeService {
     workspacesFail: false,
     workspacesGate: Effect.void,
     members: {},
+    invitations: {},
     notPermitted: false,
     connection: { connected: false, login: null },
     connectPages: [],
@@ -338,6 +342,35 @@ function fakeService(plans: Plan[]): FakeService {
           );
           service.members[workspaceId] = remaining;
           return { ok: true, answer: remaining } as const;
+        }),
+      invitations: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`invitations:${workspaceId}`);
+          return { ok: true, answer: service.invitations[workspaceId] ?? [] } as const;
+        }),
+      // The service answers the invitation it made, with its accept link.
+      invite: (workspaceId, email, role) =>
+        Effect.sync(() => {
+          service.reads.push(`invite:${workspaceId}:${email}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const made: WorkspaceInvitation = {
+            id: `inv-${email}`,
+            email,
+            role: role === WORKSPACE_ROLE.ADMIN ? WORKSPACE_ROLE.ADMIN : WORKSPACE_ROLE.MEMBER,
+            expiresAt: "2026-10-16T12:00:00.000Z",
+            acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${email}`,
+          };
+          service.invitations[workspaceId] = [...(service.invitations[workspaceId] ?? []), made];
+          return { ok: true, answer: made } as const;
+        }),
+      cancelInvitation: (workspaceId, invitationId) =>
+        Effect.sync(() => {
+          service.reads.push(`cancel:${workspaceId}:${invitationId}`);
+          const pending = (service.invitations[workspaceId] ?? []).filter(
+            (one) => one.id !== invitationId,
+          );
+          service.invitations[workspaceId] = pending;
+          return { ok: true, answer: pending } as const;
         }),
       leave: (workspaceId) =>
         Effect.sync(() => {
@@ -1189,6 +1222,51 @@ it.effect(
         `members:${ACME.id}`,
         `remove:${ACME.id}:${GRACE.userId}`,
         "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "an invitation is made, read, and canceled on the service, and nothing else is read with any of them",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call } = yield* subject(service);
+
+      const made = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+        workspaceId: ACME.id,
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+      });
+      const pending = yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: ACME.id });
+      const left = yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+        workspaceId: ACME.id,
+        invitationId: "inv-alan@example.com",
+      });
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+        workspaceId: ACME.id,
+        email: "grace@example.com",
+        role: WORKSPACE_ROLE.ADMIN,
+      });
+
+      const invitation = {
+        id: "inv-alan@example.com",
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+        expiresAt: "2026-10-16T12:00:00.000Z",
+        acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com",
+      };
+      assert.deepEqual(made, { invitation });
+      assert.deepEqual(pending, { invitations: [invitation] });
+      assert.deepEqual(left, { invitations: [] });
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(service.reads, [
+        `invite:${ACME.id}:alan@example.com`,
+        `invitations:${ACME.id}`,
+        `cancel:${ACME.id}:inv-alan@example.com`,
+        `invite:${ACME.id}:grace@example.com`,
       ]);
     }),
 );

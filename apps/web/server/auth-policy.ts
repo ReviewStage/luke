@@ -62,13 +62,14 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * through the server-only `auth.api` calls, which these paths do not reach.
  *
  * A teammate joins by invitation, Better Auth's own
- * (https://www.better-auth.com/docs/plugins/organization#invitations): the
- * invite page asks for one, lists and cancels the pending ones, and the
- * invitee's page reads and accepts theirs, so exactly those five endpoints
- * are served (`invite-member`, `list-invitations`, `cancel-invitation`,
- * `get-invitation`, `accept-invitation`). The plugin checks each against the
- * caller's role and address itself. Rejecting and listing one's own
- * invitations stay shut, since no page of Luke's asks for either. The team
+ * (https://www.better-auth.com/docs/plugins/organization#invitations). An
+ * owner or an admin asks for one, lists and cancels the pending ones from
+ * the Mac, through Luke's routes and the server-only calls, so those paths
+ * are shut too; the invitee's page reads and accepts theirs on the browser's
+ * session, so exactly those two endpoints are served (`get-invitation`,
+ * `accept-invitation`). The plugin checks each against the caller's address
+ * itself. Rejecting and listing one's own invitations stay shut, since no
+ * page of Luke's asks for either. The team
  * and role endpoints are listed although this deployment does not mount
  * them, so turning either option on later opens no door by itself.
  *
@@ -89,6 +90,9 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/remove-member",
   "/organization/update-member-role",
   "/organization/leave",
+  "/organization/invite-member",
+  "/organization/list-invitations",
+  "/organization/cancel-invitation",
   "/organization/reject-invitation",
   "/organization/list-user-invitations",
   "/organization/create-team",
