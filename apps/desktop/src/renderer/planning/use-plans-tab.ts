@@ -1083,8 +1083,14 @@ export function usePlansTab(input: {
     );
 
   // New plan opens the dialog over whatever stands, an open plan and its
-  // call included, which stay until a plan is started.
-  const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) => setNewPlanAsk({ preset });
+  // call included, which stay until a plan is started. Note that a press
+  // while the dialog stands, as the menu bar's still can, leaves it as it is,
+  // because a fresh ask would keep the card's draft under another preset.
+  const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) =>
+    setNewPlanAsk((standing) => standing ?? { preset });
+  // The dialog is the Plans tab's, so Settings taking the window puts it
+  // away rather than leaving it to stand again on the way back.
+  if (!shown && newPlanAsk !== undefined) setNewPlanAsk(undefined);
 
   // A plan's version history opens over the plan, so another plan opens first.
   const openHistory = (opening: HistoryOpening) => {

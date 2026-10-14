@@ -261,7 +261,7 @@ test("a repository pin still waiting on the service is let go with a sign-out, s
   assert.deepEqual(tab.control().pinnedRepositories, []);
 });
 
-test("New plan opens its dialog over the open plan, which stays open, and only a plan that starts closes it", async () => {
+test("New plan opens its dialog over the open plan, which stays open; a second press leaves it as it stands, only a plan that starts closes it, and leaving the tab puts it away", async () => {
   const answers = [
     { failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE },
     { planId: OTHER_PLAN_ID },
@@ -280,6 +280,12 @@ test("New plan opens its dialog over the open plan, which stays open, and only a
   assert.deepEqual(tab.control().newPlan.preset, { repository: "acme/web" });
   assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT, "the plan behind the dialog stays open");
   assert.ok(!tab.told.includes(ACT_KIND.PLANNING_CLOSE), "nothing left the plan");
+  act(() => tab.control().onNewPlan());
+  assert.deepEqual(
+    tab.control().newPlan.preset,
+    { repository: "acme/web" },
+    "a press while the dialog stands leaves it as it is",
+  );
 
   let note: string | undefined;
   await act(async () => {
@@ -292,6 +298,11 @@ test("New plan opens its dialog over the open plan, which stays open, and only a
   });
   assert.equal(note, undefined);
   assert.equal(tab.control().newPlan.open, false, "a plan started closes the dialog");
+
+  act(() => tab.control().onNewPlan());
+  tab.stand({ shown: false });
+  tab.stand({ shown: true });
+  assert.equal(tab.control().newPlan.open, false, "Settings taking the window put the dialog away");
 });
 
 test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
