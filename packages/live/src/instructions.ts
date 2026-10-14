@@ -1,3 +1,5 @@
+import { developerSeedItem, type InitialItem } from "./seed.js";
+
 /**
  * A planning call's backend is the planning model, which holds the saved
  * document and reads the plan's repository; a notetaker beside the call
@@ -104,43 +106,33 @@ export function sessionInstructions(): string {
 }
 
 /**
- * A planning call's opening, sent as one `session.instructions.append` with
- * a null delegation once `session.started` arrives, which is the guide's way
- * to have the model speak before the caller has. The voice service sends it
- * from the trusted side once a newly created call starts, because a Live
- * session waits for the caller's first words
- * until it is told to speak and the planning role is to lead. The plan the
- * call is about is already the session's seed, whose first line says
- * whether the plan is new or under way, so the instruction picks the
- * opening from that line: a new plan opens on what the developer has in
- * mind, asked so a problem or a rough idea is as good an answer as a
- * design, and a plan under way picks up where it stands. It asks the question in the same
- * turn, because a voice that opened by handing the backend a look at the
- * repository said "give me a second" and then waited on a backend with
- * nothing yet to go on. It says that it shapes the opening alone, since an
- * instructions append is standing text.
+ * A planning call's opening, as the last developer message of the history
+ * the call is created with, which is the Live conversations guide's way to
+ * have the model speak before the caller has: the greeting is in the session
+ * from its first instant, so there is no instruction to append once it starts,
+ * no acknowledgment to wait for, and no cue after it. The plan the call is
+ * about is the history's first message, whose first line says whether the
+ * plan is new or under way, so the opening picks its words from that line: a
+ * new plan opens on what the developer has in mind, asked so a problem or a
+ * rough idea is as good an answer as a design, and a plan under way picks up
+ * where it stands. It asks the question in the same turn, because a voice
+ * that opened by handing the backend a look at the repository said "give me
+ * a second" and then waited on a backend with nothing yet to go on. It says
+ * that it shapes the opening alone, since the history stands for the whole
+ * call.
  */
-export function planningOpeningInstruction(): string {
-  return [
-    "Open the call now, in English, without waiting for the developer to speak.",
-    "If the plan above is new, greet the developer in a few words and ask what they have in mind,",
-    "making it easy to answer with only a problem or a rough idea rather than a finished design.",
-    "If it is under way, say in one sentence where it stands and ask the one question it most",
-    "needs answered next. If earlier calls about it are shown above, pick up where the last one",
-    "left off instead: say in one sentence what you were discussing and ask the next question from there.",
-    "Ask that question in this same turn: do not say you are looking anything",
-    "up, do not ask the developer to wait, and do not wait for the backend first. Then stop and",
-    "listen. This shapes the opening alone: once it is said, carry on as your other instructions say.",
-  ].join(" ");
-}
-
-/**
- * The cue that follows the opening's acknowledgment, sent as one
- * `session.commentary.append` with a null delegation. It is the guide's own
- * sentence for an opening that has to follow application instructions, kept
- * word for word: the instructions carry what to say, and this asks only that
- * the model begin saying it.
- */
-export function greetingCue(): string {
-  return "Begin the conversation now, following the instructions provided.";
+export function planningOpeningHistory(): InitialItem {
+  return developerSeedItem(
+    [
+      "Open the call now, in English, without waiting for the developer to speak.",
+      "If the plan above is new, greet the developer in a few words and ask what they have in mind,",
+      "making it easy to answer with only a problem or a rough idea rather than a finished design.",
+      "If it is under way, say in one sentence where it stands and ask the one question it most",
+      "needs answered next. If earlier calls about it are shown above, pick up where the last one",
+      "left off instead: say in one sentence what you were discussing and ask the next question from there.",
+      "Ask that question in this same turn: do not say you are looking anything",
+      "up, do not ask the developer to wait, and do not wait for the backend first. Then pause and",
+      "listen. This shapes the opening alone: once it is said, carry on as your other instructions say.",
+    ].join(" "),
+  );
 }

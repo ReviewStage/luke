@@ -1,17 +1,9 @@
-import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
-import {
-  commentaryAppend,
-  greetingCue,
-  instructionsAppend,
-  LIVE_CLIENT_EVENT,
-  type LiveClientEvent,
-  planningOpeningInstruction,
-} from "@luke/live";
+import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -45,7 +37,7 @@ import {
   type SessionOpener,
   sessionOpener,
 } from "./opening.js";
-import { OPENING_OUTCOME, type OpeningSettled, RELAY_DEFAULTS, relaySession } from "./relay.js";
+import { RELAY_DEFAULTS, relaySession } from "./relay.js";
 import { SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
 
 /**
@@ -60,9 +52,9 @@ import { SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
  * One upgrade stands. `/api/voice/sessions` takes a signed-in Mac under its
  * account bearer, resolved and spent by the same account code every hosted
  * route uses, before any session exists. Every call is about one plan: a
- * call newly created is opened by the service, which sends the planning
- * opening, waits for the acknowledgment that says the model took it, and
- * cues the model to begin, so Luke speaks first.
+ * call newly created carries the planning opening as the last message of the
+ * history it is created with, so Luke speaks first with nothing appended,
+ * acknowledged, or cued after the start.
  *
  * A connection is one function invocation, and the platform closes it at the
  * function's maximum duration. The WebRTC session between the Mac and OpenAI
@@ -108,16 +100,6 @@ const UPGRADE_REQUIRED = 426;
  * answers for what it sends.
  */
 const SOCKET_BYTE_BUDGET = 8 * 1024 * 1024;
-
-/**
- * What the service tells a call to say first, once it starts: the planning
- * opening, since the planning role is to lead and a Live session otherwise
- * waits for the developer's first words. Only a call just created opens; one
- * re-attached opened on its first connection.
- */
-function openingInstruction(session: { started: boolean }): string | undefined {
-  return session.started ? undefined : planningOpeningInstruction();
-}
 
 /** What a server hands a service that stands on it, which is what `ws` upgrades on. */
 type VoiceUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
@@ -230,8 +212,6 @@ export interface VoiceServiceOptions {
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   log?: Log;
   closeTimeoutMs?: number;
-  /** How long the greeting's acknowledgment is waited on before the cue is abandoned. */
-  greetingTimeoutMs?: number;
   attachTimeoutMs?: number;
   createTimeoutMs?: number;
   firstFrameTimeoutMs?: number;
@@ -604,25 +584,10 @@ export class VoiceService {
       const pipe = yield* voiceSocket(sideband);
       // Both consumers listen now: what the session spoke since the attach is read here, by both.
       yield* Effect.sync(() => sideband.resume());
-      const opening = openingInstruction(opened);
       const summary = yield* relaySession<DatabaseServices>({
         device,
         upstream: pipe,
         closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
-        openingTimeoutMs: this.#options.greetingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS,
-        onSessionStarted:
-          opening === undefined
-            ? undefined
-            : () => {
-                this.#log({ event: LOG_EVENT.GREETING_SENT });
-                return instructionsAppend({
-                  eventId: randomUUID(),
-                  delegationId: null,
-                  content: opening,
-                });
-              },
-        onOpeningSettled:
-          opening === undefined ? undefined : (settled) => this.#greetingSettled(settled),
         onUsageUpdated: (seconds) => this.#written(this.#record.noteUsage({ sessionId, seconds })),
         onSessionClosed: (closed) =>
           this.#written(
@@ -717,37 +682,6 @@ export class VoiceService {
           close,
         );
       return { exchange, stop };
-    });
-  }
-
-  /**
-   * What follows the greeting's append, in the order the Live conversations
-   * guide fixes: the acknowledgment is what licenses the cue, because the
-   * greeting depends on application instructions and a cue sent ahead of
-   * them would ask the model to begin a greeting it has not been given. A
-   * refusal is written down by its kind alone, and a wait that runs out
-   * leaves the call to the developer's own first word rather than cueing an
-   * opening the session may never have taken.
-   */
-  #greetingSettled(settled: OpeningSettled): LiveClientEvent | undefined {
-    if (settled.outcome === OPENING_OUTCOME.REFUSED) {
-      this.#log({
-        event: LOG_EVENT.GREETING_REFUSED,
-        errorType: settled.errorType,
-        errorCode: settled.errorCode,
-      });
-      return undefined;
-    }
-    if (settled.outcome === OPENING_OUTCOME.UNACKNOWLEDGED) {
-      this.#log({ event: LOG_EVENT.GREETING_UNACKNOWLEDGED });
-      return undefined;
-    }
-    this.#log({ event: LOG_EVENT.GREETING_ACKNOWLEDGED });
-    this.#log({ event: LOG_EVENT.GREETING_CUED });
-    return commentaryAppend({
-      eventId: randomUUID(),
-      delegationId: null,
-      content: greetingCue(),
     });
   }
 

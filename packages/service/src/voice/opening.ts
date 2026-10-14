@@ -13,6 +13,7 @@ import {
   LIVE_INPUT_BOUNDS,
   LIVE_SESSION_OUTCOME,
   liveSessionConfig,
+  planningOpeningHistory,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   seedItemTokens,
@@ -231,30 +232,40 @@ function newestWithin(lines: readonly EarlierCallLine[], tokens: number): string
 /**
  * The input a call is created with, under the API's bounds: the plan's seed
  * first, then what was said on its earlier calls as one quoted transcript,
- * then the device's own input. The device's input is kept whole, and the
- * plan takes what is left beside it down to `PLAN_SEED_FLOOR_TOKENS` when
- * the history wants the room, cut from its end so the name and the top of
- * the document are what a long plan keeps. The history takes the rest,
- * newest lines first. Nothing is added where there is no room.
+ * then the device's own input, then the opening, last, so it is the newest
+ * thing the session holds as it starts and Luke speaks first with no append
+ * after the start. The opening's message and tokens are set aside before
+ * anything optional is measured, so a long plan or a long history never
+ * crowds it out; the device's input is kept whole, and the plan takes what
+ * is left beside it down to `PLAN_SEED_FLOOR_TOKENS` when the history wants
+ * the room, cut from its end so the name and the top of the document are
+ * what a long plan keeps. The history takes the rest, newest lines first.
+ * Nothing optional is added where there is no room, and the opening is left
+ * out only where the device's input alone fills the bounds.
  */
 function startupInput(
   input: readonly InitialItem[],
   plan: Plan,
   earlier: readonly EarlierCallLine[],
 ): readonly InitialItem[] {
-  if (input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
-  const room = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input);
+  const opening = planningOpeningHistory();
+  const openingRoom = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens([opening]);
+  if (input.length + 1 > LIVE_INPUT_BOUNDS.MESSAGES || seedItemTokens(input) > openingRoom) {
+    return input;
+  }
+  if (input.length + 1 >= LIVE_INPUT_BOUNDS.MESSAGES) return [...input, opening];
+  const room = openingRoom - seedItemTokens(input);
   const planFloor = Math.min(room, PLAN_SEED_FLOOR_TOKENS, startupTokens(planSeedText(plan, true)));
   // The plan's seed and the transcript are one message each, and the plan's is kept first.
   const said =
-    input.length + 2 > LIVE_INPUT_BOUNDS.MESSAGES
+    input.length + 3 > LIVE_INPUT_BOUNDS.MESSAGES
       ? []
       : newestWithin(earlier, room - planFloor - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
   const history =
     said.length === 0 ? [] : [developerSeedItem(`${EARLIER_CALLS_NOTE}\n\n${said.join("\n")}`)];
   const seed = startupPrefix(planSeedText(plan, said.length > 0), room - seedItemTokens(history));
   const planItems = seed.length <= PLAN_SEED_MARKER.length ? [] : [developerSeedItem(seed)];
-  return [...planItems, ...history, ...input];
+  return [...planItems, ...history, ...input, opening];
 }
 
 /**

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { runWithoutDatabase } from "@luke/database/testing/no-database";
+import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import {
   HOSTED_API_ERROR,
   hostedErrorSchema,
@@ -9,15 +10,19 @@ import {
 } from "@luke/features";
 import type { Plan } from "@luke/features/plan-wire";
 import {
+  type InitialItem,
   LIVE_DEFAULTS,
   LIVE_DELEGATION_TARGET,
+  LIVE_INPUT_BOUNDS,
   LIVE_TRANSPORT_TYPE,
   LIVE_VOICE,
+  planningOpeningHistory,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
+  seedItemTokens,
   sessionInstructions,
 } from "@luke/live";
 import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@luke/wire";
@@ -187,6 +192,30 @@ async function openSession(context: Stand) {
   return { desktop, upstream: readSocket(attach.socket), attach, created };
 }
 
+test("a long history of earlier calls is cut to leave room for the opening, which stays the startup history's last message", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const said = "We went over how invitations expire and who may send them. ".repeat(40);
+  context.record.earlierCalls = () =>
+    Effect.succeed(
+      Array.from({ length: 60 }, (_, index) => ({
+        voiceSessionId: "earlier-call",
+        role: index % 2 === 0 ? VOICE_SEGMENT_ROLE.USER : VOICE_SEGMENT_ROLE.ASSISTANT,
+        text: said,
+      })),
+    );
+
+  await openSession(context);
+
+  const session = context.openAi.creates[0]?.body.session;
+  assert.ok(isRecord(session) && Array.isArray(session.input));
+  // SAFETY: the service builds `input` from `InitialItem`s alone, which the request carries as sent.
+  const input = session.input as InitialItem[];
+  assert.deepEqual(input.at(-1), planningOpeningHistory());
+  assert.ok(seedItemTokens(input) <= LIVE_INPUT_BOUNDS.TOKENS);
+  assert.ok(input.length <= LIVE_INPUT_BOUNDS.MESSAGES);
+});
+
 test("a /sessions upgrade without a bearer is refused with 401 before any socket stands", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
@@ -243,9 +272,11 @@ test("a session is authorized, counted, created, registered to its account, atta
   assert.equal(session.store, false);
   assert.equal(session.model, LIVE_DEFAULTS.MODEL);
   assert.deepEqual(session.audio, { output: { voice: LIVE_VOICE.MARIN } });
-  // The plan's own seed goes ahead of the desktop's input, which follows it untouched.
+  // The plan's own seed goes ahead of the desktop's input, which follows it untouched, and the
+  // call's opening comes last, so Luke speaks first with nothing appended once it starts.
   assert.ok(Array.isArray(session.input));
-  assert.deepEqual(session.input.slice(1), SEED);
+  assert.deepEqual(session.input.slice(1, -1), SEED);
+  assert.deepEqual(session.input.at(-1), planningOpeningHistory());
   assert.deepEqual(session.client, {
     data_channel: {
       allowed_client_events: RENDERER_CLIENT_EVENTS,

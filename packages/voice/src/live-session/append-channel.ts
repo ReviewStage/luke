@@ -3,9 +3,14 @@ import { Clock, Deferred, Duration, Effect, Exit, Option, Queue } from "effect";
 import type { LiveSideband } from "../live-socket.js";
 
 /**
- * The host's sends on one session, in order, each awaiting the acknowledgment
- * or the error that names it. An error naming no client event is never read
- * as success, and silence past the timeout counts as the append not taken.
+ * The host's appends on one session: put on the wire in the order they were
+ * queued, each tracked against the acknowledgment or the error that names
+ * it. An append never waits for an earlier one's acknowledgment, because an
+ * acknowledgment says the session timeline reached the end of that context,
+ * which for a sentence of commentary is about as long as saying it; waiting
+ * for each in turn held every later reply, note, and instruction behind the
+ * speech before it. An error naming no client event is never read as
+ * success, and silence past the timeout counts as the append not taken.
  * Closing the channel refuses everything still waiting, so a dead session's
  * deliveries are discarded rather than left hanging.
  */
@@ -18,18 +23,21 @@ const APPEND_ACK_TIMEOUT_MS = 10_000;
  * answered inside the timeout, or never sent because the channel is closed.
  * A refusal is the one outcome that says the session did not take the words;
  * an append left unanswered may still reach the timeline once it moves again,
- * as the conversations guide has it, so the two are told apart.
+ * as the conversations guide has it, so the two are told apart. One withdrawn
+ * was given up by its sender while it waited for the wire.
  */
 export const APPEND_OUTCOME = {
   TAKEN: "taken",
   REFUSED: "refused",
   UNANSWERED: "unanswered",
   CLOSED: "closed",
+  /** Never sent: whoever queued it gave it up before its turn on the wire came. */
+  WITHDRAWN: "withdrawn",
 } as const;
 
 export type AppendOutcome = (typeof APPEND_OUTCOME)[keyof typeof APPEND_OUTCOME];
 
-/** What settles a waiting append before its timeout: an acknowledgment, an error, or the close. */
+/** What settles a waiting append before its timeout: an acknowledgment, an error, the close, or its withdrawal. */
 type Acknowledgment = Exclude<AppendOutcome, typeof APPEND_OUTCOME.UNANSWERED>;
 
 /**
@@ -39,6 +47,8 @@ type Acknowledgment = Exclude<AppendOutcome, typeof APPEND_OUTCOME.UNANSWERED>;
 interface SendOptions {
   /** Whether this send moves the idle clock. The stop instruction does not. */
   countsForIdle?: boolean;
+  /** Read as the append's turn on the wire comes: true gives it up unsent, as a reply silenced while it waited. */
+  withdrawn?: () => boolean;
 }
 
 interface AppendChannelOptions {
@@ -49,8 +59,9 @@ interface AppendChannelOptions {
 export class AppendChannel {
   readonly #options: AppendChannelOptions;
   readonly #pending = new Map<string, Deferred.Deferred<Acknowledgment>>();
+  /** Each queued append's turn on the wire, oldest first: a send alone, never the wait for its answer. */
   readonly #work: Queue.Queue<Effect.Effect<void>>;
-  /** Settled by `close`, so the fiber serializing the sends ends where it waits rather than outliving the session. */
+  /** Settled by `close`, so the fiber putting appends on the wire ends where it waits rather than outliving the session. */
   readonly #closed = Deferred.makeUnsafe<void>();
   #shut = false;
   /**
@@ -66,7 +77,7 @@ export class AppendChannel {
   }
 
   /**
-   * The channel and the fiber that serializes its sends: the caller runs
+   * The channel and the fiber that puts its appends on the wire in order: the caller runs
    * `serve` on a fiber of its own scope, since the channel starts nothing on
    * a runtime of its own, and `close` is what ends that fiber.
    */
@@ -81,39 +92,37 @@ export class AppendChannel {
   }
 
   /**
-   * Serializes the host's sends: each unit of work runs after the last has
-   * settled, and none once the channel is closed. A close while a unit is in
-   * flight lets that unit finish and takes no other, so a delivery already
-   * under way settles as its sender wrote it.
+   * Puts one append in line now, behind every append queued before it, and
+   * answers the wait for what became of it: its acknowledgment, its refusal,
+   * the timeout, or the close. The append goes on the wire when its turn
+   * comes, whether or not anyone waits on the answer and whatever became of
+   * the appends ahead of it, so wire order is queue order while the
+   * acknowledgments settle each its own append, in whatever order they come.
    */
-  enqueue(work: Effect.Effect<void>): void {
-    if (this.#shut) return;
-    Queue.offerUnsafe(this.#work, work);
-  }
-
-  /** Sends one append and answers whether the session took it. */
-  send(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<boolean> {
-    return Effect.map(this.deliver(event, options), (outcome) => outcome === APPEND_OUTCOME.TAKEN);
-  }
-
-  /** Sends one append and answers what became of it. */
-  deliver(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<AppendOutcome> {
+  queue(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<AppendOutcome> {
+    if (this.#shut) return Effect.succeed(APPEND_OUTCOME.CLOSED);
+    const { countsForIdle = true, withdrawn } = options;
+    const acknowledged = Deferred.makeUnsafe<Acknowledgment>();
+    this.#pending.set(event.event_id, acknowledged);
+    Queue.offerUnsafe(
+      this.#work,
+      Effect.gen({ self: this }, function* () {
+        if (withdrawn?.() === true) {
+          this.#settle(event.event_id, APPEND_OUTCOME.WITHDRAWN);
+          return;
+        }
+        if (countsForIdle) this.lastSentAt = yield* Clock.currentTimeMillis;
+        yield* this.#options.sideband.send(event);
+      }),
+    );
     return Effect.gen({ self: this }, function* () {
-      if (this.#shut) return APPEND_OUTCOME.CLOSED;
-      const { countsForIdle = true } = options;
-      const acknowledged = yield* Deferred.make<Acknowledgment>();
-      this.#pending.set(event.event_id, acknowledged);
-      if (countsForIdle) this.lastSentAt = yield* Clock.currentTimeMillis;
-      yield* this.#options.sideband.send(event);
       const settled = yield* Effect.timeoutOption(
         Deferred.await(acknowledged),
         Duration.millis(APPEND_ACK_TIMEOUT_MS),
       );
-      if (Option.isNone(settled)) {
-        this.#pending.delete(event.event_id);
-        return APPEND_OUTCOME.UNANSWERED;
-      }
-      return settled.value;
+      if (Option.isSome(settled)) return settled.value;
+      this.#pending.delete(event.event_id);
+      return APPEND_OUTCOME.UNANSWERED;
     });
   }
 

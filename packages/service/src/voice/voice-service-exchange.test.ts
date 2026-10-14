@@ -19,7 +19,7 @@ import {
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
-  planningOpeningInstruction,
+  planningOpeningHistory,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
@@ -385,13 +385,6 @@ async function speak(attachSocket: Parameters<typeof sendText>[0], sessionId: st
   await sendText(attachSocket, JSON.stringify(delegated("dl_1", 2500)));
 }
 
-/** A call's own opening, the first thing the service sends up once the call starts. */
-async function readOpening(upstream: SocketReader): Promise<void> {
-  const opening = clientEvent(await upstream.next(5_000));
-  assert.ok(opening.type === LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
-  assert.equal(opening.content, planningOpeningInstruction());
-}
-
 /** The desktop hangs up; the session answers the relay's close; the service reports the session ended. */
 async function hangUp(context: Stand, session: Awaited<ReturnType<typeof openSession>>) {
   await hangUpDevice(session.desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
@@ -428,12 +421,13 @@ it.effect(
       const create = context.openAi.creates[0];
       assert.ok(create && isRecord(create.body.session));
       assert.ok(Array.isArray(create.body.session.input));
-      assert.deepEqual(create.body.session.input.slice(1), SEED);
+      // The call's opening is the history's last message, so nothing is appended once it starts.
+      assert.deepEqual(create.body.session.input.slice(1, -1), SEED);
+      assert.deepEqual(create.body.session.input.at(-1), planningOpeningHistory());
       assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
 
       const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, upstreamSessionId);
-      await readOpening(session.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
@@ -564,7 +558,6 @@ it.effect(
 
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
-      await readOpening(session.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
@@ -590,6 +583,8 @@ it.effect(
         context.offered.map((offered) => offered.planId),
         [plan.id, plan.id],
       );
+      // A re-attach creates nothing, so no opening is added and none is appended.
+      assert.equal(context.openAi.creates.length, 1);
       await sendText(reattach.socket, JSON.stringify(heard("Any member can invite.", 5000, 6400)));
       await sendText(reattach.socket, JSON.stringify(delegated("dl_2", 6500)));
       // The line is attached to its ask once the brain took it, so the hang-up waits for the record.
@@ -626,7 +621,6 @@ it.effect(
 
       const firstCall = await openSession(context, first.id);
       await speak(firstCall.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
-      await readOpening(firstCall.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => "the first plan's ask to reach eve",
@@ -635,7 +629,6 @@ it.effect(
 
       const secondCall = await openSession(context, second.id);
       await speak(secondCall.attach.socket, context.openAi.attaches[1]?.sessionId ?? "");
-      await readOpening(secondCall.upstream);
       await until(
         () => context.eve.opened.length === 2,
         () => "the second plan's ask to reach eve",
@@ -688,7 +681,6 @@ it.effect(
       assert.equal(call.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(call.attach.socket, sessionId);
-      await readOpening(call.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => `the member's ask to reach eve; reports ${JSON.stringify(context.reports)}`,

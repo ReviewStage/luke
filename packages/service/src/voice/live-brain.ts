@@ -21,7 +21,7 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "@luke/voice/live-session";
-import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
+import { Cause, Clock, Duration, Effect, Queue, Result, Schedule, Schema, Scope } from "effect";
 import { SqlClient } from "effect/sql";
 import {
   ASK_REFUSAL,
@@ -88,11 +88,15 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * reply once it has finished forming and every call ahead of it has settled,
  * which is what the voice speaks meanwhile.
  *
- * How far each turn was told is written on the ask's row before it is told,
- * so a connection that re-attaches to the session on another function
- * instance takes the runs up again from the event after the last one told
- * (`recoverRuns`). Written first, a telling the socket's loss cut between
- * the write and the voice is lost rather than said twice.
+ * How far each turn was told is written on the ask's row beside the telling,
+ * never ahead of it: the events reach the voice first and the write follows
+ * on one ordered writer of the socket's scope, so a slow store holds back no
+ * reply. A connection that re-attaches to the session on another function
+ * instance takes the runs up again from the event after the last one the row
+ * says was told (`recoverRuns`); a telling the socket's loss cut between the
+ * voice and the write may be said again there, which is the price of a store
+ * that cannot delay the voice. Within one connection nothing is told twice,
+ * because each turn's told position is kept in memory as it is told.
  *
  * The brain is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
@@ -385,6 +389,24 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   // end, because each sentence told per ask was said per ask.
   const toldOfTurn = new Map<string, TurnTold>();
   const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
+  /**
+   * The told positions still to be written, oldest first, run one at a time
+   * by the writer below so the row moves in the order the voice was told.
+   * The socket's close lets the write in hand finish and then writes what is
+   * left, so a detach loses no position it had already told.
+   */
+  const checkpoints = yield* Queue.unbounded<Effect.Effect<void, never, DatabaseServices>>();
+  yield* Scope.addFinalizer(
+    socket,
+    Effect.flatMap(Queue.clear(checkpoints), (left) => Effect.forEach(left, (write) => write)).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.provideService(Database, database),
+    ),
+  );
+  yield* Effect.forkIn(
+    Effect.forever(Effect.flatMap(Queue.take(checkpoints), Effect.uninterruptible)),
+    socket,
+  );
 
   function emit(event: LiveBrainRunEvent): void {
     for (const listener of [...listeners]) listener(event);
@@ -454,12 +476,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   });
 
   /**
-   * Tells events under the ask, its row first moved past them, as one step
-   * the socket's close cannot cut: a telling is written down before it is
-   * told, so a connection that takes the run up again never tells it twice.
-   * A row the store could not move is reported and the events told all the
-   * same, since leaving the reply unsaid now is worse than a re-attach that
-   * might say it again.
+   * Tells events under the ask and then hands the writer the row's move past
+   * them, so the voice hears them without waiting on the store. A row the
+   * store could not move is reported; the telling stands, since leaving the
+   * reply unsaid is worse than a re-attach that might say it again.
    */
   const tell = Effect.fnUntraced(function* (
     askId: string,
@@ -468,18 +488,15 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   ) {
     if (events.length === 0) return;
     const at = told.ended ? new Date(yield* Clock.currentTimeMillis) : undefined;
-    yield* Effect.uninterruptible(
+    for (const event of events) emit(event);
+    Queue.offerUnsafe(
+      checkpoints,
       options.asks.asks
         .told(askId, at === undefined ? { seq: told.seq } : { seq: told.seq, endAt: at })
         .pipe(
           Effect.tapError(logStoreFailure),
           Effect.catch(() =>
             Effect.sync(() => options.report("How far a spoken ask was told could not be written")),
-          ),
-          Effect.andThen(
-            Effect.sync(() => {
-              for (const event of events) emit(event);
-            }),
           ),
         ),
     );

@@ -889,8 +889,8 @@ comparative evaluation.
 
 - **Microphone button.** One press starts talking to Luke about the open plan.
   The call opens if none stands, and the microphone opens. A call just
-  opened is Luke's to begin: the voice service tells it to speak first
-  (`planningOpeningInstruction`), asking what to build on an untouched plan
+  opened is Luke's to begin: the voice service creates it with the opening
+  in its startup history (`planningOpeningHistory`), asking what to build on an untouched plan
   and the plan's next question on one under way, in its first turn and
   without waiting on the backend, while a call re-attached after a dropped
   socket opens nothing again. The call's seed says which the plan is: an

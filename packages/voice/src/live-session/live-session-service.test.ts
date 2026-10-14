@@ -50,6 +50,8 @@ class FakeSideband implements LiveSideband {
   closed = false;
   /** Whether a thinking append is acknowledged the instant it is sent, as the session does for an append that speaks nothing; a test that watches one wait turns this off. */
   acknowledgeThinkingAtOnce = true;
+  /** While set, each send waits here before it reaches the wire, as a slow socket's would. */
+  sendWhen: Deferred.Deferred<void> | undefined;
   /** The hold a real socket has beneath its sideband, so what a test says before the session reads is held exactly as it would be. */
   readonly #hold: SocketHold = holdSocket({
     send: () => undefined,
@@ -65,12 +67,16 @@ class FakeSideband implements LiveSideband {
   }
 
   send(event: LiveClientEvent): Effect.Effect<void> {
-    return Effect.sync(() => {
-      this.sent.push(event);
-      if (this.acknowledgeThinkingAtOnce && event.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
-        this.acknowledge(this.sent.length - 1, 0, 0);
-      }
-    });
+    const wait = this.sendWhen === undefined ? Effect.void : Deferred.await(this.sendWhen);
+    return Effect.andThen(
+      wait,
+      Effect.sync(() => {
+        this.sent.push(event);
+        if (this.acknowledgeThinkingAtOnce && event.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
+          this.acknowledge(this.sent.length - 1, 0, 0);
+        }
+      }),
+    );
   }
 
   get close(): Effect.Effect<void> {
@@ -504,5 +510,198 @@ it.effect(
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, sentences.length);
+    }),
+);
+
+/** What each commentary append asked the voice to say, in wire order. */
+function said(sideband: FakeSideband) {
+  return appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+    "content" in event ? event.content : undefined,
+  );
+}
+
+/** A session with one asked run standing as `run-1`. */
+function askedRun() {
+  return Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("What changed?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    return { f, sideband };
+  });
+}
+
+function sentence(runId: string, words: string): LiveBrainRunEvent {
+  return { kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: words };
+}
+
+it.effect(
+  "consecutive sentences all reach the wire before any is acknowledged, and an acknowledgment out of order settles only the append it names",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      f.brain.fire(sentence("run-1", "One."));
+      f.brain.fire(sentence("run-1", "Two."));
+      f.brain.fire(sentence("run-1", "Three."));
+      yield* settle();
+      assert.deepEqual(said(sideband), ["One.", "Two.", "Three."]);
+      // The third is taken first and the second refused: only the second is sent again, under a fresh id.
+      sideband.acknowledge(2, 300, 400);
+      const refused = sideband.sent[1];
+      assert.ok(refused);
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-1",
+        error: { type: "invalid_request_error", code: "busy", client_event_id: refused.event_id },
+      });
+      yield* settle();
+      assert.deepEqual(said(sideband), ["One.", "Two.", "Three.", "Two."]);
+      assert.notEqual(sideband.sent[3]?.event_id, refused.event_id);
+      sideband.acknowledge(0, 0, 100);
+      sideband.acknowledge(3, 400, 500);
+      yield* advanceClock(20_000);
+      assert.deepEqual(f.reports, []);
+    }),
+);
+
+it.effect(
+  "a chunk refused twice is given up, and one left unanswered is reported and never sent again",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      f.brain.fire(sentence("run-1", "Refused."));
+      f.brain.fire(sentence("run-1", "Unanswered."));
+      yield* settle();
+      const refuse = (index: number) =>
+        sideband.receive({
+          type: LIVE_SERVER_EVENT.ERROR,
+          event_id: `err-${index}`,
+          error: {
+            type: "invalid_request_error",
+            client_event_id: sideband.sent[index]?.event_id ?? "",
+          },
+        });
+      refuse(0);
+      yield* settle();
+      refuse(2);
+      yield* advanceClock(20_000);
+      assert.deepEqual(said(sideband), ["Refused.", "Unanswered.", "Refused."]);
+      assert.deepEqual(
+        f.reports.filter((report) => report.includes("commentary")),
+        [
+          "A reply's commentary was refused twice and is not said",
+          "A reply's commentary went unanswered and is not sent again",
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "while the socket's sends are slow, appends still reach the wire in the order they were queued",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      const slow = yield* Deferred.make<void>();
+      sideband.sendWhen = slow;
+      f.brain.fire(sentence("run-1", "First."));
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+        runId: "run-1",
+        step: "repository_read",
+      });
+      f.brain.fire(sentence("run-1", "Second."));
+      yield* settle();
+      assert.equal(sideband.sent.length, 0);
+      yield* Deferred.succeed(slow, undefined);
+      yield* settle();
+      assert.deepEqual(
+        sideband.sent.map((event) => ("content" in event ? event.content : event.type)),
+        ["First.", "Luke is reading the repository; this takes a moment.", "Second."],
+      );
+    }),
+);
+
+it.effect(
+  "a stop withdraws the reply chunks still waiting for the wire, so nothing of the stopped run is said",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      const slow = yield* Deferred.make<void>();
+      sideband.sendWhen = slow;
+      f.brain.fire(sentence("run-1", "Stale one."));
+      f.brain.fire(sentence("run-1", "Stale two."));
+      yield* settle();
+      assert.ok(f.service.stopSpeaking());
+      yield* Deferred.succeed(slow, undefined);
+      yield* settle();
+      // The first chunk had its turn on the wire before the stop; every one after is withdrawn.
+      assert.deepEqual(said(sideband), ["Stale one."]);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).map((event) => event.type),
+        [LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND],
+      );
+    }),
+);
+
+it.effect(
+  "an accepted ask's reply and its next question are said while the ask's record write is still out",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.record.hold();
+      sideband.input("What changed?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "Which repo?",
+        recommendation: "The web app.",
+      });
+      f.brain.fire(sentence("run-1", "Invites expire after seven days."));
+      yield* settle();
+      assert.equal(f.record.attached.length, 0);
+      assert.deepEqual(said(sideband), [
+        "Ask the developer this next, once they have answered anything you have already asked: Which repo? Recommended answer: The web app.",
+        "Invites expire after seven days.",
+      ]);
+      f.record.release(true);
+      yield* settle();
+      assert.equal(f.record.attached.length, 1);
+    }),
+);
+
+it.effect(
+  "a sentence is said as the brain tells it, with no settled mark of the service's own to wait for",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      f.brain.fire(sentence("run-1", "Right away."));
+      yield* settle();
+      assert.deepEqual(said(sideband), ["Right away."]);
+    }),
+);
+
+it.effect(
+  "a finished worker's finding is said while an asked run is still under way, and the next ask silences it",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: "woken-1" });
+      f.brain.fire(sentence("woken-1", "The repository has an invites module."));
+      yield* settle();
+      assert.deepEqual(said(sideband), ["The repository has an invites module."]);
+      sideband.input("And emails?", 1000, 1600);
+      sideband.delegation("item_2", 1700);
+      yield* settle();
+      f.brain.fire(sentence("woken-1", "Stale finding."));
+      f.brain.fire(sentence("run-1", "Superseded reply."));
+      f.brain.fire(sentence("run-2", "Current reply."));
+      yield* settle();
+      assert.deepEqual(said(sideband), ["The repository has an invites module.", "Current reply."]);
     }),
 );
