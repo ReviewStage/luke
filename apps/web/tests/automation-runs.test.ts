@@ -174,6 +174,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const agent = Option.getOrThrow(yield* readCodingAgent(owner, run?.codingAgentId ?? ""));
         assert.equal(agent.model, SOL);
         assert.equal(agent.effort, "low");
+        assert.equal(agent.automationId, automation.id, "the agent names the automation it ran");
         assert.ok(agent.task?.startsWith(PROMPT), "the prompt is the agent's task");
         assert.match(agent.task ?? "", /the automation "Flaky-test sweep"/u);
         assert.deepEqual(

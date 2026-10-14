@@ -17,6 +17,7 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, type SQL, sql } fro
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { organization } from "../schemas/auth.js";
 import {
   codingAgent,
   codingAgentDelegation,
@@ -41,6 +42,7 @@ import {
   agentReachableBy,
   planReachableBy,
   reachablePlan,
+  workspaceReachableBy,
 } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -111,6 +113,8 @@ export interface CodingAgent {
   readonly planId: string | null;
   /** The workspace the agent belongs to: its own, or its plan's on a row the backfill has not reached. */
   readonly organizationId: string;
+  /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
+  readonly automationId: string | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -153,9 +157,25 @@ export type CodingAgentBriefText =
   | { readonly planSnapshot: string; readonly task: null }
   | { readonly planSnapshot: null; readonly task: string };
 
-/** A Start: the plan, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
-export type NewCodingAgent = CodingAgentBriefText & {
-  readonly planId: string;
+/**
+ * Where a Start puts the agent: on a plan, whose workspace it joins and
+ * whose text or the developer's task it is handed, or in a workspace with
+ * no plan, as an automation's run puts one, handed a task, since there is
+ * no plan to hand it.
+ */
+export type CodingAgentPlace =
+  | (CodingAgentBriefText & { readonly planId: string; readonly organizationId?: undefined })
+  | {
+      readonly planId: null;
+      readonly organizationId: string;
+      readonly planSnapshot: null;
+      readonly task: string;
+    };
+
+/** A Start: where it goes, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
+export type NewCodingAgent = CodingAgentPlace & {
+  /** The automation whose run starts the agent; none for one started by hand. */
+  readonly automationId?: string | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -172,6 +192,7 @@ const CODING_AGENT_COLUMNS = {
   userId: codingAgent.userId,
   planId: codingAgent.planId,
   organizationId: AGENT_WORKSPACE,
+  automationId: codingAgent.automationId,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -214,6 +235,7 @@ const CodingAgentRowSchema = Schema.Struct({
   userId: Schema.String,
   planId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
+  automationId: Schema.NullOr(Schema.String),
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -257,6 +279,31 @@ const lockReachablePlan = SqlSchema.findOneOption({
     ),
 });
 
+/** The workspace, locked, where the account is a member of it: the lock serialises two Starts in it under one key, as the plan's own lock does for a plan. */
+const lockReachableWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(
+          and(eq(organization.id, organizationId), workspaceReachableBy(userId, organization.id)),
+        )
+        .for("update"),
+    ),
+});
+
+/** The workspace a Start puts its agent in, locked: the plan's, where the plan stands archived or not, or the workspace named; nothing where the account reaches neither. */
+const lockedPlace = Effect.fnUntraced(function* (userId: string, place: CodingAgentPlace) {
+  if (place.planId === null) {
+    const reached = yield* lockReachableWorkspace({ userId, organizationId: place.organizationId });
+    return Option.map(reached, (workspace) => ({ organizationId: workspace.id, archived: false }));
+  }
+  return yield* lockReachablePlan({ userId, planId: place.planId });
+});
+
 const findAgentByKey = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -294,8 +341,9 @@ const insertAgent = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
-    planId: Schema.String,
+    planId: Schema.NullOr(Schema.String),
     organizationId: Schema.String,
+    automationId: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -315,6 +363,7 @@ const insertAgent = SqlSchema.findOne({
           userId: write.userId,
           planId: write.planId,
           organizationId: write.organizationId,
+          automationId: write.automationId,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -616,11 +665,14 @@ const deleteConversationRow = SqlSchema.void({
 });
 
 /**
- * Starts an agent on a plan of the account's workspace: a `coding_agent` conversation of the account's and
- * the row that binds it to the plan, with the plan text or the task, and
- * the repository, as handed. A Start whose key the account has already used answers the agent
+ * Starts an agent on a plan of the account's workspace, or in a workspace
+ * of the account's with no plan: a `coding_agent` conversation of the
+ * account's and the row that binds it to the plan or the workspace, with
+ * the plan text or the task, the repository, and the automation whose run
+ * started it, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * Nothing where the account reaches no such plan. An archived plan starts no
+ * Nothing where the account reaches no such plan or is no member of the
+ * workspace. An archived plan starts no
  * agent, read under the same lock, though a retry still answers the agent
  * its Start made before the archive.
  */
@@ -635,7 +687,7 @@ export function createCodingAgent(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const reached = yield* lockReachablePlan({ userId, planId: started.planId });
+        const reached = yield* lockedPlace(userId, started);
         if (Option.isNone(reached)) return Option.none();
         const existing = yield* findAgentByKey({
           userId,
@@ -655,6 +707,7 @@ export function createCodingAgent(
           conversationId: conversation.id,
           planId: started.planId,
           organizationId: reached.value.organizationId,
+          automationId: started.automationId ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,

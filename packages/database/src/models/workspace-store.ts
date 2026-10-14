@@ -315,6 +315,11 @@ function isOwnPersonalOrganization(
   return Effect.map(findOwnedOrganization({ userId, organizationId }), Option.isSome);
 }
 
+/** The condition that the account is a member of the workspace a statement names, by its id or a column standing for it. */
+export function workspaceReachableBy(userId: string, organizationId: string | SQLWrapper): SQL {
+  return memberOfWorkspace(userId, organizationId);
+}
+
 /** A coding agent row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
 export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${codingAgent.planId}))`;
 
