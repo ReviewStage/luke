@@ -117,6 +117,10 @@ import {
   type PlanningWorkspaceAnswer,
   type PlanningWorkspaceCreateParams,
   type PlanningWorkspaceGitHubConnectAnswer,
+  type PlanningWorkspaceInvitationAnswer,
+  type PlanningWorkspaceInvitationCancelParams,
+  type PlanningWorkspaceInvitationsAnswer,
+  type PlanningWorkspaceInviteParams,
   type PlanningWorkspaceLeaveAnswer,
   type PlanningWorkspaceLeaveParams,
   type PlanningWorkspaceMemberRemoveParams,
@@ -137,6 +141,8 @@ import {
   planningViewSchema,
   planningWorkspaceAnswerSchema,
   planningWorkspaceGitHubConnectAnswerSchema,
+  planningWorkspaceInvitationAnswerSchema,
+  planningWorkspaceInvitationsAnswerSchema,
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
 } from "@sidecar/hosted/planning-view";
@@ -307,6 +313,18 @@ export interface HostOperator {
   ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
   /** One workspace left; or why it was not. */
   workspaceLeave(params: PlanningWorkspaceLeaveParams): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
+  /** One workspace's pending invitations; or why there are none. */
+  workspaceInvitations(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
+  /** An invitation made; it with its accept link, or why none was. */
+  workspaceInvite(
+    params: PlanningWorkspaceInviteParams,
+  ): Effect.Effect<PlanningWorkspaceInvitationAnswer>;
+  /** A pending invitation canceled; those still pending, or why it was not. */
+  workspaceInvitationCancel(
+    params: PlanningWorkspaceInvitationCancelParams,
+  ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -799,6 +817,28 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
         workspaceAnswer(planningWorkspaceLeaveAnswerSchema),
+      ),
+    workspaceInvitations: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceInvitationsAnswerSchema),
+      ),
+    workspaceInvite: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+          workspaceId: params.workspaceId,
+          email: params.email,
+          role: params.role,
+        }),
+        workspaceAnswer(planningWorkspaceInvitationAnswerSchema),
+      ),
+    workspaceInvitationCancel: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+          workspaceId: params.workspaceId,
+          invitationId: params.invitationId,
+        }),
+        workspaceAnswer(planningWorkspaceInvitationsAnswerSchema),
       ),
     planningSetRepository: (params) =>
       Effect.map(

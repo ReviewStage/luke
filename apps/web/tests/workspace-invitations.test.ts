@@ -14,9 +14,11 @@ import {
 } from "../server/auth-policy";
 
 /**
- * Workspace invitations over HTTP, as the invite and accept pages reach them
- * from a browser session, on Luke's own organization policy over a migrated
- * PGlite. Email and password sign-up stands in for the Google or GitHub
+ * Workspace invitations on Luke's own organization policy over a migrated
+ * PGlite: made, listed, and canceled through the server-only calls under the
+ * inviter's session, as Luke's routes make them for the Mac, and read and
+ * accepted over HTTP, as the accept page reaches them from a browser
+ * session. Email and password sign-up stands in for the Google or GitHub
  * sign-in, whose provider verifies the address, so an account is marked
  * verified the way a provider's sign-in would mark it. Synthetic accounts
  * throughout.
@@ -126,11 +128,35 @@ async function call(
   return auth.handler(request);
 }
 
+/** The session an account's cookie carries, as headers a server-only call takes. */
+function sessionOf(account: Account): Headers {
+  return new Headers({ cookie: account.cookie });
+}
+
+/** An invitation made through the server-only call Luke's route makes, answered as the plugin answers it. */
 async function invite(auth: Auth, inviter: Account, workspaceId: string, email: string) {
-  return call(auth, inviter, "/organization/invite-member", {
-    email,
-    role: "member",
-    organizationId: workspaceId,
+  return auth.api.createInvitation({
+    headers: sessionOf(inviter),
+    body: { email, role: "member", organizationId: workspaceId },
+    asResponse: true,
+  });
+}
+
+/** A workspace's invitations listed through the server-only call. */
+async function listInvitations(auth: Auth, account: Account, workspaceId: string) {
+  return auth.api.listInvitations({
+    headers: sessionOf(account),
+    query: { organizationId: workspaceId },
+    asResponse: true,
+  });
+}
+
+/** An invitation canceled through the server-only call. */
+async function cancelInvitation(auth: Auth, account: Account, invitationId: string) {
+  return auth.api.cancelInvitation({
+    headers: sessionOf(account),
+    body: { invitationId },
+    asResponse: true,
   });
 }
 
@@ -153,11 +179,7 @@ test("an admin invites by address, and the invitee reads the invitation and acce
     assert.equal(invited.status, 200);
     const invitation = Schema.decodeUnknownSync(InvitationSchema)(await invited.json());
 
-    const listed = await call(
-      auth,
-      admin,
-      `/organization/list-invitations?organizationId=${workspaceId}`,
-    );
+    const listed = await listInvitations(auth, admin, workspaceId);
     assert.deepEqual(
       Schema.decodeUnknownSync(Schema.Array(InvitationSchema))(await listed.json()),
       [{ id: invitation.id, email: invitee.email, status: "pending" }],
@@ -207,17 +229,13 @@ test("a member invites no one and cancels nothing, and an invitation its owner c
 
     const invited = await invite(auth, owner, workspaceId, invitee.email);
     const { id } = Schema.decodeUnknownSync(InvitationSchema)(await invited.json());
-    const memberCancel = await call(auth, member, "/organization/cancel-invitation", {
-      invitationId: id,
-    });
+    const memberCancel = await cancelInvitation(auth, member, id);
     assert.deepEqual(await refusal(memberCancel), {
       status: 403,
       code: "YOU_ARE_NOT_ALLOWED_TO_CANCEL_THIS_INVITATION",
     });
 
-    const ownerCancel = await call(auth, owner, "/organization/cancel-invitation", {
-      invitationId: id,
-    });
+    const ownerCancel = await cancelInvitation(auth, owner, id);
     assert.equal(ownerCancel.status, 200);
     const accepted = await call(auth, invitee, "/organization/accept-invitation", {
       invitationId: id,
@@ -235,11 +253,7 @@ test("a personal workspace takes no invitation, even from its owner", async () =
       status: 403,
       code: INVITATION_REFUSAL.PERSONAL_WORKSPACE,
     });
-    const listed = await call(
-      auth,
-      owner,
-      `/organization/list-invitations?organizationId=${workspaceId}`,
-    );
+    const listed = await listInvitations(auth, owner, workspaceId);
     assert.deepEqual(await listed.json(), []);
   });
 });
@@ -266,5 +280,35 @@ test("an invitation is accepted only by the invited address, and only once its p
 
     await verify(auth, invitee.id);
     assert.equal((await accept(invitee)).status, 200);
+  });
+});
+
+test("no browser invites, lists, or cancels over HTTP: the Mac does, through Luke's routes", async () => {
+  await withAuth(async (auth) => {
+    const owner = await signUp(auth, "owner");
+    const workspaceId = await workspaceOf(auth, owner);
+    const invited = await invite(auth, owner, workspaceId, "friend@example.com");
+    const { id } = Schema.decodeUnknownSync(InvitationSchema)(await invited.json());
+
+    const answers = [
+      await call(auth, owner, "/organization/invite-member", {
+        email: "other@example.com",
+        role: "member",
+        organizationId: workspaceId,
+      }),
+      await call(auth, owner, `/organization/list-invitations?organizationId=${workspaceId}`),
+      await call(auth, owner, "/organization/cancel-invitation", { invitationId: id }),
+    ];
+
+    assert.deepEqual(
+      answers.map((answer) => answer.status),
+      [404, 404, 404],
+    );
+    assert.deepEqual(
+      Schema.decodeUnknownSync(Schema.Array(InvitationSchema))(
+        await (await listInvitations(auth, owner, workspaceId)).json(),
+      ),
+      [{ id, email: "friend@example.com", status: "pending" }],
+    );
   });
 });

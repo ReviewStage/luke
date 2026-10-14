@@ -33,6 +33,10 @@ import type {
   PlanningWorkspaceAnswer,
   PlanningWorkspaceCreateParams,
   PlanningWorkspaceGitHubConnectAnswer,
+  PlanningWorkspaceInvitationAnswer,
+  PlanningWorkspaceInvitationCancelParams,
+  PlanningWorkspaceInvitationsAnswer,
+  PlanningWorkspaceInviteParams,
   PlanningWorkspaceLeaveAnswer,
   PlanningWorkspaceLeaveParams,
   PlanningWorkspaceMemberRemoveParams,
@@ -44,6 +48,7 @@ import { Effect } from "effect";
 import {
   ACT,
   ACT_KIND,
+  ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
@@ -105,11 +110,18 @@ export interface PlanningActsDependencies {
     workspaceLeave(
       params: PlanningWorkspaceLeaveParams,
     ): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
+    workspaceInvitations(
+      params: PlanningWorkspaceParams,
+    ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
+    workspaceInvite(
+      params: PlanningWorkspaceInviteParams,
+    ): Effect.Effect<PlanningWorkspaceInvitationAnswer>;
+    workspaceInvitationCancel(
+      params: PlanningWorkspaceInvitationCancelParams,
+    ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
   };
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
-  /** The hosted service's origin, without a trailing slash, whose invite page a workspace's invite opens. */
-  serviceBaseUrl: string;
   /** The plan the panel has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
@@ -153,7 +165,9 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_RESTORE
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
   | typeof ACT_KIND.WORKSPACE_CREATE
+  | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
+  | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -162,14 +176,14 @@ type PlanningActKind =
 
 type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_CREATE
+  | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
+  | typeof ACT_KIND.WORKSPACE_INVITE
+  | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_LEAVE;
-
-/** The query the service's invite page reads its workspace from. */
-const INVITE_PAGE_QUERY = { WORKSPACE: "workspace" } as const;
 
 /**
  * The longest page whose source main colours. Note that a longer one is
@@ -177,7 +191,6 @@ const INVITE_PAGE_QUERY = { WORKSPACE: "workspace" } as const;
  * colouring holds main for about a millisecond per hundred characters.
  */
 const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
-
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
   if (!sender.panel) {
@@ -203,15 +216,10 @@ function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure)
   const message =
     failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
       ? WORKSPACE_NOT_PERMITTED_REFUSAL
-      : ACT[kind].refusal;
+      : failure === WORKSPACE_CALL_FAILURE.ALREADY_INVITED
+        ? ALREADY_INVITED_REFUSAL
+        : ACT[kind].refusal;
   return Effect.fail(new ActRefused({ message }));
-}
-
-/** The service's invite page for one workspace, where its owners and admins invite people in the browser's own session. */
-function invitePageOf(serviceBaseUrl: string, workspaceId: string): string {
-  const page = new URL("/invite.html", serviceBaseUrl);
-  page.searchParams.set(INVITE_PAGE_QUERY.WORKSPACE, workspaceId);
-  return page.href;
 }
 
 /** A GitHub page the host named, opened in the browser; refused in the act's own words where it named none. */
@@ -389,11 +397,29 @@ export function planningActRows(
           : refusedWorkspace(ACT_KIND.WORKSPACE_CREATE, answer.failure),
       );
     },
-    // The page is the service's own, opened from here rather than asked of
-    // the host: inviting happens in the browser, under its own session.
-    [ACT_KIND.WORKSPACE_INVITE]: ({ workspaceId }, sender) => {
+    [ACT_KIND.WORKSPACE_INVITATIONS_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITATIONS_READ, sender);
+      return Effect.flatMap(host.workspaceInvitations(params), (answer) =>
+        "invitations" in answer
+          ? Effect.succeed(answer.invitations)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_INVITATIONS_READ, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_INVITE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITE, sender);
-      return dependencies.openExternal(invitePageOf(dependencies.serviceBaseUrl, workspaceId));
+      return Effect.flatMap(host.workspaceInvite(params), (answer) =>
+        "invitation" in answer
+          ? Effect.succeed(answer.invitation)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_INVITE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_INVITATION_CANCEL]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITATION_CANCEL, sender);
+      return Effect.flatMap(host.workspaceInvitationCancel(params), (answer) =>
+        "invitations" in answer
+          ? Effect.succeed(answer.invitations)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_INVITATION_CANCEL, answer.failure),
+      );
     },
     // Note that the address the service answered opens only where it is
     // GitHub's, because it is the one address here the panel did not name.

@@ -1,4 +1,8 @@
 import {
+  INVITATION_ROLE,
+  type WorkspaceInvitation,
+} from "@sidecar/hosted/workspace-invitation-wire";
+import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
@@ -7,6 +11,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { Fragment, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { useCopyToast } from "../copy-feedback";
 import { SETTINGS_SECTION } from "../settings-views";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { SelectRow } from "./select-row";
@@ -19,8 +24,9 @@ import { SettingsGroup } from "./settings-group";
  * lists until another is chosen or a link names one. Under it the
  * workspace's name and the account's role. A team's workspace then lists its
  * members as the service holds them now, each with its name, email, and
- * role: Invite people opens the service's invite page in the browser, an
- * owner or an admin removes a member who is not an owner, and anyone but an
+ * role. An owner or an admin invites people by address and role, sees the
+ * invitations still pending with each one's accept link to copy and send,
+ * and cancels one; removes a member who is not an owner; and anyone but an
  * owner leaves. For an owner or an admin, GitHub repositories connects one
  * GitHub organization's installation of the Luke GitHub App to the
  * workspace, or names the connected account with Disconnect and the way to
@@ -197,6 +203,112 @@ function TeamMembers({
   );
 }
 
+/**
+ * The workspace's invitations, for an owner or an admin: the form that
+ * invites an address as a member or an admin, then those still pending,
+ * each with its link to copy and a Cancel, which asks nothing first since
+ * inviting the address again undoes it. A refusal is said under the form.
+ */
+function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Element {
+  const { act } = useAct();
+  const copy = useCopyToast();
+  const [pending, setPending] = useState<readonly WorkspaceInvitation[]>([]);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
+  const [note, setNote] = useState<string>();
+
+  useEffect(() => {
+    let live = true;
+    act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }).then(
+      (invitations) => {
+        if (live) setPending(invitations);
+      },
+      (refused: Error) => {
+        if (live) setNote(refused.message);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, workspaceId]);
+
+  const invite = (event: React.FormEvent) => {
+    event.preventDefault();
+    setNote(undefined);
+    act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }).then(
+      (made) => {
+        setPending((standing) => [...standing, made]);
+        setEmail("");
+      },
+      (refused: Error) => setNote(refused.message),
+    );
+  };
+
+  return (
+    <>
+      <form className="settings-row workspace-invite" onSubmit={invite}>
+        <input
+          type="email"
+          required
+          aria-label="Email address"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+        <select
+          aria-label="Role"
+          value={role}
+          onChange={(event) =>
+            setRole(
+              event.target.value === INVITATION_ROLE.ADMIN
+                ? INVITATION_ROLE.ADMIN
+                : INVITATION_ROLE.MEMBER,
+            )
+          }
+        >
+          {Object.values(INVITATION_ROLE).map((each) => (
+            <option key={each} value={each}>
+              {ROLE_WORDS[each]}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="toolbar-button bordered-button">
+          Invite
+        </button>
+      </form>
+      {note === undefined ? null : <p className="settings-note">{note}</p>}
+      {pending.map((one) => (
+        <Row
+          key={one.id}
+          className="workspace-invitation"
+          name={one.email}
+          line={ROLE_WORDS[one.role]}
+        >
+          {/* Luke sends no mail: the accept link is copied and sent by hand. */}
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            onClick={() => copy(one.acceptUrl, "Link copied")}
+          >
+            Copy link
+          </button>
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            onClick={() =>
+              act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId: one.id }).then(
+                setPending,
+                (refused: Error) => setNote(refused.message),
+              )
+            }
+          >
+            Cancel
+          </button>
+        </Row>
+      ))}
+    </>
+  );
+}
+
 /** A row whose button opens a page in the browser for the workspace, the act's refusal said under it. */
 function OpenerRow({
   name,
@@ -333,7 +445,6 @@ export function WorkspacePage({
 }: {
   control: WorkspaceSettingsControl;
 }): React.JSX.Element | null {
-  const { act } = useAct();
   const workspace =
     control.workspaces.find((each) => each.id === control.workspaceId) ?? control.workspaces[0];
   if (workspace === undefined) return null;
@@ -343,12 +454,7 @@ export function WorkspacePage({
       {workspace.personal ? null : (
         <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
           <Fragment key={workspace.id}>
-            <OpenerRow
-              className="workspace-invite"
-              name="Invite people"
-              verb="Invite people…"
-              open={() => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId: workspace.id })}
-            />
+            {managesWorkspace(workspace) ? <Invitations workspaceId={workspace.id} /> : null}
             <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
           </Fragment>
         </SettingsGroup>

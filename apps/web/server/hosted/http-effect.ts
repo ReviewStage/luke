@@ -1,5 +1,5 @@
 import type { PlanArchived } from "@sidecar/database/models/plan-store";
-import { Effect, type Layer, type Option, Stream } from "effect";
+import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
@@ -34,6 +34,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -50,6 +51,11 @@ export type HostedRefusal = { readonly error: HostedRefusalSlug };
 export type UserIdResolver<Input = Request> = (
   input: Input,
 ) => Effect.Effect<Option.Option<string>>;
+
+/** A Better Auth session's account, or none; a failure is the auth service's, not a signed-out caller. */
+export type SessionUserIdResolver = (
+  request: Request,
+) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
 /** The refusal values themselves, since not one of them carries a field. */
 export const HOSTED_REFUSAL = {
@@ -81,6 +87,8 @@ export const HOSTED_REFUSAL = {
   PLAN_ARCHIVED: { error: HOSTED_API_ERROR.PLAN_ARCHIVED },
   /** The account's role in the workspace, or the workspace being personal, does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+  /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
+  ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**

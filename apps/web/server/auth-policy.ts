@@ -10,6 +10,7 @@ import {
   isPersonalWorkspaceMetadata,
   type StoredOrganizationMetadata,
 } from "@sidecar/database/models/workspace-seams";
+import { DESKTOP_SESSION_CLIENT_ID } from "@sidecar/hosted/desktop-session-wire";
 import { APIError } from "better-auth/api";
 
 /**
@@ -61,15 +62,20 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * through the server-only `auth.api` calls, which these paths do not reach.
  *
  * A teammate joins by invitation, Better Auth's own
- * (https://www.better-auth.com/docs/plugins/organization#invitations): the
- * invite page asks for one, lists and cancels the pending ones, and the
- * invitee's page reads and accepts theirs, so exactly those five endpoints
- * are served (`invite-member`, `list-invitations`, `cancel-invitation`,
- * `get-invitation`, `accept-invitation`). The plugin checks each against the
- * caller's role and address itself. Rejecting and listing one's own
- * invitations stay shut, since no page of Luke's asks for either. The team
+ * (https://www.better-auth.com/docs/plugins/organization#invitations). An
+ * owner or an admin asks for one, lists and cancels the pending ones from
+ * the Mac, through Luke's routes and the server-only calls, so those paths
+ * are shut too; the invitee's page reads and accepts theirs on the browser's
+ * session, so exactly those two endpoints are served (`get-invitation`,
+ * `accept-invitation`). The plugin checks each against the caller's address
+ * itself. Rejecting and listing one's own invitations stay shut, since no
+ * page of Luke's asks for either. The team
  * and role endpoints are listed although this deployment does not mount
  * them, so turning either option on later opens no door by itself.
+ *
+ * The Electron plugin's `/electron/init-oauth-proxy` starts a sign-in of
+ * its own; the Mac signs in through its OAuth authorization and only then
+ * asks the plugin to transfer the signed-in browser, so that door is shut.
  */
 export const DISABLED_AUTH_PATHS = [
   "/token",
@@ -84,6 +90,9 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/remove-member",
   "/organization/update-member-role",
   "/organization/leave",
+  "/organization/invite-member",
+  "/organization/list-invitations",
+  "/organization/cancel-invitation",
   "/organization/reject-invitation",
   "/organization/list-user-invitations",
   "/organization/create-team",
@@ -95,7 +104,27 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/create-role",
   "/organization/update-role",
   "/organization/delete-role",
+  "/electron/init-oauth-proxy",
 ] as const;
+
+/**
+ * How a session is carried where no cookie is: Better Auth's bearer plugin
+ * (https://www.better-auth.com/docs/plugins/bearer) reads `Authorization:
+ * Bearer` as the session cookie. Only the signed token it hands out in
+ * `set-auth-token` is taken, never a bare session token, so a token is
+ * worth nothing without this deployment's secret having signed it.
+ */
+export const SESSION_BEARER = { requireSignature: true } as const;
+
+/**
+ * Better Auth's Electron plugin
+ * (https://www.better-auth.com/docs/integrations/electron), which mints the
+ * Mac a session of its own from a signed-in browser through a single-use,
+ * PKCE-bound code. Its client id is not the Mac's OAuth client id: the
+ * plugin's sign-in hook reads a `client_id` and a `code_challenge` off the
+ * query, which the OAuth authorization also carries.
+ */
+export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
 
 /** Why the plugin refused an invitation on Luke's own terms, apart from its own refusals. */
 export const INVITATION_REFUSAL = {

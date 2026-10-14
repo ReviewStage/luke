@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { WorkspaceInvitation } from "@sidecar/hosted/workspace-invitation-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -16,6 +17,7 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
+  ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -25,8 +27,10 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
  * Settings' Workspace page over a bridge answering as the host would: the
  * picker chooses the workspace the page shows, a team workspace's members
  * are read and listed, an owner or an admin is offered Remove for anyone but
- * an owner, a member leaves, a refusal the role earns says so, and an owner
- * or admin connects or disconnects the workspace's GitHub repositories.
+ * an owner, a member leaves, a refusal the role earns says so, an owner or
+ * admin invites by address and role and copies or cancels what is pending,
+ * and an owner or admin connects or disconnects the workspace's GitHub
+ * repositories.
  * Synthetic accounts.
  */
 
@@ -64,6 +68,10 @@ let stored: WorkspaceMember[] = [];
 let sent: Act[] = [];
 /** Whether the service refuses the next removal for the account's role. */
 let refuseRemoval = false;
+/** The invitations the test's service holds pending. */
+let invitations: WorkspaceInvitation[] = [];
+/** Whether the service refuses the next invitation as the address already invited. */
+let refuseInvitation = false;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -85,10 +93,32 @@ function answer(request: Act): Promise<ActOutcome> {
       }
       stored = stored.filter((member) => member.userId !== request.payload.userId);
       return Promise.resolve(done(stored));
+    case ACT_KIND.WORKSPACE_INVITATIONS_READ:
+      return Promise.resolve(done(invitations));
+    case ACT_KIND.WORKSPACE_INVITE: {
+      if (refuseInvitation) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: ALREADY_INVITED_REFUSAL,
+        });
+      }
+      const made: WorkspaceInvitation = {
+        id: `inv-${request.payload.email}`,
+        email: request.payload.email,
+        role: request.payload.role,
+        expiresAt: "2026-10-16T12:00:00.000Z",
+        acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${request.payload.email}`,
+      };
+      invitations = [...invitations, made];
+      return Promise.resolve(done(made));
+    }
+    case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
+      invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
+      return Promise.resolve(done(invitations));
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WORKSPACE_GITHUB_DISCONNECT:
-    case ACT_KIND.WORKSPACE_INVITE:
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
+    case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -102,6 +132,8 @@ beforeEach(() => {
   stored = [OWNER, MEMBER];
   sent = [];
   refuseRemoval = false;
+  invitations = [];
+  refuseInvitation = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -253,7 +285,7 @@ test("the personal workspace says it is yours, lists no members, and offers its 
     "Your personal workspace. Its plans are yours alone.",
   );
   assert.equal(page.querySelector(".workspace-member"), null);
-  assert.deepEqual(buttons(page, "Invite people…"), []);
+  assert.equal(page.querySelector(".workspace-invite"), null);
   assert.ok(page.querySelector(".workspace-github"), "the owner is offered GitHub repositories");
 });
 
@@ -331,17 +363,72 @@ test("the picker shows another workspace on the page, its name, the account's ro
   );
 });
 
-test("Invite people opens the service's invite page for the workspace the page shows", async () => {
-  const { page } = await mount(ACME);
+/** Types an address, chooses a role, and presses Invite in the page's form. */
+async function invite(page: HTMLElement, email: string, role: string): Promise<void> {
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const address = form.querySelector("input") ?? assert.fail("no address field");
+  const chosen = form.querySelector("select") ?? assert.fail("no role choice");
+  act(() => {
+    // React reads a typed value off the element's own setter, as a keystroke sets it.
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(address, email);
+    address.dispatchEvent(new Event("input", { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(chosen, role);
+    chosen.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  act(() => form.requestSubmit());
+  await settle();
+}
 
-  act(() => button(page, "Invite people…").click());
+test("an admin invites an address as a role, sees it pending with its link to copy, and cancels it", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
+  const row = page.querySelector(".workspace-invitation") ?? assert.fail("no pending invitation");
+  const listed = [
+    row.querySelector("strong")?.textContent,
+    row.querySelector("small")?.textContent,
+  ];
+  act(() => button(row, "Copy link").click());
+  act(() => button(row, "Cancel").click());
   await settle();
 
+  assert.deepEqual(listed, ["alan@example.com", "Admin"]);
+  assert.equal(page.querySelector(".workspace-invitation"), null);
   assert.deepEqual(
     sent
-      .filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE)
-      .map((request) => request.payload),
-    [{ workspaceId: ACME.id }],
+      .filter((request) => request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ)
+      .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
+    [
+      [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
+      [
+        ACT_KIND.WORKSPACE_INVITE,
+        { workspaceId: ACME.id, email: "alan@example.com", role: WORKSPACE_ROLE.ADMIN },
+      ],
+      [
+        ACT_KIND.WINDOW_COPY_TEXT,
+        { words: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com" },
+      ],
+      [
+        ACT_KIND.WORKSPACE_INVITATION_CANCEL,
+        { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
+      ],
+    ],
+  );
+});
+
+test("an address already invited is said under the form, and a member is offered no invitations", async () => {
+  refuseInvitation = true;
+  const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  await invite(admin.page, "sam@example.com", WORKSPACE_ROLE.MEMBER);
+  const member = await mount(ACME);
+  await settle();
+
+  assert.equal(admin.page.querySelector(".settings-note")?.textContent, ALREADY_INVITED_REFUSAL);
+  assert.equal(admin.page.querySelector(".workspace-invitation"), null);
+  assert.equal(member.page.querySelector(".workspace-invite"), null);
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length,
+    1,
   );
 });
 
