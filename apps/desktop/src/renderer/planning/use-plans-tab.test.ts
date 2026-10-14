@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -633,6 +634,25 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   tab.stand({ planning: OPEN });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
+});
+
+test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  const section = { kind: MENTION_KIND.SECTION, planId: OTHER_PLAN_ID, anchor: "rollout" } as const;
+
+  act(() => tab.control().onShowMention(section));
+  const first = tab.control().sectionReveal;
+  act(() => tab.control().onShowMention(section));
+
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.deepEqual(first, { planId: OTHER_PLAN_ID, reveal: { anchor: "rollout", ask: 1 } });
+  assert.deepEqual(tab.control().sectionReveal, {
+    planId: OTHER_PLAN_ID,
+    reveal: { anchor: "rollout", ask: 2 },
+  });
 });
 
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {

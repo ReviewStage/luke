@@ -211,6 +211,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onShowAgent: ignore,
     onShowSource: ignore,
     onShowPlan: ignore,
+    onShowMention: ignore,
+    sectionReveal: undefined,
     onShowInbox: ignore,
     secondCall: {
       confirm: {
