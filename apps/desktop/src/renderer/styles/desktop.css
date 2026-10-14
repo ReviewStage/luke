@@ -1384,6 +1384,76 @@ body,
   align-self: center;
 }
 
+/* Chips ----------------------------------------------------------------------- */
+
+/* A button that names a value or a thing (`chip.tsx`): the labelled button
+   above, giving way before the row around it does, its words cut short
+   rather than pushing past it, at a weight between the button's and the
+   body's. A mark beside the words is a size under the button's glyph, and a
+   menu's chevron is the small, muted one a menu draws. */
+.chip {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  font-weight: 560;
+}
+
+.chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip :is(.account-mark, .repository-picture, .provider-mark) {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.chip .settings-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-tertiary);
+}
+
+/* A toolbar chip picks what its place runs on, so it is drawn as the
+   toolbar's own buttons are, quiet until the pointer is on it or its menu is
+   open, tighter at its sides, and its words in the body's colour until then. */
+.chip:where([data-look="toolbar"]) {
+  padding: 0 var(--space-8);
+  color: var(--text-body);
+}
+
+/* A pill names a thing, so it stands filled and inside a hairline at rest,
+   its fill deepening under the pointer rather than taking a button's. */
+.chip:where([data-look="pill"]) {
+  padding: 0 var(--space-12) 0 var(--row-inset);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.chip:where([data-look="pill"]):is(:hover, [aria-expanded="true"]) {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+/* A field is a settings row's value, inside the row buttons' hairline, at
+   the form's type, its words leading and its chevron at the far end. */
+.chip:where([data-look="field"]) {
+  justify-content: flex-start;
+  padding: 0 var(--space-8) 0 var(--space-12);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.chip:where([data-look="field"]) .chip-name {
+  flex: 1;
+  text-align: left;
+}
+
 /* The way off a thumbnail, on its corner: an attached file's chip or a
    feedback screenshot. Note that the disc is 18px but the button is 24px,
    because the corner of a thumbnail carries no more disc than that and the
@@ -2017,36 +2087,16 @@ body,
 }
 
 /* The chip in the toolbar stands in the actions row beside Start, so it is
-   drawn as a toolbar control is: the toolbar buttons' height and corner, no
-   fill until the pointer is on it. The wrapper draws nothing of its own, so
-   a plan whose chip is not drawn leaves no gap in the row; its menu hangs
+   the toolbar chip (`chip.tsx`). The wrapper draws nothing of its own, so a
+   plan whose chip is not drawn leaves no gap in the row; its menu hangs
    from the actions row's right edge, with or without the chip. */
 .repository-chip[data-place="toolbar"] {
   display: contents;
 }
 
-.repository-chip[data-place="toolbar"] .plan-compose-chip {
-  height: 28px;
-  padding: 0 10px 0 9px; /* off-scale */
-  border-radius: 8px;
-  background: none;
-  font-size: 12px;
-}
-
-.repository-chip[data-place="toolbar"] .plan-compose-chip:hover,
-.repository-chip[data-place="toolbar"] .plan-compose-chip[aria-expanded="true"] {
-  background: var(--raised-strong);
-}
-
 .repository-chip[data-place="toolbar"] .plan-compose-menu {
   right: 0;
   left: auto;
-}
-
-.plan-compose-chip :is(.account-mark, .repository-picture) {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
 }
 
 /* A harness mark keeps its box in a row however tight the row is, the one
@@ -2249,41 +2299,10 @@ body,
   bottom: 0;
 }
 
-.plan-compose-chip {
-  display: flex;
-  max-width: 100%;
-  align-items: center;
-  gap: var(--glyph-gap);
-  height: 30px;
-  padding: 0 var(--space-12) 0 var(--row-inset);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 560;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.plan-compose-chip:hover,
-.plan-compose-chip[aria-expanded="true"] {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.plan-compose-chip-name,
 .plan-compose-menu-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.plan-compose-chip svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
 }
 
 .plan-compose-menu-row :is(svg, .repository-picture) {

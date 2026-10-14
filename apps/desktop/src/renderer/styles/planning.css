@@ -1956,9 +1956,10 @@ button.agent-ref:hover .agent-ref-name {
 
 /* The chips along the box's foot: the model chip, the MCP button, and the
    context ring, each the box its popover hangs from (`anchored-popover.tsx`),
-   above itself since the box stands at the panel's foot, and after them what
-   the agent published, in the same chip style, the pull request's wearing its
-   state's colour, the branch's its name in the code face. */
+   above itself since the box stands at the panel's foot, and before them what
+   the agent published, in the composer's pill (`chip.tsx`), the pull
+   request's wearing its state's colour, the branch's its name in the code
+   face. */
 .agent-model-chip,
 .agent-servers,
 .agent-context {
@@ -1978,33 +1979,12 @@ button.agent-ref:hover .agent-ref-name {
   color: var(--text-secondary);
 }
 
-/* The model button is a toolbar button, quiet until the pointer is on it or
-   its menu is open, at the foot's own type and in the body's colour until
-   then: the pair it names (`.model-label`) cut short before the chevron
-   where the foot is narrow, and the chevron small and muted, as a menu's
-   own is. */
-.agent-model-chip .agent-model-button {
-  flex: 0 1 auto;
-  max-width: 100%;
-  padding: 0 var(--space-6) 0 var(--space-8);
-  color: var(--text-body);
-  font-weight: 560;
-}
-
-.agent-model-chip .agent-model-button:is(:hover, [aria-expanded="true"]) {
-  color: var(--text-primary);
-}
-
-.agent-model-chip .agent-model-button .model-label {
+/* The model chip is the toolbar chip (`chip.tsx`): the pair it names cut
+   short before the chevron where the foot is narrow. */
+.agent-model-chip .model-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.agent-model-chip .agent-model-button svg {
-  width: 12px;
-  height: 12px;
-  color: var(--text-tertiary);
 }
 
 /* The MCP servers popover: the searchable menu's surface, its search field

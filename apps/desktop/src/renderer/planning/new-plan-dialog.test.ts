@@ -243,7 +243,7 @@ test("the workspace first resolving keeps a repository picked before the workspa
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
   const chip =
-    document.querySelector<HTMLButtonElement>(".plan-compose-chip") ??
+    document.querySelector<HTMLButtonElement>(".chip") ??
     assert.fail("the dialog draws the repository chip");
   act(() => chip.click());
   await settle();
