@@ -58,10 +58,16 @@ export type SignIn =
     }
   | {
       readonly kind: typeof SIGN_IN.FAILED;
+      /** The mark of the sign-in it ended, so a read issued before that sign-in says nothing of how it ended. */
+      readonly since: number;
       /** Why, where a read named it; nothing for a sign-in that came back without a grant. */
       readonly failure?: SignInFailure;
     }
-  | { readonly kind: typeof SIGN_IN.UNFINISHED };
+  | {
+      readonly kind: typeof SIGN_IN.UNFINISHED;
+      /** The mark of the sign-in it gave up on. */
+      readonly since: number;
+    };
 
 /** How long a sign-in waits on the browser before the window stops waiting on it. */
 export const SIGN_IN_WAIT = Duration.minutes(3);
@@ -108,14 +114,17 @@ export function signInGraced(signIn: SignIn, at: number): SignIn {
  * window did not begin, from another surface or before a relaunch, is
  * waited on from the read that found it, and one that read names failed
  * stands failed whether the window waited on it or not; a read issued
- * before a sign-in began says nothing of it, and one the service never
+ * before a sign-in began says nothing of it, nor of how it ended, so a slow
+ * read never puts an earlier sign-in's reason over a later one's; one the service never
  * answers pending cannot be seen to fail, only to connect or to run out of
  * time.
  */
 export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): SignIn | undefined {
   if (read.status === INTEGRATION_STATUS.CONNECTED) return undefined;
-  if (signIn?.kind === SIGN_IN.WAITING && read.mark <= signIn.since) return signIn;
-  if (read.failure !== undefined) return { kind: SIGN_IN.FAILED, failure: read.failure };
+  if (signIn !== undefined && read.mark <= signIn.since) return signIn;
+  if (read.failure !== undefined) {
+    return { kind: SIGN_IN.FAILED, since: signIn?.since ?? read.mark, failure: read.failure };
+  }
   if (signIn === undefined) {
     return read.status === INTEGRATION_STATUS.PENDING
       ? signInBegun(read.mark, read.at, true)
@@ -123,9 +132,9 @@ export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): S
   }
   if (signIn.kind !== SIGN_IN.WAITING) return signIn;
   if (signIn.seenPending && read.status !== INTEGRATION_STATUS.PENDING) {
-    return { kind: SIGN_IN.FAILED };
+    return { kind: SIGN_IN.FAILED, since: signIn.since };
   }
-  return read.at >= signIn.deadline ? { kind: SIGN_IN.UNFINISHED } : signIn;
+  return read.at >= signIn.deadline ? { kind: SIGN_IN.UNFINISHED, since: signIn.since } : signIn;
 }
 
 /** The line a row draws for a sign-in. */
