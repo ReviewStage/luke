@@ -615,8 +615,7 @@
 /* Settings › Integrations: a connected row's tools opened in place under
    it. The chevron that opens a row, after its count, turns down while its
    tools show; the tools scroll inside their own bound, past the row's
-   mark, their run headings staying at the bound's top on the card's own
-   ground. */
+   mark. */
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;
@@ -645,9 +644,6 @@
 }
 
 .settings-card > .integration-tools-panel {
-  --tool-list-top: calc(var(--space-4) * -1);
-  --tool-list-ground:
-    linear-gradient(var(--section-fill), var(--section-fill)), var(--desktop-ground);
   max-height: 360px;
   padding: var(--space-4) var(--space-8) var(--space-8) calc(var(--space-16) + 20px);
   overflow-y: auto;

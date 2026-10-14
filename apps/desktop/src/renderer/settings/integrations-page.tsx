@@ -60,9 +60,9 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  *
  * A connected row whose server answered with its tools opens in place onto
  * them, drawn as the MCP popover draws a server's page
- * (`../integration-tool-list.tsx`): run by name prefix where the names
- * clearly share them, else alphabetical, each badged only by its server's
- * own annotations. Settings has one search, the sidebar's: the page hands
+ * (`../integration-tool-list.tsx`): alphabetical, each badged only by its
+ * server's own annotations, a press on one opening it onto the whole of
+ * what it does. Settings has one search, the sidebar's: the page hands
  * the tools it read up to it, so a query finds an integration by its tools'
  * names and descriptions too (`../settings-search.tsx`), and while a query
  * stands, a row with a tool it found opens by itself onto just the tools it

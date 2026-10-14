@@ -11,7 +11,7 @@ import {
   type IntegrationTool,
 } from "../integration-health";
 import { SIGN_IN, type SignIn, signInLine } from "../integration-sign-in";
-import { byName } from "../integration-tool-groups";
+import { byName } from "../integration-tool-model";
 import { matchesTokens, searchTokens } from "../search-tokens";
 
 /**

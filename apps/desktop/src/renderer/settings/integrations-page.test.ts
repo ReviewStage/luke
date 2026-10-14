@@ -581,3 +581,41 @@ test("a row closed under one query opens again when that query comes back after 
 
   assert.deepEqual(shownTools(container), [["get_deployment", undefined]]);
 });
+
+test("a tool pressed in an opened row shows the whole of what it does, one tool at a time", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    {
+      name: "list_projects",
+      description: "Lists projects.\n\nPages through every project on the team.",
+    },
+    { name: "get_deployment", description: "Reads one deployment." },
+  ]);
+  const page = await mount();
+  act(() =>
+    (
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      assert.fail("Vercel's row opens onto its tools")
+    ).click(),
+  );
+  const press = (name: string) =>
+    act(() =>
+      (
+        [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find((button) =>
+          button.textContent?.startsWith(name),
+        ) ?? assert.fail(`${name} has its row`)
+      ).click(),
+    );
+
+  press("list_projects");
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-full")].map((full) => full.textContent),
+    ["Lists projects.\n\nPages through every project on the team."],
+  );
+
+  press("get_deployment");
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-full")].map((full) => full.textContent),
+    ["Reads one deployment."],
+  );
+});

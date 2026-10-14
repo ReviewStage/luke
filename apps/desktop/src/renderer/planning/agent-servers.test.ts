@@ -235,3 +235,32 @@ test("a pointer's press on a server page's switch leaves the focus in the filter
   assert.deepEqual(switched, [[VERCEL]]);
   assert.equal(container.querySelector(".agent-servers-page-title"), null);
 });
+
+test("pressing a tool opens it in place onto its whole description and leaves the popover open; a second press closes it", async () => {
+  const { container } = await opened();
+  act(() =>
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
+      .find((row) => row.textContent?.includes("Vercel"))
+      ?.click(),
+  );
+  const head = () =>
+    [...container.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find((button) =>
+      button.textContent?.startsWith("delete_project"),
+    ) ?? assert.fail("delete_project has its row");
+
+  // Note that a press focuses the pressed button first, as the browser would, which is what used to close the popover.
+  act(() => {
+    head().focus();
+    head().click();
+  });
+
+  assert.notEqual(container.querySelector(".agent-servers-menu"), null);
+  assert.equal(head().getAttribute("aria-expanded"), "true");
+  assert.equal(
+    container.querySelector(".integration-tool-full")?.textContent,
+    "Deletes a project.",
+  );
+
+  act(() => head().click());
+  assert.equal(container.querySelector(".integration-tool-full"), null);
+});

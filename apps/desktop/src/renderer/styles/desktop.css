@@ -2511,29 +2511,11 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
-   popover's server page and in Settings › Integrations alike. A run's
-   heading is the prefix its tools' names share, drawn in the code face as
-   the pattern it is, set as a menu's section heading is, and stays at its
-   scroller's top while its run scrolls under it, on the ground and at the
-   inset its owner names. A tool is its name in the code face with its
-   badge after it, and what it does under it in the muted type, two lines
-   at most; the whole line is the tool's title. */
-.integration-tool-run {
-  position: sticky;
-  z-index: 1;
-  top: var(--tool-list-top, calc(var(--menu-inset) * -1));
-  padding: var(--space-8) var(--row-inset) var(--space-4);
-  background: var(--tool-list-ground, var(--surface-popover));
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.integration-tool-run[data-prefix="true"] {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
+   popover's server page and in Settings › Integrations alike: one list, each
+   tool a press whose face is its name in the code face with its badge after
+   it, and the start of what it does under it in the muted type, two lines at
+   most. A tool opened shows the whole of what it does instead, wrapped as
+   its server wrote it and selectable, on the pressed row's fill. */
 .integration-tool-list {
   margin: 0;
   padding: 0;
@@ -2544,9 +2526,41 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   min-width: 0;
   flex-direction: column;
+  border-radius: var(--menu-row-radius);
+}
+
+.integration-tool[data-open="true"] {
+  background: var(--raised);
+}
+
+.integration-tool-head {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
   gap: 1px;
   padding: var(--space-4) var(--row-inset);
   border-radius: var(--menu-row-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.integration-tool-head:hover {
+  background: var(--raised);
+}
+
+.integration-tool-full {
+  margin: 0;
+  padding: 0 var(--row-inset) var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
 }
 
 .integration-tool-name {
