@@ -248,7 +248,7 @@ function slugOf(name: string): string {
 }
 
 /** The highest role the plugin's role text names, read as a member where it names none Luke knows. */
-function roleOf(text: string): WorkspaceRole {
+export function roleOf(text: string): WorkspaceRole {
   const named = text.split(",").map((part) => part.trim());
   return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
 }

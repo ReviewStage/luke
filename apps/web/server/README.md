@@ -170,6 +170,15 @@ plan's one conversation, which `openPlanConversation` answers with its
 opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
+A workspace's members are read through `server/workspaces-app.ts` under the
+bearer, since the plugin's own `listMembers` takes a session cookie a Mac
+never holds. `GET /api/workspaces/members?workspaceId=` answers a
+workspace's members to a member, read through Drizzle
+(`hosted/workspace-members.ts`), owners first, then admins, then members. A
+workspace the account is not in is `not-found`; a personal one
+`not-permitted`. `tests/workspaces-app.test.ts` holds each over the plugin on
+PGlite.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server

@@ -113,3 +113,45 @@ it.effect("disconnects GitHub, answering the workspace with no GitHub account", 
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { workspaceId: ACME.id });
   }),
 );
+
+const ADA = { userId: "user-ada", name: "Ada Lovelace", email: "ada@luke.test", role: "owner" };
+const GRACE = {
+  userId: "user-grace",
+  name: "Grace Hopper",
+  email: "grace@luke.test",
+  role: "member",
+};
+
+it.effect("reads a workspace's members under the workspace's id, as the service ordered them", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
+    });
+
+    const members = yield* Effect.provide(client().members(ACME.id), api.layer);
+
+    assert.deepEqual(members, { ok: true, answer: [ADA, GRACE] });
+    assert.deepEqual(
+      api.requests().map(({ method, pathname, search }) => `${method} ${pathname}${search}`),
+      [`GET /api/workspaces/members?workspaceId=${ACME.id}`],
+    );
+  }),
+);
+
+it.effect("names a members read the service refused: a personal workspace, or not a member", () =>
+  Effect.gen(function* () {
+    const route = "GET /api/workspaces/members";
+
+    const personal = yield* Effect.provide(
+      client().members(PERSONAL.id),
+      refusing(route, HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN).layer,
+    );
+    const outsider = yield* Effect.provide(
+      client().members(ACME.id),
+      refusing(route, HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND).layer,
+    );
+
+    assert.deepEqual(personal, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(outsider, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+  }),
+);
