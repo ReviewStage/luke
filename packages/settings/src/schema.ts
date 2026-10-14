@@ -98,7 +98,7 @@ export const APP_SETTING_SCHEMA = {
       "Luke and coding agents run any shell command here without asking, from your home folder, " +
       "and what it prints goes to the model and is kept with the conversation.",
     default: true,
-    page: SETTINGS_PAGE.ROOT,
+    page: SETTINGS_PAGE.THIS_MAC,
     order: 2,
     // Nothing to run per write: the host reads the setting before each read for commands.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
@@ -111,7 +111,7 @@ export const APP_SETTING_SCHEMA = {
       "Sent only while Luke's window is in the background. System Settings can also turn off " +
       "Luke's notifications and the Dock's Inbox count.",
     default: true,
-    page: SETTINGS_PAGE.CODING_AGENTS,
+    page: SETTINGS_PAGE.NOTIFICATIONS,
     order: 1,
     // Nothing to run per write: main reads the setting as each end or inbox item is announced.
     sideEffect: SETTING_SIDE_EFFECT.NONE,

@@ -67,7 +67,7 @@ import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../planning/use-side-panel
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
-import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
+import { landOnSettingsRow, resultPageWord, settingsSearchEntries } from "../settings-search";
 import type { SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
@@ -436,7 +436,7 @@ function settingRows(
   return settingsSearchEntries(rows).map((entry) => ({
     icon: <GearIcon />,
     label: entry.label,
-    detail: RESULT_PAGE_WORD[entry.page],
+    detail: resultPageWord(entry.page),
     terms: [entry.label],
     keywords: entry.haystack,
     onChoose: () => land(entry.page, entry.id),

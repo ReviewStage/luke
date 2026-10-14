@@ -31,7 +31,7 @@ const SETTINGS: SettingsPanelProps = {
   },
   onSignOut: () => Promise.resolve(),
   onDeleteAccount: accepted,
-  view: SETTINGS_VIEW.ROOT,
+  view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
     status: MICROPHONE_STATUS.GRANTED,

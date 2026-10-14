@@ -7,9 +7,9 @@ import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";
 import { SettingsGroup } from "./settings-group";
 
 /**
- * Who is signed in, and the two ways out of that. It sits at the foot of
- * General: signing out and deleting are done once or never. Both ways out ask
- * first in the confirm dialog, as the sidebar's Log out does: getting back in
+ * Who is signed in, and the two ways out of that, at the head of the Account
+ * page Settings opens on, and the one place either is offered. Both ways out ask
+ * first in the confirm dialog: getting back in
  * costs a whole trip through the browser, and deleting erases the account at
  * the service, which no sign-in brings back. The dialog is modal, so only one
  * of the two can stand at a time, and a refusal to delete is said in it.
