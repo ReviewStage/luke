@@ -12,7 +12,7 @@ import { matchesTokens, searchTokens } from "./search-tokens.js";
  *
  * An integration is found by its name and by what it is for, in the words
  * someone looking for it would type ("database" finds Neon and Supabase),
- * and its tools by their names and descriptions, a word naming the
+ * and its tools by their names, titles, and descriptions, a word naming the
  * integration counting toward each of its tools ("vercel logs"). Note that a
  * query its name alone answers ("vercel") finds the whole integration rather
  * than the tools that happen to repeat its name, so it finds no tool by
@@ -85,6 +85,8 @@ export function matchIntegration(
   const named = matchesTokens(integrationLines(provider), tokens);
   const found = matchesTokens([name], tokens)
     ? []
-    : byName(tools).filter((tool) => matchesTokens([tool.name, tool.description, name], tokens));
+    : byName(tools).filter((tool) =>
+        matchesTokens([tool.name, tool.title ?? "", tool.description, name], tokens),
+      );
   return named || found.length > 0 ? { named, tools: found } : undefined;
 }

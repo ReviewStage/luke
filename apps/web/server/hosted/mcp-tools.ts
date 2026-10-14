@@ -7,13 +7,16 @@
  * back. A server may answer a request with one JSON body or with an event
  * stream whose `data:` lines carry it; both are read. The account's bearer
  * travels on every request and nowhere else, and the session is ended once
- * the list is read. What the list keeps of each tool is its name, its
- * description whole (bounded, for a person to read it all where a list opens
- * it), and the hints the server annotated it
- * with (`readOnlyHint` and its kin), where it sent any it spelled as the
- * spec does: nothing the model would be handed, only what a person picking
- * servers reads. A tool whose hints are malformed is kept without them, so
- * one server's slip never costs the developer its whole list.
+ * the list is read. What the list keeps of each tool is its name, the title
+ * a person reads where the server gave one (the tool's own `title`, else its
+ * annotations' `title`, the spec's order), its description whole (bounded,
+ * for a person to read it all where a list opens it), the hints the server
+ * annotated it with (`readOnlyHint` and its kin), where it sent any it
+ * spelled as the spec does, and the arguments its input schema declares
+ * (`mcp-tool-parameters.ts`): nothing the model would be handed, only what a
+ * person picking servers reads. A tool whose title, hints, or input schema
+ * is malformed is kept without them, so one server's slip never costs the
+ * developer its whole list.
  *
  * Every failure is one word. The one thing kept of what the server said is
  * the first line of a JSON-RPC error's message, bounded, and only where it
@@ -24,11 +27,14 @@
 
 import {
   type IntegrationToolAnnotations,
+  type IntegrationToolParameter,
   integrationToolAnnotationsSchema,
 } from "@luke/features/integration-wire";
+import { isRecord, isWireString, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
 import { Data, Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { toolParameters } from "./mcp-tool-parameters.js";
 
 /** The protocol revision the session is opened under. */
 const PROTOCOL_VERSION = "2025-06-18";
@@ -58,7 +64,10 @@ const READ_TIMEOUT = Duration.seconds(10);
 const END_TIMEOUT = Duration.seconds(2);
 
 /** The most of a description a tool keeps, enough for any a server writes for a person to read whole. */
-const DESCRIPTION_MAX_CHARS = 2000;
+const DESCRIPTION_MAX_CHARS = 8000;
+
+/** The most of a title a tool keeps. */
+const TITLE_MAX_CHARS = 200;
 
 /** The most of a server's error message a failure keeps. */
 const MESSAGE_MAX_CHARS = 200;
@@ -114,9 +123,13 @@ const RPC_UNAUTHORIZED = -32001;
 /** One tool, as a person picking servers reads it. */
 export interface McpTool {
   readonly name: string;
+  /** The title its server gave it for a person to read, where it gave one. */
+  readonly title?: string;
   readonly description: string;
   /** The hints its server sent, where it sent any. */
   readonly annotations?: IntegrationToolAnnotations;
+  /** The arguments its input schema declares, where that schema was readable. */
+  readonly parameters?: readonly IntegrationToolParameter[];
 }
 
 const RpcError = Schema.Struct({
@@ -134,11 +147,11 @@ const ToolsPage = Schema.Struct({
   tools: Schema.Array(
     Schema.Struct({
       name: Schema.String,
+      // A malformed title, hint, or input schema costs its tool that part, never the page.
+      title: Schema.optionalKey(WireValueSchema),
       description: Schema.optionalKey(Schema.String),
-      // A malformed hint costs its tool the hints, never the page.
-      annotations: Schema.optionalKey(
-        integrationToolAnnotationsSchema.pipe(Schema.catchDecoding(() => Effect.succeedNone)),
-      ),
+      annotations: Schema.optionalKey(WireValueSchema),
+      inputSchema: Schema.optionalKey(WireValueSchema),
     }),
   ),
   nextCursor: Schema.optionalKey(Schema.String),
@@ -183,11 +196,22 @@ function firstLine(text: string | undefined, max: number): string {
   return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
 }
 
-/** The hints a tool keeps of those its server sent: none where it sent none at all. */
-function keptAnnotations(
-  sent: IntegrationToolAnnotations | undefined,
-): IntegrationToolAnnotations | undefined {
-  return sent === undefined || Object.keys(sent).length === 0 ? undefined : sent;
+const decodeAnnotations = Schema.decodeUnknownOption(integrationToolAnnotationsSchema);
+
+/** The hints a tool keeps of those its server sent: none where it sent none at all, or spelled them as the spec does not. */
+function keptAnnotations(sent: UnparsedWireValue): IntegrationToolAnnotations | undefined {
+  const read = Option.getOrUndefined(decodeAnnotations(sent));
+  return read === undefined || Object.keys(read).length === 0 ? undefined : read;
+}
+
+/**
+ * The title a tool keeps: its own `title`, else its annotations' `title`,
+ * the spec's order, bounded; none where neither is words.
+ */
+function keptTitle(own: UnparsedWireValue, annotations: UnparsedWireValue): string | undefined {
+  const fromAnnotations = isRecord(annotations) ? annotations.title : undefined;
+  const title = [own, fromAnnotations].filter(isWireString).find((each) => each.trim() !== "");
+  return title === undefined ? undefined : bounded(title, TITLE_MAX_CHARS);
 }
 
 const unreachable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREACHABLE });
@@ -315,11 +339,15 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
       const read = Option.getOrUndefined(decodePage(result));
       if (read === undefined) return yield* unreadable;
       for (const tool of read.tools) {
+        const title = keptTitle(tool.title, tool.annotations);
         const annotations = keptAnnotations(tool.annotations);
+        const parameters = toolParameters(tool.inputSchema);
         tools.push({
           name: tool.name,
+          ...(title !== undefined ? { title } : undefined),
           description: bounded(tool.description, DESCRIPTION_MAX_CHARS),
           ...(annotations !== undefined ? { annotations } : undefined),
+          ...(parameters !== undefined ? { parameters } : undefined),
         });
       }
       cursor = read.nextCursor;

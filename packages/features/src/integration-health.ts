@@ -4,6 +4,7 @@ import {
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
   type IntegrationToolAnnotations,
+  type IntegrationToolParameter,
   type IntegrationToolsProblemReason,
 } from "./integration-wire.js";
 
@@ -25,11 +26,17 @@ import {
  * service says.
  */
 
-/** One tool as a list draws it, with the hints its server annotated it with where it sent any. */
+/**
+ * One tool as a list draws it: the title a person reads where its server
+ * gave one, the hints its server annotated it with where it sent any, and the
+ * arguments it takes where its server's input schema was readable.
+ */
 export interface IntegrationTool {
   readonly name: string;
+  readonly title?: string;
   readonly description: string;
   readonly annotations?: IntegrationToolAnnotations;
+  readonly parameters?: readonly IntegrationToolParameter[];
 }
 
 /** How far a connected provider's server is known to work. */
