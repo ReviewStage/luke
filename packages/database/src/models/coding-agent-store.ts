@@ -184,6 +184,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly repository: string;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  /** The MCP servers the task mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
+  readonly mentionedServers?: readonly IntegrationProvider[] | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -352,6 +354,7 @@ const insertAgent = SqlSchema.findOne({
     task: Schema.NullOr(Schema.String),
     repository: Schema.String,
     disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -373,6 +376,7 @@ const insertAgent = SqlSchema.findOne({
           repository: write.repository,
           repositories: [write.repository],
           disabledServers: write.disabledServers,
+          mentionedServers: write.mentionedServers,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -413,6 +417,46 @@ const updateAgentServers = SqlSchema.findOneOption({
         .set({ disabledServers })
         .where(reachableAgent(userId, agentId))
         .returning(CODING_AGENT_COLUMNS),
+    ),
+});
+
+/** The agent of a conversation under its own lock, as far as a turn taking its mentioned servers reads it. */
+const lockAgentMentionedServers = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, mentionedServers: DisabledServersColumnSchema }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
+        .limit(1)
+        .for("update"),
+    ),
+});
+
+/** The agent under its own lock, as far as a send adding to its mentioned servers reads it. */
+const lockReachableMentionedServers = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, mentionedServers: DisabledServersColumnSchema }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
+        .from(codingAgent)
+        .where(reachableAgent(userId, agentId))
+        .for("update"),
+    ),
+});
+
+const setAgentMentionedServers = SqlSchema.void({
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+  }),
+  execute: ({ agentId, mentionedServers }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ mentionedServers }).where(eq(codingAgent.id, agentId)),
     ),
 });
 
@@ -716,6 +760,7 @@ export function createCodingAgent(
           task: started.task,
           repository: started.repository,
           disabledServers: storedServers(started.disabledServers ?? []),
+          mentionedServers: storedServers(started.mentionedServers ?? []),
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -842,6 +887,64 @@ export function updateCodingAgentServers(
   disabledServers: readonly IntegrationProvider[],
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return updateAgentServers({ userId, agentId, disabledServers: storedServers(disabledServers) });
+}
+
+/**
+ * The hand-over of a message mentioning MCP servers to eve, run with those
+ * servers standing among the ones the agent's next turn takes whatever its
+ * switches say, and left standing only where the hand-over answers that eve
+ * took the message. The row is locked, the servers added, the hand-over
+ * run, and the servers as they stood put back for one that answered
+ * nothing, so a refused send leaves no server for a later turn. Note that
+ * the caller runs this as the dispatch under the conversation's lock
+ * (`writeAwaitingLine`), after its repeat check, so a send's servers are
+ * added only for a send eve hears, and no other send's hand-over stands
+ * between this one's servers and its message. Nothing is added for no
+ * server, or for an agent of a workspace the account is not in.
+ */
+export function dispatchMentioningServers<E, R>(
+  userId: string,
+  agentId: string,
+  mentioned: readonly IntegrationProvider[],
+  dispatch: Effect.Effect<boolean, E, R>,
+): Effect.Effect<boolean, E | CodingAgentStoreFailure, R | DatabaseServices> {
+  if (mentioned.length === 0) return dispatch;
+  return Effect.gen(function* () {
+    const locked = yield* lockReachableMentionedServers({ userId, agentId });
+    if (Option.isNone(locked)) return yield* dispatch;
+    const before = locked.value.mentionedServers;
+    yield* setAgentMentionedServers({
+      agentId,
+      mentionedServers: storedServers([...before, ...mentioned]),
+    });
+    const taken = yield* dispatch;
+    if (!taken)
+      yield* setAgentMentionedServers({ agentId, mentionedServers: storedServers(before) });
+    return taken;
+  });
+}
+
+/**
+ * The MCP servers mentioned since the agent of the conversation last started
+ * a turn, taken by the turn starting now: read and cleared under the row's
+ * lock, so a mention landing meanwhile is either taken here or left for the
+ * next turn, never lost. None for a conversation of no agent the account
+ * reaches.
+ */
+export function takeCodingAgentMentionedServers(
+  userId: string,
+  conversationId: string,
+): CodingAgentStoreEffect<readonly IntegrationProvider[]> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockAgentMentionedServers({ userId, conversationId });
+        if (Option.isNone(locked) || locked.value.mentionedServers.length === 0) return [];
+        yield* setAgentMentionedServers({ agentId: locked.value.id, mentionedServers: null });
+        return locked.value.mentionedServers;
+      }),
+    ),
+  );
 }
 
 /** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */

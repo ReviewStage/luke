@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   MENTION_KIND,
   type Mention,
@@ -259,4 +260,23 @@ test("once the plan's repository changes, the box offers the new repository's fi
 
   assert.deepEqual(before, ["rollout-store.ts", "Rollout"]);
   assert.deepEqual(listed(container), ["rollout-next.ts", "Rollout"]);
+});
+
+test("a sent message's mention of an MCP server is drawn on a plan's page as a chip that opens nothing", () => {
+  const opened: Mention[] = [];
+  const linear = mentionMarkdown(
+    { kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR },
+    "Linear",
+    PLACE,
+  );
+  const container = drawn(
+    createElement(TranscriptWords, { text: `Check ${linear} first.` }),
+    planPage(opened),
+  );
+
+  const chip = container.querySelector(".mention-chip");
+
+  assert.equal(chip?.tagName, "SPAN");
+  assert.equal(chip?.textContent, "Linear");
+  assert.equal(carryingTarget(container), undefined);
 });

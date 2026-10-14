@@ -1,4 +1,5 @@
 import { Schema as EffectSchema, Option } from "effect";
+import { integrationProviderSchema } from "./integration-wire.js";
 import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 
 /**
@@ -44,7 +45,9 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * and `luke://folder/<path>/`, stand in plans and messages already, so
  * they are read forever, as the same mention the settled form names. A
  * thing with no page of its own on the web keeps the `luke:` form, which
- * nothing outside the app opens.
+ * nothing outside the app opens: an MCP server, `luke://mcp/<provider>`,
+ * and one of its tools, `luke://mcp/<provider>/<tool>`, the tool's own name
+ * as the server lists it.
  */
 
 export const MENTION_KIND = {
@@ -52,6 +55,8 @@ export const MENTION_KIND = {
   SECTION: "section",
   FILE: "file",
   FOLDER: "folder",
+  SERVER: "server",
+  TOOL: "tool",
 } as const;
 
 const MENTION_BOUNDS = {
@@ -96,8 +101,12 @@ const LEGACY = {
     [MENTION_KIND.PLAN]: "plan",
     [MENTION_KIND.FILE]: "file",
     [MENTION_KIND.FOLDER]: "folder",
+    [MENTION_KIND.SERVER]: "mcp",
   },
 } as const;
+
+/** A tool's name as an MCP server lists it, which is the name the agent's connection runs it by. */
+const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
 
 /** An anchor as `sectionAnchors` spells one: letters, marks, digits, underscores, and hyphens. */
 const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
@@ -201,12 +210,24 @@ const mentionSchema = EffectSchema.Union([
     lines: EffectSchema.optionalKey(linesSchema),
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(MENTION_KIND.FOLDER), path: pathSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.SERVER),
+    provider: integrationProviderSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.TOOL),
+    provider: integrationProviderSchema,
+    tool: EffectSchema.String.check(EffectSchema.isPattern(TOOL_NAME)),
+  }),
 ]);
 
 export type Mention = typeof mentionSchema.Type;
 
 /** A mention of the plan or one of its sections. */
 export type PlanMention = Extract<Mention, { readonly planId: string }>;
+
+/** A mention of an MCP server or one of its tools. */
+export type ServerMention = Extract<Mention, { readonly provider: string }>;
 
 /** A file's lines a mention names, at the commit they were read at. */
 export type MentionLines = typeof linesSchema.Type;
@@ -291,6 +312,12 @@ function legacyFields(url: URL) {
       return { kind: MENTION_KIND.FILE, path: decodedPath(url.pathname) };
     case LEGACY.HOST[MENTION_KIND.FOLDER]:
       return { kind: MENTION_KIND.FOLDER, path: decodedPath(url.pathname) };
+    case LEGACY.HOST[MENTION_KIND.SERVER]: {
+      const [provider, tool, ...rest] = url.pathname.replace(/^\//u, "").split("/");
+      if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
+      if (tool === undefined) return { kind: MENTION_KIND.SERVER, provider };
+      return { kind: MENTION_KIND.TOOL, provider, tool: decodedPart(tool) };
+    }
     case LEGACY.HOST[MENTION_KIND.PLAN]: {
       const planId = decodedPart(url.pathname.replace(/^\//u, ""));
       if (url.hash === "") return { kind: MENTION_KIND.PLAN, planId };
@@ -539,6 +566,11 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return planTarget(mention.planId, place, "");
     case MENTION_KIND.SECTION:
       return planTarget(mention.planId, place, mention.anchor);
+    // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
+    case MENTION_KIND.SERVER:
+      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}`;
+    case MENTION_KIND.TOOL:
+      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}/${encodedPart(mention.tool)}`;
   }
 }
 

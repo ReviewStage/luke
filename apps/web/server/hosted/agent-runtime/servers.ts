@@ -11,8 +11,13 @@
  * developer switched off for it from its composer, which writes
  * the agent's `disabled_servers` (`coding-agent-store.ts`); its worker's
  * session is admitted for its parent's conversation, so it follows its
- * parent agent's switches. A turn already running keeps what it was handed,
- * and eve tells the model at its next step when a connection came or went.
+ * parent agent's switches. A server the developer mentioned in a message to
+ * a coding agent (`@Linear`) is handed to the next turn the agent starts
+ * whatever its switch says, and to that turn alone: the turn takes the
+ * mentions from the row as it reads its standing, and the switch is never
+ * written. A worker takes none. A turn already running keeps what it was
+ * handed, and eve tells the model at its next step when a connection came or
+ * went.
  *
  * The read fails closed: a turn whose admission or row could not be read is
  * handed no server, so one the developer switched off never comes back on
@@ -23,7 +28,10 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
+import {
+  readCodingAgentOfConversation,
+  takeCodingAgentMentionedServers,
+} from "@luke/database/models/coding-agent-store";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -61,11 +69,37 @@ type ServerAdmission = Effect.Effect<
 export type ServerStandingRead = (auth: SessionAuth, sessionId: string) => Promise<ServerStanding>;
 
 /**
+ * The servers mentioned since the agent's last turn started, taken by the
+ * turn starting now; none where the policy takes none. Note that a take
+ * that failed hands only what the switches say rather than failing the
+ * standing, so a passing store failure costs the turn a mention, never
+ * every server.
+ */
+function takenMentions(
+  policy: ConnectionPolicy,
+  userId: string,
+  conversationId: string,
+): Effect.Effect<readonly IntegrationProvider[], never, DatabaseServices> {
+  if (policy !== CONNECTION_POLICY.AGENT_SWITCHES_AND_MENTIONS) return Effect.succeed([]);
+  return takeCodingAgentMentionedServers(userId, conversationId).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(
+          `the turn took no mentioned server, its mentions unread: ${causeKind(cause)}`,
+        ),
+        [],
+      ),
+    ),
+  );
+}
+
+/**
  * The servers the turn starting is handed under the policy, among those
  * offered to the account: every one for a session admitted at all, and for
- * a coding agent every one its row does not list; none for a session the
- * host does not admit, one admitted for no agent where the policy reads an
- * agent's switches, or a read that failed.
+ * a coding agent every one its row does not list, and every one mentioned
+ * since its last turn where the policy takes mentions; none for a session
+ * the host does not admit, one admitted for no agent where the policy reads
+ * an agent's switches, or a read that failed.
  */
 export function turnServers(
   admission: ServerAdmission,
@@ -89,7 +123,10 @@ export function turnServers(
     const agent = yield* readCodingAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
-    const providers = offered.filter((provider) => !disabledServers.includes(provider));
+    const mentioned = yield* takenMentions(policy, userId, conversationId);
+    const providers = offered.filter(
+      (provider) => !disabledServers.includes(provider) || mentioned.includes(provider),
+    );
     return { on: true, account: userId, providers } as const;
   }).pipe(
     Effect.catchCause((cause) =>

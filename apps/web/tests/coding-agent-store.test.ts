@@ -8,6 +8,7 @@ import {
   type CodingAgentPlace,
   type CodingAgentStarted,
   createCodingAgent,
+  dispatchMentioningServers,
   listCodingAgents,
   listPublishedCodingAgents,
   type NewCodingAgent,
@@ -15,6 +16,7 @@ import {
   readCodingAgentOfConversation,
   recordCodingAgentPublished,
   renameCodingAgent,
+  takeCodingAgentMentionedServers,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
@@ -27,6 +29,7 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 
@@ -146,6 +149,52 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), [
           { agent, published: null },
         ]);
+      }),
+  );
+
+  it.effect(
+    "the servers a send eve took mentioned are taken once, each once, by the next turn, the task's among them, while a refused send's are put back as they stood, and another account adds or takes none",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openPlan;
+        const agent = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { mentionedServers: [INTEGRATION_PROVIDER.SENTRY] }),
+          ),
+        );
+        const taken = Effect.succeed(true);
+        const refused = Effect.succeed(false);
+
+        yield* dispatchMentioningServers(userId, agent.id, [INTEGRATION_PROVIDER.LINEAR], taken);
+        yield* dispatchMentioningServers(
+          userId,
+          agent.id,
+          [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NOTION],
+          taken,
+        );
+        yield* dispatchMentioningServers(userId, agent.id, [INTEGRATION_PROVIDER.VERCEL], refused);
+        yield* dispatchMentioningServers(
+          other.userId,
+          agent.id,
+          [INTEGRATION_PROVIDER.SLACK],
+          taken,
+        );
+        const theirs = yield* takeCodingAgentMentionedServers(other.userId, agent.conversationId);
+        const first = yield* takeCodingAgentMentionedServers(userId, agent.conversationId);
+        const again = yield* takeCodingAgentMentionedServers(userId, agent.conversationId);
+
+        assert.deepEqual(theirs, []);
+        assert.deepEqual(
+          [...first].sort(),
+          [
+            INTEGRATION_PROVIDER.LINEAR,
+            INTEGRATION_PROVIDER.NOTION,
+            INTEGRATION_PROVIDER.SENTRY,
+          ].sort(),
+        );
+        assert.deepEqual(again, []);
       }),
   );
 

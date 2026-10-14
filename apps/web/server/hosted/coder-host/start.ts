@@ -34,7 +34,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { mentionedContext } from "../mentioned-context.js";
+import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import {
   acceptedModelChoice,
   type ModelCatalog,
@@ -199,6 +199,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       repository: landing.repository,
       disabledServers: ask.disabledServers,
+      // The servers the task mentions are its first turn's, whatever the switches say.
+      mentionedServers: brief.task === null ? [] : mentionedServers(brief.task),
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -217,7 +219,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           : eveContent(
               brief.task,
               ask.attachments ?? [],
-              landing.plan === undefined ? undefined : mentionedContext(brief.task, landing.plan),
+              mentionedContext(brief.task, landing.plan),
             ),
     })
     .pipe(

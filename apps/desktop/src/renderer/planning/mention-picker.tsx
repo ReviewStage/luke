@@ -7,7 +7,7 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, ProviderMark } from "@luke/ui";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
 import { FolderIcon, HashIcon } from "lucide-react";
@@ -171,6 +171,9 @@ function RowGlyph({ mention }: { mention: Mention }): React.JSX.Element {
       return <HashIcon aria-hidden="true" />;
     case MENTION_KIND.PLAN:
       return <DocumentIcon />;
+    case MENTION_KIND.SERVER:
+    case MENTION_KIND.TOOL:
+      return <ProviderMark provider={mention.provider} />;
   }
 }
 

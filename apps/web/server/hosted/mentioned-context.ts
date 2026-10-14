@@ -1,14 +1,18 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   MENTION_KIND,
+  type Mention,
   mentionName,
   mentionsIn,
   type PlanMention,
+  type ServerMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
+import { CONNECTION_TOOL } from "./connection-tools.js";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
@@ -30,7 +34,15 @@ import type { Plan } from "@luke/features/plan-wire";
  * is named with a line saying so, so the model knows to ask rather than
  * guess. A section is found by its anchor (`sectionAnchors`), and one whose
  * anchor no heading of the plan spells any longer is named as gone, by the
- * name the mention was written with.
+ * name the mention was written with. *
+ * An MCP server, or one of its tools, is the agent's to reach through its
+ * connections, whose tools it finds by search; a mention says which the
+ * developer pointed it at, so it uses that one without hunting for it. The
+ * turn the message opens is handed the server whatever the agent's switches
+ * (`agent-runtime/servers.ts`), but a message steering a turn already running
+ * reaches one handed only what it started with, so the note says a server
+ * not among its connections joins at its next turn. An agent with no plan
+ * is handed the notes alone.
  */
 
 export const MENTIONED_BOUNDS = {
@@ -80,6 +92,12 @@ interface NamedMention {
   readonly name: string;
 }
 
+/** A mention the part hands its agent something of, and the name it was written with: the agent's own plan or one of its sections, or an MCP server or one of its tools. */
+interface HandedMention {
+  readonly mention: PlanMention | ServerMention;
+  readonly name: string;
+}
+
 /** What a mention of the plan or one of its sections is handed as. */
 function excerptOf({ mention, name }: NamedMention, plan: Plan): string {
   if (mention.kind === MENTION_KIND.PLAN) {
@@ -104,26 +122,88 @@ function excerptOf({ mention, name }: NamedMention, plan: Plan): string {
   return `The plan's section "${section.heading}":\n\n${cutOnLine(section.text, MENTIONED_BOUNDS.SECTION_CHARS)}`;
 }
 
-/** The same mention, each named once whatever times the message names it. */
-function sameMention(first: PlanMention, second: PlanMention): boolean {
-  if (first.kind === MENTION_KIND.PLAN || second.kind === MENTION_KIND.PLAN) {
-    return first.kind === second.kind;
+/** What a mention of an MCP server or one of its tools is handed as: which the developer pointed the agent at, and how to reach it. */
+function noteOf(mention: ServerMention): string {
+  const server = `the ${INTEGRATION_NAME[mention.provider]} MCP server (connection \`${mention.provider}\`)`;
+  const joins = "If that connection is not among yours in this turn, it joins at your next.";
+  if (mention.kind === MENTION_KIND.SERVER) {
+    return `The developer pointed you at ${server} for this message: find its tools with \`${CONNECTION_TOOL.SEARCH}\` on that connection and run them with \`${CONNECTION_TOOL.EXECUTE}\` before reaching for anything else. ${joins}`;
   }
-  return first.anchor === second.anchor;
+  return `The developer pointed you at the tool \`${mention.tool}\` of ${server} for this message: run it with \`${CONNECTION_TOOL.EXECUTE}\` in preference to other tools. ${joins}`;
+}
+
+/** The mention as the part hands it, where it hands it anything: one of another plan, or of a plan where the agent has none, is handed nothing. */
+function handedMention(
+  mention: Mention,
+  plan: Plan | undefined,
+): PlanMention | ServerMention | undefined {
+  switch (mention.kind) {
+    case MENTION_KIND.PLAN:
+    case MENTION_KIND.SECTION:
+      return mention.planId === plan?.id ? mention : undefined;
+    case MENTION_KIND.SERVER:
+    case MENTION_KIND.TOOL:
+      return mention;
+    case MENTION_KIND.FILE:
+    case MENTION_KIND.FOLDER:
+      return undefined;
+  }
+}
+
+/** The same mention, each named once whatever times the message names it. */
+function sameMention(
+  first: PlanMention | ServerMention,
+  second: PlanMention | ServerMention,
+): boolean {
+  switch (first.kind) {
+    case MENTION_KIND.PLAN:
+      return second.kind === MENTION_KIND.PLAN;
+    case MENTION_KIND.SECTION:
+      return second.kind === MENTION_KIND.SECTION && first.anchor === second.anchor;
+    case MENTION_KIND.SERVER:
+      return second.kind === MENTION_KIND.SERVER && first.provider === second.provider;
+    case MENTION_KIND.TOOL:
+      return (
+        second.kind === MENTION_KIND.TOOL &&
+        first.provider === second.provider &&
+        first.tool === second.tool
+      );
+  }
+}
+
+/** What the part hands for one mention; a mention of the plan only where the agent has one (`handedMention`). */
+function handedAs({ mention, name }: HandedMention, plan: Plan | undefined): string {
+  if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
+    return noteOf(mention);
+  }
+  return plan === undefined ? "" : excerptOf({ mention, name }, plan);
+}
+
+/** The MCP servers the words mention, by themselves or by one of their tools, each once: the ones the turn the words open is handed whatever the agent's switches say. */
+export function mentionedServers(words: string): readonly IntegrationProvider[] {
+  // Note that no repository is handed, since a server's mention names no file of one.
+  const providers = mentionsIn(words, null).flatMap(({ mention }) =>
+    mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL
+      ? [mention.provider]
+      : [],
+  );
+  return [...new Set(providers)];
 }
 
 /**
  * The part a message hands its agent beside its words: the plan or each of
  * its sections the words mention, as it stands in `plan`, the agent's own
- * plan as the send read it; nothing where they mention none of it.
+ * plan as the send read it, and a note for each MCP server or tool they
+ * mention; nothing where they mention none of these. An agent with no plan
+ * is handed the notes alone.
  */
-export function mentionedContext(words: string, plan: Plan): string | undefined {
-  const named: NamedMention[] = [];
-  for (const { mention, label } of mentionsIn(words, plan.repository)) {
-    if (mention.kind !== MENTION_KIND.PLAN && mention.kind !== MENTION_KIND.SECTION) continue;
-    if (mention.planId !== plan.id) continue;
-    if (!named.some((each) => sameMention(each.mention, mention))) {
-      named.push({ mention, name: mentionName(label) });
+export function mentionedContext(words: string, plan: Plan | undefined): string | undefined {
+  const named: HandedMention[] = [];
+  for (const { mention, label } of mentionsIn(words, plan?.repository ?? null)) {
+    const handed = handedMention(mention, plan);
+    if (handed === undefined) continue;
+    if (!named.some((each) => sameMention(each.mention, handed))) {
+      named.push({ mention: handed, name: mentionName(label) });
     }
   }
   if (named.length === 0) return undefined;
@@ -133,7 +213,7 @@ export function mentionedContext(words: string, plan: Plan): string | undefined 
   // ending the part, so a shorter one after it still goes; what was passed
   // over is counted, and said once at the end.
   for (const mention of named) {
-    const excerpt = `\n\n${excerptOf(mention, plan)}`;
+    const excerpt = `\n\n${handedAs(mention, plan)}`;
     if (part.length + excerpt.length + LEFT_OUT_ROOM <= MENTIONED_BOUNDS.PART_CHARS)
       part += excerpt;
     else left += 1;

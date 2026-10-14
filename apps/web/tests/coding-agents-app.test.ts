@@ -5,7 +5,10 @@ import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  readCodingAgent,
+  takeCodingAgentMentionedServers,
+} from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
@@ -40,6 +43,7 @@ import {
   type InboxPost,
   inboxAnswerSchema,
 } from "@luke/features/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -1049,6 +1053,80 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           },
         ]);
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT, words]);
+      }),
+  );
+
+  it.effect(
+    "a message mentioning an MCP server that eve does not take leaves no server for a later turn",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY });
+        const { owner, agent, ask, target } = yield* startedAgent(eve, { running: true });
+        const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
+
+        const answered = yield* ask(
+          messageAs(owner, agent.id, { text: words, clientKey: randomUUID() }),
+        );
+
+        assert.notEqual(answered.status, HOSTED_HTTP_STATUS.ACCEPTED);
+        assert.deepEqual(
+          yield* takeCodingAgentMentionedServers(target.userId, target.conversationId),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent started on a task mentioning a switched-off MCP server leaves the server for its first turn to take, its switch left off",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const opened = yield* openPlan({ eve });
+        const task = `Triage ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
+
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* opened.ask(
+            startAs(opened.owner, opened.plan.id, {
+              idempotencyKey: randomUUID(),
+              task,
+              disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+            }),
+          ),
+        ).agent;
+
+        const stored = yield* readCodingAgent(opened.owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        assert.deepEqual(stored.value.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+        assert.deepEqual(
+          yield* takeCodingAgentMentionedServers(opened.owner, stored.value.conversationId),
+          [INTEGRATION_PROVIDER.LINEAR],
+        );
+      }),
+  );
+
+  it.effect(
+    "a message mentioning an MCP server hands eve a note naming its connection beside the words, and the server is left for the agent's next turn to take",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { target, sent } = yield* startedAgent(eve, { running: true });
+        const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
+
+        yield* sent(words);
+
+        const handed = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(handed), "eve was handed parts");
+        assert.deepEqual(handed[0], { type: "text", text: words });
+        assert.match(
+          JSON.stringify(handed[1]),
+          /pointed you at the Linear MCP server \(connection `linear`\)/u,
+        );
+        assert.deepEqual(
+          yield* takeCodingAgentMentionedServers(target.userId, target.conversationId),
+          [INTEGRATION_PROVIDER.LINEAR],
+        );
       }),
   );
 

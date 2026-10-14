@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
   createCodingAgent,
+  dispatchMentioningServers,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -110,7 +111,7 @@ const codingSession = (host: CoderHost) =>
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const SLACK = INTEGRATION_PROVIDER.SLACK;
-const { ALWAYS_ON, AGENT_SWITCHES } = CONNECTION_POLICY;
+const { ALWAYS_ON, AGENT_SWITCHES, AGENT_SWITCHES_AND_MENTIONS } = CONNECTION_POLICY;
 
 /** Every integration's server on, under the account. */
 function allOn(account: string): ServerStanding {
@@ -186,6 +187,47 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
             standing([GITHUB, LINEAR, SLACK]),
             standing([GITHUB, SLACK]),
           ]);
+        }),
+    );
+
+    it.effect(
+      "a server switched off but mentioned since the agent's last turn is handed to its next turn alone, never to a worker, and its switch stays off",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* codingHost;
+          const agent = yield* codingSession(host);
+          yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR, SLACK]);
+          yield* dispatchMentioningServers(
+            agent.userId,
+            agent.agentId,
+            [LINEAR],
+            Effect.succeed(true),
+          );
+          const deployment = integrationConnectOver({
+            LINEAR_CONNECTOR_UID: "oauth/linear",
+            SLACK_CONNECTOR_UID: "oauth/slack",
+            SLACK_ALLOWED_ACCOUNTS: `${agent.userId}@luke.test`,
+          });
+          const handed = (policy: typeof AGENT_SWITCHES | typeof AGENT_SWITCHES_AND_MENTIONS) =>
+            turnServers(
+              policy === AGENT_SWITCHES
+                ? host.admitDelegated(agent.auth, mintSession())
+                : host.admit(agent.auth, agent.sessionId),
+              policy,
+            ).pipe(Effect.provide(deployment));
+          const standing = (providers: readonly IntegrationProvider[]): ServerStanding => ({
+            on: true,
+            account: agent.userId,
+            providers,
+          });
+
+          const worker = yield* handed(AGENT_SWITCHES);
+          const next = yield* handed(AGENT_SWITCHES_AND_MENTIONS);
+          const after = yield* handed(AGENT_SWITCHES_AND_MENTIONS);
+
+          assert.deepEqual(worker, standing([GITHUB]));
+          assert.deepEqual(next, standing([GITHUB, LINEAR]));
+          assert.deepEqual(after, standing([GITHUB]));
         }),
     );
 
