@@ -1,18 +1,12 @@
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/hosted/plan-wire";
-import {
-  GitMergeIcon,
-  GitPullRequestClosedIcon,
-  GitPullRequestDraftIcon,
-  GitPullRequestIcon,
-} from "lucide-react";
 import { GitHubMark } from "../account-marks";
 import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
-import { agentTabLabel, pullRequestPillLabel } from "../planning/coding-agent-model";
+import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
 import { sinceText } from "../planning/plan-time";
 import { repositoryPageUrl } from "../planning/planning-model";
+import { PullRequestMark } from "../planning/pull-request-mark";
 import { RepositoryPicture } from "../repository-picture";
 import { WorkingMark } from "../working-mark";
 
@@ -20,14 +14,14 @@ import { WorkingMark } from "../working-mark";
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
  *
  * The mark is the working mark while an agent works on the plan
- * (`working-mark.tsx`), held mid-lap where motion is reduced, else the pull request's glyph in GitHub's colours for
- * where it stands, red where its checks failed, else nothing
+ * (`working-mark.tsx`), held mid-lap where motion is reduced, else the pull
+ * request's mark (`pull-request-mark.tsx`), else nothing
  * (`plan-agents-model.ts`). The card names the plan, its repository, and
  * how long ago it was updated at its head, then a row for each of a few
  * agents, drawn as its tab draws it: its harness's mark wearing where it
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of a few
- * pull requests, its glyph coloured for where it stands, and its size.
+ * pull requests, its mark, and its size.
  * Each list counts what it leaves out. Everything is read from the plan
  * list's row, so the card fetches nothing.
  *
@@ -46,40 +40,12 @@ const CARD_ROWS = {
   PULL_REQUESTS: 2,
 } as const;
 
-/** The glyph a pull request is drawn with for where it stands. */
-const PULL_REQUEST_GLYPH = {
-  [PULL_REQUEST_STATE.OPEN]: GitPullRequestIcon,
-  [PULL_REQUEST_STATE.DRAFT]: GitPullRequestDraftIcon,
-  [PULL_REQUEST_STATE.MERGED]: GitMergeIcon,
-  [PULL_REQUEST_STATE.CLOSED]: GitPullRequestClosedIcon,
-} as const;
-
 /** The mark an agent at work is drawn with, in the mark's own slot, so the row moves nothing as the work starts or ends. */
 function WorkingGlyph({ label }: { label: string }): React.JSX.Element {
   return (
     <span className="plan-mark-glyph" data-plan-mark="working" role="img" aria-label={label}>
       <WorkingMark />
     </span>
-  );
-}
-
-/** A pull request's glyph, coloured for where it stands and red where its checks failed. */
-function PullRequestGlyph({
-  pullRequest,
-}: {
-  pullRequest: PlanPullRequestLine;
-}): React.JSX.Element {
-  const Glyph = PULL_REQUEST_GLYPH[pullRequest.state];
-  const failing = pullRequest.checks === CHECK_SUMMARY.FAILING;
-  return (
-    <Glyph
-      className="plan-mark-glyph"
-      data-plan-mark="pull-request"
-      data-state={pullRequest.state}
-      data-failing={String(failing)}
-      role="img"
-      aria-label={`${pullRequestPillLabel(pullRequest)}${failing ? ", checks failing" : ""}`}
-    />
   );
 }
 
@@ -90,7 +56,7 @@ export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Eleme
     case PLAN_ROW_MARK.WORKING:
       return <WorkingGlyph label="Agent working" />;
     case PLAN_ROW_MARK.PULL_REQUEST:
-      return <PullRequestGlyph pullRequest={mark.pullRequest} />;
+      return <PullRequestMark pullRequest={mark.pullRequest} className="plan-mark-glyph" />;
     case PLAN_ROW_MARK.NONE:
       return null;
   }
@@ -207,10 +173,11 @@ export function PullRequestLine({
   return (
     <li data-plan-card-pull-request="">
       <CardLine
-        glyph={<PullRequestGlyph pullRequest={pullRequest} />}
+        glyph={<PullRequestMark pullRequest={pullRequest} className="plan-mark-glyph" />}
         label={
           <>
-            <span className="plan-card-number">#{pullRequest.number}</span> {pullRequest.title}
+            <span className="plan-card-number">{pullRequestNumberLabel(pullRequest)}</span>{" "}
+            {pullRequest.title}
           </>
         }
         end={

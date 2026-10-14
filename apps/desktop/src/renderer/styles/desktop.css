@@ -632,9 +632,8 @@ body,
 
 /* A row's one mark leads its time, so it steps out with the time while the
    row is hovered: a spinner, in the time's own ink, while an agent works on
-   the plan, else the pull request's glyph in GitHub's colours, open in the
-   success green, a draft in the muted ink, merged in the merged purple, and
-   red where its checks failed. The card reuses the glyphs. */
+   the plan, else the pull request's mark, in its own colours
+   (`planning.css`). The card reuses the glyphs. */
 .plan-mark-glyph {
   display: inline-block;
   width: 12px;
@@ -646,18 +645,6 @@ body,
 
 .sidebar-plan-time .plan-mark-glyph {
   margin-right: var(--space-4);
-}
-
-.plan-mark-glyph[data-state="open"] {
-  color: var(--state-complete);
-}
-
-.plan-mark-glyph[data-state="merged"] {
-  color: var(--state-merged);
-}
-
-.plan-mark-glyph[data-failing="true"] {
-  color: var(--danger);
 }
 
 /* Pin and Archive stand in the time's slot, which is always as wide as the
@@ -4203,6 +4190,15 @@ body:has(.app-stage[data-capture="true"])
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* The Changes card's corner leads its number with the pull request's mark,
+   set inline so the corner keeps the head's baseline. */
+.changes-card-number .pull-request-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-4);
+  vertical-align: -2px; /* off-scale */
 }
 
 .tab-card-preview {
