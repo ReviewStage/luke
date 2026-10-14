@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
-  awaitingLinesOf,
+  awaitingLinesOfReached,
   type CodingAgent,
-  latestTurnsOf,
+  latestTurnsOfReached,
   listCodingAgents,
   readCodingAgent,
 } from "@sidecar/database/models/coding-agent-store";
@@ -333,18 +333,18 @@ interface AgentReading {
   readonly activity: string | null;
 }
 
-/** The newest journals of an agent's conversation, oldest first; none where the page does not read. */
-const journalsOf = (userId: string, agent: CodingAgent, limit: number) =>
-  Effect.map(listJournals(userId, agent.conversationId, CODER_TOOL_SET, limit), (read) =>
+/** The newest journals of an agent's conversation, read under the member who started it, oldest first; none where the page does not read. */
+const journalsOf = (agent: CodingAgent, limit: number) =>
+  Effect.map(listJournals(agent.userId, agent.conversationId, CODER_TOOL_SET, limit), (read) =>
     read.ok ? read.value.map((record) => record.message) : [],
   );
 
-/** The agents' standings, read once for the lot: each one's newest turn, and whether a line of the developer's awaits one. */
-const standingsOf = (userId: string, agents: readonly CodingAgent[]) =>
+/** The agents' standings, read once for the lot: each one's newest turn, and whether a line of the developer's awaits one. The agents were read through the plan's gate, so their conversations are read by id. */
+const standingsOf = (agents: readonly CodingAgent[]) =>
   Effect.gen(function* () {
     const ids = agents.map((agent) => agent.conversationId);
-    const turns = yield* latestTurnsOf(userId, ids);
-    const awaiting = yield* awaitingLinesOf(userId, ids);
+    const turns = yield* latestTurnsOfReached(ids);
+    const awaiting = yield* awaitingLinesOfReached(ids);
     const now = yield* Clock.currentTimeMillis;
     return (agent: CodingAgent) => {
       const turn = turns.get(agent.conversationId);
@@ -372,7 +372,6 @@ const offeredModels = Effect.flatMap(ModelCatalog, (catalog) =>
 );
 
 const readAgent = (
-  userId: string,
   agent: CodingAgent,
   standing: {
     readonly status: CodingAgentStatus;
@@ -381,7 +380,7 @@ const readAgent = (
   offered: readonly OfferedModel[],
 ): Effect.Effect<AgentReading, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
-    const [newest] = yield* journalsOf(userId, agent, 1);
+    const [newest] = yield* journalsOf(agent, 1);
     const activity =
       newest === undefined
         ? undefined
@@ -415,7 +414,7 @@ const publishedOf = (
     Result.isSuccess(read) ? read.success : undefined,
   );
 
-/** The plan's agent under the id, or nothing: another plan's, another account's, or none. */
+/** The plan's agent under the id, or nothing: another plan's, one of a workspace the account is not in, or none. */
 const planAgent = (call: CodingAgentCall, agentId: string) =>
   Effect.map(readCodingAgent(call.plan.userId, agentId), (found) =>
     Option.filter(found, (agent) => agent.planId === call.plan.planId),
@@ -446,8 +445,8 @@ function choiceRefusal(choice: ModelChoice | undefined, offered: readonly Offere
 }
 
 /** The agent as a start answers it: its id, what it runs on, and where it stands now. */
-const startedReading = (userId: string, agent: CodingAgent, offered: readonly OfferedModel[]) =>
-  Effect.map(standingsOf(userId, [agent]), (standing) => ({
+const startedReading = (agent: CodingAgent, offered: readonly OfferedModel[]) =>
+  Effect.map(standingsOf([agent]), (standing) => ({
     id: agent.id,
     model: agent.model,
     modelName: modelLabel(agent.model, offered),
@@ -476,10 +475,10 @@ export function runListCodingAgents(
     Effect.gen(function* () {
       const { userId, planId } = call.plan;
       const agents = yield* listCodingAgents(userId, planId);
-      const standing = yield* standingsOf(userId, agents);
+      const standing = yield* standingsOf(agents);
       const offered = yield* offeredModels;
       const readings = yield* Effect.forEach(agents, (agent) =>
-        readAgent(userId, agent, standing(agent), offered),
+        readAgent(agent, standing(agent), offered),
       );
       return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readingsRecord(readings) };
     }),
@@ -501,10 +500,10 @@ export function runReadCodingAgent(
       if (Option.isNone(found)) return rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const agent = found.value;
       const { userId } = call.plan;
-      const standing = yield* standingsOf(userId, [agent]);
-      const reading = yield* readAgent(userId, agent, standing(agent), yield* offeredModels);
+      const standing = yield* standingsOf([agent]);
+      const reading = yield* readAgent(agent, standing(agent), yield* offeredModels);
       const published = yield* publishedOf(userId, agent);
-      const journals = yield* journalsOf(userId, agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
+      const journals = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
       const tail = journals
         .flatMap((journal) => entriesOf(journal, CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS))
         .slice(-CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES);
@@ -585,7 +584,7 @@ export function runStartCodingAgent(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        agent: yield* startedReading(userId, started.success.agent, yield* offeredModels),
+        agent: yield* startedReading(started.success.agent, yield* offeredModels),
       };
     }),
   );

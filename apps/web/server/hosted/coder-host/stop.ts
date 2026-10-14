@@ -1,9 +1,9 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
-  awaitingLinesOf,
+  awaitingLinesOfReached,
   type CodingAgent,
   type CodingAgentLatestTurn,
-  latestTurnsOf,
+  latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
 } from "@sidecar/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
@@ -35,7 +35,9 @@ import { type AgentTurnStanding, codingAgentSummary } from "./status.js";
  * archive or a delete wants it, must also have no turn coming that no
  * Stop could name yet: a session still coming up, or a line awaiting the
  * turn it opens, is refused as not ready until that turn exists or has
- * ended.
+ * ended. Every agent here was read through the caller's membership of its
+ * plan's workspace, so a member stops a teammate's agent on the agent's own
+ * conversation, whichever of them started it.
  */
 
 /** How a route reaches eve: the origin the deployment names, or a test's own eve. */
@@ -59,17 +61,16 @@ export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* eveSessions({ origin, caller: { authorization }, mount });
 });
 
-/** Where each of the account's conversations named stands now: its newest turn, and whether a line of the developer's awaits one. */
+/** Where each of the agents' conversations named stands now, read by id since the agents passed the plan's gate: its newest turn, and whether a line of the developer's awaits one. */
 export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
   conversationIds: readonly string[],
 ): Effect.fn.Return<
   (conversationId: string) => AgentTurnStanding,
   HostedRefusal,
   DatabaseServices
 > {
-  const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, conversationIds));
-  const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOf(userId, conversationIds));
+  const turns = yield* hostedStoreOrUnavailable(latestTurnsOfReached(conversationIds));
+  const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
   return (conversationId) => ({
     turn: turns.get(conversationId),
     lineAwaits: awaiting.has(conversationId),
@@ -78,10 +79,9 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The agent's summary with its status read now. */
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
-  const standing = yield* standingsOf(userId, [agent.conversationId]);
+  const standing = yield* standingsOf([agent.conversationId]);
   return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
 });
 
@@ -102,11 +102,10 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
-  userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  const target = { userId, conversationId: agent.conversationId };
-  const turn = (yield* standingsOf(userId, [agent.conversationId]))(agent.conversationId).turn;
+  const target = { userId: agent.userId, conversationId: agent.conversationId };
+  const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return;
@@ -146,11 +145,10 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
-  userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  yield* stoppedTurn(reach, writer, request, userId, agent);
-  const { status } = yield* summaryOf(userId, agent);
+  yield* stoppedTurn(reach, writer, request, agent);
+  const { status } = yield* summaryOf(agent);
   if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }

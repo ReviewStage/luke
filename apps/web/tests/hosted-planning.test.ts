@@ -109,8 +109,8 @@ const planningHost = (
       writer: () => Effect.succeed(writer),
       userInfo: () => Effect.succeed(undefined),
       ownership: {
-        sessionOwner: unreached("sessionOwner"),
-        ownsConversation: unreached("ownsConversation"),
+        reachesSession: unreached("reachesSession"),
+        reachesConversation: unreached("reachesConversation"),
       },
       openAi,
       deploymentSecret: () => undefined,
@@ -136,7 +136,9 @@ const savedPlanWithConversation = () =>
     const userId = yield* openUser;
     const started = yield* startPlan(userId, RELAY_PLAN);
     const host = yield* planningHost();
-    const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+    const conversationId = Option.getOrThrow(
+      yield* openPlanConversation(userId, started.id),
+    ).conversationId;
     return { host, userId, planId: started.id, conversationId };
   });
 
@@ -392,8 +394,12 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         const userId = yield* openUser;
         const started = yield* startPlan(userId, RELAY_PLAN);
 
-        const first = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
-        const again = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+        const first = Option.getOrThrow(
+          yield* openPlanConversation(userId, started.id),
+        ).conversationId;
+        const again = Option.getOrThrow(
+          yield* openPlanConversation(userId, started.id),
+        ).conversationId;
 
         assert.equal(again, first);
         const stored = Option.getOrThrow(yield* readPlan(userId, started.id));
@@ -438,11 +444,10 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const userId = yield* openGithubUser();
         const host = yield* planningHost();
-        const started = yield* startPlan(userId, {
-          ...RELAY_PLAN,
-          repository: RELAY_FULL_NAME,
-        });
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+        const started = yield* startPlan(userId, { ...RELAY_PLAN, repository: RELAY_FULL_NAME });
+        const conversationId = Option.getOrThrow(
+          yield* openPlanConversation(userId, started.id),
+        ).conversationId;
         const sandbox = sandboxDouble((command) =>
           command === "ls" ? { exitCode: 0, stdout: RELAY_LISTING, stderr: "" } : undefined,
         );
