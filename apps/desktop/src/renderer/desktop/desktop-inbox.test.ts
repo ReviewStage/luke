@@ -17,7 +17,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import { DocumentIcon } from "@luke/panel";
+import { DocumentIcon } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

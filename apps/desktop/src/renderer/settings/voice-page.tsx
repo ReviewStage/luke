@@ -1,9 +1,9 @@
-import { CheckIcon, ExternalIcon } from "@luke/panel";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
 } from "@luke/settings";
+import { CheckIcon, ExternalIcon } from "@luke/ui";
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,

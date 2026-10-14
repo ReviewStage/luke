@@ -5,7 +5,7 @@ import {
   type Mention,
   type PlanMention,
 } from "@luke/features/mention-link";
-import { DocumentIcon } from "@luke/panel";
+import { DocumentIcon } from "@luke/ui";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { MentionNode } from "../plan-editor/contract";

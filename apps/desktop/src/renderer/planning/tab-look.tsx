@@ -1,6 +1,6 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
-import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/panel";
+import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";

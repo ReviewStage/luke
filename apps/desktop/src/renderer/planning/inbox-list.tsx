@@ -1,7 +1,7 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import { DocumentIcon } from "@luke/panel";
+import { DocumentIcon } from "@luke/ui";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";

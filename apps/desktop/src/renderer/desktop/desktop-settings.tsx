@@ -1,8 +1,8 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { BackIcon } from "@luke/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import { BackIcon } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";

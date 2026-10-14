@@ -1,4 +1,4 @@
-import { ChevronRightIcon } from "@luke/panel";
+import { ChevronRightIcon } from "@luke/ui";
 import type { ReactNode } from "react";
 import { Tooltip } from "../tooltip";
 

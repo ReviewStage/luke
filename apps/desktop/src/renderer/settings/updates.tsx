@@ -1,4 +1,4 @@
-import { CheckIcon, ExternalIcon } from "@luke/panel";
+import { CheckIcon, ExternalIcon } from "@luke/ui";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";

@@ -1,6 +1,6 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
-import { CopyIcon, DocumentIcon, UnpinIcon } from "@luke/panel";
+import { CopyIcon, DocumentIcon, UnpinIcon } from "@luke/ui";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";

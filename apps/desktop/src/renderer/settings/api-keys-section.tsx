@@ -7,7 +7,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import { PencilIcon, TrashIcon } from "@luke/panel";
+import { PencilIcon, TrashIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";

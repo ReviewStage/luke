@@ -7,7 +7,7 @@ import {
   type PlanMention,
 } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
-import { EllipsisIcon } from "@luke/panel";
+import { EllipsisIcon } from "@luke/ui";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";

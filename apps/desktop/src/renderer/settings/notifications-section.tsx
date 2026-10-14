@@ -1,5 +1,5 @@
-import { ExternalIcon } from "@luke/panel";
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
+import { ExternalIcon } from "@luke/ui";
 import type { NotificationsControl } from "./controls";
 import { SchemaSettingRows } from "./schema-rows";
 import { SettingsGroup } from "./settings-group";

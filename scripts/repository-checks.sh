@@ -194,6 +194,18 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
+# `@luke/ui` is mounted by more than one app, so it reaches none of them: the
+# desktop's preload bridge and its `#shared/`, `#renderer/`, and `#main/`
+# aliases resolve inside the desktop alone, and a component that reads one
+# typechecks there and breaks in every other app that mounts it.
+ui_app_reaches=$(grep -rnaE 'window\.luke|"#(shared|renderer|main)/' \
+    "$LUKE_REPO_ROOT/packages/ui/src" || true)
+if [[ -n "$ui_app_reaches" ]]; then
+    printf 'error: @luke/ui reaches into an app (take the value as a prop and let the app that mounts the component read it):\n%s\n' \
+        "$ui_app_reaches" >&2
+    exit 1
+fi
+
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
 # reset time. The diagnostics the renderer receives carry the members, so the

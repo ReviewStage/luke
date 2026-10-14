@@ -10,7 +10,7 @@ import {
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
-} from "@luke/panel";
+} from "@luke/ui";
 import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";

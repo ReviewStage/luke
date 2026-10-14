@@ -1,5 +1,5 @@
 import type { ModelChoice } from "@luke/features/models-wire";
-import { ChevronDownIcon, PlayIcon } from "@luke/panel";
+import { ChevronDownIcon, PlayIcon } from "@luke/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
 import { FAILURE_REASON } from "../failure-remedy";

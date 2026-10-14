@@ -4,7 +4,7 @@ import {
   MicrophoneOffIcon,
   SpeakerIcon,
   SpeakerOffIcon,
-} from "@luke/panel";
+} from "@luke/ui";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";

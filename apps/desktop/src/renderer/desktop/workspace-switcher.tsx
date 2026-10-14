@@ -1,5 +1,5 @@
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/panel";
+import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/ui";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";

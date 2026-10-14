@@ -1,7 +1,7 @@
 import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@luke/features/planning-view";
-import { GearIcon } from "@luke/panel";
+import { GearIcon } from "@luke/ui";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";

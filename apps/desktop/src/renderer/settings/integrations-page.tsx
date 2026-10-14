@@ -6,7 +6,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { ChevronRightIcon, CloseIcon, SearchIcon, TrashIcon } from "@luke/panel";
+import { ChevronRightIcon, CloseIcon, SearchIcon, TrashIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";

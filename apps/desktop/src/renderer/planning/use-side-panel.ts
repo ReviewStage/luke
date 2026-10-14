@@ -1,5 +1,5 @@
 import type { CodeRef } from "@luke/features/plan-wire";
-import { BoardIcon, CallIcon, CodeIcon } from "@luke/panel";
+import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fileName } from "./code-pane-model";

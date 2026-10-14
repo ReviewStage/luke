@@ -1,4 +1,4 @@
-import { CloseIcon, SearchIcon } from "@luke/panel";
+import { CloseIcon, SearchIcon } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,

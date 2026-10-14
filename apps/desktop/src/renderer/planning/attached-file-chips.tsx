@@ -1,5 +1,5 @@
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import { RemoveIcon } from "@luke/panel";
+import { RemoveIcon } from "@luke/ui";
 import { isRecord, isWireString } from "@luke/wire";
 import { type ReactNode, useState } from "react";
 import {

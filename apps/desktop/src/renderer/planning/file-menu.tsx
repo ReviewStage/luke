@@ -1,4 +1,4 @@
-import { CopyIcon, DownloadIcon, EllipsisIcon } from "@luke/panel";
+import { CopyIcon, DownloadIcon, EllipsisIcon } from "@luke/ui";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";

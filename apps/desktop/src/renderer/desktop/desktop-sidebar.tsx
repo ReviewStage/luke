@@ -12,7 +12,7 @@ import {
   PlusIcon,
   SearchIcon,
   UnpinIcon,
-} from "@luke/panel";
+} from "@luke/ui";
 import { HouseIcon, InboxIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";

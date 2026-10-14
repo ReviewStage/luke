@@ -1,6 +1,6 @@
-import { cssCustomProperties } from "@luke/brand/react-css";
 import type { CodeRef } from "@luke/features/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
+import { cssCustomProperties } from "@luke/ui";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import {

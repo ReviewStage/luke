@@ -1,7 +1,6 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { CloseIcon, SearchIcon } from "@luke/panel";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
@@ -9,6 +8,7 @@ import {
   settingFieldForId,
   settingIdVisible,
 } from "@luke/settings";
+import { CloseIcon, SearchIcon } from "@luke/ui";
 import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
