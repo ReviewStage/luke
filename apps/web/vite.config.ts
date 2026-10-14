@@ -22,6 +22,7 @@ export default defineConfig({
         "connect-github": resolveEntry("./connect-github.html"),
         "accept-invitation": resolveEntry("./accept-invitation.html"),
         "desktop-session": resolveEntry("./desktop-session.html"),
+        open: resolveEntry("./open.html"),
       },
     },
   },
