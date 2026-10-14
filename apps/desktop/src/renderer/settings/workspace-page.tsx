@@ -257,7 +257,16 @@ function TeamMembers({
 function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const { act } = useAct();
   const copy = useCopyToast();
-  const [pending, setPending] = useState<readonly WorkspaceInvitation[] | undefined>(undefined);
+  const [pending, setPendingState] = useState<readonly WorkspaceInvitation[] | undefined>(
+    undefined,
+  );
+  const [firstReadFailed, setFirstReadFailed] = useState<string>();
+  const pendingRead = useRef(false);
+  const setPending: typeof setPendingState = (next) => {
+    pendingRead.current = true;
+    setFirstReadFailed(undefined);
+    setPendingState(next);
+  };
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
@@ -276,8 +285,9 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
       },
       (refused: Error) => {
         if (asked !== latest.current) return;
-        setPending((standing) => standing ?? []);
-        setNote(refused.message);
+        // A list never read is not an empty one: it says so with Retry in its place.
+        if (pendingRead.current) setNote(refused.message);
+        else setFirstReadFailed(refused.message);
       },
     );
   };
@@ -296,8 +306,13 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
       });
   };
 
-  useEffect(() => {
+  const read = () => {
+    setFirstReadFailed(undefined);
     show(act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }));
+  };
+
+  useEffect(() => {
+    read();
     return () => {
       latest.current += 1;
     };
@@ -366,7 +381,11 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
           {note}
         </p>
       )}
-      {pending === undefined ? <Reading label="Loading the invitations" /> : null}
+      {firstReadFailed !== undefined ? (
+        <ReadFailed line={firstReadFailed} onRetry={read} />
+      ) : pending === undefined ? (
+        <Reading label="Loading the invitations" />
+      ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
           key={one.id}
@@ -473,6 +492,10 @@ export interface WorkspaceSettingsControl {
   onChooseWorkspace: (workspaceId: string) => void;
   /** Lists the personal workspace again where the workspace left was the one listed. */
   onLeft: (workspaceId: string) => void;
+  /** Whether the read the workspaces arrive with failed, so none will arrive until it is asked again. */
+  listFailed: boolean;
+  /** Asks for the workspaces again. */
+  onRetryList: () => void;
 }
 
 /** The workspace the page shows: the one named, else the first; none before the workspaces are read. */
@@ -518,7 +541,7 @@ function WorkspaceHead({
 /**
  * The page for one workspace: its head, a team's members, and, for a team's
  * owner or admin, its GitHub repositories; held back, as a page still
- * reading is, before the workspaces are read.
+ * reading is, before the workspaces are read, and Retry where that read failed.
  */
 export function WorkspacePage({
   control,
@@ -529,7 +552,11 @@ export function WorkspacePage({
   if (workspace === undefined) {
     return (
       <SettingsGroup>
-        <Reading label="Loading your workspaces" />
+        {control.listFailed ? (
+          <ReadFailed line="Luke could not read your workspaces." onRetry={control.onRetryList} />
+        ) : (
+          <Reading label="Loading your workspaces" />
+        )}
       </SettingsGroup>
     );
   }

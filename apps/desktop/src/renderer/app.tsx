@@ -468,6 +468,8 @@ export function App(): React.JSX.Element {
       plans.onLeftWorkspace(workspaceId);
       setSettingsWorkspaceId(undefined);
     },
+    listFailed: plans.listFailed,
+    onRetryList: plans.onRetryList,
   };
 
   return (

@@ -67,6 +67,8 @@ const PERSONAL: Workspace = {
 let stored: WorkspaceMember[] = [];
 /** Every act the section sent, in order. */
 let sent: Act[] = [];
+/** Whether the service refuses to read the invitations. */
+let refuseInvitationsRead = false;
 /** Whether the service refuses to read the members. */
 let refuseMembersRead = false;
 /** Whether the service refuses the next removal for the account's role. */
@@ -106,6 +108,9 @@ function answer(request: Act): Promise<ActOutcome> {
       stored = stored.filter((member) => member.userId !== request.payload.userId);
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_INVITATIONS_READ: {
+      if (refuseInvitationsRead) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+      }
       const read = invitations;
       const held = firstRead;
       firstRead = undefined;
@@ -157,6 +162,7 @@ beforeEach(() => {
   stored = [OWNER, MEMBER];
   sent = [];
   refuseMembersRead = false;
+  refuseInvitationsRead = false;
   refuseRemoval = false;
   invitations = [];
   refuseInvitation = false;
@@ -195,6 +201,8 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
       workspaces,
       workspaceId,
       onChooseWorkspace: (chosen) => render(chosen),
+      listFailed: false,
+      onRetryList: () => undefined,
       onLeft: () => {
         pressed.left += 1;
       },
@@ -302,6 +310,8 @@ test("while the members are being read the page holds itself back, and a read th
     workspaceId: ACME.id,
     onChooseWorkspace: () => undefined,
     onLeft: () => undefined,
+    listFailed: false,
+    onRetryList: () => undefined,
   };
   act(() => root.render(createElement(WorkspacePage, { control })));
   const heldBack = container.querySelector(".settings-reading") !== null;
@@ -627,5 +637,63 @@ test("a Disconnect asked for one workspace does not stand over another listed in
   assert.equal(
     sent.some((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_DISCONNECT),
     false,
+  );
+});
+
+test("a workspaces read that failed says so with Retry, which asks for them again", () => {
+  let retried = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control: WorkspaceSettingsControl = {
+    workspaces: [],
+    workspaceId: undefined,
+    onChooseWorkspace: () => undefined,
+    onLeft: () => undefined,
+    listFailed: true,
+    onRetryList: () => {
+      retried += 1;
+    },
+  };
+  act(() => root.render(createElement(WorkspacePage, { control })));
+
+  assert.equal(
+    container.querySelector('[role="alert"]')?.textContent,
+    "Luke could not read your workspaces.",
+  );
+  assert.equal(container.querySelector(".settings-reading"), null);
+  act(() => button(container, "Retry").click());
+  assert.equal(retried, 1);
+});
+
+test("an invitations read that failed says so with Retry in the list's place, which reads them again", async () => {
+  invitations = [
+    {
+      id: "inv-sam",
+      email: "sam@example.com",
+      role: WORKSPACE_ROLE.MEMBER,
+      expiresAt: "2026-10-16T12:00:00.000Z",
+      acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-sam",
+    },
+  ];
+  refuseInvitationsRead = true;
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  assert.equal(
+    [...page.querySelectorAll('[role="alert"]')].some(
+      (each) => each.textContent === "Could not read.",
+    ),
+    true,
+  );
+  refuseInvitationsRead = false;
+  const retries = buttons(page, "Retry");
+  assert.equal(retries.length, 1, "the members read, which landed, offers none");
+  act(() => retries[0]?.click());
+  await settle();
+
+  assert.deepEqual(
+    invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
+    ["sam@example.com"],
   );
 });
