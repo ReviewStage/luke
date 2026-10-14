@@ -18,16 +18,29 @@ import {
   automationRunStatusSchema,
   automationTriggerSchema,
 } from "@sidecar/hosted/automation-wire";
-import { and, asc, desc, eq, exists, gte, inArray, lte, ne, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  or,
+  type SQL,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
 import { planReachableBy, reachablePlan } from "./workspace-store.js";
 
 /**
@@ -592,6 +605,107 @@ const writeExpired = SqlSchema.findAll({
     ),
 });
 
+const lockAutomationRow = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (id) =>
+    Database.use((db) =>
+      db.select({ id: automation.id }).from(automation).where(eq(automation.id, id)).for("update"),
+    ),
+});
+
+const writeClaim = SqlSchema.findAll({
+  Request: Schema.Struct({ id: Schema.String, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ status: AUTOMATION_RUN_STATUS.STARTED, settledAt: now })
+        .where(
+          and(eq(automationRun.id, id), eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED)),
+        )
+        .returning({ id: automationRun.id }),
+    ),
+});
+
+/** A run claimed for its start and not yet holding the agent it started: started, with no agent. */
+const CLAIMED = and(
+  eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+  isNull(automationRun.codingAgentId),
+);
+
+const writeAgent = SqlSchema.findAll({
+  Request: Schema.Struct({ id: Schema.String, codingAgentId: Schema.String, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, codingAgentId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId, settledAt: now })
+        .where(
+          and(
+            eq(automationRun.id, id),
+            or(eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED), CLAIMED),
+          ),
+        )
+        .returning({ id: automationRun.id }),
+    ),
+});
+
+const writeClaimFailed = SqlSchema.findAll({
+  Request: Schema.Struct({
+    id: Schema.String,
+    reason: automationRunReasonSchema,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, reason, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ status: AUTOMATION_RUN_STATUS.FAILED, reason, settledAt: now })
+        .where(and(eq(automationRun.id, id), CLAIMED))
+        .returning({ id: automationRun.id }),
+    ),
+});
+
+const findClaimed = SqlSchema.findAll({
+  Request: Schema.Struct({ automationId: Schema.String, since: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ automationId, since }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automationRun.id })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            CLAIMED,
+            gte(automationRun.firedAt, since),
+          ),
+        ),
+    ),
+});
+
+const findStranded = SqlSchema.findAll({
+  Request: Schema.Struct({ before: Schema.Date, limit: Schema.Int }),
+  Result: Schema.Struct({ id: Schema.String, automationId: Schema.String, userId: Schema.String }),
+  execute: ({ before, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: automationRun.id,
+          automationId: automationRun.automationId,
+          userId: automationRun.userId,
+        })
+        .from(automationRun)
+        .where(and(CLAIMED, lte(automationRun.settledAt, before)))
+        .orderBy(asc(automationRun.settledAt))
+        .limit(limit),
+    ),
+});
+
 const writePause = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, reason: automationPauseSchema, now: Schema.Date }),
   execute: ({ id, reason, now }) =>
@@ -802,4 +916,63 @@ export function expireQueuedAutomationRuns(
 /** Pauses the automation for the reason the service gives, so nothing fires it until its owner resumes it. */
 export function pauseAutomation(id: string, reason: AutomationPause): PlanStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => writePause({ id, reason, now }));
+}
+
+/**
+ * Runs `effect` holding the automation's row lock, in one transaction, so
+ * two acts on one automation's runs, two sweeps or a sweep and a "Run now",
+ * read its guards and claim a start one after the other rather than both
+ * reading the same count.
+ */
+export function withAutomationLocked<A, E, R>(
+  automationId: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | PlanStoreFailure, R | DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(Effect.andThen(lockAutomationRow(automationId), effect)),
+  );
+}
+
+/** Claims a queued run for its start: started, with no agent yet; false where it was not queued. */
+export function claimAutomationRun(runId: string): PlanStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(writeClaim({ id: runId, now }), (rows) => rows.length > 0),
+  );
+}
+
+/** The run started with the agent named, from queued or from its claim; false where it settled otherwise. */
+export function attachRunAgent(runId: string, codingAgentId: string): PlanStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(writeAgent({ id: runId, codingAgentId, now }), (rows) => rows.length > 0),
+  );
+}
+
+/** A claimed run whose start was refused, failed for the reason given; false where it holds an agent or was not claimed. */
+export function failClaimedRun(
+  runId: string,
+  reason: AutomationRunReason,
+): PlanStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(writeClaimFailed({ id: runId, reason, now }), (rows) => rows.length > 0),
+  );
+}
+
+/** How many of the automation's runs fired at or after `since` are claimed and still starting, which count against its concurrency. */
+export function claimedRunsStarting(automationId: string, since: Date): PlanStoreEffect<number> {
+  return Effect.map(findClaimed({ automationId, since }), (rows) => rows.length);
+}
+
+/** One claimed run left without its agent: its id, its automation, and its owner. */
+export interface StrandedRun {
+  readonly id: string;
+  readonly automationId: string;
+  readonly userId: string;
+}
+
+/** Claimed runs whose start never settled by `before`, a function that died between the claim and the agent: oldest first, at most `limit`. */
+export function strandedAutomationRuns(
+  before: Date,
+  limit: number,
+): PlanStoreEffect<readonly StrandedRun[]> {
+  return findStranded({ before, limit });
 }

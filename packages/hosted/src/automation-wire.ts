@@ -23,8 +23,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 export const AUTOMATION_BOUNDS = {
   /** The most characters an automation's name may spell. */
   MAX_NAME_CHARS: 80,
-  /** The most characters of a prompt, the same bound a coding agent's task is held to. */
-  MAX_PROMPT_CHARS: 20_000,
+  /** The most characters of a prompt: under a coding agent's task bound, with room for what Luke adds about the firing. */
+  MAX_PROMPT_CHARS: 12_000,
   /** The most characters of a cron expression. */
   MAX_CRON_CHARS: 120,
   /** The most characters of an IANA time zone name. */

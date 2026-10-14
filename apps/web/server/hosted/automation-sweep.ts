@@ -4,6 +4,7 @@ import {
   claimDueAutomations,
   expireQueuedAutomationRuns,
   queuedAutomationRuns,
+  strandedAutomationRuns,
 } from "@sidecar/database/models/automation-store";
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@sidecar/hosted/automation-schedule";
@@ -15,7 +16,7 @@ import {
   type AutomationTrigger,
 } from "@sidecar/hosted/automation-wire";
 import { Effect } from "effect";
-import { type EveForAccount, executeAutomationRun } from "./automation-runs.js";
+import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 import type { StartServices } from "./coder-host/start.js";
 
 /**
@@ -37,7 +38,9 @@ import type { StartServices } from "./coder-host/start.js";
  * automations at once, but one automation's runs one after another, since
  * each run's guards read what the one before it settled. A run two sweeps
  * both act on starts one agent, since the run's id is its Start's key, and
- * settles once. A run still queued two hours on, an hour past the last
+ * settles once. A run claimed for its start and left without its agent,
+ * the function that claimed it gone, is settled as the agent its key made
+ * where one stands and failed where none does. A run still queued two hours on, an hour past the last
  * sweep that would act on it, is settled as missed, so the history never
  * holds a run that will not come.
  */
@@ -49,6 +52,8 @@ const AUTOMATION_SWEEP = {
   MAX_RUNS: 12,
   /** How many runs are acted on at once. */
   CONCURRENCY: 4,
+  /** How long a claimed run may stand without its agent before it is recovered: a start runs in seconds. */
+  STRANDED_AFTER_MS: 10 * 60_000,
   /** How far back a queued run is still acted on. */
   QUEUED_WITHIN_MS: 60 * 60_000,
   /**
@@ -107,6 +112,13 @@ export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations"
   yield* expireQueuedAutomationRuns(
     new Date(now - AUTOMATION_SWEEP.EXPIRED_AFTER_MS),
     AUTOMATION_RUN_REASON.MISSED,
+  );
+  yield* Effect.forEach(
+    yield* strandedAutomationRuns(
+      new Date(now - AUTOMATION_SWEEP.STRANDED_AFTER_MS),
+      AUTOMATION_SWEEP.MAX_RUNS,
+    ),
+    recoverStrandedRun,
   );
   const outcomes = (yield* Effect.forEach(
     byAutomation(queued),

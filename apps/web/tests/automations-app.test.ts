@@ -15,6 +15,7 @@ import {
 import { SCHEDULE_PRESET } from "@sidecar/hosted/automation-schedule";
 import {
   AUTOMATION_ACTION,
+  AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_PAUSE,
@@ -452,7 +453,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             ...weekdays(plan.id),
             action: {
               kind: AUTOMATION_ACTION.CODING_AGENT,
-              prompt: `${"\u0001".repeat(19_999)}x`,
+              prompt: `${"\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS - 1)}x`,
             },
           },
         });
@@ -463,6 +464,47 @@ it.layer(getTestDB())("the automation routes", (it) => {
           body: { idempotencyKey: "2026-10-15T09:00:00.000Z" },
         });
         assert.deepEqual(notUuid.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+      }),
+  );
+
+  it.effect(
+    "sending enabled as it stands moves no due instant, and a plan filter that names no plan is refused as invalid",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: weekdays(plan.id),
+          }),
+        );
+        // The due instant as the sweep leaves it once it has moved a schedule on.
+        const later = new Date((automation.nextRunAt ?? 0) + 7 * 24 * 60 * 60_000);
+        yield* Database.use((db) =>
+          db
+            .update(automationTable)
+            .set({ nextRunAt: later })
+            .where(eq(automationTable.id, automation.id)),
+        );
+
+        const resent = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(automation.id), owner, {
+            method: "PATCH",
+            body: { enabled: true, name: "Renamed" },
+          }),
+        );
+        const malformed = yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?planId=not-a-plan`, owner);
+
+        assert.equal(
+          resent.automation.nextRunAt,
+          later.getTime(),
+          "the instant the sweep set stands",
+        );
+        assert.deepEqual(malformed.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
       }),
   );
 });

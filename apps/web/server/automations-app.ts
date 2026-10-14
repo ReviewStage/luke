@@ -249,7 +249,12 @@ const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
   const plans = new URL(request.url).searchParams.getAll(AUTOMATION_LIST_QUERY.PLAN_ID);
   if (plans.length > 1) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const automations = yield* hostedStoreOrUnavailable(listAutomations(userId, plans[0]));
+  const [named] = plans;
+  const plan = named === undefined ? undefined : readEither(wireUuidSchema)(unparsedWire(named));
+  if (plan !== undefined && Result.isFailure(plan)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const automations = yield* hostedStoreOrUnavailable(listAutomations(userId, plan?.success));
   const summaries = yield* Effect.forEach(automations, (each) => summaryOf(userId, each));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { automations: summaries });
 });
@@ -339,7 +344,9 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
   const webhook = becameWebhook ? mintWebhookSecret() : undefined;
-  const reschedules = newTrigger !== undefined || asked.enabled !== undefined;
+  // Note that only a resume or a pause moves the due instant, so a form that sends `enabled` as it stands skips no firing.
+  const reschedules =
+    newTrigger !== undefined || (asked.enabled !== undefined && asked.enabled !== standing.enabled);
   const changes: AutomationChanges = {
     ...(asked.name === undefined ? undefined : { name: asked.name }),
     ...(asked.enabled === undefined ? undefined : { enabled: asked.enabled }),

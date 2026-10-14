@@ -2838,6 +2838,15 @@ automation (`paused_reason` `failures`, `next_run_at` cleared). The agent's
 questions reach the Inbox and its end the finished-agent notification as
 any agent's do.
 
+The guards are read, and the run claimed, under the automation's row lock
+(`withAutomationLocked`), so two acts on one automation's runs, a sweep and
+a "Run now" in another function among them, never both read room for one
+more agent: a claimed run stands started with no agent yet, which the next
+act's concurrency counts, and takes its agent once the start answers, or
+fails with the start's refusal. A claim left without its agent for ten
+minutes, its function gone, is settled by the sweep as the agent its key
+made where one stands, and failed as `unavailable` where none does.
+
 The routes are `server/automations-app.ts`, under the account bearer, every
 row gated by the store on the account owning the automation and still
 reaching its plan, so another account's automation, or one on a plan of a
