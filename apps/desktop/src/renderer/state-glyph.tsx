@@ -6,14 +6,15 @@
  * starts or ends; reduced motion and a capture run hold it on a frame that
  * still reads as working. A row with no glyph of its own, a sidebar plan's
  * time or a call's row in a transcript, draws the same mark through the
- * same seat, at the size its slot sets (`--state-glyph-size`). Failed, the glyph stands as it does at rest, so a
- * failed agent still shows the harness it ran in, and an alert in the
- * danger colour stands at the end of its row or its tab (`stateEndMark`),
- * before its time where it has one, as an editor marks a file's tab with
- * its problems, and a call that failed wears the same alert at its row's end. Only a failure has an end mark, so no other row keeps room
- * for one. At rest, finished or stopped by hand, the glyph stands alone,
- * since that is where every piece of work ends and a mark on each says
- * nothing. Working and failed are said aloud in a fixed word, so nothing of
+ * same seat, at the size its slot sets (`--state-glyph-size`). Failed, the
+ * glyph stands as it does at rest, so a failed agent still shows the
+ * harness it ran in, and an alert in the danger colour stands at the end
+ * of its row or its tab (`stateEndMark`), before its time where it has
+ * one, as an editor marks a file's tab with its problems; a call that
+ * failed wears the same alert at its row's end. Only a failure has an end
+ * mark, so no other row keeps room for one. At rest, finished or stopped
+ * by hand, the glyph stands alone, since that is where every piece of work
+ * ends and a mark on each says nothing. Working and failed are said aloud in a fixed word, so nothing of
  * the work rides the attribute the screen recording keeps; the glyph at
  * rest is decorative, its control's own label naming it, and a card or a
  * tab that says more of a stop than its glyph does says it in the one word
