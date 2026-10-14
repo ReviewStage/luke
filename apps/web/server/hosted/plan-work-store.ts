@@ -10,6 +10,7 @@ import {
   turnsBefore,
 } from "@sidecar/database/models/message-reads";
 import { type PlanStoreEffect, readPlan } from "@sidecar/database/models/plan-store";
+import { conversationOwnerOf } from "@sidecar/database/models/recorded-session";
 import {
   PLAN_WORK_BOUNDS,
   type PlanShownCode,
@@ -42,8 +43,10 @@ import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
  * and no secret file, is read back. The plan is read under the account
- * first, so a plan another account owns reads as no plan, exactly as in
- * `plan-store.ts`. Nothing is written here.
+ * first, so a plan of a workspace the account is not in reads as no plan,
+ * exactly as in `plan-store.ts`; its conversation is then read under the
+ * member who opened it, whose conversation it is, so every member reads the
+ * same work. Nothing is written here.
  */
 
 /**
@@ -134,7 +137,7 @@ const allShownCode = Effect.fnUntraced(function* (userId: string, conversationId
  * that wrote anything, oldest first, with the turn the next older page is
  * read before where one stands; and on the newest page, every code shown on
  * the plan. No turn for a plan whose planning model never ran, and nothing
- * where the account owns no such plan. A journal this build cannot read
+ * where the account reaches no such plan. A journal this build cannot read
  * leaves its turn out rather than the whole page.
  */
 export function readPlanWork(
@@ -147,18 +150,21 @@ export function readPlanWork(
     if (Option.isNone(plan)) return Option.none();
     const { conversationId } = plan.value;
     const newest = before === undefined;
-    if (conversationId === undefined) {
+    const owner =
+      conversationId === undefined ? Option.none() : yield* conversationOwnerOf(conversationId);
+    if (conversationId === undefined || Option.isNone(owner)) {
       return Option.some({ turns: [], ...(newest ? { code: [] } : undefined) });
     }
-    const page = yield* turnsBefore(userId, conversationId, PLAN_WORK_BOUNDS.TURNS, before);
-    const read = yield* Effect.forEach(page.turns, (turn) => turnJournalOf(userId, turn));
+    const opener = owner.value;
+    const page = yield* turnsBefore(opener, conversationId, PLAN_WORK_BOUNDS.TURNS, before);
+    const read = yield* Effect.forEach(page.turns, (turn) => turnJournalOf(opener, turn));
     const journaled = read.filter((each) => each !== undefined);
     const asked = yield* spokenAskRowsOf(
-      userId,
+      opener,
       conversationId,
       journaled.map((each) => each.turn.id),
     );
-    const code = newest ? yield* allShownCode(userId, conversationId) : undefined;
+    const code = newest ? yield* allShownCode(opener, conversationId) : undefined;
     const oldest = page.turns[0];
     return Option.some({
       turns: journaled.map((each) =>
@@ -177,7 +183,7 @@ export function readPlanWork(
   });
 }
 
-/** Every code shown on the plan, oldest first, as the Code tab draws it; nothing where the account owns no such plan, and none for a plan whose planning model never ran. */
+/** Every code shown on the plan, oldest first, as the Code tab draws it, read under the member who opened the plan's conversation; nothing where the account reaches no such plan, and none for a plan whose planning model never ran. */
 export function readPlanCode(
   userId: string,
   planId: string,
@@ -186,7 +192,9 @@ export function readPlanCode(
     const plan = yield* readPlan(userId, planId);
     if (Option.isNone(plan)) return Option.none();
     const { conversationId } = plan.value;
-    if (conversationId === undefined) return Option.some({ code: [] });
-    return Option.some({ code: yield* allShownCode(userId, conversationId) });
+    const owner =
+      conversationId === undefined ? Option.none() : yield* conversationOwnerOf(conversationId);
+    if (conversationId === undefined || Option.isNone(owner)) return Option.some({ code: [] });
+    return Option.some({ code: yield* allShownCode(owner.value, conversationId) });
   });
 }
