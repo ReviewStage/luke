@@ -23,29 +23,37 @@ export interface ClockDriven<A, E> {
 }
 
 /**
- * The effect forked on the test's clock, with each wait it makes announced.
- * Note that the wait is forked to start at once, because the TestClock
- * registers it synchronously, so a wait is held before it is announced and
- * the step that answers the announcement wakes it.
+ * The test's clock with each wait made on it announced, for an effect that
+ * runs where the test cannot fork it, such as a route answering in a
+ * runtime of its own. Note that the wait is forked to start at once,
+ * because the TestClock registers it synchronously, so a wait is held
+ * before it is announced and the step that answers the announcement wakes
+ * it.
  */
+export const announcingClock = Effect.gen(function* () {
+  const clock = yield* Clock.Clock;
+  const asleep = yield* Queue.unbounded<void>();
+  const announcing: Clock.Clock = {
+    ...clock,
+    sleep: (duration) =>
+      Effect.gen(function* () {
+        const waiting = yield* Effect.forkChild(clock.sleep(duration), {
+          startImmediately: true,
+        });
+        yield* Queue.offer(asleep, undefined);
+        yield* Fiber.join(waiting);
+      }),
+  };
+  return { clock: announcing, asleep: Queue.asDequeue(asleep) };
+});
+
+/** The effect forked on the test's clock, with each wait it makes announced. */
 export const forkClockDriven = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<ClockDriven<A, E>, never, R> =>
   Effect.gen(function* () {
-    const clock = yield* Clock.Clock;
-    const asleep = yield* Queue.unbounded<void>();
-    const announcing: Clock.Clock = {
-      ...clock,
-      sleep: (duration) =>
-        Effect.gen(function* () {
-          const waiting = yield* Effect.forkChild(clock.sleep(duration), {
-            startImmediately: true,
-          });
-          yield* Queue.offer(asleep, undefined);
-          yield* Fiber.join(waiting);
-        }),
-    };
-    const fiber = yield* Effect.forkChild(Effect.provideService(effect, Clock.Clock, announcing));
+    const { clock, asleep } = yield* announcingClock;
+    const fiber = yield* Effect.forkChild(Effect.provideService(effect, Clock.Clock, clock));
     return { fiber, asleep };
   });
 

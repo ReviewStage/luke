@@ -147,6 +147,12 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
+  /**
+   * A workspace's chat as a person in it reads it past a cursor (GET), held
+   * open while nothing moved, the workspace and the cursor named in
+   * `chat-wire.ts`'s `CHAT_QUERY`, which declares the answer.
+   */
+  WORKSPACES_CHAT: "/api/workspaces/chat",
   /** An owner or an admin removes a member who is not an owner (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The account leaves a workspace it does not own (POST). */
