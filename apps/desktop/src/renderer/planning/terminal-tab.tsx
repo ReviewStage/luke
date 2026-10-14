@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import { SHORTCUT_KEY } from "#shared/shortcuts";
+import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
 import { Shortcut } from "../shortcut";
+import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, useTreeSlide } from "./file-view";
 import { AgentGlyph } from "./tab-look";
@@ -26,6 +29,36 @@ import { WorkingTime } from "./working-time";
  * own words are drawn on a canvas the text masking cannot reach, and a
  * shell prints whatever its commands print.
  */
+
+/**
+ * The screen's scrollback as the source ⌘F finds in, since the terminal
+ * draws its words on a canvas the window's find cannot read: found as
+ * typed, stepped, tallied, and seeded from the screen's selection.
+ */
+function useScrollbackFind(find: TerminalFind | undefined): FindSource | undefined {
+  return useMemo(
+    () =>
+      find === undefined
+        ? undefined
+        : {
+            search: (query) => find.find(query, TERMINAL_FIND.TYPED),
+            step: (query, step) =>
+              find.find(
+                query,
+                step === FIND_STEP.NEXT ? TERMINAL_FIND.NEXT : TERMINAL_FIND.PREVIOUS,
+              ),
+            clear: find.clear,
+            onTally: find.onTally,
+            // A selection over several lines seeds its first, the one line the field holds, its spaces kept.
+            selection: () =>
+              find
+                .selection()
+                .split(/\r?\n/)
+                .find((line) => line.trim() !== ""),
+          },
+    [find],
+  );
+}
 
 /** What the shells list's toggle says. */
 const SHELLS_TOGGLE = { open: "Hide shells", closed: "Show shells" } as const;
@@ -91,6 +124,7 @@ export function TerminalTab({
 }): React.JSX.Element {
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
   const session = useTerminalSession(agentId, shown, onClose);
+  useFindSource(useScrollbackFind(session.find));
   const look = terminalLook(session.state);
   const slide = useTreeSlide(shells.open);
   return (

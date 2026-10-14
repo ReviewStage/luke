@@ -27,6 +27,9 @@ import {
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { runAppCommand } from "../app-commands";
+import { FindScope } from "../find-in-tab";
 import { TerminalCardFoot } from "./terminal-shells";
 import { shellsAsked } from "./terminal-store";
 import { TerminalTab } from "./terminal-tab";
@@ -224,6 +227,8 @@ async function mount(
   shown = true,
   shellsOpen = true,
   before?: (registry: AtomRegistry.AtomRegistry) => void,
+  /** Whether the tab stands in a find scope holding the window's keys, as the side panel draws it. */
+  findable = false,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -232,6 +237,14 @@ async function mount(
   const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   before?.(registry);
+  const wrapped = (tab: React.ReactElement) =>
+    findable
+      ? createElement(FindScope, {
+          active: true,
+          subject: { plan: PLAN, tab: { terminal: AGENT.id } },
+          children: tab,
+        })
+      : tab;
   let closed = 0;
   let toggled = 0;
   const render = (on: boolean) =>
@@ -239,21 +252,23 @@ async function mount(
       root.render(
         onRegistry(
           registry,
-          createElement(TerminalTab, {
-            agentId: AGENT.id,
-            agents,
-            shown: on,
-            onOpenAgent: () => undefined,
-            onClose: () => {
-              closed += 1;
-            },
-            shells: {
-              open: shellsOpen,
-              onToggle: () => {
-                toggled += 1;
+          wrapped(
+            createElement(TerminalTab, {
+              agentId: AGENT.id,
+              agents,
+              shown: on,
+              onOpenAgent: () => undefined,
+              onClose: () => {
+                closed += 1;
               },
-            },
-          }),
+              shells: {
+                open: shellsOpen,
+                onToggle: () => {
+                  toggled += 1;
+                },
+              },
+            }),
+          ),
         ),
       ),
     );
@@ -1049,4 +1064,68 @@ test("a new shell asked for while the tab is hidden waits for a stopped sandbox'
   await settle();
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
   assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 1);
+});
+
+/** Types into the find bar's field as the keyboard does, which React hears as an input. */
+function typeFind(text: string): void {
+  const field = document.querySelector<HTMLInputElement>(
+    'search.find-bar input[aria-label="Find"]',
+  );
+  assert.ok(field, "the find bar stands open");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** What the find bar's tally says. */
+function findTally(): string | null | undefined {
+  return document.querySelector(".find-bar-tally")?.textContent;
+}
+
+test("⌘F finds in the shell's scrollback, which the terminal draws on a canvas, from the newest match up, every match counted and stepped through", async () => {
+  vi.useFakeTimers();
+  const tab = await mount(true, true, undefined, true);
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  port.say({ type: "output", data: bytes("alpha beta\r\nalpha gamma\r\n") });
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("alpha");
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.equal(findTally(), "2 of 2");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND_NEXT);
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.equal(findTally(), "1 of 2");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND_PREVIOUS);
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.equal(findTally(), "2 of 2");
+  // What the find draws over the matches stands inside the tab, which the recording leaves out whole.
+  for (const drawn of tab.container.querySelectorAll('[class*="xterm-decoration"]')) {
+    assert.ok(drawn.closest(".ph-no-capture"));
+  }
+  typeFind("delta");
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.equal(findTally(), "No results");
+});
+
+test("a find with more matches than it counts says there are more", async () => {
+  vi.useFakeTimers();
+  await mount(true, true, undefined, true);
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  port.say({ type: "output", data: bytes("hit\r\n".repeat(1_100)) });
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("hit");
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  assert.match(findTally() ?? "", /1000\+/);
 });

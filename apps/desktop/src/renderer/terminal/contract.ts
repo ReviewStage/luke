@@ -31,6 +31,34 @@ export interface TerminalProps {
   readonly onLink: (url: string) => void;
 }
 
+/** Which way a find over the scrollback goes: to the next match, the one before, or the query as typed, keeping to the match it was at. */
+export const TERMINAL_FIND = {
+  NEXT: "next",
+  PREVIOUS: "previous",
+  TYPED: "typed",
+} as const;
+
+export type TerminalFindWay = (typeof TERMINAL_FIND)[keyof typeof TERMINAL_FIND];
+
+/** What a find over the scrollback says of its matches: how many, and which the find is at, -1 for none. */
+interface TerminalFindTally {
+  readonly count: number;
+  readonly at: number;
+  /** Whether there are more matches than the find counts. */
+  readonly more: boolean;
+}
+
+/** A find over the terminal's scrollback, every match tinted where it stands and the one it is at brought into view. */
+export interface TerminalFind {
+  readonly find: (query: string, way: TerminalFindWay) => void;
+  /** Takes every match's tint away, as the find closes. */
+  readonly clear: () => void;
+  /** Hears the tally each time a find changes it, until the answer is called. */
+  readonly onTally: (listener: (tally: TerminalFindTally) => void) => () => void;
+  /** The words selected on the screen, which ⌘F seeds a find with; empty with none. */
+  readonly selection: () => string;
+}
+
 /** The terminal as mounted. */
 export interface TerminalHandle {
   /**
@@ -43,6 +71,7 @@ export interface TerminalHandle {
   readonly focus: () => void;
   /** Clears the screen and its scrollback, as another shell is about to draw on it. */
   readonly reset: () => void;
+  readonly find: TerminalFind;
   readonly unmount: () => void;
 }
 

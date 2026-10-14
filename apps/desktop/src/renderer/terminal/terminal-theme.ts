@@ -39,6 +39,27 @@ const THEME_TOKENS = {
   brightWhite: "--terminal-bright-white",
 } as const satisfies Record<string, `--terminal-${string}`>;
 
+/** The tints a find gives the matches, by the token each is read from: every match, and the one the find is at. */
+const FIND_TOKENS = {
+  match: "--terminal-find-match",
+  current: "--terminal-find-current",
+} as const;
+
+/** A find's tints: every match's, and the one the find is at. */
+interface FindTints {
+  readonly match: string;
+  readonly current: string;
+}
+
+/** A find's tints as the tokens stand on `host` now, as the search reads them. */
+export function terminalFindTints(host: Element): FindTints {
+  const style = getComputedStyle(host);
+  return {
+    match: style.getPropertyValue(FIND_TOKENS.match).trim(),
+    current: style.getPropertyValue(FIND_TOKENS.current).trim(),
+  };
+}
+
 /** The appearance query whose answer flipping changes every token's value. */
 export const LIGHT_APPEARANCE = "(prefers-color-scheme: light)";
 
