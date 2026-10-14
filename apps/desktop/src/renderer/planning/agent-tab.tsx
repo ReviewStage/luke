@@ -37,6 +37,7 @@ import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-plan";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
+import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
 import {
   AGENT_PART,
   type AgentPart,
@@ -45,6 +46,7 @@ import {
   agentStillWriting,
   agentTabLabel,
   agentWorkingPhase,
+  chatNoticeOf,
   delegates,
   dockedTodos,
   endLine,
@@ -60,6 +62,7 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { useMinute } from "./plan-time";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
@@ -219,6 +222,22 @@ export interface DelegationDoors {
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
   /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
   jobs?: WorkerJobs | undefined;
+  /** The chat a chat notice's card reads its message from and opens in; none where the window holds no chat. */
+  chat?: ChatNoticeDoors | undefined;
+}
+
+/** A chat notice's card, at the moment the window's clock says. */
+function NoticeRow({
+  message,
+  doors,
+}: {
+  message: CodingAgentMessage;
+  doors: ChatNoticeDoors | undefined;
+}): ReactNode {
+  const now = useMinute();
+  const notice = chatNoticeOf(message);
+  if (notice === undefined) return null;
+  return <ChatNoticeCard notice={notice} words={messageWords(message)} doors={doors} now={now} />;
 }
 
 /** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it. */
@@ -517,6 +536,10 @@ export function AgentMessage({
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
+  // A line a chat notice wrote is the sender's message, never the developer's bubble.
+  if (chatNoticeOf(message) !== undefined) {
+    return <NoticeRow message={message} doors={delegation?.chat} />;
+  }
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
@@ -624,7 +647,9 @@ function AgentTranscriptView({
     // The plan is the first of the developer's messages, unless the agent
     // was handed a task in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
-    const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    const first = messages.find(
+      (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+    );
     const plan = brief === CODING_AGENT_BRIEF.TASK ? undefined : first;
     const task = brief === CODING_AGENT_BRIEF.TASK ? first : undefined;
     return (
@@ -718,6 +743,7 @@ function AgentTabView({
   onOpenSubagent,
   onOpenTarget,
   cards,
+  chat,
   openGitHub,
   onOpenApiKeys,
   keywords,
@@ -747,6 +773,8 @@ function AgentTabView({
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang; none where they hang their hints. */
   cards?: TranscriptCards | undefined;
+  /** The chat a chat notice's card reads and opens; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
   openGitHub: (url: string) => void;
   /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
   onOpenApiKeys?: (() => void) | undefined;
@@ -773,6 +801,7 @@ function AgentTabView({
           onOpenTarget,
           cards,
           standings: transcript.subagents,
+          chat,
         }}
         reading={transcript.reading}
         failed={transcript.failed}
@@ -832,6 +861,7 @@ export function AgentTab({
   onOpenTerminal,
   onOpenTarget,
   cards,
+  chat,
   onHeld,
 }: {
   agent: CodingAgentSummary;
@@ -848,6 +878,8 @@ export function AgentTab({
   onOpenChanges?: (() => void) | undefined;
   /** Opens the agent's own Terminal tab in the side panel. */
   onOpenTerminal?: (() => void) | undefined;
+  /** The chat a chat notice's card reads its message from and opens in; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
@@ -923,6 +955,7 @@ export function AgentTab({
       onOpenSubagent={onOpenSubagent}
       onOpenTarget={onOpenTarget}
       cards={cards}
+      chat={chat}
       openGitHub={openGitHub}
       onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}

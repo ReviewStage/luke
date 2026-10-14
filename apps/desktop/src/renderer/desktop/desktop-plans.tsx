@@ -11,6 +11,7 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
+import { chatNames } from "../planning/chat-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList } from "../planning/inbox-list";
 import {
@@ -446,6 +447,17 @@ function PlanDocument({
       }
     }
   };
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = plans.chatView.chat;
+  const chat =
+    chatRead === undefined
+      ? undefined
+      : {
+          chat: chatRead.answer,
+          names: chatNames(plans.plans, chatRead.agents, undefined),
+          onOpen: plans.chatView.onShow,
+        };
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = planCards({
@@ -620,6 +632,7 @@ function PlanDocument({
                     onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
                     onOpenTarget={openTarget}
                     cards={cards}
+                    chat={chat}
                   />
                 </section>
               )}

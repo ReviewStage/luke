@@ -1,4 +1,3 @@
-import type { PlanAgentLine } from "@luke/features/plan-wire";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -6,9 +5,9 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import {
   CHAT_PLACE,
-  type ChatNames,
   type ChatPlace,
   type ChatRailRow,
+  chatNames,
   chatRail,
   FOR_YOU,
 } from "../planning/chat-model";
@@ -101,17 +100,10 @@ export function DesktopChat({
   const openLink = useOpenLink();
   const read = view.chat;
   const listed = plans.plans;
-  const names = useMemo((): ChatNames => {
-    const lines: PlanAgentLine[] = [
-      ...listed.flatMap((plan) => plan.agents?.agents ?? []),
-      ...(read?.agents ?? []),
-    ];
-    return {
-      agents: new Map(lines.map((line) => [line.id, line])),
-      plans: new Map(listed.map((plan) => [plan.id, plan.name])),
-      selfName: accountName,
-    };
-  }, [listed, read, accountName]);
+  const names = useMemo(
+    () => chatNames(listed, read?.agents ?? [], accountName),
+    [listed, read, accountName],
+  );
   if (read === undefined) {
     return (
       <div className="chat-view">

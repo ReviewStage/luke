@@ -69,6 +69,7 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
           onOpen: () => undefined,
           onClose: () => undefined,
           onChoose: setPlace,
+          onShow: setPlace,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
         },

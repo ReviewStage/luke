@@ -37,7 +37,16 @@ import {
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
-import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import {
+  type ChatNoticeMetadata,
+  isRecord,
+  isWireString,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  USER_MESSAGE_METADATA,
+  type WireValue,
+} from "@luke/wire";
+import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
@@ -910,6 +919,23 @@ function agentPart(part: WireValue): AgentPart {
     };
   }
   return { kind: AGENT_PART.OTHER };
+}
+
+/** A user row's metadata as the service stored it, or nothing where it holds none this build reads. */
+const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
+
+/**
+ * What a chat notice says of the message it tells, where a chat notice
+ * wrote the line rather than the developer: which kind of member posted
+ * it, its place in the workspace's chat, and the poster's handle. Nothing
+ * for the developer's own words, typed or spoken, or a row this build
+ * cannot read.
+ */
+export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | undefined {
+  if (message.role !== MESSAGE_ROLE.USER || message.metadata === undefined) return undefined;
+  const read = Option.getOrUndefined(readUserMetadata(message.metadata));
+  if (read === undefined || !("channel" in read)) return undefined;
+  return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
 }
 
 /** The parts of a message as the tab draws them, in the row's order. */

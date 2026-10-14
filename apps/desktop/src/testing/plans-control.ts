@@ -261,6 +261,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      onShow: ignore,
       onPost: () => Promise.resolve(undefined),
       onAnswer: () => Promise.resolve(undefined),
     },
