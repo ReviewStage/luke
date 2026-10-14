@@ -554,6 +554,48 @@ export function readMessageByClientId(
   );
 }
 
+const findReceivedLines = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    turnId: Schema.String,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.turnId, options.turnId),
+            eq(messages.role, MESSAGE_ROLE.USER),
+          ),
+        )
+        .orderBy(asc(messages.seq))
+        .limit(MAXIMUM_READ_PAGE),
+    ),
+});
+
+/**
+ * The lines a turn received, oldest first: the user rows the turn owns, its
+ * opening line and each it was steered by. Answers an empty page for a turn
+ * that holds none or a conversation that does not stand.
+ */
+export function readReceivedLines(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  turnId: string,
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+  return Effect.flatMap(findReceivedLines({ conversationId, userId, turnId }), (selected) =>
+    readSelected(selected, tools),
+  );
+}
+
 /** The newest turn of a conversation, as a coding agent's status is read from it. */
 export interface LatestTurn {
   readonly conversationId: string;

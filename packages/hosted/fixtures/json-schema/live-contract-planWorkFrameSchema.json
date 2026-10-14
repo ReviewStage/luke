@@ -176,6 +176,13 @@
           },
           "maxItems": 20
         },
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
         "model": {
           "type": "string",
           "maxLength": 200

@@ -4,6 +4,7 @@ import {
   listJournals,
   listJournalsCalling,
   readMessageByClientId,
+  readReceivedLines,
   type StoredMessageRecord,
   type StoredTurnRecord,
   spokenAskRowsOf,
@@ -17,7 +18,7 @@ import {
   type PlanWorkAnswer,
 } from "@sidecar/hosted/planning-view";
 import { Effect, Option } from "effect";
-import { isStoredToolPart, storedToolName } from "../core.js";
+import { isStoredToolPart, storedToolName, TURN_ORIGIN } from "../core.js";
 import {
   callsSendingToEarlierTasks,
   planWorkOf,
@@ -39,7 +40,8 @@ import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
  * its row and its journal exactly as a call tells it live
  * (`voice/plan-work.ts`), a worker's session and its title read from its
  * child conversation beside it, and the spoken lines each took as its ask
- * read from the rows the turn holds. The code is every answered `show_code` call in
+ * read from the rows the turn holds, and a report's turn with the lines it
+ * received, which carry the reports' first lines. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
  * and no secret file, is read back. The plan is read under the account
@@ -78,6 +80,12 @@ export const plannerDelegationRowsOf = Effect.fnUntraced(function* (
 /** The conversation's journals that call the worker, where a task a later turn sent work to was started; none where they do not read. */
 const workerJournalsOf = plannerDelegationJournalsOf;
 
+/** The lines a report's turn received, which carry the reports' first lines; none where they do not read. */
+const receivedLinesOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
+  const read = yield* readReceivedLines(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
+  return read.ok ? read.value.map((row) => row.message) : [];
+});
+
 /** One turn's journal and the sessions of the subagents it started or sent work to, with the title of each that has one and what each ran on and spent, or nothing where the turn wrote none or it does not read. */
 export const turnJournalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
   const read = yield* readMessageByClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
@@ -98,7 +106,8 @@ export const turnJournalOf = Effect.fnUntraced(function* (userId: string, turn: 
   const parent = { userId, conversationId: turn.conversationId };
   const titles = yield* childTitlesByCall(parent, children);
   const records = yield* subagentRecordsByCall(userId, subagents);
-  return { turn, message, subagents, titles, records };
+  const received = turn.origin === TURN_ORIGIN.REPORT ? yield* receivedLinesOf(userId, turn) : [];
+  return { turn, message, subagents, titles, records, received };
 });
 
 /** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first. */
@@ -175,6 +184,7 @@ export function readPlanWork(
           each.titles,
           each.records,
           asked.get(each.turn.id),
+          each.received,
         ),
       ),
       ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),

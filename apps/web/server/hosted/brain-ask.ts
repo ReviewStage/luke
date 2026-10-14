@@ -66,6 +66,7 @@ const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([
 const HOST_TURN_OF_ASK_ORIGIN = {
   [ASK_ORIGIN.TYPED]: BRAIN_HOST_TURN.TYPED,
   [ASK_ORIGIN.SPOKEN]: BRAIN_HOST_TURN.SPOKEN,
+  [ASK_ORIGIN.REPORT]: BRAIN_HOST_TURN.REPORT,
 } as const satisfies Record<AskOrigin, BrainHostTurn>;
 
 /** Where an id stands: the ask it named, where it was an ask's id, and the turn eve started for it, where one has started. */
@@ -141,7 +142,7 @@ interface AcceptedAsk {
   readonly queuedAt: number;
 }
 
-type AskOutcome = Result.Result<AcceptedAsk, AskRefused>;
+export type AskOutcome = Result.Result<AcceptedAsk, AskRefused>;
 
 /**
  * An ask as a caller that has already resolved the account hands it over:

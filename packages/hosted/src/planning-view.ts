@@ -166,6 +166,8 @@ export const PLAN_WORK_BOUNDS = {
   ASKED_LINES: 20,
   /** The most characters of a spoken line's id, which the voice's ledger mints. */
   LINE_ID_CHARS: 128,
+  /** The most characters of a report's first line a turn carries. */
+  SUBJECT_CHARS: 300,
 } as const;
 
 const workText = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.TEXT_CHARS));
@@ -260,6 +262,16 @@ export const planWorkTurnSchema = EffectSchema.Struct({
         fromMs: EffectSchema.Finite,
       }),
     ).check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.ASKED_LINES)),
+  ),
+  /**
+   * For a turn a rollout worker's report opened, each report's fixed first
+   * line, `[worker 3] opened #415`, in the order the turn received them,
+   * drawn above Luke's reply; absent for every other turn.
+   */
+  reports: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.SUBJECT_CHARS)),
+    ),
   ),
   ...turnRecordFields,
 });
