@@ -396,14 +396,18 @@ wire (`@sidecar/hosted/terminal-wire`): a shell is `id` and `title`.
 | `terminal.attach` | `{ agentId, terminalId, cols, rows }` | `{}` straight away, before the connection opens. Main then posts the port (below). Attaching again from the same window replaces that window's port, and the old one closes |
 | `terminal.detach` | `{ agentId, terminalId }` | `{}`. Closing the port does the same |
 
-**Refusals** (`TERMINAL_REFUSAL`, the act's fixed refusal):
+**Refusals.** A refusal the tab acts on comes back as an answer,
+`{ refused }`, with `refused` one of these (`TERMINAL_REFUSAL`):
 
 - `sandbox-stopped`: `create` in a stopped sandbox.
 - `agent-not-ready`: `create` before the agent opened its sandbox.
 - `not-found`: no such agent or shell, or another workspace's.
 - `gone`: an archived agent.
-- `unavailable`: the service or Vercel could not be reached, so the caller
-  may retry.
+
+So `list`, `rename` and `kill` answer `TerminalsAnswer | { refused }`,
+`create` answers `{ terminal } | { refused }`, and `resume` answers
+`{ sandbox } | { refused }`. An outage (the service or Vercel could not be
+reached, so the caller may retry) is the act's own refusal sentence instead.
 
 ### The port (`terminal:port`)
 
