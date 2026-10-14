@@ -7,7 +7,8 @@
  * the one node it feeds, which posts PCM16 chunks that the turn gate turns
  * into `audio` and `turn_end`. The context, the nodes, and an open turn are
  * released when the scope closes. A tee that cannot stand up leaves the feed
- * dark and the call on voice, so the effect never fails.
+ * dark and the call on voice, so the effect never fails: it answers whether
+ * the tee stands, and the caller hands Luke's voice to the avatar only if so.
  *
  * Note that the remote stream must stay attached to a playing `<audio>`
  * element, muted or not, for as long as the tee stands: Spike 0 found that
@@ -76,21 +77,25 @@ function acquireTee(context: AudioContext, options: AvatarFeedOptions) {
 
 export function startAvatarFeed(
   options: AvatarFeedOptions,
-): Effect.Effect<void, never, Scope.Scope> {
+): Effect.Effect<boolean, never, Scope.Scope> {
   return Effect.gen(function* () {
     const context = yield* acquireContext;
     // Note that a context that would not open at the rate is left dark rather
     // than fed, because Keyframe reads every chunk at 24 kHz whatever it was.
     if (context.sampleRate !== PCM_SAMPLE_RATE) {
-      return yield* Effect.logWarning("avatar feed: the audio context refused 24 kHz", {
+      yield* Effect.logWarning("avatar feed: the audio context refused 24 kHz", {
         sampleRate: context.sampleRate,
       });
+      return false;
     }
     yield* Effect.tryPromise(() => context.audioWorklet.addModule(PCM_TEE.SCRIPT));
     yield* acquireTee(context, options);
     // A suspended context pulls nothing, and no gesture in a hidden window has vouched for it.
     yield* Effect.ignore(Effect.tryPromise(() => context.resume()));
+    return true;
   }).pipe(
-    Effect.catch((error) => Effect.logWarning("avatar feed: the tee did not start", { error })),
+    Effect.catch((error) =>
+      Effect.as(Effect.logWarning("avatar feed: the tee did not start", { error }), false),
+    ),
   );
 }

@@ -52,6 +52,7 @@ import {
   handoverInterrupt,
   handoverOnFeed,
   handoverOnStatus,
+  handoverOnTee,
 } from "../avatar-feed/handover";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
 import { LiveCaptions } from "./live-captions";
@@ -119,8 +120,8 @@ export interface AvatarFeedActs {
 /** The call's avatar feed path: where it goes, the tee it reads, and the element it mutes. */
 interface LiveAvatarFeedOptions {
   acts: AvatarFeedActs;
-  /** The tee over Luke's remote track, standing for as long as the scope it is run in. */
-  startTee: (options: AvatarFeedOptions) => Effect.Effect<void, never, Scope.Scope>;
+  /** The tee over Luke's remote track, standing for as long as the scope it is run in, answering whether it stood up. */
+  startTee: (options: AvatarFeedOptions) => Effect.Effect<boolean, never, Scope.Scope>;
   /**
    * Whether the avatar voices Luke in the element's place. The element is
    * muted while it does and never paused: a track no playing element holds
@@ -394,7 +395,8 @@ export class LiveCall implements LiveVoiceCall {
   /**
    * The avatar's status as the document moved it. The tee stands while the
    * avatar is starting or live, so a turn already open when it goes live is
-   * known to be, and is left to finish on the element.
+   * known to be, and is left to finish on the element; Luke's voice stays on
+   * the element until the tee stands.
    */
   reportAvatarStatus(status: AvatarState["status"]): void {
     this.#avatarStatus = status;
@@ -845,6 +847,12 @@ export class LiveCall implements LiveVoiceCall {
     if (step.feed) this.#options.avatarFeed?.acts.feed(step.feed);
   }
 
+  /** The tee up: the status is applied again, now that the avatar can be fed. */
+  #onTeeStanding(): void {
+    const standing = handoverOnTee(this.#handover, true, this.#lukeSpeaking);
+    this.#route(handoverOnStatus(standing, this.#avatarStatus));
+  }
+
   /** Flushes the avatar where it has audio to flush, and starts the barge-in's cooldown. */
   #interrupt(): void {
     const step = handoverInterrupt(this.#handover);
@@ -885,6 +893,8 @@ export class LiveCall implements LiveVoiceCall {
    * stands with a feed path and the avatar is starting or live. Taken down,
    * its scope closes the context and owes the avatar the `turn_end` of a turn
    * still open, which the handover drops once the voice is back on the element.
+   * A tee that could not stand ends its fiber and leaves the voice on the
+   * element; the next time the avatar starts tries it again.
    */
   #syncTee(): void {
     const avatarFeed = this.#options.avatarFeed;
@@ -897,14 +907,21 @@ export class LiveCall implements LiveVoiceCall {
     if (!wanted) {
       if (this.#tee !== undefined) this.#disarm(this.#tee);
       this.#tee = undefined;
+      this.#route(handoverOnTee(this.#handover, false, false));
       return;
     }
     if (this.#tee !== undefined) return;
     this.#tee = this.#fork(
       Effect.scoped(
-        Effect.andThen(
+        Effect.flatMap(
           avatarFeed.startTee({ stream, onFeed: (feed) => this.#onTeeFeed(feed) }),
-          Effect.never,
+          (standing) =>
+            standing
+              ? Effect.andThen(
+                  Effect.sync(() => this.#onTeeStanding()),
+                  Effect.never,
+                )
+              : Effect.void,
         ),
       ),
     );

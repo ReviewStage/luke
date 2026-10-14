@@ -4,7 +4,10 @@
  * The avatar renders about a second behind GPT Live's own timeline, so the
  * voice moves over to it only between turns: a `LIVE` arriving while a turn
  * is open leaves that turn on the element and hands the next one over, and
- * no word is heard twice. Anything but `LIVE` puts the voice straight back on
+ * no word is heard twice. Nor does it move before the tee stands: a tee still
+ * loading, or one that failed, would leave Luke heard nowhere, and a turn
+ * already playing when it stands is one it has not seen open, so the turn
+ * the meter hears then is taken as open. Anything but `LIVE` puts the voice straight back on
  * the element, at once. While the stop's silence stands the feed is dropped,
  * because the avatar must not voice what the element was silenced for. A
  * pure function over status, feed, and interrupt, like the turn gate it
@@ -29,6 +32,8 @@ type AvatarRoute = (typeof AVATAR_ROUTE)[keyof typeof AVATAR_ROUTE];
 
 export interface AvatarHandover {
   readonly route: AvatarRoute;
+  /** Whether the tee stands and reads Luke's track, which the avatar can only voice him through. */
+  readonly teeStanding: boolean;
   /** Whether the tee has a turn open, read off its feed: audio opens one and `turn_end` closes it. */
   readonly turnOpen: boolean;
   /** Whether audio went to the avatar since the last interrupt, so an interrupt has something to flush. */
@@ -43,6 +48,7 @@ export interface AvatarHandoverStep {
 
 export const AVATAR_HANDOVER_DIRECT: AvatarHandover = {
   route: AVATAR_ROUTE.DIRECT,
+  teeStanding: false,
   turnOpen: false,
   fedSinceInterrupt: false,
 };
@@ -57,13 +63,28 @@ export function handoverOnStatus(
   handover: AvatarHandover,
   status: AvatarState["status"],
 ): AvatarHandover {
-  if (status !== AVATAR_STATUS.LIVE)
-    return { ...AVATAR_HANDOVER_DIRECT, turnOpen: handover.turnOpen };
-  if (handover.route !== AVATAR_ROUTE.DIRECT) return handover;
+  if (status !== AVATAR_STATUS.LIVE) {
+    return { ...handover, route: AVATAR_ROUTE.DIRECT, fedSinceInterrupt: false };
+  }
+  if (handover.route !== AVATAR_ROUTE.DIRECT || !handover.teeStanding) return handover;
   return {
     ...handover,
     route: handover.turnOpen ? AVATAR_ROUTE.AWAITING_TURN : AVATAR_ROUTE.AVATAR,
   };
+}
+
+/**
+ * The tee standing up, with whether Luke is heard speaking on his track as
+ * it does, or taken down, which leaves nothing open and the voice on the
+ * element. The caller applies the status again after a tee stands.
+ */
+export function handoverOnTee(
+  handover: AvatarHandover,
+  standing: boolean,
+  speaking: boolean,
+): AvatarHandover {
+  if (!standing) return AVATAR_HANDOVER_DIRECT;
+  return { ...handover, teeStanding: true, turnOpen: handover.turnOpen || speaking };
 }
 
 /**

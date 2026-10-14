@@ -9,7 +9,7 @@ import {
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
 import type { WireRecord } from "@sidecar/wire";
-import { type Context, Duration, Effect, Fiber } from "effect";
+import { type Context, Deferred, Duration, Effect, Fiber, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { AVATAR_FEED_KIND, AVATAR_STATUS, type AvatarFeed } from "#shared/messages/avatar";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
@@ -215,19 +215,37 @@ interface FixtureOptions {
  */
 class FakeTee {
   starts = 0;
+  /** Whether the next tee fails to stand, as one whose context refuses 24 kHz does. */
+  refuses = false;
+  /** A tee still loading its worklet, until `loaded` lets it stand. */
+  #loading: Deferred.Deferred<void> | undefined;
   #onFeed: ((feed: AvatarFeed) => void) | undefined;
 
   get standing(): boolean {
     return this.#onFeed !== undefined;
   }
 
-  start(options: AvatarFeedOptions) {
-    return Effect.acquireRelease(
-      Effect.sync(() => {
-        this.starts += 1;
-        this.#onFeed = options.onFeed;
-      }),
-      () => Effect.sync(() => (this.#onFeed = undefined)),
+  holdNext(): void {
+    this.#loading = Deferred.makeUnsafe<void>();
+  }
+
+  loaded(): Effect.Effect<void> {
+    return this.#loading ? Effect.asVoid(Deferred.succeed(this.#loading, undefined)) : Effect.void;
+  }
+
+  start(options: AvatarFeedOptions): Effect.Effect<boolean, never, Scope.Scope> {
+    const loading = this.#loading;
+    return Effect.andThen(
+      loading ? Deferred.await(loading) : Effect.void,
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          this.starts += 1;
+          if (this.refuses) return false;
+          this.#onFeed = options.onFeed;
+          return true;
+        }),
+        () => Effect.sync(() => (this.#onFeed = undefined)),
+      ),
     );
   }
 
@@ -680,4 +698,39 @@ it.effect("the call's end gives Luke's voice back to the element and takes the t
     assert.equal(f.avatarVoiced(), false);
     assert.equal(f.tee.standing, false);
   }),
+);
+
+it.effect("Luke stays on the element where the tee could not stand", () =>
+  Effect.gen(function* () {
+    const f = yield* standingWithAvatar;
+    f.tee.refuses = true;
+    f.call.reportAvatarStatus(AVATAR_STATUS.STARTING);
+    f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+    yield* settle;
+    assert.equal(f.tee.starts, 1);
+    assert.equal(f.avatarVoiced(), false);
+  }),
+);
+
+it.effect(
+  "a live avatar waits for the tee to stand, and a turn the meter hears then finishes on the element",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* standingWithAvatar;
+      f.tee.holdNext();
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      yield* settle;
+      assert.equal(f.avatarVoiced(), false);
+      f.call.reportRemoteAudioLevel(true);
+      yield* f.tee.loaded();
+      yield* settle;
+      assert.equal(f.tee.standing, true);
+      // The tee met Luke mid-turn: the rest of it, and its end, stay on the element.
+      f.tee.emit(AUDIO);
+      f.tee.emit(TURN_END);
+      assert.deepEqual(f.fed, []);
+      assert.equal(f.avatarVoiced(), true);
+      f.tee.emit(AUDIO);
+      assert.deepEqual(f.fed, [AUDIO]);
+    }),
 );
