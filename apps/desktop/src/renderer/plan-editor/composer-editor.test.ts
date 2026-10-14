@@ -282,3 +282,96 @@ test("the list's word is reported again as the words scroll under it", () => {
     rect: { left: 10, top: 40, bottom: 56 },
   });
 });
+
+/** A box mounted with mentions, every report and drawn mention written down. */
+function mountedWithMentions(text: string) {
+  const reported: (ComposerTrigger | undefined)[] = [];
+  const drawn: string[] = [];
+  const box = mounted(text, {
+    mentions: {
+      onTrigger: (trigger) => reported.push(trigger),
+      drawMention: (element, mention) => {
+        element.textContent = `@${mention.name}`;
+        drawn.push(`${mention.name} ${mention.target}`);
+        return () => undefined;
+      },
+    },
+  });
+  return { ...box, reported, drawn };
+}
+
+const STORE_LINK = "[@session-store.ts](luke://file/apps/web/session-store.ts)";
+
+test("an @ word is reported to the mentions, and a pick writes the mention into the words as its link, a space after it", () => {
+  const box = mountedWithMentions("");
+
+  typeInComposer(box.host, "Fix @ses");
+  const word = box.reported.at(-1);
+  box.handle.chooseMention({
+    name: "session-store.ts",
+    target: "luke://file/apps/web/session-store.ts",
+  });
+
+  assert.equal(word?.query, "ses");
+  assert.equal(box.drafts.at(-1), `Fix ${STORE_LINK} `);
+  assert.deepEqual(box.drawn, ["session-store.ts luke://file/apps/web/session-store.ts"]);
+});
+
+test("words laid in with a mention's link hold it as its chip, and hand the same words back", () => {
+  const box = mountedWithMentions("");
+
+  box.handle.replace(`See ${STORE_LINK} first`);
+
+  assert.deepEqual(box.drawn, ["session-store.ts luke://file/apps/web/session-store.ts"]);
+  assert.equal(box.drafts.at(-1), `See ${STORE_LINK} first`);
+});
+
+test("one Backspace right after a mention takes it out whole", () => {
+  const box = mountedWithMentions(`See ${STORE_LINK}`);
+
+  typeInComposer(box.host, "");
+  pressInComposer(box.host, "Backspace");
+
+  assert.equal(box.drafts.at(-1), "See ");
+});
+
+test("a pick right before a chip replaces the @ word alone, and the chip stays", () => {
+  const box = mountedWithMentions(`See ${STORE_LINK}`);
+
+  // The caret right after "See ", before the chip: the paragraph opens at 1.
+  box.caretAt(1 + "See ".length);
+  typeInComposer(box.host, "@go");
+  box.handle.chooseMention({ name: "Goal", target: "luke://plan/pl_1#Goal" });
+
+  assert.equal(box.drafts.at(-1), `See [@Goal](luke://plan/pl_1#Goal) ${STORE_LINK}`);
+});
+
+test("a box with no mentions reports no @ word", () => {
+  const triggers: (ComposerTrigger | undefined)[] = [];
+  const box = mounted("", { onTrigger: (trigger) => triggers.push(trigger) });
+
+  typeInComposer(box.host, "Fix @ses");
+
+  assert.ok(triggers.every((trigger) => trigger === undefined));
+});
+
+test("an @ in code is the code's: no @ word is reported in a fence or a span", () => {
+  const box = mountedWithMentions("");
+
+  typeInComposer(box.host, "```\n@ses");
+  const inFence = box.reported.at(-1);
+  box.handle.replace("Run `x @ses` now");
+  box.caretAt(1 + "Run `x @ses".length);
+
+  assert.equal(inFence, undefined);
+  assert.equal(box.reported.at(-1), undefined);
+});
+
+test("a box that takes no mentions shows a mention's link as the words it is, never a chip", () => {
+  const box = mounted("");
+
+  box.handle.replace(`See ${STORE_LINK}`);
+
+  assert.equal(composerEditor(box.host).textContent, `See ${STORE_LINK}`);
+  assert.equal(box.drafts.at(-1), `See ${STORE_LINK}`);
+});

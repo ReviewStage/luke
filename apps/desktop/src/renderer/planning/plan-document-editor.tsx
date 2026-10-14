@@ -1,5 +1,4 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import { decodeMention } from "@sidecar/hosted/mention-link";
 import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
@@ -14,8 +13,8 @@ import type {
 } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
-import { MentionChip, type MentionDoors, retargetedMention } from "./mention-chip";
-import { useMentionPicker } from "./mention-picker";
+import { type MentionDoors, MentionNodeChip, retargetedMention } from "./mention-chip";
+import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
@@ -541,12 +540,12 @@ export function PlanDocumentEditor({
   const module = useAtomValue(editorBundleAtom);
   const room = useRef<HTMLElement>(null);
   const chips = useEditorMentions();
+  // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
+  const text = () => handle.current?.markdown() ?? editor.draft;
   const picker = useMentionPicker({
-    planId: plan.id,
-    planName: plan.name,
-    // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
-    text: () => handle.current?.markdown() ?? editor.draft,
+    source: { planId: plan.id, planName: plan.name, repository: plan.repository, text },
     room,
+    side: MENTION_MENU_SIDE.BELOW,
     onChoose: (mention) => handle.current?.chooseMention(mention),
   });
   if (!AsyncResult.isSuccess(module)) {
@@ -596,7 +595,7 @@ export function PlanDocumentEditor({
         ? null
         : chips.drawn.map((each) =>
             createPortal(
-              <EditorMention mention={each.mention} doors={mentions} />,
+              <MentionNodeChip mention={each.mention} doors={mentions} />,
               each.element,
               each.key,
             ),
@@ -629,17 +628,4 @@ function useEditorMentions(): EditorMentions {
     return () => setDrawn((was) => was.filter((each) => each.key !== key));
   };
   return { drawn, draw };
-}
-
-/** A mention in the editor: its chip where its target names a mention, and its words where it names none. */
-function EditorMention({
-  mention,
-  doors,
-}: {
-  mention: MentionNode;
-  doors: MentionDoors;
-}): React.JSX.Element {
-  const named = decodeMention(mention.target);
-  if (named === undefined) return <>{`@${mention.name}`}</>;
-  return <MentionChip mention={named} name={mention.name} doors={doors} />;
 }

@@ -91,7 +91,7 @@ function insideSpan(text: string, at: number): boolean {
 }
 
 /** Whether the index stands in code: inside a fenced block, or inside a code span on its own line. */
-function insideCode(text: string, at: number): boolean {
+export function insideCode(text: string, at: number): boolean {
   return insideFence(text, at) || insideSpan(text, at);
 }
 

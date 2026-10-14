@@ -39,6 +39,9 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { DictateButton, DictationStrip } from "./dictation-strip";
+import { MentionNodeChip } from "./mention-chip";
+import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
+import { usePlanMentions } from "./plan-mentions";
 import { useRepositoryRemedy } from "./repository-remedy";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
@@ -101,6 +104,11 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * to be heard and the words land at the caret, or ✕ or Escape drops it
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
+ *
+ * An `@` at the start of a word, on a plan's page, opens the list of what
+ * the message can mention, the plan's repository's files and folders and
+ * the plan's sections (`mention-picker.tsx`), and the one chosen is written
+ * into the words as its link, drawn as its chip (`mention-chip.tsx`).
  *
  * A `/` at the start of a word opens the list of the skills the plan's
  * repository keeps, at the caret, and the one chosen is written into the
@@ -257,8 +265,19 @@ export function AgentComposer({
     onOpen: openSkill,
   });
 
+  // An `@` picks a mention of the plan the box stands on, where it stands on a plan's page.
+  const planMentions = usePlanMentions();
+  const mentionPicker = useMentionPicker({
+    source: planMentions,
+    room,
+    side: MENTION_MENU_SIDE.ABOVE,
+    onChoose: (mention) => editor.current?.chooseMention(mention),
+  });
+
   const onFieldKey = (event: KeyboardEvent): boolean => {
-    if (dictation.onFieldKey(event) || skillPicker.onKey(event)) return true;
+    if (dictation.onFieldKey(event) || skillPicker.onKey(event) || mentionPicker.onKey(event)) {
+      return true;
+    }
     if (event.key !== "Escape") return false;
     event.stopPropagation();
     editor.current?.blur();
@@ -355,8 +374,19 @@ export function AgentComposer({
           }}
           onTrigger={skillPicker.onTrigger}
           chip={skillPicker.chip}
+          mentions={
+            planMentions === undefined
+              ? undefined
+              : {
+                  onTrigger: mentionPicker.onTrigger,
+                  chip: (mention) => (
+                    <MentionNodeChip mention={mention} doors={planMentions.doors} />
+                  ),
+                }
+          }
         >
           {skillPicker.menu}
+          {mentionPicker.menu}
         </ComposerField>
         <PromptInputFooter>
           {dictating ? (

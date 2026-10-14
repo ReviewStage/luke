@@ -59,6 +59,11 @@ const MENU_GAP = 4;
 /** The list's width, as the stylesheet sets it (`.mention-menu`). */
 const MENU_WIDTH = 360;
 
+/** Where the list stands in its room: its left edge, and its top, or its foot over the word with its top left to it. */
+type MenuPlace =
+  | { readonly left: number; readonly top: number }
+  | { readonly left: number; readonly top: "auto"; readonly bottom: number };
+
 /** One row the list offers: what it mentions, the name its mention is written with, and a muted detail. */
 interface MentionRow {
   readonly mention: Mention;
@@ -179,7 +184,7 @@ function MentionMenu({
   id: string;
   groups: readonly MentionGroup[];
   at: number;
-  place: { readonly left: number; readonly top: number };
+  place: MenuPlace;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
@@ -245,24 +250,39 @@ export interface MentionPicker {
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
 
+/** Which side of the word the list stands: under it, as in the plan, or over it, as at the foot of an agent's tab. */
+export const MENTION_MENU_SIDE = {
+  BELOW: "below",
+  ABOVE: "above",
+} as const;
+
+type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
+
+/** The plan whose sections and repository the list offers, and its text as it stands now. */
+export interface MentionSource {
+  readonly planId: string;
+  readonly planName: string;
+  /** The plan's repository, `owner/name`; null before one is chosen. */
+  readonly repository: string | null;
+  readonly text: () => string;
+}
+
 /**
- * The `@` list for an editor of the plan's text: its rows read from the
- * plan's words as they stand and the repository's paths, placed under the
- * word in `room`, and a pick handed to `onChoose` as the mention's node.
+ * The `@` list for an editor on a plan's page: its rows read from the
+ * plan's words as they stand and the repository's paths, placed by the word
+ * in `room`, and a pick handed to `onChoose` as the mention's node; a list
+ * that never opens where there is no plan to offer.
  */
 export function useMentionPicker({
-  planId,
-  planName,
-  text,
+  source,
   room,
+  side,
   onChoose,
 }: {
-  planId: string;
-  planName: string;
-  /** The plan's text as it stands now, whose sections the list offers, read as the list draws. */
-  text: () => string;
-  /** The element the list is placed in, under the word. */
+  source: MentionSource | undefined;
+  /** The element the list is placed in, by the word. */
   room: RefObject<HTMLElement | null>;
+  side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
 }): MentionPicker {
   const listId = useId();
@@ -270,17 +290,24 @@ export function useMentionPicker({
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
-  const [paths, setPaths] = useState<{ planId: string; paths: readonly RepositoryPath[] }>();
+  const [paths, setPaths] = useState<{
+    planId: string;
+    repository: string | null;
+    paths: readonly RepositoryPath[];
+  }>();
 
-  const open = trigger !== undefined && closedAt !== trigger.start;
+  const planId = source?.planId ?? "";
+  const repository = source?.repository ?? null;
+  const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
   // A word closed with Escape stays closed only while the caret is in it.
   const inWord = trigger !== undefined;
   useEffect(() => {
     if (!inWord) setClosedAt(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the plan.
-  const read = paths?.planId === planId ? paths.paths : undefined;
+  // The repository's paths are read the first time the list opens on the plan, and again once its repository changes.
+  const read =
+    paths?.planId === planId && paths.repository === repository ? paths.paths : undefined;
   useEffect(() => {
     if (!open || read !== undefined) return;
     let live = true;
@@ -290,6 +317,7 @@ export function useMentionPicker({
         const entries = "folder" in answer ? answer.folder.entries : [];
         setPaths({
           planId,
+          repository,
           paths: entries.map((entry) => ({
             path: entry.name,
             folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
@@ -301,9 +329,11 @@ export function useMentionPicker({
     return () => {
       live = false;
     };
-  }, [open, read, act, planId]);
+  }, [open, read, act, planId, repository]);
 
-  const groups = open ? groupsFor(trigger.query, read, planRows(planId, planName, text())) : [];
+  const groups = open
+    ? groupsFor(trigger.query, read, planRows(planId, source.planName, source.text()))
+    : [];
   const rows = groups.flatMap((group) => group.rows);
   const held =
     highlight !== undefined &&
@@ -337,22 +367,22 @@ export function useMentionPicker({
     return false;
   };
 
-  // The list stands under the word's line, inside the room's width.
+  // The list stands by the word's line, on the side asked, inside the room's width.
   const box = room.current;
   const placed = box?.getBoundingClientRect();
+  const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): MenuPlace => {
+    const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
+    return side === MENTION_MENU_SIDE.BELOW
+      ? { left, top: word.rect.bottom - at.top + MENU_GAP }
+      : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
+  };
   const menu =
     !open || box === null || placed === undefined ? null : (
       <MentionMenu
         id={listId}
         groups={groups}
         at={at}
-        place={{
-          left: Math.max(
-            0,
-            Math.min(trigger.rect.left - placed.left, box.clientWidth - MENU_WIDTH),
-          ),
-          top: trigger.rect.bottom - placed.top + MENU_GAP,
-        }}
+        place={placeOf(trigger, placed, box.clientWidth)}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />

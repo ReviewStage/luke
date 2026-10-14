@@ -28,7 +28,7 @@ const LABEL_SPECIAL = /[[\]\\]/gu;
 const LINK_MARK = "link";
 
 /** A mention as markdown writes it. */
-function mentionLink(mention: MentionNode): string {
+export function mentionLink(mention: MentionNode): string {
   const label = `${MENTION_SIGIL}${mention.name}`.replace(
     LABEL_SPECIAL,
     (special) => `\\${special}`,
@@ -120,4 +120,26 @@ function mentionsOfRun(content: readonly JSONContent[]): JSONContent[] {
 export function withMentions(node: JSONContent): JSONContent {
   if (node.content === undefined) return node;
   return { ...node, content: mentionsOfRun(node.content) };
+}
+
+/** A mention written in plain words: where its link stands, and what it holds. */
+export interface MentionToken {
+  readonly start: number;
+  readonly end: number;
+  readonly mention: MentionNode;
+}
+
+/** A link whose label starts with `@`: the label's words, its escapes kept, and a target with no space or parenthesis in it. */
+const MENTION_LINK = /\[@((?:\\[[\]\\]|[^[\]\\\n])+)\]\(([^\s()]+)\)/gu;
+
+/** A label's escaped character, read back. */
+const LABEL_ESCAPE = /\\([[\]\\])/gu;
+
+/** Every mention written in plain words, in order, as the composer reads a message laid in whole: a restored draft or a paste. */
+export function mentionTokens(text: string): readonly MentionToken[] {
+  return [...text.matchAll(MENTION_LINK)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+    mention: { name: (match[1] ?? "").replace(LABEL_ESCAPE, "$1"), target: match[2] ?? "" },
+  }));
 }
