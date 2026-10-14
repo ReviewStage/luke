@@ -1,7 +1,9 @@
 # Proposal: an Experimental settings page that gates features
 
 Status: proposed, waiting on Dean's decisions below. No product code until he
-answers.
+answers. On 2026-10-14 Dean asked for two changes to the page, now drawn here
+and in the show: no intro text, and the empty Inbox's empty state in place of
+a one-line note.
 
 Dean's ask: "I want to build the thin version of Factory. HOWEVER, I want to
 add an Experimental settings tab that gates features. Can we plan this out
@@ -43,9 +45,10 @@ Each decision lists its options; **the recommendation is in bold**.
      word).
    - (c) "Labs".
 4. **When no experiment is in.**
-   - **(a) The page stays and says "Nothing to try right now. New features
-     show up here first."** It stays findable from search and ⌘K, and a link
-     to it never dangles.
+   - **(a) The page stays and draws the empty state the empty Inbox draws:
+     a large muted glyph, the title "No experiments right now", and one short
+     line, "New features show up here to try before they ship."** It stays
+     findable from search and ⌘K, and a link to it never dangles.
    - (b) The page disappears from the sidebar while the list is empty, as
      ChatGPT's Beta features tab did.
 5. **How a gated feature is marked once it is on.**
@@ -312,16 +315,24 @@ export const EXPERIMENTS = [
 
 **What it draws:**
 
-- **The lede, once for the page:** "Try features before they are finished.
-  They may change or be removed, and they may be rough. What you turn on
-  here follows your account to every Mac."
+- **No intro text** (Dean, 2026-10-14). The page is its title, then the
+  rows.
 - **One `SettingsGroup`, one `SwitchRow` per entry:** the name, the
   one-line detail, and "Send feedback" at the end of the detail. The switch
   writes at once, with no confirm.
-- **The empty line,** when the registry is empty: "Nothing to try right now.
-  New features show up here first." It is drawn as a `settings-card-line
-  settings-note`, the way Settings says every empty card. `EmptyState` is
-  for whole tabs (`empty-state.tsx`).
+- **The empty state,** when the registry is empty (Dean, 2026-10-14). It is
+  the empty Inbox's own component, `EmptyState` (`empty-state.tsx`, drawn by
+  `desktop-inbox.tsx` as `<EmptyState icon={<InboxIcon />}>`), centred in the
+  page column under the title. It has the flask glyph, large and muted, the
+  title "No experiments right now", and the line "New features show up here
+  to try before they ship."
+  - `EmptyState` draws a glyph and one line today. PR 3 gives it an optional
+    `title`, drawn the way `ConversationEmptyState` (the component beneath
+    it) draws its own: medium weight, in the primary ink, a small gap above
+    the line.
+  - The Inbox's call is unchanged.
+  - Its comment is amended to name a Settings page with nothing on it among
+    the places that draw one.
 
 **Search.** Each entry joins the Settings search corpus: its name, its
 detail, and the page's title. A result lands on the row. ⌘K's settings rows
@@ -429,7 +440,7 @@ built from the shared builders.
   - with Factory off, the sidebar row is absent and the command is not
     offered;
   - the Keyboard shortcuts page hides the chord;
-  - the page lists its rows, or the empty line;
+  - the page lists its rows, or the empty state;
   - the search finds a row by its name.
 - **Main.** The menu template omits Go › Factory while it is off.
 - **Evidence.** `./scripts/verify.sh` evidence for the page and the sidebar,
@@ -443,7 +454,7 @@ They form one stack, in order. Each is small enough to review in one sitting.
 | --- | --- | --- | --- |
 | 1 | `feat(web,settings): experiments stored on the account` | S–M, ~300 lines | The registry module (starting empty), the tolerant wire reader, the `experiments` column and migration, the store's read and per-key merge with tests, and the endpoint's third part with tests |
 | 2 | `feat(desktop,host): read and write an experiment, gated in one place per list` | M, ~450 lines | The host cache, reconcile and write, `experiments.set`, `ACT_KIND.EXPERIMENT_SET`, app state, `useExperiment`, the `experiment` tags and their filters (shortcuts, "+" entries), the menu rebuild, history skipping an off place, and `experimentsOn` |
-| 3 | `feat(desktop): Settings › Experimental` | M, ~350 lines | The page, its place and icon, counted names, rows and empty line, search entries, the feedback dialog's experiment, and `experiment:toggle`. With the registry still empty, it ships showing the empty state. `verify.sh` evidence |
+| 3 | `feat(desktop): Settings › Experimental` | M, ~350 lines | The page, its place and icon, counted names, rows and empty state (`EmptyState` gains an optional title), search entries, the feedback dialog's experiment, and `experiment:toggle`. With the registry still empty, it ships showing the empty state. `verify.sh` evidence |
 | 4 | Factory's view (worker 260), gated | Worker 260's | Factory's registry entry, then its view, sidebar row, command, chord and Go menu item, each behind `useExperiment(EXPERIMENT.FACTORY)`, with the toolbar badge and Send feedback |
 
 **Order.** Factory stacks on PR 3, because that is the only way to turn it on
