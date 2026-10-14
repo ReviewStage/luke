@@ -185,16 +185,20 @@ export const terminalPortInboundSchema = EffectSchema.Union([
 export type TerminalPortInbound = typeof terminalPortInboundSchema.Type;
 
 /**
- * What main sends on a shell's port: bytes the shell printed, or how the connection stands.
- *
- * @public Read by the Terminal tab (desktop PRs 6–9) and the host's terminal
- * client (PR 4's implementation), which land above this contract.
+ * What main sends on a shell's port: bytes the shell printed, or how the
+ * connection stands, its exit status on `exited`. The tab reads each message
+ * through it before anything reaches the screen.
  */
-export type TerminalPortOutbound =
-  | { readonly type: typeof TERMINAL_PORT_MESSAGE.OUTPUT; readonly data: Uint8Array }
-  | {
-      readonly type: typeof TERMINAL_PORT_MESSAGE.STATE;
-      readonly state: TerminalConnection;
-      /** The shell's exit status, on `exited`. */
-      readonly code?: number;
-    };
+export const terminalPortOutboundSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.OUTPUT),
+    data: EffectSchema.Uint8Array,
+  }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(TERMINAL_PORT_MESSAGE.STATE),
+    state: EffectSchema.Literals(Object.values(TERMINAL_CONNECTION)),
+    code: EffectSchema.optional(EffectSchema.Int),
+  }),
+]);
+
+export type TerminalPortOutbound = typeof terminalPortOutboundSchema.Type;

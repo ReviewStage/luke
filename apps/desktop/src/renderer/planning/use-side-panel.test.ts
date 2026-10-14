@@ -105,6 +105,35 @@ test("a Changes tab closed stays closed across a launch, and closing the chosen 
   assert.equal(second.control().tab, SIDE_PANEL_TAB.CODE);
 });
 
+test("an agent's Terminal tab opens once at the strip's end and chosen, stands only on its agent's plan, and is kept across no launch", () => {
+  const first = launch({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
+  act(() => first.control().onChoose({ terminal: AGENT }));
+  act(() => first.control().onChoose({ terminal: AGENT }));
+  assert.deepEqual(first.control().terminals, [{ terminal: AGENT }], "opened once, chosen again");
+  assert.deepEqual(first.control().strip.at(-1), { terminal: AGENT });
+  assert.deepEqual(first.control().tab, { terminal: AGENT });
+
+  // Another plan never draws it, its agents read or not.
+  first.render({ plan: OTHER_PLAN, planAgents: undefined });
+  assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "terminal" in tab));
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  first.render({ plan: OTHER_PLAN, planAgents: [] });
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+
+  // Back on its plan it stands as it was; closed, the tab viewed before it is chosen.
+  first.render({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
+  assert.deepEqual(first.control().tab, { terminal: AGENT });
+  act(() => first.control().onClose({ terminal: AGENT }));
+  assert.deepEqual(first.control().terminals, []);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  act(() => first.control().onChoose({ terminal: OTHER_AGENT }));
+  first.quit();
+
+  const second = launch({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
+  assert.deepEqual(second.control().terminals, []);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {
   const first = launch({ plan: PLAN, planAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));

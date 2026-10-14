@@ -7,7 +7,8 @@ import { rendererRuntime } from "./renderer-runtime";
  * bundle-loader.ts -- a bundle of the panel's own that is too large for the one every window parses, loaded the first time it is needed and kept for the window's life.
  *
  * The whiteboard (`whiteboard/`), a File tab's tree (`file-tree/`), the panel's
- * editors (`plan-editor/`), and the session recorder (`session-recorder/`) each
+ * editors (`plan-editor/`), a Terminal tab's screen (`terminal/`), and the
+ * session recorder (`session-recorder/`) each
  * ship as a script of their own beside `index.html` that sets one global
  * once it has run. Loading one adds its stylesheet, where it has one, and
  * its script to the document, and answers with what the script set; the

@@ -54,3 +54,9 @@ declare global {
     lukeTerminal?: TerminalModule;
   }
 }
+
+/** The files the terminal bundle is, beside `index.html`. */
+export const TERMINAL_ASSET = {
+  SCRIPT: "terminal.js",
+  STYLESHEET: "terminal.css",
+} as const;

@@ -6,7 +6,8 @@
  * `planning/use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
- * started, one subagent, one file, one agent's changes, or one page. Two tabs are the
+ * started, one subagent, one file, one agent's changes, one agent's
+ * terminal, or one page. Two tabs are the
  * same where they name the same thing, so a tab rebuilt on every render is
  * still the tab it was.
  *
@@ -33,6 +34,7 @@ export const TAB_WORDS = {
   NEW_AGENT: "New coding agent",
   CODING_AGENT: "Coding agent",
   CHANGES: "Changes",
+  TERMINAL: "Terminal",
 } as const;
 
 /** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
@@ -73,6 +75,11 @@ export interface ChangesStripTab {
   readonly changes: string;
 }
 
+/** One agent's Terminal tab, named by the agent in whose sandbox its shells run. */
+export interface TerminalStripTab {
+  readonly terminal: string;
+}
+
 /** One page's tab, named by the page an agent wrote for the plan. */
 export interface PageStripTab {
   readonly page: string;
@@ -86,6 +93,7 @@ export type StripTab =
   | SubagentStripTab
   | FileStripTab
   | ChangesStripTab
+  | TerminalStripTab
   | PageStripTab;
 
 /**
@@ -116,6 +124,11 @@ export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
   return tab instanceof Object && "changes" in tab;
 }
 
+/** Whether a tab is one agent's terminal. */
+export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
+  return tab instanceof Object && "terminal" in tab;
+}
+
 /** Whether a tab is one page's. */
 export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
@@ -132,19 +145,37 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
+  if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   return a === b;
+}
+
+/**
+ * The key each agent's Terminal tab is drawn under, by agent, made the first
+ * time it is asked for. Note that it is not the agent's id, because the
+ * agent's Changes tab stands in the same strip under that.
+ */
+const terminalKeys = new Map<string, string>();
+
+function terminalKey(agentId: string): string {
+  const held = terminalKeys.get(agentId);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  terminalKeys.set(agentId, made);
+  return made;
 }
 
 /**
  * A tab's key for a list that draws one element per tab: a word tab's word,
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by, and a page's
- * by the page's own id.
+ * of the side panel, the one strip it stands in, is keyed by, a Terminal tab
+ * by a key made for its agent (`terminalKey`), and a page's by the page's
+ * own id.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
+  if (isTerminalTab(tab)) return terminalKey(tab.terminal);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;

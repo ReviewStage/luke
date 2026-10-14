@@ -20,6 +20,7 @@ import {
   isFileTab,
   isPageTab,
   isSubagentTab,
+  isTerminalTab,
   type StripTab,
   sameTab,
 } from "@luke/ui/tab-strip-model";
@@ -113,6 +114,7 @@ import {
 import {
   drawsChanges,
   drawsSubagent,
+  drawsTerminal,
   inColumn,
   type PinnedTab,
   type PlanHolds,
@@ -1333,7 +1335,7 @@ export function usePlansTab(input: {
   );
   // Whether the open plan's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, the Inbox while the plan holds an
-  // agent, and a subagent's, a Changes tab, or a page's on the strip's own
+  // agent, and a subagent's, a Changes or Terminal tab, or a page's on the strip's own
   // terms. Note that what the plan has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   const drawsAgain = (closed: ClosedTab): boolean => {
@@ -1350,6 +1352,7 @@ export function usePlansTab(input: {
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: workers });
     if (isChangesTab(tab)) return drawsChanges(tab, { planAgents: agentIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
+    if (isTerminalTab(tab)) return drawsTerminal(tab, { planAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, planning.activePlanId, drawsAgain);
