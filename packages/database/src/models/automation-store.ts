@@ -738,9 +738,15 @@ const ListeningRowSchema = Schema.Struct({
 export type ListeningAutomation = typeof ListeningRowSchema.Type;
 
 const findGithubAutomations = SqlSchema.findAll({
-  Request: Schema.Struct({ repository: Schema.String, event: Schema.String, limit: Schema.Int }),
+  Request: Schema.Struct({
+    repository: Schema.String,
+    event: Schema.String,
+    labels: Schema.String,
+    branch: Schema.NullOr(Schema.String),
+    limit: Schema.Int,
+  }),
   Result: ListeningRowSchema,
-  execute: ({ repository, event, limit }) =>
+  execute: ({ repository, event, labels, branch, limit }) =>
     Database.use((db) =>
       db
         .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
@@ -753,6 +759,14 @@ const findGithubAutomations = SqlSchema.findAll({
             // GitHub folds a repository's name; a plan keeps it as GitHub spelled it when it was named.
             sql`lower(${plan.repository}) = lower(${repository})`,
             sql`${automation.trigger}->>'event' = ${event}`,
+            // A label filter is met by any of the event's labels, folded as GitHub folds a label's case.
+            sql`(coalesce(jsonb_array_length(${automation.trigger}->'labels'), 0) = 0 or exists (
+              select 1 from jsonb_array_elements_text(${automation.trigger}->'labels') as wanted
+              where lower(wanted) in (select lower(label) from jsonb_array_elements_text(${labels}::jsonb) as label)
+            ))`,
+            sql`(coalesce(jsonb_array_length(${automation.trigger}->'branches'), 0) = 0 or (
+              ${branch}::text is not null and jsonb_exists(${automation.trigger}->'branches', ${branch}::text)
+            ))`,
             OWNER_REACHES_PLAN,
           ),
         )
@@ -1090,18 +1104,33 @@ export function strandedAutomationRuns(
   return findStranded({ before, limit });
 }
 
+/** What a GitHub event offers an automation's filters: its labels, and the branch it names. */
+export interface GitHubEventFilters {
+  readonly labels: readonly string[];
+  readonly branch: string | undefined;
+}
+
 /**
- * The enabled automations listening for the GitHub event on plans of the
- * repository, whoever owns them, of owners who still reach those plans,
- * oldest first, at most `limit`: what a delivery about the repository may
- * fire, its filters still to read.
+ * The enabled GitHub automations on plans of `repository` listening for
+ * `event` whose label and branch filters the event meets, whoever owns
+ * them, of owners who still reach those plans, oldest first, at most
+ * `limit`: what a delivery about the repository fires. Note that the filters are met in the query, before the
+ * limit, because a bound taken first would let older automations filtered
+ * away crowd out a newer one that matches.
  */
 export function githubAutomationsOn(
   repository: string,
   event: GitHubTriggerEvent,
+  filters: GitHubEventFilters,
   limit: number,
 ): PlanStoreEffect<readonly ListeningAutomation[]> {
-  return findGithubAutomations({ repository, event, limit });
+  return findGithubAutomations({
+    repository,
+    event,
+    labels: JSON.stringify(filters.labels),
+    branch: filters.branch ?? null,
+    limit,
+  });
 }
 
 /** The webhook automation under this id, whoever owns it, for a call to its address; nothing for any other id or trigger. */

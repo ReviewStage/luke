@@ -5,9 +5,7 @@ import {
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import {
   AUTOMATION_FIRING,
-  AUTOMATION_TRIGGER,
   type AutomationFiring,
-  type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
 } from "@sidecar/hosted/automation-wire";
@@ -265,22 +263,6 @@ function githubEventOf(event: string, payload: UnparsedWireValue): GitHubEventRe
   }
 }
 
-/** Whether the trigger listens for this event: its event, and its label and branch filters where it names any. */
-function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): boolean {
-  if (trigger.kind !== AUTOMATION_TRIGGER.GITHUB || trigger.event !== read.event) return false;
-  const labels = trigger.labels ?? [];
-  const branches = trigger.branches ?? [];
-  // A label is matched the way GitHub folds a label's case.
-  const labelled =
-    labels.length === 0 ||
-    labels.some((wanted) =>
-      read.labels.some((label) => label.toLowerCase() === wanted.toLowerCase()),
-    );
-  const branched =
-    branches.length === 0 || (read.branch !== undefined && branches.includes(read.branch));
-  return labelled && branched;
-}
-
 /**
  * Queues a run, under the delivery's own id, for every enabled automation
  * on a plan of the delivery's repository whose trigger listens for the
@@ -295,11 +277,12 @@ export function queueGithubRuns(
   const read = githubEventOf(event, payload);
   if (read === undefined || deliveryId.length === 0) return Effect.succeed(0);
   return Effect.gen(function* () {
-    const listening = (yield* githubAutomationsOn(
+    const listening = yield* githubAutomationsOn(
       read.repository,
       read.event,
+      { labels: read.labels, branch: read.branch },
       MAXIMUM_AUTOMATIONS,
-    )).filter((automation) => triggerMatches(automation.trigger, read));
+    );
     const firedAt = new Date(yield* Clock.currentTimeMillis);
     const recorded = yield* Effect.forEach(listening, (automation) =>
       recordAutomationRun(automation, { dedupeKey: deliveryId, firing: read.firing, firedAt }),

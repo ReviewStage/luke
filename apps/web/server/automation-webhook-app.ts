@@ -5,11 +5,7 @@ import {
   recordAutomationRun,
 } from "@sidecar/database/models/automation-store";
 import { wireUuidSchema } from "@sidecar/hosted";
-import {
-  AUTOMATION_BOUNDS,
-  AUTOMATION_FIRING,
-  AUTOMATION_WEBHOOK,
-} from "@sidecar/hosted/automation-wire";
+import { AUTOMATION_FIRING, AUTOMATION_WEBHOOK } from "@sidecar/hosted/automation-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
@@ -68,16 +64,16 @@ function secretHolds(secret: string, kept: string): boolean {
 }
 
 /**
- * The caller's own key for the call, its SHA-256 where it runs past the
- * bound, so a long key still names the one run on every retry; a fresh one
- * where it sends none, so a call without one is its own run.
+ * The caller's own key for the call as its SHA-256, so a key of any length
+ * names the one run on every retry; a fresh one where it sends none, so a
+ * call without one is its own run. Note that every key sent is hashed, the
+ * short with the long, because a long key's digest kept beside short keys
+ * kept as sent could be sent as a short key of its own and name that run.
  */
 function dedupeKeyOf(request: Request): string {
   const sent = request.headers.get(AUTOMATION_WEBHOOK.IDEMPOTENCY_HEADER)?.trim() ?? "";
   if (sent.length === 0) return randomUUID();
-  return sent.length <= AUTOMATION_BOUNDS.MAX_KEY_CHARS
-    ? sent
-    : createHash("sha256").update(sent).digest("hex");
+  return createHash("sha256").update(sent).digest("hex");
 }
 
 /** The body as UTF-8 text, or nothing for bytes that are not, which the agent could not be handed whole. */

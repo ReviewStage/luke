@@ -229,4 +229,31 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
         assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 1);
       }),
   );
+
+  it.effect(
+    "a short key that spells a long key's digest is a call of its own, in either order",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, secret } = yield* openWebhook;
+        const { ask } = yield* standing;
+        const path = automationWebhookPath(automation.id);
+        const long = "k".repeat(500);
+        const digest = createHash("sha256").update(long).digest("hex");
+        const other = "j".repeat(500);
+        const otherDigest = createHash("sha256").update(other).digest("hex");
+
+        const answers = [
+          yield* ask(path, call(secret, { key: long })),
+          yield* ask(path, call(secret, { key: digest })),
+          yield* ask(path, call(secret, { key: otherDigest })),
+          yield* ask(path, call(secret, { key: other })),
+        ];
+
+        assert.deepEqual(
+          answers.map((each) => each.body),
+          [{ queued: 1 }, { queued: 1 }, { queued: 1 }, { queued: 1 }],
+        );
+        assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 4);
+      }),
+  );
 });

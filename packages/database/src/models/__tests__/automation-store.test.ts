@@ -50,7 +50,7 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** A plan in a workspace the account owns, as the organization plugin would leave the rows. */
-const openPlan = (userId: string) =>
+const openPlan = (userId: string, repository = "acme/api") =>
   Effect.gen(function* () {
     const db = yield* Database;
     const organizationId = randomUUID();
@@ -67,10 +67,13 @@ const openPlan = (userId: string) =>
     const made = yield* createPlan(userId, {
       organizationId,
       name: "Nightly triage",
-      repository: "acme/api",
+      repository,
     });
     return made.id;
   });
+
+/** An issue labelled bug on no branch, as a delivery offers it to the filters. */
+const BUG = { labels: ["Bug"], branch: undefined } as const;
 
 const nightly = (planId: string): NewAutomation => ({
   planId,
@@ -283,6 +286,37 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
+    "an event's labels and branch are met before the bound, so older automations filtered away never crowd out one that matches",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner, "acme/triage");
+        const filtered = (labels: readonly string[], branches: readonly string[]) =>
+          createAutomation(owner, {
+            ...nightly(planId),
+            trigger: {
+              kind: AUTOMATION_TRIGGER.GITHUB,
+              event: "issue-labeled",
+              labels: [...labels],
+              branches: [...branches],
+            },
+            nextRunAt: null,
+          });
+        yield* filtered(["docs"], []);
+        const bug = Option.getOrThrow(yield* filtered(["bug"], []));
+        yield* filtered(["bug"], ["main"]);
+
+        const found = yield* githubAutomationsOn("acme/triage", "issue-labeled", BUG, 1);
+
+        assert.deepEqual(
+          found.map((each) => each.id),
+          [bug.id],
+          "the docs automation is filtered away before the bound, and the branch filter wants a branch the issue names none of",
+        );
+      }),
+  );
+
+  it.effect(
     "a repository's event finds the enabled GitHub automations listening for it on its plans, however its name is cased, and no other",
     () =>
       Effect.gen(function* () {
@@ -302,19 +336,19 @@ it.layer(getTestDB())("the automation store", (it) => {
         yield* updateAutomation(owner, paused.id, { enabled: false });
         yield* createAutomation(owner, nightly(planId));
 
-        const found = yield* githubAutomationsOn("ACME/api", "issue-opened", 10);
+        const found = yield* githubAutomationsOn("ACME/api", "issue-opened", BUG, 10);
         assert.deepEqual(
           found.filter((each) => each.userId === owner).map((each) => [each.id, each.trigger]),
           [[listening.id, github]],
         );
         assert.deepEqual(
-          (yield* githubAutomationsOn("acme/other", "issue-opened", 10)).filter(
+          (yield* githubAutomationsOn("acme/other", "issue-opened", BUG, 10)).filter(
             (each) => each.userId === owner,
           ),
           [],
         );
         assert.deepEqual(
-          (yield* githubAutomationsOn("acme/api", "push", 10)).filter(
+          (yield* githubAutomationsOn("acme/api", "push", BUG, 10)).filter(
             (each) => each.userId === owner,
           ),
           [],
