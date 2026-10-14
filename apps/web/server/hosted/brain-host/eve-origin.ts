@@ -33,10 +33,22 @@ const DEPLOYMENT_ENVIRONMENT = { PRODUCTION: "production" } as const;
  * eve.
  */
 export function deploymentEveOrigin(): string | undefined {
+  return eveOrigin(deploymentServiceOrigin() ?? "") || undefined;
+}
+
+/**
+ * The origin the deployment answers its own routes on, read from Vercel's
+ * own environment and never from a request: the project's production domain
+ * where this deployment is the production one, else the deployment's own
+ * host, else nothing on a machine that is neither. What a client is handed
+ * to call back, a webhook's address, is spelled on it, so a request's Host
+ * header can never point that address elsewhere.
+ */
+export function deploymentServiceOrigin(): string | undefined {
   const production =
     process.env[VERCEL_ENVIRONMENT.ENVIRONMENT]?.trim() === DEPLOYMENT_ENVIRONMENT.PRODUCTION
       ? process.env[VERCEL_ENVIRONMENT.PRODUCTION_URL]?.trim()
       : undefined;
   const own = production || process.env[VERCEL_ENVIRONMENT.URL]?.trim();
-  return eveOrigin(own ? `https://${own}` : "") || undefined;
+  return own ? `https://${own}` : undefined;
 }

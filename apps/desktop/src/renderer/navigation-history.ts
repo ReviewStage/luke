@@ -75,6 +75,10 @@ const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
+  // An automation read on the Automations page, or its list narrowed to a plan, is a step of its own.
+  if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
+    return one.chosen === other.chosen && one.plan === other.plan;
+  }
   return true;
 }
 

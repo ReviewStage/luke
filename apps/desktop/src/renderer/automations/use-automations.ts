@@ -5,7 +5,7 @@ import {
   type AutomationCreateParams,
 } from "@sidecar/hosted/automation-view";
 import type { AutomationRunSummary, AutomationSummary } from "@sidecar/hosted/automation-wire";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useMinute } from "../planning/plan-time";
@@ -46,13 +46,18 @@ export function useAutomations(plan: string | undefined) {
   const { act } = useAct();
   const now = useMinute();
   const [read, setRead] = useState<AutomationsRead>(undefined);
-  const reload = useCallback(
-    () =>
-      act(ACT_KIND.AUTOMATIONS_LIST, plan === undefined ? {} : { planId: plan }).then(setRead, () =>
-        setRead(UNANSWERED),
-      ),
-    [act, plan],
-  );
+  // Note that every write moves the generation on, so a read asked before it answers nothing over it.
+  const generation = useRef(0);
+  const reload = useCallback(() => {
+    const asked = generation.current;
+    const taken = (answer: AutomationsRead) => {
+      if (asked === generation.current) setRead(answer);
+    };
+    return act(ACT_KIND.AUTOMATIONS_LIST, plan === undefined ? {} : { planId: plan }).then(
+      taken,
+      () => taken(UNANSWERED),
+    );
+  }, [act, plan]);
   // Note that the minute is read so the list is read again each minute the page stands.
   useEffect(() => {
     void now;
@@ -60,6 +65,7 @@ export function useAutomations(plan: string | undefined) {
   }, [reload, now]);
   /** One automation taken into the list as the service answered it, first where it is new. */
   const take = useCallback((automation: AutomationSummary) => {
+    generation.current += 1;
     setRead((held) => {
       if (held === undefined || "failure" in held) return { automations: [automation] };
       const known = held.automations.some((each) => each.id === automation.id);
@@ -120,11 +126,15 @@ export function useAutomationRuns(automationId: string | undefined) {
   const { act } = useAct();
   const now = useMinute();
   const [read, setRead] = useState<RunsRead>(undefined);
+  // The automation shown now, so a read of the one before that answers late is not taken as this one's.
+  const shown = useRef(automationId);
+  shown.current = automationId;
   const reload = useCallback(() => {
     if (automationId === undefined) return Promise.resolve();
-    return act(ACT_KIND.AUTOMATIONS_RUNS, { automationId }).then(setRead, () =>
-      setRead(UNANSWERED),
-    );
+    const taken = (answer: RunsRead) => {
+      if (shown.current === automationId) setRead(answer);
+    };
+    return act(ACT_KIND.AUTOMATIONS_RUNS, { automationId }).then(taken, () => taken(UNANSWERED));
   }, [act, automationId]);
   useEffect(() => {
     void now;

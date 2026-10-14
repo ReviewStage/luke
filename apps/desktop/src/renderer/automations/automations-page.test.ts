@@ -7,6 +7,7 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
+  GITHUB_TRIGGER_EVENT,
 } from "@sidecar/hosted/automation-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -224,4 +225,34 @@ test("with none made, a template opens the editor filled in", async () => {
     document.querySelector<HTMLInputElement>('.automation-dialog [aria-label="Branches"]')?.value,
     "main",
   );
+});
+
+test("a GitHub trigger keeps only the filters its event reads, so labels left from another event never hold a push back", async () => {
+  script([SCHEDULED]);
+  const page = await mount();
+  await act(async () => button(page, "New automation").click());
+  const dialog = document.querySelector<HTMLElement>(".automation-dialog");
+  assert.ok(dialog);
+  const name = dialog.querySelector<HTMLInputElement>('[aria-label="Automation name"]');
+  const task = dialog.querySelector<HTMLTextAreaElement>('[aria-label="Task"]');
+  assert.ok(name && task);
+  await act(async () => {
+    type(name, "Fix pushes");
+    type(task, "Check the push.");
+    button(dialog, "GitHub event").click();
+  });
+  await act(async () => button(dialog, "Issue labelled").click());
+  const labels = dialog.querySelector<HTMLInputElement>('[aria-label="Labels"]');
+  assert.ok(labels);
+  await act(async () => type(labels, "bug"));
+  await act(async () => button(dialog, "Push to a branch").click());
+  await act(async () => button(dialog, "Create automation").click());
+
+  const create = asked.find((each) => each.kind === ACT_KIND.AUTOMATIONS_CREATE);
+  const read = readEither(automationCreateParamsSchema)(unparsedWire(create?.payload));
+  assert.ok(Result.isSuccess(read));
+  assert.deepEqual(read.success.trigger, {
+    kind: AUTOMATION_TRIGGER.GITHUB,
+    event: GITHUB_TRIGGER_EVENT.PUSH,
+  });
 });

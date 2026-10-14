@@ -119,6 +119,8 @@ const WEBHOOK_SECRET_BYTES = 32;
 
 export interface AutomationsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
+  /** The deployment's own origin, which a webhook's address is spelled on; the request's where it names none, as a test or a local run does. */
+  serviceOrigin?: () => string | undefined;
 }
 
 /** What the routes may require of the function that stands them. */
@@ -140,9 +142,9 @@ const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   return account.value;
 });
 
-/** The origin the request came to, which a webhook's address is spelled on. */
-function originOf(request: Request): string {
-  return new URL(request.url).origin;
+/** The origin a webhook's address is spelled on: the deployment's own, never a request's Host, where it names one. */
+function originOf(request: Request, seams: AutomationsAppSeams): string {
+  return seams.serviceOrigin?.() ?? new URL(request.url).origin;
 }
 
 /** The one id the path put under `id`; two is refused, and one that is no UUID names no row. */
@@ -274,6 +276,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** GET: the account's automations, or one plan's. */
 const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: AutomationsAppSeams,
   userId: string,
   request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
@@ -286,13 +289,14 @@ const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const automations = yield* hostedStoreOrUnavailable(listAutomations(userId, plan?.success));
   const summaries = yield* Effect.forEach(automations, (each) =>
-    summaryOf(userId, each, originOf(request)),
+    summaryOf(userId, each, originOf(request, seams)),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { automations: summaries });
 });
 
 /** POST: an automation made on one of the account's plans with a repository. */
 const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: AutomationsAppSeams,
   userId: string,
   request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
@@ -323,7 +327,7 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const automation = yield* summaryOf(userId, created.value, originOf(request));
+  const automation = yield* summaryOf(userId, created.value, originOf(request, seams));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     automation,
     ...answeredSecret(webhook),
@@ -341,8 +345,8 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const userId = yield* resolvedUserId(seams, request);
   return incoming.method === HTTP_METHOD.GET
-    ? yield* listEndpoint(userId, request)
-    : yield* createEndpoint(userId, request);
+    ? yield* listEndpoint(seams, userId, request)
+    : yield* createEndpoint(seams, userId, request);
 });
 
 /**
@@ -420,7 +424,7 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
   if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (incoming.method === HTTP_METHOD.GET) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      automation: yield* summaryOf(userId, standing.value, originOf(request)),
+      automation: yield* summaryOf(userId, standing.value, originOf(request, seams)),
     });
   }
   const asked = readEither(automationChangeRequestSchema)(
@@ -431,7 +435,7 @@ const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(f
   const written = yield* hostedStoreOrUnavailable(updateAutomation(userId, id, changes));
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    automation: yield* summaryOf(userId, written.value, originOf(request)),
+    automation: yield* summaryOf(userId, written.value, originOf(request, seams)),
     ...answeredSecret(webhook),
   });
 });
@@ -527,7 +531,7 @@ const webhookSecretEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookSe
     const written = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
     if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      automation: yield* summaryOf(userId, written.value, originOf(request)),
+      automation: yield* summaryOf(userId, written.value, originOf(request, seams)),
       ...answeredSecret(webhook),
     });
   },

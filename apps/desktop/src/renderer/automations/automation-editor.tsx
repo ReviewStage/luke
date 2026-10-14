@@ -72,6 +72,22 @@ const LABELLED_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
   GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
 ]);
 
+/** The events a label filter is read against: an issue's or pull request's opening, and its labelling. */
+const LABEL_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
+  GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+  GITHUB_TRIGGER_EVENT.ISSUE_LABELED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
+]);
+
+/** The events a branch filter is read against: a pull request's base, a check's, and a push's branch. */
+const BRANCH_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
+  GITHUB_TRIGGER_EVENT.CHECK_FAILED,
+  GITHUB_TRIGGER_EVENT.PUSH,
+]);
+
 /** What a refused schedule says under its fields. */
 const SCHEDULE_WORDS = {
   [SCHEDULE_REFUSAL.CRON]: "That isn't a five-field cron: minute, hour, day, month, weekday.",
@@ -193,8 +209,9 @@ function triggerOf(draft: AutomationDraft): AutomationTrigger {
         timezone: draft.schedule.timezone,
       };
     case AUTOMATION_TRIGGER.GITHUB: {
-      const labels = listOf(draft.labels);
-      const branches = listOf(draft.branches);
+      // Only the filters the event reads are kept, so one left from another event never holds it back.
+      const labels = LABEL_EVENTS.has(draft.event) ? listOf(draft.labels) : [];
+      const branches = BRANCH_EVENTS.has(draft.event) ? listOf(draft.branches) : [];
       return {
         kind: AUTOMATION_TRIGGER.GITHUB,
         event: draft.event,
@@ -431,7 +448,6 @@ function GitHubFields({
   onPatch: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const labelled = LABELLED_EVENTS.has(draft.event);
-  const branched = draft.event !== GITHUB_TRIGGER_EVENT.ISSUE_OPENED && !labelled;
   return (
     <>
       <Field label="Event" hint={repository === null ? undefined : `on ${repository}`}>
@@ -450,9 +466,7 @@ function GitHubFields({
         </div>
       </Field>
       <div className="automation-field-row">
-        {draft.event === GITHUB_TRIGGER_EVENT.ISSUE_OPENED ||
-        draft.event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED ||
-        labelled ? (
+        {LABEL_EVENTS.has(draft.event) ? (
           <Field label="Labels" hint="any of, comma-separated">
             <input
               type="text"
@@ -464,7 +478,7 @@ function GitHubFields({
             />
           </Field>
         ) : null}
-        {branched || draft.event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED ? (
+        {BRANCH_EVENTS.has(draft.event) ? (
           <Field label="Branches" hint="any of, comma-separated">
             <input
               type="text"
@@ -569,7 +583,14 @@ export function AutomationEditor({
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const offered = plans.filter((plan) => plan.repository !== null);
-  const plan = offered.find((each) => each.id === draft.planId) ?? offered[0];
+  // An edit keeps the automation's own plan, which the form names and does not offer to change.
+  const plan =
+    editing === undefined
+      ? (offered.find((each) => each.id === draft.planId) ?? offered[0])
+      : {
+          id: editing.planId,
+          repository: plans.find((each) => each.id === editing.planId)?.repository ?? null,
+        };
   const trigger = triggerOf(draft);
   const scheduleOk = draft.kind !== AUTOMATION_TRIGGER.SCHEDULE || scheduleNote(draft.schedule).ok;
   const canSave =
@@ -639,7 +660,10 @@ export function AutomationEditor({
         ) : null}
         <hr className="automation-dialog-rule" />
         <Field label="Plan" hint="the agent works on its repository">
-          {offered.length === 0 ? (
+          {editing !== undefined ? (
+            // An automation keeps the plan it was made on; a new one is made for another.
+            <p className="automation-field-note">{editing.planName}</p>
+          ) : offered.length === 0 ? (
             <p className="automation-field-note">
               Give a plan a repository first; an agent works in one.
             </p>

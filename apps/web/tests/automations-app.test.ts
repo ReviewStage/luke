@@ -60,6 +60,8 @@ import { startPlan } from "./support/workspaces";
  */
 
 const ORIGIN = "https://luke.test";
+/** The deployment's own origin, which a webhook's address is spelled on whatever a request's Host said. */
+const SERVICE_ORIGIN = "https://service.luke.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
 
@@ -107,6 +109,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
         eveOrigin: () => ORIGIN,
+        serviceOrigin: () => SERVICE_ORIGIN,
         eve: () => sessions,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
@@ -315,8 +318,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const secret = hooked.webhookSecret ?? "";
         assert.equal(
           hooked.automation.webhookUrl,
-          `${ORIGIN}/api/automations/${hooked.automation.id}/webhook`,
-          "the address is spelled on the origin the request came to",
+          `${SERVICE_ORIGIN}/api/automations/${hooked.automation.id}/webhook`,
+          "the address is spelled on the deployment's own origin, never the request's",
         );
         assert.ok(secret.length >= 40, "a secret of real length is answered");
         const [row] = yield* Database.use((db) =>

@@ -1,9 +1,13 @@
 import { automationsApp } from "../automations-app.js";
 import { resolveHostedUserId } from "../hosted/bearer.js";
-import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
+import { deploymentEveOrigin, deploymentServiceOrigin } from "../hosted/brain-host/eve-origin.js";
 import { routeFromHttpRouter } from "../route-effect.js";
 
 /** The account's automations: list them (GET) or make one (POST). The logic lives in `server/automations-app.ts`; this file only hands it the deployment's real seams. */
 export default routeFromHttpRouter(
-  automationsApp({ resolveUserId: resolveHostedUserId, eveOrigin: deploymentEveOrigin }),
+  automationsApp({
+    resolveUserId: resolveHostedUserId,
+    eveOrigin: deploymentEveOrigin,
+    serviceOrigin: deploymentServiceOrigin,
+  }),
 );

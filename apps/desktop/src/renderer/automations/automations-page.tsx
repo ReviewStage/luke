@@ -35,6 +35,7 @@ import { ProviderMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { WorkingMark } from "../working-mark";
 import {
   type AutomationDraft,
@@ -113,6 +114,9 @@ const TEMPLATES: readonly {
     },
   },
 ];
+
+/** What a "Run now" the service did not take says. */
+const RUN_NOW_FAILED = "Couldn't run it now. Try again.";
 
 const NEXT_RUN = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -792,6 +796,7 @@ function RunNowButton({
   onRan: () => void;
 }): React.JSX.Element {
   const [running, setRunning] = useState(false);
+  const show = useToast();
   return (
     <button
       type="button"
@@ -800,9 +805,12 @@ function RunNowButton({
       disabled={running}
       onClick={() => {
         setRunning(true);
-        void runs.runNow().then(() => {
+        void runs.runNow().then((answer) => {
           setRunning(false);
           onRan();
+          if ("failure" in answer) {
+            show({ words: RUN_NOW_FAILED, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+          }
         });
       }}
     >
