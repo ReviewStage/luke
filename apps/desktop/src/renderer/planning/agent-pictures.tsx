@@ -32,7 +32,7 @@ import { AttachmentViewer } from "./attachment-viewer";
  * in one row, each picture at its own shape, uncropped, and the row
  * stretched to the column so they share a height; a set of more stands as
  * thumbnails of one height that wrap, six of them, the sixth saying how many
- * more there are. A call's pictures are the message box's chips under its
+ * more there are, the rest read all the same for the viewer. A call's pictures are the message box's chips under its
  * row, open or closed. A press on any opens the window's file viewer
  * walking the set, or the call's pictures, from it. Everything here is
  * left out of the screen recording, as the tab around it is.
@@ -232,6 +232,12 @@ function SetTile({
   );
 }
 
+/** A picture of a set past the six drawn, read all the same, so the viewer walks the whole set. */
+function UnseenPicture({ door, picture }: { door: AgentPictureDoor; picture: KeptPicture }): null {
+  usePicture(door.owner, picture.id, door.read);
+  return null;
+}
+
 /** The words under a set of many, saying how many pictures it holds. */
 function setCount(count: number): string {
   return `${String(count)} pictures`;
@@ -293,6 +299,13 @@ export function ShownPictures({
           />
         ))}
       </div>
+      {shown
+        .slice(SET_SHOWN)
+        .flatMap((each) =>
+          each.picture === undefined
+            ? []
+            : [<UnseenPicture key={each.picture.id} door={door} picture={each.picture} />],
+        )}
       {many ? <figcaption className="picture-caption">{setCount(shown.length)}</figcaption> : null}
       {viewer}
     </figure>

@@ -1138,6 +1138,21 @@ function isShownSet(part: AgentPart): part is ToolPart {
   );
 }
 
+/**
+ * A `show_image` call its tool refused, as the call that failed it is: the
+ * service answers a refusal as an output carrying why, so the row reads
+ * the reason as its error, its line wears the failed mark, and no picture
+ * waits for bytes that were never kept; nothing for any other part.
+ */
+function refusedSet(part: AgentPart): ToolPart | undefined {
+  if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.SHOW_IMAGE) return undefined;
+  if (part.state !== TOOL_STATE.OUTPUT_AVAILABLE || !isRecord(part.output)) return undefined;
+  const reason = part.output.reason;
+  if (part.output.status !== ACTION_RESULT_STATUS.REJECTED || !isWireString(reason))
+    return undefined;
+  return { ...part, state: TOOL_STATE.OUTPUT_ERROR, errorText: reason };
+}
+
 function listOf(value: UnparsedWireValue, key: string): readonly WireValue[] {
   if (!isRecord(value)) return [];
   const list = value[key];
@@ -1181,6 +1196,11 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
       continue;
     }
     const last = drawn.at(-1);
+    const refusal = refusedSet(part);
+    if (refusal !== undefined) {
+      drawn.push(refusal);
+      continue;
+    }
     if (last !== undefined && isShownSet(last) && isShownSet(part)) {
       drawn[drawn.length - 1] = joinedSets(last, part);
     } else {

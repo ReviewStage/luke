@@ -205,3 +205,59 @@ test("a refused show_image is a row where its error is read, and a picture in th
   assert.equal(container.querySelectorAll("img").length, 0);
   assert.match(container.textContent ?? "", /Saved as Members page and Picture\./u);
 });
+
+test("a refused set is a row that failed, its reason read in it, and nothing waits for pictures never kept", async () => {
+  const reason = "Not shown: a picture is kept up to 4 MB. Save it smaller: shots/full.png";
+  const { container } = await drawn(
+    {
+      id: "turn",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        toolPart(
+          "show_image",
+          "call-refused-answer",
+          { images: [{ path: "shots/full.png", caption: "Whole page" }] },
+          { status: "rejected", reason },
+        ),
+      ],
+    },
+    true,
+  );
+
+  assert.equal(container.querySelectorAll(".picture-block, .picture-set").length, 0);
+  // The group the call stands in, then the call's own row, each opened as a reader would.
+  for (let opened = 0; opened < 3; opened += 1) {
+    const closed = container.querySelector<HTMLElement>("details:not([open]) > summary");
+    if (closed === null) break;
+    await act(async () => closed.click());
+  }
+  assert.match(container.textContent ?? "", /Not shown: a picture is kept up to 4 MB/u);
+});
+
+test("the viewer over a set of eight walks all eight, the two the turn did not draw among them", async () => {
+  const pictures = Array.from({ length: 8 }, () => picture(800, 450));
+  const { container } = await drawn(finished([shown("call-eight", pictures), text("All eight.")]));
+  const first = container.querySelector<HTMLButtonElement>(".picture-set-tile");
+  assert.ok(first);
+
+  await act(async () => first.click());
+
+  assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 8");
+});
+
+test("a finished turn that ends on its pictures, with no words after them, keeps them out of its folded work", async () => {
+  const { container } = await drawn(
+    finished([
+      toolPart(
+        "bash",
+        "call-shot-only",
+        { command: "pnpm exec playwright screenshot" },
+        { exitCode: 0 },
+      ),
+      shown("call-last", [picture(1200, 720), picture(390, 700)]),
+    ]),
+  );
+
+  assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
+  assert.match(container.textContent ?? "", /1 tool call/u);
+});
