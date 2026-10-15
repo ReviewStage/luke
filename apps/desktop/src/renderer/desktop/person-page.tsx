@@ -1,4 +1,7 @@
+import { automationOwner, automationTriggerText } from "@luke/features/automation-list-model";
+import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   ACTOR_KIND,
@@ -19,7 +22,7 @@ import {
 import { EllipsisIcon, ListFilterIcon, MailIcon, SettingsIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useCopyToast } from "../copy-feedback";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
@@ -29,13 +32,15 @@ import { InboxItemRow } from "../planning/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
+import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { RecentRow, useWaitingItems } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
+import { useAutomations } from "./use-automations";
 
 /**
  * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.
@@ -47,7 +52,8 @@ import { useArchivedView, useTaskListView } from "./task-list-view";
  * Under it, in Home's own voice, stand their agents at work, the Inbox
  * items their agents wait on, the tasks they created, and their other
  * agents, each from the listed workspace's task list and Inbox
- * (`@luke/ui/person-page-model`), a section with nothing in it left out.
+ * (`@luke/ui/person-page-model`), and the workspace's automations they
+ * made, a section with nothing in it left out.
  * Until the Inbox is read the page says so, and a read that failed says
  * that and offers Retry, so a page is called empty only once it is.
  * Nothing on it is read for it: it shows a teammate only what the sidebar,
@@ -226,6 +232,50 @@ function PersonActions({
   );
 }
 
+/**
+ * The workspace's automations the person made, read while the Automations
+ * page is on (`EXPERIMENT.AUTOMATIONS`): the workspace's alone, never their
+ * personal ones, which only they read. None until the list is read, and none
+ * where it could not be, since the page lists only what it holds.
+ */
+function usePersonAutomations(
+  workspaceId: string | undefined,
+  userId: string,
+  on: boolean,
+): readonly AutomationSummary[] {
+  const { read } = useAutomations(on ? workspaceId : undefined);
+  if (!on || read === undefined || "failure" in read) return [];
+  return read.automations.filter(
+    (automation) =>
+      automation.creatorId === userId && automationOwner(automation) === AUTOMATION_SCOPE.WORKSPACE,
+  );
+}
+
+/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it; a press opens it. */
+function AutomationRow({
+  automation,
+  onOpen,
+}: {
+  automation: AutomationSummary;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <li className="sidebar-plan-item home-row">
+      <button type="button" className="sidebar-plan" onClick={onOpen}>
+        <span className="sidebar-plan-line">
+          <span className="home-row-picture">
+            <ActorMark actor={automationActor(automation)} />
+          </span>
+          <span className="sidebar-plan-name">{automation.name}</span>
+          <span className="home-row-context">
+            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
+          </span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
 /** The page's head: their face, their name and You where it is the reader, and who they are here. */
 function PersonHead({ person }: { person: Actor }): React.JSX.Element {
   const line = headLine(person);
@@ -275,6 +325,11 @@ function PersonColumn({
   };
   const page = personPage(userId, listed);
   const you = userId === plans.me;
+  const automations = usePersonAutomations(
+    plans.workspace?.id,
+    userId,
+    useExperiment(EXPERIMENT.AUTOMATIONS),
+  );
   const read = useWaitingItems(plans);
   // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
   const waiting = read.items.filter(
@@ -356,6 +411,22 @@ function PersonColumn({
               ))}
             </PersonSection>
           )}
+          {automations.length === 0 ? null : (
+            <PersonSection title="Automations" count={automations.length}>
+              {automations.map((automation) => (
+                <AutomationRow
+                  key={automation.id}
+                  automation={automation}
+                  onOpen={() =>
+                    plans.automationsView.onOpen({
+                      kind: AUTOMATIONS_PAGE.EDIT,
+                      automationId: automation.id,
+                    })
+                  }
+                />
+              ))}
+            </PersonSection>
+          )}
           {read.failed ? (
             <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
               <span>Some Inbox items could not be read.</span>
@@ -363,7 +434,7 @@ function PersonColumn({
             </div>
           ) : waiting.length === 0 && read.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
-          ) : personPageEmpty(page) && waiting.length === 0 ? (
+          ) : personPageEmpty(page) && waiting.length === 0 && automations.length === 0 ? (
             <p className="sidebar-note person-empty">
               {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
             </p>

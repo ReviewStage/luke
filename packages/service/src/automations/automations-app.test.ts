@@ -996,6 +996,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(yield* minesListed(owner), { [owners.id]: true, [members.id]: false });
         assert.deepEqual(yield* minesListed(member), { [owners.id]: false, [members.id]: true });
         assert.equal(readByMember.mine, false);
+        // Each names who made it to every member alike, which their page lists it under.
+        assert.deepEqual([readByMember.creatorId, members.creatorId], [owner, member]);
       }),
   );
 

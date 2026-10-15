@@ -438,6 +438,8 @@ export const automationSummarySchema = EffectSchema.Struct({
   webhookUrl: EffectSchema.optionalKey(EffectSchema.String),
   /** Whether the account reading it created it, which a run starts as; absent from a service before it. */
   mine: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** The account that created it, which its creator's page lists it under; absent from a service before it. */
+  creatorId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;

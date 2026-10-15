@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationScope,
+  type AutomationSummary,
+} from "@luke/features/automation-wire";
 import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
@@ -12,11 +20,14 @@ import {
 import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { OpenSettingsProvider } from "../open-settings";
@@ -38,6 +49,38 @@ const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, g
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const PRIYA = { userId: "user-priya", name: "Priya Raman" };
+/** An automation of the workspace's or of one member's own, made by `by`. */
+function automation(
+  n: number,
+  name: string,
+  by: string,
+  scope: AutomationScope,
+): AutomationSummary {
+  return {
+    id: `5a0c4d2e-0000-4c3a-9e7d-${String(n).padStart(12, "0")}`,
+    planId: null,
+    planName: null,
+    workspaceId: "workspace-acme",
+    name,
+    enabled: true,
+    pausedReason: null,
+    trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage." },
+    guards: AUTOMATION_DEFAULT_GUARDS,
+    nextRunAt: null,
+    lastRun: null,
+    createdAt: 1,
+    scope,
+    creatorId: by,
+  };
+}
+
+const AUTOMATIONS = [
+  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE),
+  automation(2, "Charles's own reminders", "user-charles", AUTOMATION_SCOPE.PERSONAL),
+  automation(3, "Weekly dependency bumps", "user-dean", AUTOMATION_SCOPE.WORKSPACE),
+];
+
 const PRIYA_PICTURE = "https://avatars.githubusercontent.com/u/11";
 const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }];
 const MEMBERS: readonly WorkspaceMember[] = [
@@ -159,6 +202,12 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
           const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { automations: AUTOMATIONS },
+          });
         }
         if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
@@ -442,4 +491,19 @@ test("someone who left heads their page with their own picture, grayed", async (
   const face = page.querySelector<HTMLElement>(".person-head .actor-mark");
   assert.equal(face?.dataset.left, "true");
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
+});
+
+test("with Automations on, a person's page lists the workspace's automations they made, never their own personal ones", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  assert.deepEqual(sections(page).Automations, ["Morning Sentry triage"]);
+});
+
+test("with Automations off, a person's page reads no automations and lists none", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  assert.equal(sections(page).Automations, undefined);
 });
