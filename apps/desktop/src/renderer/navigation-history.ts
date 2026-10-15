@@ -63,7 +63,12 @@ type Place =
   | { readonly kind: typeof PLACE_KIND.HOME }
   | { readonly kind: typeof PLACE_KIND.INBOX }
   | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
-  | { readonly kind: typeof PLACE_KIND.PERSON; readonly userId: string }
+  | {
+      readonly kind: typeof PLACE_KIND.PERSON;
+      readonly userId: string;
+      /** The workspace the page was the person's in, which it is no place of another's. */
+      readonly workspaceId: string | undefined;
+    }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
   | { readonly kind: typeof PLACE_KIND.AUTOMATIONS }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
@@ -80,7 +85,9 @@ function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
-  if ("userId" in one && "userId" in other) return one.userId === other.userId;
+  if ("userId" in one && "userId" in other) {
+    return one.userId === other.userId && one.workspaceId === other.workspaceId;
+  }
   return true;
 }
 
@@ -251,6 +258,7 @@ export function useWindowHistory(input: {
     | "inboxView"
     | "agentView"
     | "personView"
+    | "workspace"
     | "factoryView"
     | "automationsView"
     | "restoring"
@@ -264,6 +272,7 @@ export function useWindowHistory(input: {
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
   const pagePerson = plans.personView.userId;
+  const listedWorkspace = plans.workspace?.id;
   const factoryOpen = plans.factoryView.open;
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = plans.automationsView.open;
@@ -279,7 +288,9 @@ export function useWindowHistory(input: {
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
-    if (pagePerson !== undefined) return { kind: PLACE_KIND.PERSON, userId: pagePerson };
+    if (pagePerson !== undefined) {
+      return { kind: PLACE_KIND.PERSON, userId: pagePerson, workspaceId: listedWorkspace };
+    }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
@@ -296,6 +307,7 @@ export function useWindowHistory(input: {
     inboxOpen,
     pageAgent,
     pagePerson,
+    listedWorkspace,
     factoryOpen,
     automationsOpen,
   ]);
@@ -303,6 +315,8 @@ export function useWindowHistory(input: {
     // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
     if (to.kind === PLACE_KIND.AUTOMATIONS) return automationsOn;
+    // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
+    if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
     return (

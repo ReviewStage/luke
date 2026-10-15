@@ -133,8 +133,11 @@ const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
 };
 
 let root: Root | undefined;
+/** Whether the Inbox's reads are refused, as a read that failed is. */
+let inboxRefused = false;
 
 beforeEach(() => {
+  inboxRefused = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -144,7 +147,7 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
         }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
           const value: CodingAgentInboxAnswerView = {
             items: INBOXES.get(request.payload.planId) ?? [],
             cursor: "1",
@@ -287,4 +290,14 @@ test("a person's tasks wear no face of theirs, since the page's head already say
 
   const created = page.querySelector('section[aria-label="Created"]');
   assert.equal(created?.querySelectorAll(".actor-mark").length, 0);
+});
+
+test("an Inbox that could not be read says so and offers Retry, and never passes for an empty page", async () => {
+  inboxRefused = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Some Inbox items could not be read\./u);
+  assert.ok(button(page, "Retry"));
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });

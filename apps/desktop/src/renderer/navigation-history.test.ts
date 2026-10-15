@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { act, createElement, useState } from "react";
@@ -121,4 +122,20 @@ test("a person's page is a step of its own, which Back from a plan opened after 
   act(() => window.history().onBack());
 
   assert.deepEqual(reopened, ["user-maya", "user-charles"]);
+});
+
+test("a person's page is theirs in the workspace it stood in, so once another is listed Back passes over it", () => {
+  const reopened: string[] = [];
+  const standing = (workspaceId: string, userId: string | undefined) =>
+    plansControl({
+      workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+      personView: { userId, onOpen: (id) => reopened.push(id), onClose: () => undefined },
+    });
+  const window = mount(standing("workspace-acme", undefined));
+  window.stand(standing("workspace-acme", "user-charles"));
+  window.stand(standing("workspace-platform", undefined));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(reopened, []);
 });

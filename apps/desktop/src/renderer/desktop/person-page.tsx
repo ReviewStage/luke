@@ -25,6 +25,8 @@ import { holderName, INBOX_HOLDER, type InboxListed } from "../planning/inbox-mo
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { RetryButton } from "../retry-button";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { RecentRow, useWaitingItems } from "./desktop-home";
 
 /**
@@ -38,6 +40,8 @@ import { RecentRow, useWaitingItems } from "./desktop-home";
  * items their agents wait on, the tasks they created, and their other
  * agents, each from the listed workspace's task list and Inbox
  * (`@luke/ui/person-page-model`), a section with nothing in it left out.
+ * Until the Inbox is read the page says so, and a read that failed says
+ * that and offers Retry, so a page is called empty only once it is.
  * Nothing on it is read for it: it shows a teammate only what the sidebar,
  * the Inbox, and an agent's card already show any member, never their
  * personal workspace, their answers, or another workspace's. A press on a
@@ -153,7 +157,8 @@ function PersonColumn({
   const page = personPage(userId, listed);
   const you = userId === plans.me;
   // An item is theirs where its task's row says they started its agent; an agent with no plan is the reader's own.
-  const waiting = useWaitingItems(plans).items.filter(({ holder, item }) =>
+  const read = useWaitingItems(plans);
+  const waiting = read.items.filter(({ holder, item }) =>
     holder.kind === INBOX_HOLDER.PLAN ? agentStarter(holder.plan, item.agentId) === userId : you,
   );
   const { inboxView } = plans;
@@ -223,7 +228,14 @@ function PersonColumn({
               ))}
             </PersonSection>
           )}
-          {personPageEmpty(page) && waiting.length === 0 ? (
+          {read.failed ? (
+            <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
+              <span>Some Inbox items could not be read.</span>
+              <RetryButton onRetry={read.onRetry} />
+            </div>
+          ) : waiting.length === 0 && read.reading ? (
+            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
+          ) : personPageEmpty(page) && waiting.length === 0 ? (
             <p className="sidebar-note person-empty">
               {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
             </p>
