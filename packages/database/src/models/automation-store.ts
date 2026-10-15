@@ -49,6 +49,7 @@ import { automation, automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { plan } from "../schemas/plan.js";
+import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
 import { reachablePlan } from "./workspace-store.js";
@@ -705,9 +706,10 @@ const ArchivableAgentSchema = Schema.Struct({
   conversationId: Schema.String,
   createdAt: InstantColumnSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  conversationSeq: Schema.Number,
 });
 
-/** An agent a run started that its automation archives once it finishes well: its run, whose it is, its id, its conversation, when it was made, and when it was put away where it already was. */
+/** An agent a run started that its automation archives once it finishes well: its run, whose it is, its id, its conversation and how far its lines had run when read, when it was made, and when it was put away where it already was. */
 export type ArchivableRunAgent = typeof ArchivableAgentSchema.Type;
 
 /**
@@ -732,10 +734,12 @@ const findArchivableAgents = SqlSchema.findAll({
           conversationId: codingAgent.conversationId,
           createdAt: codingAgent.createdAt,
           archivedAt: codingAgent.archivedAt,
+          conversationSeq: conversations.nextMessageSeq,
         })
         .from(automationRun)
         .innerJoin(automation, eq(automation.id, automationRun.automationId))
         .innerJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
         .where(
           and(
             eq(automation.archiveSuccessful, true),

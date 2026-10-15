@@ -196,14 +196,19 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
         });
         const keeping = yield* openAutomation();
+        const departing = yield* openAutomation({ archiveSuccessful: true });
         const succeeded = yield* startedNow(eve, archiving.automation);
         const failed = yield* startedNow(eve, archiving.automation);
         const asking = yield* startedNow(eve, archiving.automation);
         const kept = yield* startedNow(eve, keeping.automation);
+        const orphaned = yield* startedNow(eve, departing.automation);
         yield* ranTurn(archiving.owner, succeeded, TURN_STATUS.SETTLED);
         yield* ranTurn(archiving.owner, failed, TURN_STATUS.FAILED);
         yield* ranTurn(archiving.owner, asking, TURN_STATUS.SETTLED);
         yield* ranTurn(keeping.owner, kept, TURN_STATUS.SETTLED);
+        yield* ranTurn(departing.owner, orphaned, TURN_STATUS.SETTLED);
+        // Its starter gone from the workspace, the agent is no one's to archive, so it is not counted archived.
+        yield* leaveWorkspace(departing.workspaceId, departing.owner);
         const question = yield* postInboxItem(
           { userId: archiving.owner, planId: null, agentId: asking },
           { key: "which-queue", title: "Which queue?", response: { type: INBOX_RESPONSE.TEXT } },

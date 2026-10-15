@@ -9,7 +9,7 @@ import {
   strandedAutomationRuns,
 } from "@luke/database/models/automation-store";
 import {
-  archiveCodingAgent,
+  archiveUnmovedCodingAgent,
   awaitingLinesOfReached,
   latestTurnsOfReached,
 } from "@luke/database/models/coding-agent-store";
@@ -145,12 +145,19 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
         lineAwaits: awaiting.has(agent.conversationId),
       });
       const finishedWell = agent.archivedAt === null && status === CODING_AGENT_STATUS.COMPLETED;
-      if (finishedWell) yield* archiveCodingAgent(agent.userId, agent.codingAgentId, true);
-      // An agent still at work is read again by a later sweep; any other is settled for good.
-      if (finishedWell || agent.archivedAt !== null || ENDED_UNWELL.has(status)) {
+      // Note that the archive takes only while the agent's lines stand where they were read, so
+      // one woken since, or whose starter left, stands and is read again by a later sweep.
+      const archived =
+        finishedWell &&
+        (yield* archiveUnmovedCodingAgent(
+          agent.userId,
+          agent.codingAgentId,
+          agent.conversationSeq,
+        ));
+      if (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status)) {
         yield* settleRunArchive(agent.runId);
       }
-      return finishedWell;
+      return archived;
     }),
   );
   return archived.filter(Boolean).length;

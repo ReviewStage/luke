@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
@@ -10,6 +11,7 @@ import { conversations, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  archiveUnmovedCodingAgent,
   delegationsOf,
   readCodingAgent,
   recordTurnFastRefused,
@@ -207,6 +209,36 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
           [true, true, false],
           "the agent's conversation is its workspace's, as its sessions are admitted",
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's archive of an agent left as it was read", (it) => {
+  it.effect(
+    "an agent whose conversation's lines moved on since it was read stands, and one whose did not is archived, once",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const { agentId, conversationId } = yield* planlessAgent(starter, workspace);
+        const db = yield* Database;
+        const [read] = yield* db
+          .select({ seq: conversations.nextMessageSeq })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId));
+        assert.ok(read);
+        // A message landed after the read, as a developer waking the agent would leave it.
+        yield* db
+          .update(conversations)
+          .set({ nextMessageSeq: read.seq + 1 })
+          .where(eq(conversations.id, conversationId));
+
+        const stale = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq);
+        const current = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
+        const again = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
+
+        assert.deepEqual([stale, current, again], [false, true, false]);
+        assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
       }),
   );
 });
