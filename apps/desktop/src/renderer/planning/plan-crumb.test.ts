@@ -270,6 +270,24 @@ test("the repository's card says the workspace's GitHub account it comes through
   assert.deepEqual(asked, ["read repositories"]);
 });
 
+test("a plan moved to another workspace on the same repository reads its default branch again, through that workspace's GitHub", async () => {
+  const connected = { ...ACME, github: { login: "acme-corp", active: true } };
+  const stage = { ...connected, id: "workspace-stage", name: "Stage" };
+  const page = await crumb(connected, "acme-corp/relay", MEMBERS);
+  const chip = () =>
+    page.current().querySelector<HTMLElement>(".plan-crumb-repository") ??
+    assert.fail("the repository is a chip");
+
+  cardOf(chip(), "data-repository-card");
+  await settle();
+  await page.redraw(stage);
+  const moved = cardOf(chip(), "data-repository-card");
+  await settle();
+
+  assert.match(moved.textContent ?? "", /· Stage/u);
+  assert.deepEqual(page.asked, ["read repositories", "read repositories"]);
+});
+
 test("an archived plan's repository menu offers no Change repository", async () => {
   const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS, true);
   const chip =

@@ -5,7 +5,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, ExternalIcon, ProviderMark } from "@luke/ui";
 import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
@@ -356,12 +356,16 @@ export function PlanCrumb({
       {repository === null ? null : (
         <>
           <ChevronRightIcon className="plan-crumb-separator" aria-hidden="true" />
-          <RepositoryCrumb
-            key={repository}
-            repository={repository}
-            workspace={workspace}
-            doors={doors.repository}
-          />
+          {/* Keyed by the workspace and then the repository, so a plan moved to
+              another workspace reads its branch afresh, through that one's GitHub. */}
+          <Fragment key={workspace.id}>
+            <RepositoryCrumb
+              key={repository}
+              repository={repository}
+              workspace={workspace}
+              doors={doors.repository}
+            />
+          </Fragment>
         </>
       )}
       {count === undefined ? null : (
