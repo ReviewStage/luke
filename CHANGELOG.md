@@ -123,7 +123,9 @@ line and its section bylines name whoever wrote it, the time opening the
 history, and a task's ⋯ menu ends with who created and last edited it. A
 teammate's call is headed by their face and name, their messages in an
 agent's tab carry it, and an agent a teammate started, an Inbox answer, and a
-command run on someone's Mac each say whose it was.
+command run on someone's Mac each say whose it was. A task someone else
+created wears their face in the sidebar, and its card, crumb, Home, the
+Factory, and ⌘K name who created it.
 ([#2784](https://github.com/ReviewStage/luke/pull/2784),
 [#2794](https://github.com/ReviewStage/luke/pull/2794),
 [#2796](https://github.com/ReviewStage/luke/pull/2796),
@@ -138,7 +140,10 @@ command run on someone's Mac each say whose it was.
 [#2715](https://github.com/ReviewStage/luke/pull/2715),
 [#2638](https://github.com/ReviewStage/luke/pull/2638),
 [#2853](https://github.com/ReviewStage/luke/pull/2853),
-[#2854](https://github.com/ReviewStage/luke/pull/2854))
+[#2854](https://github.com/ReviewStage/luke/pull/2854),
+[#2873](https://github.com/ReviewStage/luke/pull/2873),
+[#2875](https://github.com/ReviewStage/luke/pull/2875),
+[#2877](https://github.com/ReviewStage/luke/pull/2877))
 
 ![The Teammate invitations plan, edited by Dana Moreno on her face under its acme › relay crumb and the five who can edit it, its sections signed by Dana, Luke during your call, a coding agent, and Jordan Lee.](apps/web/public/changelog/0.14.0/who-did-what.png)
 
@@ -240,6 +245,24 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 
 ### Improvements
 
+- The sidebar lists tasks in one section, grouped by repository, by creator,
+  or not at all, in the order you choose
+  ([#2893](https://github.com/ReviewStage/luke/pull/2893))
+- The Changes tab and card name who opened the pull request, its reviewers by
+  where each stands, its commit authors, and its review comments
+  ([#2862](https://github.com/ReviewStage/luke/pull/2862),
+  [#2863](https://github.com/ReviewStage/luke/pull/2863),
+  [#2865](https://github.com/ReviewStage/luke/pull/2865),
+  [#2878](https://github.com/ReviewStage/luke/pull/2878))
+- A Mermaid fence in a plan draws as its diagram, in the read view and under
+  its code in the editor
+  ([#2890](https://github.com/ReviewStage/luke/pull/2890))
+- A workspace holds several GitHub installations, listed in Settings ›
+  Workspace and managed on GitHub
+  ([#2642](https://github.com/ReviewStage/luke/pull/2642),
+  [#2644](https://github.com/ReviewStage/luke/pull/2644))
+- A task counts as read the moment it opens, on whichever of its tabs
+  ([#2900](https://github.com/ReviewStage/luke/pull/2900))
 - Luke answers sooner on a call, his replies waiting on nothing earlier, and a
   call greets you from where the last one left off
   ([#2623](https://github.com/ReviewStage/luke/pull/2623))
@@ -280,6 +303,9 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 - The sign-in's buttons stand taller and wear "Last used" on the corner of the
   one it marks ([#2782](https://github.com/ReviewStage/luke/pull/2782),
   [#2785](https://github.com/ReviewStage/luke/pull/2785))
+- A tool-call group leads with its fold's chevron, and a subagent's tab groups
+  its calls as its agent's does
+  ([#2892](https://github.com/ReviewStage/luke/pull/2892))
 - No button, menu item, or command ends its name with an ellipsis
   ([#2821](https://github.com/ReviewStage/luke/pull/2821))
 
@@ -313,6 +339,10 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
   [#2813](https://github.com/ReviewStage/luke/pull/2813))
 - Fixed a transparent workspace photo showing its letter tile behind it
   ([#2769](https://github.com/ReviewStage/luke/pull/2769))
+- Fixed a picture on its own line opening in the plan editor as something you
+  could not edit ([#2886](https://github.com/ReviewStage/luke/pull/2886))
+- Fixed Luke's face moving on the sign-in screen
+  ([#2891](https://github.com/ReviewStage/luke/pull/2891))
 - Fixed an agent's to-do list sitting off its rows' text, its item in progress
   now wearing the working mark
   ([#2874](https://github.com/ReviewStage/luke/pull/2874))
