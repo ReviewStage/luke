@@ -13,6 +13,13 @@ import {
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
 import type { StoreWriter } from "@luke/database/models/writer";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "@luke/service/agents/brain-host/bounds";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_FIRST_TURN_ID,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
@@ -26,13 +33,6 @@ import {
   Option,
   Result,
 } from "effect";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "./brain-host/bounds.js";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_FIRST_TURN_ID,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
-} from "./brain-host/eve-sessions.js";
 
 /**
  * The ask door: a spoken question handed to Luke's judgment, admitted before

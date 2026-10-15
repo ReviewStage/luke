@@ -14,15 +14,15 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { childConversationId } from "@luke/database/models/ids";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { Effect, Option, Result, type Schema } from "effect";
-import type { SessionAuth, SessionContext } from "eve/context";
 import {
   type AdmittedConversation,
   admitConversation,
   type ConversationAdmission,
   claimRuntimeSession,
   SESSION_STANDING,
-} from "../brain-host/conversation.js";
+} from "@luke/service/agents/brain-host/conversation";
+import { Effect, Option, Result, type Schema } from "effect";
+import type { SessionAuth, SessionContext } from "eve/context";
 
 type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 

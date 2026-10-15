@@ -1,5 +1,6 @@
 import { hostTurnId } from "@luke/database/models/ids";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
@@ -12,7 +13,6 @@ import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
 import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";

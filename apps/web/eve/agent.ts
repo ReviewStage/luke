@@ -1,7 +1,7 @@
+import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "@luke/service/agents/brain-host/bounds";
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import type { SessionAuth } from "eve/context";
-import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "../server/hosted/brain-host/bounds.js";
 import { runWeb } from "../server/runtime.js";
 import { host, seams } from "./host.js";
 import { scriptedModel } from "./scripted-model.js";

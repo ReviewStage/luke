@@ -25,17 +25,17 @@ import {
   SEED_ROLE,
   sessionInstructions,
 } from "@luke/live";
+import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";

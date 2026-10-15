@@ -1,7 +1,7 @@
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { Effect } from "effect";
 import type { SessionAuth } from "eve/context";
 import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
 import {

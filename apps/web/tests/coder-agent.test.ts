@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { Redacted } from "effect";
-import { routeAuth } from "eve/channels/auth";
-import type { SessionAuthContext } from "eve/context";
-import { test } from "vitest";
-import { DEPLOYMENT_PRESENCE, lukeAccount } from "../server/hosted/brain-host/auth";
+import { DEPLOYMENT_PRESENCE, lukeAccount } from "@luke/service/agents/brain-host/auth";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   BRAIN_HOST_HEADER,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
-} from "../server/hosted/brain-host/bounds";
+} from "@luke/service/agents/brain-host/bounds";
+import { Redacted } from "effect";
+import { routeAuth } from "eve/channels/auth";
+import type { SessionAuthContext } from "eve/context";
+import { test } from "vitest";
 import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";

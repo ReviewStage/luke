@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Redacted } from "effect";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
@@ -10,7 +10,7 @@ import {
   type EveMount,
   type EveSessions,
   eveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
+} from "./eve-sessions.js";
 
 /**
  * The host's three calls into eve, against an `HttpClient` that answers as

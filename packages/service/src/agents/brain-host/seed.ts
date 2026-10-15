@@ -1,4 +1,4 @@
-import type { StoredUIMessage } from "@luke/service/core";
+import type { StoredUIMessage } from "../../core.js";
 import { BRAIN_HOST } from "./bounds.js";
 import { storedMessageLine } from "./context.js";
 

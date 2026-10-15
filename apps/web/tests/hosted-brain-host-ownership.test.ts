@@ -9,6 +9,17 @@ import {
   setConversationDeletedAt,
   startPlan,
 } from "@luke/database/testing";
+import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_HEADER,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN,
+} from "@luke/service/agents/brain-host/bounds";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "@luke/service/agents/brain-host/conversation";
 import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "@luke/service/core";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import { generateText } from "ai";
@@ -17,18 +28,7 @@ import { routeAuth } from "eve/channels/auth";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import { DEPLOYMENT_PRESENCE } from "../server/hosted/brain-host/auth";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN,
-} from "../server/hosted/brain-host/bounds";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
-import {
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "../server/hosted/brain-host/conversation";
 import type { SessionOwnership } from "../server/hosted/brain-host/door";
 import {
   type BrainHost,

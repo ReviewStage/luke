@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { test } from "vitest";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role";
 import {
   renewsCredential,
   type SandboxRecord,

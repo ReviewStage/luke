@@ -1,15 +1,15 @@
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { Effect, Redacted, Result } from "effect";
 import { defineState } from "eve/context";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
-import { AGENT_ROLE } from "../../server/hosted/agent-runtime/role.js";
 import {
   endsTurn,
   renewsCredential,
   type SandboxRecord,
   stopsAtTurnEnd,
 } from "../../server/hosted/agent-runtime/sandbox.js";
-import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
 import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
@@ -126,7 +126,7 @@ export default defineHook({
     async "*"(event, ctx) {
       // Pinned before anything awaits, because the admission's statement can
       // hand this fiber back in another session's context, and the relay's
-      // state and the prompt's hash are this session's (`server/hosted/brain-host/pinned-state.ts`).
+      // state and the prompt's hash are this session's (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);

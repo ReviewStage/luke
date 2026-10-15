@@ -13,6 +13,20 @@ import {
   startPlan,
 } from "@luke/database/testing";
 import type { PlanWorkTurn } from "@luke/features/planning-view";
+import { DEPLOYMENT_PRESENCE, deploymentActor } from "@luke/service/agents/brain-host/auth";
+import {
+  BRAIN_HOST_HEADER,
+  BRAIN_HOST_TURN,
+  RELAY_TURN,
+} from "@luke/service/agents/brain-host/bounds";
+import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+  eveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "@luke/service/core";
 import {
   LIVE_BRAIN_CANCEL,
@@ -29,18 +43,8 @@ import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { askStanding } from "../server/hosted/brain-ask";
-import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
-import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { ownedAuth } from "../server/hosted/brain-host/door";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-  eveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,

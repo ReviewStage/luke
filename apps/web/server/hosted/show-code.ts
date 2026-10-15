@@ -9,6 +9,7 @@ import {
   type ShownCode,
   shownCodeSchema,
 } from "@luke/features/plan-wire";
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import {
   ACTION_RESULT_STATUS,
   type StoredToolPart,
@@ -27,7 +28,6 @@ import {
 } from "@luke/service/plans/shown-file";
 import { describeWire } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   checkedOutSandbox,
   REPOSITORY_REFUSAL,

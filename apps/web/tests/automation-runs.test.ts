@@ -28,6 +28,13 @@ import {
 } from "@luke/features/automation-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { closeInboxItem, postInboxItem } from "@luke/service/inbox/inbox-store";
 import {
   connectWorkspaceGitHub,
@@ -40,13 +47,6 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { executeAutomationRun, recoverStrandedRun } from "../server/hosted/automation-runs";
 import { sweepAutomations } from "../server/hosted/automation-sweep";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 
 /**

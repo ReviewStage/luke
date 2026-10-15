@@ -5,11 +5,11 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@luke/features";
+import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "@luke/service/core";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   memoryRelayState,
   type RelayStanding,

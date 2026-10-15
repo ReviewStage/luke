@@ -1,4 +1,5 @@
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { BRAIN_HOST_MODEL_FIXTURE } from "@luke/service/agents/brain-host/bounds";
 import { DRAW_ON_BOARD_TOOL } from "@luke/service/plans/board-tool";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
@@ -8,7 +9,6 @@ import {
   type MockModelToolResult,
   mockModel,
 } from "eve/evals";
-import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
 import {

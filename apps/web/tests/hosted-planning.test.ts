@@ -8,6 +8,13 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/plan-wire";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_TURN,
+  BRAIN_HOST_TURN_KIND,
+  type BrainHostTurn,
+} from "@luke/service/agents/brain-host/bounds";
+import { readRecentMessages } from "@luke/service/agents/brain-host/context";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   connectWorkspaceGitHub,
@@ -38,13 +45,6 @@ import {
   SCRIPTED_READ_REPLY,
   scriptedModel,
 } from "../eve/scripted-model";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_TURN,
-  BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-} from "../server/hosted/brain-host/bounds";
-import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";

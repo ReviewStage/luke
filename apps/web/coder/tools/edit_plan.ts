@@ -1,7 +1,7 @@
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
 import {
   EDIT_PLAN_TOOL,
   requestedNotes,
@@ -17,7 +17,7 @@ import { planNotesTaken } from "../session-prompt.js";
  * (`server/hosted/coder-host/plan-edit.ts`). The call reaches the store
  * through the host's door (`../host.ts`), as the delegation does, and the
  * turn's count of notes is the session's own state, pinned before anything
- * awaits (`server/hosted/brain-host/pinned-state.ts`). Note that the call's
+ * awaits (`packages/service/src/agents/brain-host/pinned-state.ts`). Note that the call's
  * notes are reserved against the cap before the save goes out and settled
  * to what was taken once it answers, because calls one step makes run at
  * once, and each must see the other's reservation.

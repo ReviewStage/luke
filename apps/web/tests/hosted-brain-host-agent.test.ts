@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
 import { test } from "vitest";
-import { DEPLOYMENT_PRESENCE } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_TURN_POLICY,
   brainHostChannelInput,

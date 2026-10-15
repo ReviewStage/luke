@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import { COMMAND_DESCRIPTION } from "@luke/service/agents/command-description";
 import { GitHubApp } from "@luke/service/github/github-app";
 import type { PlanDocumentBinding } from "@luke/service/plans/plan-notes";
@@ -8,7 +9,6 @@ import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { planWorkspace } from "./workspace-repository.js";
 
 /**

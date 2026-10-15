@@ -29,6 +29,8 @@ import {
   type PlanWorkAnswer,
   type PlanWorkTurn,
 } from "@luke/features/planning-view";
+import { BRAIN_HOST_TURN, RELAY_TURN } from "@luke/service/agents/brain-host/bounds";
+import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
 import {
   ASK_ORIGIN,
   MESSAGE_AUTHOR,
@@ -42,8 +44,6 @@ import { Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
-import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,

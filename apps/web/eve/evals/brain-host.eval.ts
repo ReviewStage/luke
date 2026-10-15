@@ -7,6 +7,7 @@ import { openPlanConversation, readPlan, savePlanText } from "@luke/database/mod
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { readMessagesByConversationTyped, readTurnById, startPlan } from "@luke/database/testing";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -22,7 +23,6 @@ import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import { defineEval } from "eve/evals";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import {
   PLANNER_DELEGATE_TOOL,
   planningToolDeclarations,

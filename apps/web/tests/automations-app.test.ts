@@ -39,6 +39,12 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   connectWorkspaceGitHub,
@@ -53,12 +59,6 @@ import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { automationsApp } from "../server/automations-app";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 
 /**

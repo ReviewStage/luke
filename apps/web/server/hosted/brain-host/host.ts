@@ -7,6 +7,24 @@ import { listMessagesPast, type MessageCursor } from "@luke/database/models/mess
 import { readPlanOfConversation } from "@luke/database/models/plan-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
+import { turnKindOf } from "@luke/service/agents/brain-host/auth";
+import {
+  BRAIN_HOST,
+  BRAIN_HOST_MODEL_FIXTURE,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN_KIND,
+  type BrainHostTurn,
+  RELAY_TURN,
+} from "@luke/service/agents/brain-host/bounds";
+import { readRecentMessages } from "@luke/service/agents/brain-host/context";
+import {
+  type AdmittedConversation,
+  admitConversation,
+  openChildConversation,
+  SESSION_STANDING,
+} from "@luke/service/agents/brain-host/conversation";
+import { EVE_MOUNT, eveSessionsComposer } from "@luke/service/agents/brain-host/eve-sessions";
+import { rotationSeedText } from "@luke/service/agents/brain-host/seed";
 import {
   ACTION_RESULT_STATUS,
   type BrainTurnTrigger,
@@ -32,23 +50,6 @@ import { type ModelCatalog, providerModelOf } from "../model-catalog.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import type { RepositorySkill } from "../repository-skills.js";
 import { planWorkspace } from "../workspace-repository.js";
-import { turnKindOf } from "./auth.js";
-import {
-  BRAIN_HOST,
-  BRAIN_HOST_MODEL_FIXTURE,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-  RELAY_TURN,
-} from "./bounds.js";
-import { readRecentMessages } from "./context.js";
-import {
-  type AdmittedConversation,
-  admitConversation,
-  openChildConversation,
-  SESSION_STANDING,
-} from "./conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
 import { brainModelSelection } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,
@@ -60,7 +61,6 @@ import {
 } from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
-import { rotationSeedText } from "./seed.js";
 import { carryStop } from "./stop-carrier.js";
 
 /**

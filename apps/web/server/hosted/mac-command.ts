@@ -16,11 +16,11 @@ import {
   type MacCommandResult,
   macCommandSchema,
 } from "@luke/features/mac-command-wire";
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import { COMMAND_DESCRIPTION } from "@luke/service/agents/command-description";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * mac-command.ts -- a shell command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.

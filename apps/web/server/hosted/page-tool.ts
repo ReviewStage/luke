@@ -7,6 +7,7 @@ import {
   pageHtmlSchema,
   pageTitleSchema,
 } from "@luke/features/page-wire";
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
@@ -18,7 +19,6 @@ import { isSecretFile } from "@luke/service/plans/shown-file";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document written for the plan and shown in the developer's side panel.

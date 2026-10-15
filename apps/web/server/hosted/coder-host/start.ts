@@ -19,6 +19,12 @@ import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { eveContent } from "@luke/service/agents/attached-files";
+import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  describeUnreachable,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { mentionedContext, mentionedServers } from "@luke/service/agents/mentioned-context";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import {
@@ -29,12 +35,6 @@ import {
 } from "@luke/service/http/http-effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
-import {
-  describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
-} from "../brain-host/eve-sessions.js";
 import {
   acceptedModelChoice,
   type ModelCatalog,

@@ -10,6 +10,8 @@ import {
   type PlanNote,
 } from "@luke/features/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import { AGENT_TOOL, toolsOf } from "@luke/service/agents/agent-runtime/tools";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
@@ -23,8 +25,6 @@ import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { ToolDefinition } from "eve/tools";
-import { AGENT_ROLE } from "../agent-runtime/role.js";
-import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import {
   type CodingAgentCall,

@@ -11,9 +11,9 @@ import {
   readTemplateRevision,
 } from "@luke/database/models/plan-template-revisions";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
+import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import type { AccountAppSeams } from "../account-app.js";
 import { resolveHostedUserId } from "./bearer.js";
-import { deploymentEveOrigin } from "./brain-host/eve-origin.js";
 import { anthropicFastAccess } from "./coder-host/account-keys.js";
 
 /**

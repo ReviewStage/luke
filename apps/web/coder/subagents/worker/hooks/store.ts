@@ -1,6 +1,6 @@
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
-import { pinnedState } from "../../../../server/hosted/brain-host/pinned-state.js";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../../../server/hosted/brain-host/relay.js";
 import { relayChildEvent } from "../../../host.js";
 import { delegationRecord } from "../../../session-prompt.js";
@@ -23,7 +23,7 @@ const relayState = defineState<RelayState>("luke.coder.relay.child", () => EMPTY
 export default defineHook({
   events: {
     "*"(event, ctx) {
-      // Pinned before anything awaits, for the reason the root's relay pins it (`server/hosted/brain-host/pinned-state.ts`).
+      // Pinned before anything awaits, for the reason the root's relay pins it (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const delegation = pinnedState(delegationRecord);
       const parentCallId = ctx.session.parent?.callId;

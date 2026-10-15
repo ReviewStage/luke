@@ -9,6 +9,13 @@ import {
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { type ReceivedMessage, receivedMessage } from "@luke/service/agents/attached-files";
 import {
+  BRAIN_HOST_TURN,
+  BRAIN_HOST_TURN_KIND,
+  RECEIVED_LINE,
+  RELAY_TURN,
+  type RelayTurn,
+} from "@luke/service/agents/brain-host/bounds";
+import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
   addModelUsage,
@@ -44,13 +51,6 @@ import {
 import { Effect, Option, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
-import {
-  BRAIN_HOST_TURN,
-  BRAIN_HOST_TURN_KIND,
-  RECEIVED_LINE,
-  RELAY_TURN,
-  type RelayTurn,
-} from "./bounds.js";
 
 /**
  * The relay from eve's stream into the brain's own, which both eve services

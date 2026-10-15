@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import {
   ACTION_RESULT_STATUS,
   type StoredToolPart,
@@ -6,7 +7,6 @@ import {
   type WireRecord,
 } from "@luke/service/core";
 import { Schema } from "effect";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * end-call.ts -- the planning model's `end_call` tool: the developer said they are done, so Luke hangs up.

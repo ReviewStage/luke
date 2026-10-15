@@ -17,6 +17,8 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
+import type { EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -38,8 +40,6 @@ import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";

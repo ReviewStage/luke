@@ -4,9 +4,9 @@ import { childConversationId } from "@luke/database/models/ids";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { codingAgentDelegationInputSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { openChildConversation } from "../brain-host/conversation.js";
 import { MODEL_CHOICE_REFUSAL, type OfferedModel, validateModelChoice } from "../model-catalog.js";
 
 /**

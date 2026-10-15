@@ -11,6 +11,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
+import { type MeterSeams, meteredModel } from "@luke/service/agents/agent-runtime/meter";
 import {
   APICallError,
   type LanguageModel,
@@ -19,7 +20,6 @@ import {
 } from "ai";
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
-import { type MeterSeams, meteredModel } from "../agent-runtime/meter.js";
 import { FAST_PROVIDERS, type ProviderModel, providerModelOf } from "../model-catalog.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
