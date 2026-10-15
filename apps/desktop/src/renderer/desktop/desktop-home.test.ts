@@ -302,3 +302,21 @@ test("↑ and ↓ pressed on New plan leave the focus on it", async () => {
   });
   assert.ok(document.activeElement === newPlan, "New plan keeps the focus");
 });
+
+test("Home lists every open item of the listed plans, a teammate's agent's included, though main counts only the account's own as waiting on it", async () => {
+  // Billing's question is a teammate's agent's: main's account read holds the plan, but waits the account on Invitations' alone.
+  const { page } = mount({
+    listed: {
+      plans: PLANS,
+      archived: [],
+      inbox: [{ planId: INVITES.id, items: [waitingOf(EMAIL)] }],
+      inboxPlans: HOLDING.inboxPlans,
+    },
+  });
+  await settle();
+
+  assert.deepEqual(rows(page, "home-inbox"), [
+    "Email the invitee when an invite is withdrawn? · Teammate invitations",
+    "Which billing account does the export read? · Billing export",
+  ]);
+});
