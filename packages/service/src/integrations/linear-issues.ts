@@ -28,6 +28,11 @@ import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrUnavailable,
+} from "../http/http-effect.js";
+import {
   INTEGRATION_CONNECT_FAILURE,
   IntegrationConnect,
   type IntegrationToken,
@@ -240,5 +245,49 @@ export function linearIssue(
           description: (issue.description ?? "").slice(0, LINEAR_BOUNDS.MAX_DESCRIPTION_CHARS),
         }),
     }),
+  );
+}
+
+/**
+ * A read through the workspace's Linear: its token, then the read, and the
+ * workspace's row marked expired where Linear itself refused the token, so
+ * Settings says so and New plan stops offering a picker that cannot read.
+ */
+export function throughWorkspaceLinear<A>(
+  organizationId: string,
+  read: (token: Redacted.Redacted) => Effect.Effect<A, LinearReadFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  A,
+  LinearReadFailure | QueryError | Schema.SchemaError,
+  DatabaseServices | IntegrationConnect | HttpClient.HttpClient
+> {
+  return Effect.gen(function* () {
+    const token = yield* workspaceLinearToken(organizationId);
+    if (Result.isFailure(token)) return yield* failed(token.failure);
+    return yield* read(token.success.token).pipe(
+      Effect.tapError((failure) =>
+        failure.reason === LINEAR_READ_FAILURE.EXPIRED
+          ? expireWorkspaceIntegration(organizationId, INTEGRATION_PROVIDER.LINEAR)
+          : Effect.void,
+      ),
+    );
+  });
+}
+
+/**
+ * A Linear read as a route answers it: Linear's own failure as the one
+ * Linear refusal, logged by its word, and a store failure as unavailable.
+ */
+export function linearOrRefused<A, R>(
+  read: Effect.Effect<A, LinearReadFailure | QueryError | Schema.SchemaError, R>,
+  logLine: string,
+): Effect.Effect<A, HostedRefusal, R> {
+  return Effect.catch(read, (failure) =>
+    failure instanceof LinearReadFailure
+      ? Effect.andThen(
+          Effect.logWarning(logLine, failure.reason),
+          Effect.fail(HOSTED_REFUSAL.LINEAR_UNAVAILABLE),
+        )
+      : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
 }

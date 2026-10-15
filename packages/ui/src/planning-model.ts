@@ -11,6 +11,7 @@ import {
   type PlanActivity,
   type PlanningView,
   type RepositoryCallFailure,
+  type StartCallFailure,
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/planning-view";
@@ -180,6 +181,17 @@ const REPOSITORY_FAILURE_NOTES = {
 /** The sentence the page shows for a start or a repository change the service refused. */
 export function repositoryFailureNote(failure: RepositoryCallFailure): string {
   return REPOSITORY_FAILURE_NOTES[failure];
+}
+
+/** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
+const LINEAR_START_FAILED_NOTE =
+  "Linear could not be read for that issue. It may be disconnected from this workspace; an owner or admin can connect it again in Settings › Workspace.";
+
+/** The sentence the page shows for a start the service refused, by its reason. */
+export function startFailureNote(failure: StartCallFailure): string {
+  return failure === PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE
+    ? LINEAR_START_FAILED_NOTE
+    : repositoryFailureNote(failure);
 }
 
 /** What a plan's name says, where it was edited, when the service refused the rename. */

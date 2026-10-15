@@ -49,6 +49,7 @@ import {
   repositoryFailureNote,
   repositoryPageUrl,
   sidebarPlans,
+  startFailureNote,
   unsettledMarks,
   unsettledRenames,
   unsettledRepositoryPins,
@@ -1556,7 +1557,7 @@ export function usePlansTab(input: {
       ...(linearIssueId === undefined ? undefined : { linearIssueId }),
     }).then(
       (answer) => {
-        if ("failure" in answer) return repositoryFailureNote(answer.failure);
+        if ("failure" in answer) return startFailureNote(answer.failure);
         setNewPlanAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);

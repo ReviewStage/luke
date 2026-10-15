@@ -55,74 +55,76 @@ const openAccount = Effect.gen(function* () {
   return userId;
 });
 
-/** Linear's GraphQL API, listing the one issue to anyone, and every bearer and query it heard. */
-function linearApi() {
+/** Linear's GraphQL API, listing the one issue to anyone unless it `refuses` every token, and every bearer and query it heard. */
+function linearApi(refuses: boolean) {
   const asked: { bearer: string; query: string }[] = [];
   const layer = fakeHttpClientLayer(async (_url, init) => {
     // SAFETY: the client sends one GraphQL request body per call.
     const body = JSON.parse(await new Response(init.body).text()) as { query: string };
     asked.push({ bearer: new Headers(init.headers).get("authorization") ?? "", query: body.query });
+    if (refuses) return Response.json({ errors: [{ message: "unauthorized" }] }, { status: 401 });
     return Response.json({ data: { issues: { nodes: [LINEAR_NODE] } } });
   });
   return { layer, asked };
 }
 
 /** The group over the test's database, a deployment naming Linear's connector, and Linear's API. */
-const standing = Effect.gen(function* () {
-  const clock = yield* Clock.Clock;
-  const linear = linearApi();
-  const services = Layer.mergeAll(
-    Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-    Layer.succeed(Database, yield* Database),
-    Layer.succeed(Clock.Clock, clock),
-    integrationConnectOver(LINEAR_CONNECTOR),
-    linear.layer,
-  );
-  const app = HttpRouter.toWebHandler(
-    workspaceLinearApp({
-      resolveUserId: (incoming) =>
-        Effect.succeed(
-          Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
+const standing = (refuses = false) =>
+  Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const linear = linearApi(refuses);
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      Layer.succeed(Clock.Clock, clock),
+      integrationConnectOver(LINEAR_CONNECTOR),
+      linear.layer,
+    );
+    const app = HttpRouter.toWebHandler(
+      workspaceLinearApp({
+        resolveUserId: (incoming) =>
+          Effect.succeed(
+            Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
+          ),
+        mintState: mintIntegrationState,
+        now: () => clock.currentTimeMillisUnsafe(),
+      }).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
+    const fetch = (path: string) =>
+      Effect.promise(() => app.handler(new Request(new URL(path, ORIGIN))));
+    const post = (path: string, userId: string, body: WireBoundaryInput) =>
+      Effect.gen(function* () {
+        const response = yield* Effect.promise(() =>
+          app.handler(
+            new Request(new URL(path, ORIGIN), {
+              method: "POST",
+              headers: { authorization: `Bearer ${userId}` },
+              body: JSON.stringify(body),
+            }),
+          ),
+        );
+        // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+        const answer = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
+        return { status: response.status, body: answer };
+      });
+    return {
+      linear,
+      connect: (userId: string, workspaceId: string) =>
+        post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECT, userId, { workspaceId }),
+      disconnect: (userId: string, workspaceId: string) =>
+        post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_DISCONNECT, userId, { workspaceId }),
+      issues: (userId: string, workspaceId: string) =>
+        post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES, userId, { workspaceId }),
+      /** The browser back from Connect with the state the sign-in carried; where it was sent on. */
+      returned: (state: string) =>
+        Effect.map(
+          fetch(`${HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECTED}?state=${state}`),
+          (response) => response.headers.get("location"),
         ),
-      mintState: mintIntegrationState,
-      now: () => clock.currentTimeMillisUnsafe(),
-    }).pipe(HttpRouter.provideRequest(services)),
-    { disableLogger: true },
-  );
-  yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
-  const fetch = (path: string) =>
-    Effect.promise(() => app.handler(new Request(new URL(path, ORIGIN))));
-  const post = (path: string, userId: string, body: WireBoundaryInput) =>
-    Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
-        app.handler(
-          new Request(new URL(path, ORIGIN), {
-            method: "POST",
-            headers: { authorization: `Bearer ${userId}` },
-            body: JSON.stringify(body),
-          }),
-        ),
-      );
-      // SAFETY: the group answers JSON; the test compares it as the wire value it is.
-      const answer = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-      return { status: response.status, body: answer };
-    });
-  return {
-    linear,
-    connect: (userId: string, workspaceId: string) =>
-      post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECT, userId, { workspaceId }),
-    disconnect: (userId: string, workspaceId: string) =>
-      post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_DISCONNECT, userId, { workspaceId }),
-    issues: (userId: string, workspaceId: string) =>
-      post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES, userId, { workspaceId }),
-    /** The browser back from Connect with the state the sign-in carried; where it was sent on. */
-    returned: (state: string) =>
-      Effect.map(
-        fetch(`${HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECTED}?state=${state}`),
-        (response) => response.headers.get("location"),
-      ),
-  };
-});
+    };
+  });
 
 /** The state the sign-in Connect began carries back, read off the callback address it was handed. */
 const signInState = (workspaceId: string) =>
@@ -152,7 +154,7 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
     "an admin connects Linear for the workspace, a member may not, and a stranger is answered as though there were no such workspace",
     () =>
       Effect.gen(function* () {
-        const group = yield* standing;
+        const group = yield* standing();
         const { admin, member, stranger, workspaceId } = yield* team;
 
         const refused = yield* group.connect(member, workspaceId);
@@ -183,7 +185,7 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
     "every member reads the issues through the workspace's own grant, with no team filter, and a workspace with none connected is refused",
     () =>
       Effect.gen(function* () {
-        const group = yield* standing;
+        const group = yield* standing();
         const { admin, member, workspaceId } = yield* team;
         const other = yield* team;
 
@@ -220,7 +222,7 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
 
   it.effect("a Disconnect by an admin ends every read through the workspace's grant", () =>
     Effect.gen(function* () {
-      const group = yield* standing;
+      const group = yield* standing();
       const { admin, member, workspaceId } = yield* team;
       yield* group.connect(admin, workspaceId);
       yield* group.returned(yield* signInState(workspaceId));
@@ -238,5 +240,23 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
       );
       assert.deepEqual(after.body, { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE });
     }),
+  );
+
+  it.effect(
+    "Linear refusing the workspace's token marks its connection expired, so Settings says so and the issues are refused",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(true);
+        const { admin, member, workspaceId } = yield* team;
+        yield* group.connect(admin, workspaceId);
+        yield* group.returned(yield* signInState(workspaceId));
+
+        const refused = yield* group.issues(member, workspaceId);
+        const listed = yield* workspaceOf(member, workspaceId);
+
+        assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE });
+        assert.ok(Option.isSome(listed));
+        assert.deepEqual(listed.value.linear, { active: false });
+      }),
   );
 });

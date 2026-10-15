@@ -117,15 +117,21 @@ test("picking an issue starts its plan at once and closes the picker", async () 
   assert.equal(pressed.closed, 1);
 });
 
-test("a start that was refused says why where the issues stood, and the picker stays open", async () => {
+test("a start that was refused says why where the issues stood, the picker stays open, and Retry lists the issues again", async () => {
   const refusal = "Linear is not connected to this workspace.";
   const { container, pressed } = await mount(refusal);
 
   await press(container, "Start a plan from Linear");
+  const said = container.querySelector('[role="alert"]')?.textContent;
 
-  assert.equal(container.querySelector('[role="alert"]')?.textContent, refusal);
-  assert.deepEqual(rowWords(container), []);
+  const refused = rowWords(container);
+  await press(container, "Retry");
+
+  assert.equal(said, refusal);
   assert.equal(pressed.closed, 0);
+  assert.deepEqual(refused, []);
+  assert.equal(container.querySelector('[role="alert"]'), null);
+  assert.equal(rowWords(container).length, ISSUES.length);
 });
 
 test("Blank task hands back to the New plan dialog and starts nothing", async () => {

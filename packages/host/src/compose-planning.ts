@@ -1621,6 +1621,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           client.workspaces.linearConnect(read.success.workspaceId),
           FetchHttpClient.layer,
         );
+        // The sign-in finishes in the browser, so the panel coming forward again reads the workspaces whatever the bound says.
+        workspacesAskedAt = undefined;
         return carried<PlanningWorkspaceGitHubConnectAnswer>(
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
         );

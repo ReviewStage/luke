@@ -83,6 +83,7 @@ export function LinearIssuePicker({
 
   const readIssues = useCallback(() => {
     setIssues(undefined);
+    setRefusal(undefined);
     latest.current().then(
       (listed) => setIssues({ issues: listed }),
       (refused: Error) => setIssues({ failed: refused.message }),
@@ -91,7 +92,6 @@ export function LinearIssuePicker({
 
   useEffect(() => {
     if (!open) return;
-    setRefusal(undefined);
     readIssues();
   }, [open, readIssues]);
 

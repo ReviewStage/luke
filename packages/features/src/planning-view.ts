@@ -547,6 +547,8 @@ export const PLAN_CALL_FAILURE = {
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The plan is archived, so it takes no write until it is brought back. */
   PLAN_ARCHIVED: "plan-archived",
+  /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
+  LINEAR_UNAVAILABLE: "linear-unavailable",
 } as const;
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
@@ -561,10 +563,18 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
+/** Why a start answered no plan: a repository call's reasons, or the Linear issue it was to start from could not be read. */
+const START_CALL_FAILURES = [
+  ...REPOSITORY_CALL_FAILURES,
+  PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE,
+] as const;
+
+export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
+
 /** Starting a plan, as the window hears it: the plan now active, or why none started. */
 export const planningStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.String }),
-  EffectSchema.Struct({ failure: repositoryCallFailureSchema }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(START_CALL_FAILURES) }),
 ]);
 
 export type PlanningStartAnswer = typeof planningStartAnswerSchema.Type;

@@ -62,7 +62,7 @@ import {
   IntegrationConnect,
   revokeIntegrationGrant,
 } from "./integration-connect.js";
-import { listLinearIssues, workspaceLinearToken } from "./linear-issues.js";
+import { linearOrRefused, listLinearIssues, throughWorkspaceLinear } from "./linear-issues.js";
 import {
   beginWorkspaceIntegrationSignIn,
   completeWorkspaceIntegrationSignIn,
@@ -278,11 +278,9 @@ const issuesEndpoint = Effect.fn("web/workspaceLinearIssuesEndpoint")(function* 
   const userId = yield* accountOf(seams);
   const asked = yield* bodyAs(linearIssuesRequestSchema);
   const workspace = yield* memberWorkspace(userId, asked.workspaceId);
-  const token = yield* hostedStoreOrUnavailable(workspaceLinearToken(workspace.id));
-  if (Result.isFailure(token)) return yield* Effect.fail(HOSTED_REFUSAL.LINEAR_UNAVAILABLE);
-  const issues = yield* listLinearIssues(token.success.token, asked.query).pipe(
-    Effect.tapError((failure) => Effect.logWarning("Linear listed no issues", failure.reason)),
-    Effect.mapError(() => HOSTED_REFUSAL.LINEAR_UNAVAILABLE),
+  const issues = yield* linearOrRefused(
+    throughWorkspaceLinear(workspace.id, (token) => listLinearIssues(token, asked.query)),
+    "Linear listed no issues",
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { issues });
 });

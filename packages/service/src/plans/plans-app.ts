@@ -82,7 +82,11 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import type { IntegrationConnect } from "../integrations/integration-connect.js";
-import { linearIssue, workspaceLinearToken } from "../integrations/linear-issues.js";
+import {
+  linearIssue,
+  linearOrRefused,
+  throughWorkspaceLinear,
+} from "../integrations/linear-issues.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
@@ -438,19 +442,11 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
  * it reaches. Nothing is written before it is read, so a refusal starts no
  * plan.
  */
-const startingLinearIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
-  organizationId: string,
-  issueId: string,
-) {
-  const token = yield* hostedStoreOrUnavailable(workspaceLinearToken(organizationId));
-  if (Result.isFailure(token)) return yield* Effect.fail(HOSTED_REFUSAL.LINEAR_UNAVAILABLE);
-  return yield* linearIssue(token.success.token, issueId).pipe(
-    Effect.tapError((failure) =>
-      Effect.logWarning("Linear gave no issue to start a plan from", failure.reason),
-    ),
-    Effect.mapError(() => HOSTED_REFUSAL.LINEAR_UNAVAILABLE),
+const startingLinearIssue = (organizationId: string, issueId: string) =>
+  linearOrRefused(
+    throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
+    "Linear gave no issue to start a plan from",
   );
-});
 
 /** Whether a list read asks for the archived plans too; a build from before archiving never does. */
 function listsArchived(request: Request): boolean {
