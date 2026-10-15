@@ -394,7 +394,7 @@ export function AutomationCard({
         <CardNote>
           {"Last ran "}
           <RelativeTime at={lastRun.firedAt} now={now} hint={false} ago />
-          {` · ${automationRunLine(lastRun)}`}
+          {` · ${automationRunLine(lastRun, automation.mine === true ? undefined : "its creator")}`}
         </CardNote>
       )}
       <CardRule />

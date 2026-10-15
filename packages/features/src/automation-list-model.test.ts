@@ -260,4 +260,16 @@ test("a run's line says why it did not start, else where its agent stands, or th
     ),
     "Its agent failed: the sandbox or checkout failed",
   );
+  const keyRefused = run({
+    agent: {
+      ...agent(CODING_AGENT_STATUS.FAILED),
+      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+    },
+  });
+  assert.equal(
+    automationRunLine(keyRefused, "its creator"),
+    "Its agent failed: its creator's API key was refused or can't be read",
+    "another's automation names whose key, and no Settings the reader cannot mend",
+  );
+  assert.match(automationRunLine(keyRefused), /check Settings › Coding agents › API keys$/u);
 });

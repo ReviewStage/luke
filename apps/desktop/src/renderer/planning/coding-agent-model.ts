@@ -1,5 +1,5 @@
 import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
-import { AGENT_FAILURE_WORDS } from "@luke/features/coding-agent-failure-words";
+import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -213,17 +213,6 @@ export function lineSender(
   }
 }
 
-/** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */
-function teammateKeyWords(failure: CodingAgentFailure, starter: string): string | undefined {
-  if (failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
-    return `${starter}'s API key was refused or can't be read`;
-  }
-  if (failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
-    return `Fast isn't available on ${starter}'s own API key; choose the model with Fast off`;
-  }
-  return AGENT_FAILURE_WORDS[failure];
-}
-
 /**
  * The quiet line a transcript ends on once its turn failed or was stopped,
  * with what the turn cost where known; nothing for an agent still writing or
@@ -240,12 +229,7 @@ export function endLine(
     case CODING_AGENT_STATUS.CANCELLED:
       return withCost("Stopped", turnUsage);
     case CODING_AGENT_STATUS.FAILED: {
-      const words =
-        failure === undefined
-          ? undefined
-          : starter === undefined
-            ? AGENT_FAILURE_WORDS[failure]
-            : teammateKeyWords(failure, starter);
+      const words = failure === undefined ? undefined : agentFailureWords(failure, starter);
       return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
     }
     case CODING_AGENT_STATUS.STARTING:

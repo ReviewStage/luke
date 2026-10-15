@@ -37,6 +37,9 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 /** What may fire a run: its automation's trigger, or Run now. */
 type AutomationFiringKind = AutomationFiring["kind"];
 
+/** Whose key a run ran on where the automation is another's, as its line names it. */
+const CREATOR = "its creator";
+
 /** What the panel says while the automation has no run, over how to have one. */
 const NO_RUNS_TITLE = "No runs yet";
 
@@ -64,22 +67,25 @@ export function FiringGlyph({ kind }: { kind: AutomationFiringKind }): React.JSX
 /** One run's row, a press opening its agent where it started one. */
 function RunRow({
   run,
+  keyHolder,
   now,
   onOpenAgent,
 }: {
   run: AutomationRunSummary;
+  keyHolder: string | undefined;
   now: number;
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
+  const line = automationRunLine(run, keyHolder);
   const glyph = <FiringGlyph kind={run.firing.kind} />;
   const words = (
     <>
       <StateGlyph glyph={glyph} state={state} />
       <span className="automation-row-copy">
         <span className="automation-row-name">{automationRunTitle(run)}</span>
-        <span className="automation-row-detail" title={automationRunLine(run)}>
-          {automationRunLine(run)}
+        <span className="automation-row-detail" title={line}>
+          {line}
         </span>
       </span>
       <span className="automation-row-when" title={momentText(run.firedAt)}>
@@ -108,6 +114,7 @@ const FORM_RESERVE = 480;
  */
 export function AutomationRunsPanel({
   panel,
+  mine,
   created,
   runs,
   onRetry,
@@ -115,6 +122,8 @@ export function AutomationRunsPanel({
 }: {
   /** How wide it stands and whether it stands, kept by the window (`folded-groups.ts`). */
   panel: RunsPanel;
+  /** Whether the reading account made it, whose keys its runs' agents run on; another's runs name its creator's key. */
+  mine: boolean;
   /** Whether the automation exists yet, so has runs to read. */
   created: boolean;
   runs: RunsRead;
@@ -154,7 +163,13 @@ export function AutomationRunsPanel({
         ) : (
           <div className="automation-runs-list">
             {runs.runs.map((run) => (
-              <RunRow key={run.id} run={run} now={now} onOpenAgent={onOpenAgent} />
+              <RunRow
+                key={run.id}
+                run={run}
+                keyHolder={mine ? undefined : CREATOR}
+                now={now}
+                onOpenAgent={onOpenAgent}
+              />
             ))}
           </div>
         )}

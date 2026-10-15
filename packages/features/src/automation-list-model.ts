@@ -19,7 +19,7 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "./automation-wire.js";
-import { AGENT_FAILURE_WORDS } from "./coding-agent-failure-words.js";
+import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
 
 /**
@@ -108,10 +108,15 @@ const FIRING_WORDS = {
 } as const satisfies Record<AutomationRunSummary["firing"]["kind"], string>;
 
 /** Where a started run's agent stands, and why it failed where it did, in the words its own end line uses. */
-function agentLine(agent: NonNullable<AutomationRunSummary["agent"]>): string {
+function agentLine(
+  agent: NonNullable<AutomationRunSummary["agent"]>,
+  keyHolder: string | undefined,
+): string {
   const standing = AGENT_STATUS_WORDS[agent.status];
   const why =
-    agent.failureReason === undefined ? undefined : AGENT_FAILURE_WORDS[agent.failureReason];
+    agent.failureReason === undefined
+      ? undefined
+      : agentFailureWords(agent.failureReason, keyHolder);
   return agent.status === CODING_AGENT_STATUS.FAILED && why !== undefined
     ? `${standing}: ${why}`
     : standing;
@@ -301,7 +306,11 @@ export function automationRunTitle(run: AutomationRunSummary): string {
 }
 
 /** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */
-export function automationRunLine(run: AutomationRunSummary): string {
+export function automationRunLine(
+  run: AutomationRunSummary,
+  /** Whose key the run's agent ran on where it is not the reader's: its creator, whose Settings the reader cannot mend. */
+  keyHolder?: string | undefined,
+): string {
   if (run.reason !== null) return RUN_REASON_WORDS[run.reason];
   switch (run.status) {
     case AUTOMATION_RUN_STATUS.QUEUED:
@@ -311,6 +320,6 @@ export function automationRunLine(run: AutomationRunSummary): string {
     case AUTOMATION_RUN_STATUS.SKIPPED:
       return "Skipped";
     case AUTOMATION_RUN_STATUS.STARTED:
-      return run.agent === null ? "Its agent is gone" : agentLine(run.agent);
+      return run.agent === null ? "Its agent is gone" : agentLine(run.agent, keyHolder);
   }
 }
