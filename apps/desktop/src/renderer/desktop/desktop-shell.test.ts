@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -13,10 +14,11 @@ import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { PLANS_PAGE } from "../planning/planning-model";
+import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
@@ -231,4 +233,41 @@ test("Home, pressed or by its chord from Settings, brings the Plans tab forward 
   const plans = mount(false, false, { onGoHome: () => (home += 1) });
   act(() => homeRow(plans).click());
   assert.equal(home, 2);
+});
+
+const ACME: Workspace = {
+  id: DOCUMENT_PLAN.workspaceId,
+  name: "Acme",
+  slug: "acme",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+};
+
+test("the window is called by what stands in it: the plan on screen, else the Inbox or Settings, and Luke once signed out", () => {
+  const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true) => {
+    mount(
+      inboxOpen,
+      false,
+      {
+        signedIn,
+        workspaces: [ACME],
+        workspace: ACME,
+        region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+      },
+      tab,
+    );
+    const title = document.title;
+    act(() => root?.unmount());
+    return title;
+  };
+
+  assert.deepEqual(
+    [
+      titled(false, PANEL_TAB.PLANS),
+      titled(true, PANEL_TAB.PLANS),
+      titled(false, PANEL_TAB.SETTINGS),
+      titled(false, PANEL_TAB.PLANS, false),
+    ],
+    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke"],
+  );
 });

@@ -33,9 +33,9 @@ test("the window's title names the open plan and its workspace, the workspace al
   const acme = { name: "Acme" };
 
   assert.equal(
-    titleFor({ signedIn: true, planName: "Teammate invitations", workspace: acme }),
+    titleFor({ signedIn: true, subject: "Teammate invitations", workspace: acme }),
     "Teammate invitations — Acme",
   );
-  assert.equal(titleFor({ signedIn: true, planName: undefined, workspace: acme }), "Acme");
-  assert.equal(titleFor({ signedIn: false, planName: undefined, workspace: undefined }), "Luke");
+  assert.equal(titleFor({ signedIn: true, subject: undefined, workspace: acme }), "Acme");
+  assert.equal(titleFor({ signedIn: false, subject: undefined, workspace: undefined }), "Luke");
 });
