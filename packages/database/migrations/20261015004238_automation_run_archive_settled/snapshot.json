@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "5e6c8535-0e5e-4237-81e6-9f66af24c57e",
-  "prevIds": ["7cc23920-d427-453c-8f13-f622c02ac8b8"],
+  "id": "400f5e4b-4b62-4664-ad8f-18c2a2ceb27b",
+  "prevIds": ["4a492703-41a0-464c-80a4-63a88d3353a6"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -3225,6 +3225,19 @@
       "table": "coding_agent"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "mentioned_servers",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -4845,6 +4858,19 @@
       "generated": null,
       "identity": null,
       "name": "plan_template",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_preference"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "experiments",
       "entityType": "columns",
       "schema": "public",
       "table": "account_preference"
