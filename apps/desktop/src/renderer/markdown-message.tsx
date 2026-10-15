@@ -1,4 +1,5 @@
 import { matchRanges } from "@luke/ui/search-tokens";
+import { isWireString } from "@luke/wire";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -377,6 +378,17 @@ function plainLink(
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
 
+/**
+ * Draws a picture the place showing the words knows how to, a plan's say,
+ * from its address, its alt text, and its title; nothing for one it leaves
+ * drawn as its alt text, as every picture is where no drawer is handed.
+ */
+export type PictureDrawer = (
+  src: string,
+  alt: string,
+  title: string | undefined,
+) => ReactNode | undefined;
+
 /** The marks a link's words wear, drawn mid-edit: none, one over every word, or a change inside its label. */
 const LINK_MARKS = {
   NONE: "none",
@@ -531,6 +543,7 @@ export function MarkdownMessage({
   edit,
   link,
   openLink,
+  picture,
   found,
   diagrams,
 }: {
@@ -542,6 +555,8 @@ export function MarkdownMessage({
   link?: LinkDrawer | undefined;
   /** Opens a plain link pressed; every plain link is words going nowhere without one. */
   openLink?: ((href: string) => void) | undefined;
+  /** Draws the pictures the place knows how to, a plan's say; every picture is its alt text without one. */
+  picture?: PictureDrawer | undefined;
   /** The words a search asks for, marked where they landed. */
   found?: readonly string[] | undefined;
   /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
@@ -554,7 +569,14 @@ export function MarkdownMessage({
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
   const components = useMemo<Components>(() => {
-    if (link === undefined && openLink === undefined && diagrams !== true) return COMPONENTS;
+    if (
+      link === undefined &&
+      openLink === undefined &&
+      diagrams !== true &&
+      picture === undefined
+    ) {
+      return COMPONENTS;
+    }
     const drawing: Components = {
       ...COMPONENTS,
       a: ({ href, children, node }) => {
@@ -566,8 +588,12 @@ export function MarkdownMessage({
       },
     };
     if (diagrams === true) drawing.pre = DiagramFence;
+    if (picture !== undefined) {
+      drawing.img = ({ src, alt, title }) =>
+        (isWireString(src) ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
+    }
     return drawing;
-  }, [link, openLink, diagrams]);
+  }, [link, openLink, diagrams, picture]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
       <FenceEdit.Provider value={edit}>

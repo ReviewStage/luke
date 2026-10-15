@@ -98,6 +98,7 @@ import {
   type PlanningFileAnswer,
   type PlanningMoveAnswer,
   type PlanningPageSourceAnswer,
+  type PlanningPictureAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -117,6 +118,8 @@ import {
   planningMoveParamsSchema,
   planningPageParamsSchema,
   planningPageSourceAnswerSchema,
+  planningPictureAnswerSchema,
+  planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
@@ -311,6 +314,8 @@ export const ACT_KIND = {
   PLANNING_RESTORE: "planning.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
   PLANNING_PAGE_SOURCE: "planning.pageSource",
+  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
+  PLANNING_PICTURE_READ: "planning.pictureRead",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -959,6 +964,11 @@ export const ACT = {
     payload: actSchema(planningRevisionParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not restore that version on this system.",
+  },
+  [ACT_KIND.PLANNING_PICTURE_READ]: {
+    payload: actSchema(planningPictureParamsSchema),
+    result: wireResult<PlanningPictureAnswer>(isReadable(planningPictureAnswerSchema)),
+    refusal: "Could not read that picture on this system.",
   },
   [ACT_KIND.PLANNING_PAGE_SOURCE]: {
     payload: actSchema(planningPageParamsSchema),

@@ -348,6 +348,16 @@ export function planRestorePath(planId: string, seq: number): string {
   return `${planRevisionPath(planId, seq)}/restore`;
 }
 
+/** One plan's pictures: one kept on the plan (POST). */
+function planAttachmentsPath(planId: string): string {
+  return `${planPath(planId)}/attachments`;
+}
+
+/** One picture of one plan, as its bytes (GET). */
+export function planAttachmentPath(planId: string, attachmentId: string): string {
+  return `${planAttachmentsPath(planId)}/${encodeURIComponent(attachmentId)}`;
+}
+
 /** One plan's pages (GET): each page's newest version, the most recently written first. */
 export function planPagesPath(planId: string): string {
   return `${planPath(planId)}/pages`;

@@ -18,6 +18,7 @@ import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
 import { callBarPlanId, callCard, callCardShown } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
+import { forgetPictures } from "@luke/ui/picture-cache";
 import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -89,6 +90,12 @@ export function App(): React.JSX.Element {
   // against: what arrives is the whole document at a version that only rises.
   const state = useAppState();
   const account = state?.account;
+  // A picture is read as the account signed in, so the window lets go of every one it read once that account changes.
+  const accountKey =
+    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  useEffect(() => {
+    forgetPictures();
+  }, [accountKey]);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);

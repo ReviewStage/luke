@@ -108,6 +108,8 @@ import {
   type PlanningMoveParams,
   type PlanningPageAnswer,
   type PlanningPageParams,
+  type PlanningPictureAnswer,
+  type PlanningPictureParams,
   type PlanningPinParams,
   type PlanningPinRepositoryParams,
   type PlanningRenameParams,
@@ -151,6 +153,7 @@ import {
   planningGitHubPageAnswerSchema,
   planningMoveAnswerSchema,
   planningPageAnswerSchema,
+  planningPictureAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
@@ -342,6 +345,8 @@ export interface HostOperator {
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
   planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+  /** One picture of one plan as its bytes in base64, or why there is none. */
+  planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -929,6 +934,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPicture: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PICTURE, {
+          planId: params.planId,
+          attachmentId: params.attachmentId,
+        }),
+        (answer): PlanningPictureAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPictureAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )

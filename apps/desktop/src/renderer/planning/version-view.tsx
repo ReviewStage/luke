@@ -12,6 +12,7 @@ import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
 import { type MentionedPlan, useMentionLink } from "./plan-mentions";
+import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { dayAndTimeText, momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { useOpenLink } from "./use-open-link";
@@ -98,6 +99,7 @@ function VersionBody({
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
   const link = useMentionLink(plan);
   const openLink = useOpenLink();
+  const picture = usePlanPictureDrawer();
   return (
     <div className="plan-body">
       {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
@@ -112,6 +114,7 @@ function VersionBody({
           link={link}
           openLink={openLink}
           diagrams
+          picture={picture}
         />
       ))}
     </div>
@@ -162,7 +165,17 @@ function VersionContent({
   return (
     <>
       {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
-      <VersionBody diff={diff} title={title} section={section} plan={plan} />
+      {plan === undefined ? (
+        <VersionBody diff={diff} title={title} section={section} plan={plan} />
+      ) : (
+        // A version struck a picture as well as wrote one in, so both texts name the pictures it draws.
+        <PlanPictures
+          planId={plan.planId}
+          text={`${read.document.body}\n${read.previous?.body ?? ""}`}
+        >
+          <VersionBody diff={diff} title={title} section={section} plan={plan} />
+        </PlanPictures>
+      )}
     </>
   );
 }

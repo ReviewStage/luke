@@ -20,6 +20,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
+import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
   PLAN_ACTOR,
@@ -145,6 +146,8 @@ interface FakeService extends PlanningClient {
   pages: PageVersion[];
   /** Each plan's pages as the service lists them, by plan id; a plan with none answers nothing, as a service that did not answer. */
   pageLines: Record<string, readonly PageLine[]>;
+  /** The plans' pictures the service holds, by plan and then by picture. */
+  pictures: Map<string, Map<string, { contentType: PictureType; base64: string }>>;
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
   editAnswer: PlanEditAnswer | undefined;
   /** The account's pinned repositories, newest pinned first, as the service keeps them. */
@@ -252,6 +255,14 @@ function fakeService(plans: Plan[]): FakeService {
     pages: [],
     pageLines: {},
     readPages: (planId) => Effect.sync(() => service.pageLines[planId]),
+    pictures: new Map(),
+    readPicture: (planId, attachmentId) =>
+      Effect.sync(
+        () =>
+          service.pictures.get(planId)?.get(attachmentId) ?? {
+            failure: PLAN_CALL_FAILURE.NOT_FOUND,
+          },
+      ),
     readPageVersion: (_planId, pageId, version) =>
       Effect.sync(() =>
         service.pages.find((page) => page.id === pageId && page.version === version),
@@ -768,6 +779,30 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     return { planning, call, told, last, viewWhere, viewLands, conversations };
   });
 }
+
+it.effect(
+  "a plan's picture is answered to the window that asked as its bytes, and as not found where the service holds none for it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const picture = { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      service.pictures.set(INVITES, new Map([["picture-1", picture]]));
+      const { call, told } = yield* subject(service);
+
+      const read = yield* call(GATEWAY_METHOD.PLANNING_PICTURE, {
+        planId: INVITES,
+        attachmentId: "picture-1",
+      });
+      const gone = yield* call(GATEWAY_METHOD.PLANNING_PICTURE, {
+        planId: INVITES,
+        attachmentId: "picture-2",
+      });
+
+      assert.deepEqual(read, picture);
+      assert.deepEqual(gone, { failure: PLAN_CALL_FAILURE.NOT_FOUND });
+      assert.equal(told.length, 0, "a picture's bytes are never told in the view");
+    }),
+);
 
 it.effect("the window's refresh lists the plans and opening one draws its saved document", () =>
   Effect.gen(function* () {

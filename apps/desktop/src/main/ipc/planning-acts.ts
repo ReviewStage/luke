@@ -16,6 +16,8 @@ import type {
   PlanningPageAnswer,
   PlanningPageParams,
   PlanningPageSourceAnswer,
+  PlanningPictureAnswer,
+  PlanningPictureParams,
   PlanningPinParams,
   PlanningPinRepositoryParams,
   PlanningRenameParams,
@@ -104,6 +106,7 @@ export interface PlanningActsDependencies {
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
     planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+    planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
     githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
@@ -192,6 +195,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_REVISION
   | typeof ACT_KIND.PLANNING_RESTORE
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
+  | typeof ACT_KIND.PLANNING_PICTURE_READ
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_PHOTO_SET
@@ -436,6 +440,13 @@ export function planningActRows(
     [ACT_KIND.PLANNING_RESTORE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_RESTORE, sender);
       return host.planningRestore(params);
+    },
+    // Note that the picture's answer, a failure among them, is the panel's to
+    // read, as a workspace photo's is, because a picture that hears none
+    // draws its words rather than a refusal.
+    [ACT_KIND.PLANNING_PICTURE_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_READ, sender);
+      return host.planningPicture(params);
     },
     // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
     [ACT_KIND.PLANNING_PAGE_SOURCE]: (params, sender) => {
