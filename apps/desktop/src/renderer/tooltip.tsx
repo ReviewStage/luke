@@ -131,12 +131,15 @@ function unstack(hide: () => void): void {
 
 /**
  * A card's linger, as an atom whose work is the wait: it takes the card down
- * once it has run out. There is one, since one card stands at a time; a new
- * linger starts it afresh and an interrupt calls it off. Note that the way
+ * once it has run out. Each tooltip has its own, by its id, held for as long
+ * as the tooltip is mounted: a new linger starts it afresh and an interrupt
+ * calls it off. Note that a card hung over another lingers apart from it,
+ * because the pointer leaving the stack lets both linger at once, and the
+ * pointer back on either calls off that one's alone. Note too that the way
  * down is handed inside a record, because a function handed to an atom's
  * setter is read as an update of its value and called at once.
  */
-const cardLingerAtom = Atom.keepAlive(
+const cardLingerAtom = Atom.family((_tooltip: string) =>
   rendererRuntime.fn(({ leave }: { readonly leave: () => void }) =>
     Effect.andThen(Effect.sleep(CARD_LINGER), Effect.sync(leave)),
   ),
@@ -373,7 +376,7 @@ export function Tooltip({
     () => (carded ? (cardRegion?.current ?? undefined) : undefined),
     [carded, cardRegion],
   );
-  const linger = useAtomSet(cardLingerAtom);
+  const linger = useAtomSet(cardLingerAtom(id));
   // Note that this is a ref, because the window's key listener reads it,
   // which no render stands between.
   const overCard = useRef(false);

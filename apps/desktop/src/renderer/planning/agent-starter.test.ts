@@ -17,7 +17,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { MemberDirectory } from "../member-directory";
@@ -191,6 +191,87 @@ test("the starter's name on an agent's card hangs their own card over it, read o
   assert.ok(person, "the starter's own card hangs");
   assert.match(person.textContent ?? "", /Charles Pan.*charles@example\.com.*Member/u);
   assert.equal(person.querySelector("button"), null);
+});
+
+/** Moves the pointer from `from` onto `to`, as the window tells it: out of the one, over the other. */
+function move(from: Element, to: Element): void {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
+    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+/** Lets `ms` pass on the faked clock a card waits and lingers on. */
+function pass(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+/** Longer than a card waits to show and lingers once left (`--hint-delay`, `CARD_LINGER`). */
+const PAST_ANY_WAIT = 1_000;
+
+/** The agent's card and the starter's card over it, the pointer resting on the starter's, each shown past its wait. */
+async function stacked() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  const { card } = await agentNamed(DEAN.userId);
+  pass(PAST_ANY_WAIT);
+  const control = document.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named");
+  move(control, card);
+  const starter = card.querySelector(".actor-words .actor-ref") ?? assert.fail("the starter");
+  move(card, starter);
+  pass(PAST_ANY_WAIT);
+  const theirs = cards()[1] ?? assert.fail("the starter's card hangs over the agent's");
+  // The pointer crosses the gap between the starter and their card, which stands on neither card.
+  const gap = document.body.appendChild(document.createElement("div"));
+  move(starter, gap);
+  move(gap, theirs);
+  return { card, theirs, gap };
+}
+
+test("the pointer leaving a starter's card for outside both cards takes both down once they have lingered", async () => {
+  try {
+    const { theirs } = await stacked();
+    const outside = document.body.appendChild(document.createElement("div"));
+    move(theirs, outside);
+    assert.equal(cards().length, 2, "both linger for the pointer to come back");
+    pass(PAST_ANY_WAIT);
+    assert.equal(cards().length, 0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the pointer going back from a starter's card to the agent's keeps the agent's standing and takes the starter's down once it has lingered", async () => {
+  try {
+    const { card, theirs, gap } = await stacked();
+    move(theirs, gap);
+    move(gap, card);
+    pass(PAST_ANY_WAIT);
+    const standing = cards();
+    assert.equal(standing.length, 1);
+    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card stands");
+    const outside = document.body.appendChild(document.createElement("div"));
+    move(card, outside);
+    pass(PAST_ANY_WAIT);
+    assert.equal(cards().length, 0, "and goes once the pointer leaves it in turn");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the pointer going from a starter's card back onto the agent's own name keeps the agent's card and takes the starter's down once it has lingered", async () => {
+  try {
+    const { theirs } = await stacked();
+    const control = document.querySelector("[data-agent-ref]") ?? assert.fail("the agent's name");
+    move(theirs, control);
+    pass(PAST_ANY_WAIT);
+    const standing = cards();
+    assert.equal(standing.length, 1);
+    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card stands");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("an agent's card wears its tile beside its name, its pull request at the corner where the plan holds one, and Open agent under a rule, which opens its tab and takes the card down", async () => {
