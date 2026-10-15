@@ -248,8 +248,9 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 ### Improvements
 
 - The sidebar lists tasks in one section, grouped by repository, by creator,
-  or not at all, in the order you choose
-  ([#2893](https://github.com/ReviewStage/luke/pull/2893))
+  or not at all, in the order you choose, and filters them by who created them
+  ([#2893](https://github.com/ReviewStage/luke/pull/2893),
+  [#2899](https://github.com/ReviewStage/luke/pull/2899))
 - The Changes tab and card name who opened the pull request, its reviewers by
   where each stands, its commit authors, and its review comments
   ([#2862](https://github.com/ReviewStage/luke/pull/2862),
