@@ -11,11 +11,11 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
  *
  * The coding agent runs eve's own tools, authored one file each under
- * `coder/tools/` so the set is exactly this list and eve adds nothing
+ * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, the hosted public search and page read the planning model has
  * too (`../public-research.ts`), the delegation of a slice of its
- * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
+ * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
@@ -32,7 +32,7 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * The tools the coding agent is offered, by the name eve mounts each under:
  * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
  * the callers that pick one out. Its test holds this to the registry's role
- * and the files under `coder/tools/` to this.
+ * and the files under `apps/dev/tools/` to this.
  */
 export const CODER_TOOL = {
   BASH: AGENT_TOOL.BASH,
@@ -118,7 +118,7 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
  */
 /**
  * The two task controls eve adds beside any task, which a coding agent's
- * \`delegate\` is (\`coder/tools/delegate.ts\`): eve runs them, so they are no
+ * \`delegate\` is (\`apps/dev/tools/delegate.ts\`): eve runs them, so they are no
  * tool of Luke's, but a turn that waits on its worker or stops one names them.
  * Their tasks are eve's subagent tasks, not a Luke task.
  */

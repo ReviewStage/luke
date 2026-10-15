@@ -14,7 +14,7 @@ import {
  * developer reads the agent's list and a worker's slice is one item of it.
  */
 
-/** The tool as the model is shown it (`coder/tools/write_todos.ts`): its name, its words, and the list it takes. */
+/** The tool as the model is shown it (`apps/dev/tools/write_todos.ts`): its name, its words, and the list it takes. */
 export const TODOS_TOOL = {
   name: CODING_AGENT_TODOS_TOOL,
   description:

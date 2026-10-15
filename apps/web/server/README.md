@@ -359,10 +359,11 @@ build, the install filter, the ignore rule, and the `routes` above unchanged.
 (`apps/luke/README.md`), built by a plain `pnpm exec eve build` in that root,
 which writes the Build Output static-build reads back from it, so nothing
 relocates it and no variable of eve's own is set by hand.
-`coder` is the coding-agent service, a second eve app root at `apps/web/coder/` built
-and deployed on the same terms ("The coding-agent service" below).
+`dev` is the coding-agent service, a second standalone eve app at `apps/dev`
+built and deployed on the same terms (`packages/service/README.md`'s "The
+coding-agent service").
 Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the luke service, and
+`/eve/coder/v1/*` enters the dev service, `/eve/v1/*` the luke service, and
 everything else the web service, and a
 service's own routes run only once a request has entered it. That is why the
 generated `/api/` rewrites live under the web service's `routes` and the
@@ -690,6 +691,8 @@ separate service is deployed. Tests run against a fake OpenAI on loopback and an
 
 ## The agents
 
-Luke's planning brain is its own eve app, `apps/luke`; its layout,
-deployment, and evals are in `apps/luke/README.md`.
+Luke's planning brain is its own eve app, `apps/luke`, and the coding agent
+is another, `apps/dev`; their layout, deployment, and evals are in
+`apps/luke/README.md`, which `apps/dev` follows, and `packages/service/README.md`'s
+"The coding-agent service".
 

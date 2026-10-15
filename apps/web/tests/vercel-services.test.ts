@@ -33,12 +33,12 @@ interface Rewrite {
   readonly destination: { readonly service: string };
 }
 
-const SERVICE = { WEB: "web", LUKE: "luke", CODER: "coder" } as const;
+const SERVICE = { WEB: "web", LUKE: "luke", DEV: "dev" } as const;
 
 interface Services {
   readonly [SERVICE.WEB]: Service;
   readonly [SERVICE.LUKE]: Service;
-  readonly [SERVICE.CODER]: Service;
+  readonly [SERVICE.DEV]: Service;
 }
 
 // SAFETY: the file is this repository's own vercel.json, read for its deployment shape.
