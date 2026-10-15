@@ -1,6 +1,7 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { expect, test } from "vitest";
 import {
+  createdByOnly,
   creatorGroups,
   repositoryGroups,
   repositoryLabel,
@@ -139,4 +140,14 @@ test("ordered by name, a creator's group sorts by the name its header says, even
     (plan) => (plan.ownerId === "user-zoe" ? "Zoe Quinn" : "Amy Ng"),
   );
   expect(groups.map((group) => group.plans[0]?.name)).toEqual(["Amy's", "Zoe's older"]);
+});
+
+test("filtered to one creator, the list holds only the tasks they created; filtered to nobody, every task", () => {
+  const tasks = [
+    task("Dean's", "acme/relay", 1, 1, DEAN),
+    task("Charles's", "acme/relay", 1, 1, CHARLES),
+    task("Unnamed", "acme/relay", 1, 1),
+  ];
+  expect(createdByOnly(tasks, DEAN).map((plan) => plan.name)).toEqual(["Dean's"]);
+  expect(createdByOnly(tasks, undefined)).toHaveLength(3);
 });

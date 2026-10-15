@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -14,10 +14,10 @@ import { plansControl } from "#testing/plans-control";
 import { DesktopSidebar } from "./desktop-sidebar";
 
 /**
- * task-list-view.test.ts -- the sidebar's Tasks section groups and orders
- * its tasks as its View options say, each row saying what its group does
- * not, the pins standing apart in a section of their own, and each
- * workspace keeping its own view on this Mac.
+ * task-list-view.test.ts -- the sidebar's Tasks section groups, orders,
+ * and filters its tasks as its View options say, each row saying what its
+ * group does not, the pins standing apart in a section of their own, and
+ * each workspace keeping its own view on this Mac.
  */
 
 const DEAN = "user-dean";
@@ -32,6 +32,12 @@ const ACME = {
 } as const satisfies Workspace;
 
 const PERSONAL = { ...ACME, id: "workspace-personal", name: "Dean", memberCount: 1 };
+
+const MEMBERS: readonly WorkspaceMember[] = [
+  { userId: DEAN, name: "Dean Stratakos", email: "dean@acme.dev", role: "owner" },
+  { userId: CHARLES, name: "Charles Pan", email: "charles@acme.dev", role: "member" },
+  { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
+];
 
 const roots: Root[] = [];
 
@@ -50,7 +56,12 @@ beforeEach(() => {
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
     },
   });
 });
@@ -109,12 +120,18 @@ function mountSidebar(workspace: Workspace, plans: readonly PlanSummary[] = TASK
   return container;
 }
 
-/** The menu item whose words start with `label`, in whichever menu stands. */
+/** The words each standing menu item says, its glyph left out. */
+function itemLabel(item: HTMLElement): string {
+  return (item.querySelector(".plan-menu-label") ?? item).textContent?.trim() ?? "";
+}
+
+/** The menu item that says `label`, in whichever menu stands. */
 function menuItem(label: string): HTMLElement {
-  const found = [
+  const items = [
     ...document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'),
-  ].find((item) => item.textContent?.startsWith(label));
-  assert.ok(found, `a menu item named ${label} stands`);
+  ];
+  const found = items.find((item) => itemLabel(item) === label);
+  assert.ok(found, `a menu item named ${label} stands among ${items.map(itemLabel).join(", ")}`);
   return found;
 }
 
@@ -231,4 +248,121 @@ test("a workspace nobody shares offers no grouping by creator", () => {
     (item) => item.textContent,
   );
   assert.deepEqual(choices, ["Repository", "None"]);
+});
+
+/** The sidebar once the workspace's members have answered. */
+async function mountRead(
+  workspace: Workspace,
+  plans?: readonly PlanSummary[],
+): Promise<HTMLElement> {
+  const sidebar = mountSidebar(workspace, plans);
+  await act(async () => undefined);
+  return sidebar;
+}
+
+/** The chip under the Tasks head, if one stands. */
+function chip(sidebar: HTMLElement): HTMLElement | null {
+  return sidebar.querySelector(".sidebar-view-chip");
+}
+
+/** What the chip under the Tasks head says, its face left out. */
+function chipWords(sidebar: HTMLElement): string | undefined {
+  return chip(sidebar)?.querySelector(".sidebar-view-chip-words")?.textContent ?? undefined;
+}
+
+test("Created by › Me lists only your tasks, wearing no faces, says so in a chip and a dot, and the chip's × lists everyone's again", async () => {
+  const pinnedTheirs = task("t-5", "Onboarding rewrite", "acme/console", CHARLES, undefined, 950);
+  const sidebar = await mountRead(ACME, [...TASKS, pinnedTheirs]);
+  choose(sidebar, "Created by", "Me");
+
+  assert.deepEqual(taskRows(sidebar), [
+    { name: "Retry webhooks", repository: undefined, face: false },
+  ]);
+  assert.equal(chipWords(sidebar), "Created by me");
+  const options = sidebar.querySelector('button[aria-label="View options"]');
+  assert.equal(options?.getAttribute("data-filtered"), "true");
+  const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
+  assert.deepEqual(
+    [...(pinned?.querySelectorAll(".sidebar-plan-name") ?? [])].map((name) => name.textContent),
+    ["Onboarding rewrite", "Release checklist"],
+    "the pins stand unfiltered",
+  );
+
+  const clear = chip(sidebar)?.querySelector("button");
+  assert.ok(clear, "the chip offers its ×");
+  act(() => clear.click());
+  assert.equal(chip(sidebar), null);
+  assert.equal(options?.getAttribute("data-filtered"), null);
+  assert.equal(taskRows(sidebar).length, 3);
+});
+
+test("Created by a teammate lists only theirs, named in the chip, and the choice is the workspace's to keep", async () => {
+  choose(await mountRead(ACME), "Created by", "Charles Pan");
+  unmountAll();
+
+  const sidebar = await mountRead(ACME);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Billing empty states", "Fix flaky deploy"],
+  );
+  assert.equal(chipWords(sidebar), "Created by Charles Pan");
+});
+
+test("a filter that leaves nothing says so, and Show all lists everyone's again", async () => {
+  const theirs = TASKS.filter((each) => each.createdBy?.userId === CHARLES);
+  const sidebar = await mountRead(ACME, theirs);
+  choose(sidebar, "Created by", "Me");
+  assert.equal(taskRows(sidebar).length, 0);
+  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+    each.textContent?.startsWith("None of your tasks here."),
+  );
+  const showAll = note?.querySelector("button");
+  assert.ok(showAll, "the note offers Show all");
+  act(() => showAll.click());
+  assert.equal(taskRows(sidebar).length, 2);
+});
+
+test("a workspace nobody shares offers no Created by", async () => {
+  const sidebar = await mountRead(PERSONAL);
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  const items = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+  assert.ok(!items.some((item) => item?.startsWith("Created by")), "no Created by is offered");
+});
+
+test("with every task pinned, a filter still says it leaves nothing under Tasks, with Show all", async () => {
+  const pinnedAll = TASKS.map((each, at) => ({ ...each, pinnedAt: 900 + at }));
+  const sidebar = await mountRead(ACME, pinnedAll);
+  choose(sidebar, "Created by", "Charles Pan");
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.ok(
+    notes.some((note) => note?.startsWith("None of their tasks here.")),
+    "the empty filter says so",
+  );
+});
+
+test("a workspace whose list names no member count still groups and filters by creator once its members are read", async () => {
+  const { memberCount: _, ...uncounted } = ACME;
+  const sidebar = await mountRead(uncounted);
+  choose(sidebar, "Group by", "Creator");
+  assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
+});
+
+test("in one run, a task with no repository says so on its row", async () => {
+  const notes = task("t-6", "Hiring loop notes", null, CHARLES, { createdAt: 1, updatedAt: 700 });
+  const sidebar = await mountRead(ACME, [...TASKS, notes]);
+  choose(sidebar, "Group by", "None");
+  assert.deepEqual(taskRows(sidebar)[0], {
+    name: "Hiring loop notes",
+    repository: "No repository",
+    face: true,
+  });
+});
+
+test("an empty workspace under a filter says only that it holds no tasks", async () => {
+  const sidebar = await mountRead(ACME, []);
+  choose(sidebar, "Created by", "Me");
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.deepEqual(notes, ["No tasks yet."]);
 });
