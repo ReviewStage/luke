@@ -24,7 +24,6 @@ import {
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
-  type AutomationSecretCopiedView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import {
@@ -94,8 +93,8 @@ export interface AutomationWrites {
   change(params: AutomationChangeParams): Promise<AutomationView>;
   toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
   remove(automationId: string): Promise<AutomationDeletedView>;
-  /** Mints a webhook's secret again onto the clipboard; the window hears only that it was copied. */
-  copyWebhookSecret(automationId: string): Promise<AutomationSecretCopiedView>;
+  /** Mints a webhook's secret again, answering it once for this page to show. */
+  newWebhookSecret(automationId: string): Promise<AutomationView>;
   /** Reads the list again, as a Run now settling moves an automation's newest run. */
   reload(): void;
 }
@@ -457,43 +456,88 @@ function EditorToolbar({
   );
 }
 
-/** Why a fresh secret could not be copied, as the line under the button says it. */
-const COPY_SECRET_REFUSAL_WORDS = {
+/** Why a new secret could not be made, as its dialog says it. */
+const NEW_SECRET_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't copy a new secret. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't make a new secret. Try again.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /**
+ * A webhook's secret, shown the one time the write that minted it answers:
+ * read-only, with Copy, and said never to be shown again. Note that it is
+ * left out of the screen recording whole (`ph-no-capture`), beside the
+ * masking every input already has, because it is a credential; and that it
+ * stands in this page's state alone, never the window's app state, so it is
+ * gone once Done is pressed or the page is left.
+ */
+function ShownSecret({
+  secret,
+  onDone,
+}: {
+  secret: string;
+  onDone: () => void;
+}): React.JSX.Element {
+  const copy = useCopyFeedback();
+  return (
+    <div className="automation-webhook-secret ph-no-capture">
+      <div className="automation-webhook-address">
+        <input
+          className="settings-input automation-webhook-url"
+          aria-label="Secret"
+          readOnly
+          value={secret}
+        />
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={copyHint(copy.state, "Copy secret")}
+          onClick={() => copy.copy(secret)}
+        >
+          <CopyGlyph state={copy.state} />
+        </button>
+        <button type="button" className="toolbar-button" onClick={onDone}>
+          Done
+        </button>
+      </div>
+      <p className="automation-form-note">
+        You won't be able to see this again. Copy it into your sender now.
+      </p>
+    </div>
+  );
+}
+
+/**
  * A webhook's address and secret: the address to copy once it is saved as
- * a webhook, and a fresh secret copied on a press. Note that the secret is
- * never shown, because a secret never enters a Gateway answer: the host
- * mints it and puts it on the clipboard, and this hears only that it did.
+ * a webhook, the secret shown once where the write that minted it just
+ * answered, and New secret, which asks first, since the new one stops the
+ * one a sender holds, and then shows the new one once.
  */
 function WebhookControl({
   automation,
   writes,
+  secret,
+  onSecret,
 }: {
   automation: AutomationSummary | undefined;
   writes: AutomationWrites;
+  /** The secret a write just minted for this page to show once, or none. */
+  secret: string | undefined;
+  onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
   const address = useCopyFeedback();
-  const [said, setSaid] = useState<string | undefined>(undefined);
-  // Note that a fresh secret stops the one a sender holds, so the press asks first, as anything that cannot be undone does.
   const rotation = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
       if (automation === undefined) return Promise.resolve(ACCEPTED);
-      setSaid(undefined);
-      return writes.copyWebhookSecret(automation.id).then((answer): ActionResult => {
+      onSecret(undefined);
+      return writes.newWebhookSecret(automation.id).then((answer): ActionResult => {
         if ("failure" in answer) {
           return {
             status: ACTION_RESULT_STATUS.REJECTED,
-            reason: COPY_SECRET_REFUSAL_WORDS[answer.failure],
+            reason: NEW_SECRET_REFUSAL_WORDS[answer.failure],
           };
         }
-        setSaid(
-          "A new secret is on your clipboard. Paste it into your sender now: Luke never shows it, and the one before has stopped working.",
-        );
+        onSecret(answer.webhookSecret);
         return ACCEPTED;
       });
     },
@@ -525,26 +569,25 @@ function WebhookControl({
           <CopyGlyph state={address.state} />
         </button>
       </div>
-      <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
-        Copy a new secret
-      </button>
-      {said === undefined ? null : (
-        <p className="automation-form-note" role="status">
-          {said}
-        </p>
+      {secret === undefined ? (
+        <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
+          New secret
+        </button>
+      ) : (
+        <ShownSecret secret={secret} onDone={() => onSecret(undefined)} />
       )}
       <p className="automation-form-note">
-        POST to the address with the secret as <code>Authorization: Bearer</code>. Copying a new
-        secret stops the one before. Don't send secrets in the body: Luke hands the body to the
-        run's agent, and it shows in the run's transcript.
+        POST to the address with the secret as <code>Authorization: Bearer</code>. A new secret
+        stops the one before. Don't send secrets in the body: Luke hands the body to the run's
+        agent, and it shows in the run's transcript.
       </p>
       <ConfirmDialog
         confirm={rotation}
         question={{
-          title: "Copy a new secret?",
-          body: "Luke puts a new secret on your clipboard, and the secret your sender uses now stops working until you paste in the new one.",
-          verb: "Copy new secret",
-          running: "Copying",
+          title: "Make a new secret?",
+          body: "The secret your sender uses now stops working until you give it the new one, which Luke shows you once.",
+          verb: "New secret",
+          running: "Making",
         }}
       />
     </div>
@@ -767,6 +810,8 @@ function EditorForm({
   draft,
   automation,
   writes,
+  shownSecret,
+  onSecret,
   problems,
   planBacked,
   workspace,
@@ -777,6 +822,8 @@ function EditorForm({
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
   writes: AutomationWrites;
+  shownSecret: string | undefined;
+  onSecret: (secret: string | undefined) => void;
   problems: DraftProblems;
   planBacked: boolean;
   workspace: Workspace | undefined;
@@ -832,7 +879,12 @@ function EditorForm({
             </p>
           </>
         ) : (
-          <WebhookControl automation={automation} writes={writes} />
+          <WebhookControl
+            automation={automation}
+            writes={writes}
+            secret={shownSecret}
+            onSecret={onSecret}
+          />
         )}
       </FormRow>
       <FormRow label="Task" problem={problems[DRAFT_FIELD.PROMPT]}>
@@ -936,6 +988,8 @@ export function AutomationEditor({
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // The webhook secret a write just minted, shown once on this page and gone when it is left.
+  const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
   const planBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
@@ -959,6 +1013,9 @@ export function AutomationEditor({
     }
     // Note that the draft is kept rather than replaced by the answer, so what was typed while the save was out stands, unsaved.
     setShownProblems(false);
+    // A save that leaves it no webhook lets go of any secret shown, since that secret no longer admits anything.
+    if (answer.automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) setShownSecret(undefined);
+    else if (answer.webhookSecret !== undefined) setShownSecret(answer.webhookSecret);
     if (automation === undefined) onCreated(answer.automation.id);
   };
   const save = () => {
@@ -1065,6 +1122,8 @@ export function AutomationEditor({
               draft={draft}
               automation={automation}
               writes={writes}
+              shownSecret={shownSecret}
+              onSecret={setShownSecret}
               problems={shownProblems ? problems : {}}
               planBacked={planBacked}
               workspace={workspace}

@@ -55,7 +55,9 @@ the check names. A component is placed by review under the same rule.
   to that panel's window, never into a trace, a counted event, a fixture, app
   state, or the voice window. And, approved by Dean (automations D10), a webhook
   body an automation's caller sends may reach that run's agent task, transcript
-  and traces.
+  and traces. And, approved by Dean on 2026-10-15, an automation webhook secret
+  may be shown once, in the window that minted it, at creation or rotation;
+  never anywhere else.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

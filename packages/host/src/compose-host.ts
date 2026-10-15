@@ -168,12 +168,6 @@ export const hostAssemblyLayer: Layer.Layer<
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
-      // Note that a refusal's reason is not reported, because the text is a secret.
-      copyText: (text) =>
-        Effect.map(
-          kernel.nodes.invoke(HOST_NODE_CAPABILITY.COPY_TEXT, { text }),
-          (result) => result.status === NODE_CAPABILITY_STATUS.OK,
-        ),
     });
     const integrations = yield* composeIntegrations({
       kernel,

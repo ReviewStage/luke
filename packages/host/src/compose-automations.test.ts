@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
+import { AUTOMATION_CALL_FAILURE, automationViewSchema } from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
-import type { WireRecord } from "@luke/wire";
-import { Effect } from "effect";
+import { unparsedWire, type WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Result } from "effect";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 
 /**
@@ -82,33 +83,21 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
 }
 
 function subject(
-  options: {
-    signedIn?: boolean;
-    sendsNetwork?: boolean;
-    clipboardTakes?: boolean;
-    replaceRefused?: boolean;
-  } = {},
+  options: { signedIn?: boolean; sendsNetwork?: boolean; replaceRefused?: boolean } = {},
 ) {
   return Effect.gen(function* () {
     const service = fakeService(options);
-    const clipboard: string[] = [];
     const composer = yield* composeAutomations({
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-      copyText: (text) =>
-        Effect.sync(() => {
-          if (options.clipboardTakes === false) return false;
-          clipboard.push(text);
-          return true;
-        }),
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked, clipboard };
+    return { call, asked: service.asked };
   });
 }
 
@@ -173,45 +162,34 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
 );
 
 it.effect(
-  "a webhook's fresh secret is on the clipboard before its hash alone is sent, the window hears only that it was copied, and a clipboard that refuses it replaces nothing",
+  "a new webhook secret is minted here, only its hash is sent to the service, and the secret is answered to the window that asked; a refused replacement answers no secret",
   () =>
     Effect.gen(function* () {
-      const { call, asked, clipboard } = yield* subject();
-      const refusing = yield* subject({ clipboardTakes: false });
+      const { call, asked } = yield* subject();
+      const refusing = yield* subject({ replaceRefused: true });
+      const closed = yield* subject({ signedIn: false });
       const named = { automationId: AUTOMATION_ID };
 
-      const copied = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
-      const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
+      const made = yield* call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
+      const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
+      const unasked = yield* closed.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
 
-      const [secret = ""] = clipboard;
-      assert.deepEqual(copied, { automation: SUMMARY, secretCopied: true });
-      assert.ok(secret.length >= 40, "a secret of 32 random bytes is copied");
+      const read = readEither(automationViewSchema)(unparsedWire(made));
+      const secret =
+        Result.isSuccess(read) && "webhookSecret" in read.success
+          ? (read.success.webhookSecret ?? "")
+          : "";
+      assert.ok(secret.length >= 40, "a secret of 32 random bytes is answered");
+      assert.deepEqual(made, { automation: SUMMARY, webhookSecret: secret });
       assert.deepEqual(asked, [
         [
           "replace",
           { ...named, webhookSecretHash: createHash("sha256").update(secret).digest("hex") },
         ],
       ]);
-      assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(refusing.asked, [], "a copy that failed replaces nothing");
-      assert.ok(
-        !JSON.stringify([copied, refused]).includes(secret),
-        "no answer carries the secret",
-      );
-    }),
-);
-
-it.effect(
-  "a replacement the service refuses leaves the clipboard cleared, not holding a secret that admits nothing",
-  () =>
-    Effect.gen(function* () {
-      const { call, clipboard } = yield* subject({ replaceRefused: true });
-
-      const refused = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, {
-        automationId: AUTOMATION_ID,
-      });
-
+      assert.ok(!JSON.stringify(asked).includes(secret), "the service is sent the hash alone");
       assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED });
-      assert.equal(clipboard.at(-1), "");
+      assert.deepEqual(unasked, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(closed.asked, []);
     }),
 );

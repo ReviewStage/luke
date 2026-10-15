@@ -42,7 +42,7 @@ function fixture() {
       automationDelete: unanswered("delete"),
       automationRun: unanswered("run"),
       automationRuns: unanswered("runs"),
-      automationCopyWebhookSecret: unanswered("copy"),
+      automationNewWebhookSecret: unanswered("new secret"),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
@@ -64,7 +64,7 @@ it.effect(
         for (const kind of [
           ACT_KIND.AUTOMATIONS_DELETE,
           ACT_KIND.AUTOMATIONS_RUNS,
-          ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET,
+          ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET,
         ]) {
           assert.deepEqual(
             yield* router.performAct({ kind, payload: { automationId: AUTOMATION_ID } }, sender),
