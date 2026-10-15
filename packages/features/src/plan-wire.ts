@@ -230,7 +230,7 @@ export const PLAN_AGENTS_BOUNDS = {
   MAX_PULL_REQUESTS: 3,
 } as const;
 
-/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, and since when. */
+/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
 export const planAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
@@ -244,6 +244,12 @@ export const planAgentLineSchema = EffectSchema.Struct({
    * newest turn ended once it has; absent where neither is known.
    */
   at: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The member who started the agent, whose provider key pays for it and
+   * whose Mac its commands run on; absent once their account is gone, and
+   * from a service before it.
+   */
+  startedBy: EffectSchema.optionalKey(memberRefSchema),
 });
 
 export type PlanAgentLine = typeof planAgentLineSchema.Type;

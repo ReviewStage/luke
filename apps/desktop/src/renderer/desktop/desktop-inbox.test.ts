@@ -504,6 +504,34 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   );
 });
 
+test("an item's mark hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  /** The words of the card the row's mark hangs, the plan's row naming its agent as started by `starter`. */
+  const markCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
+    const { page } = mount();
+    await settle();
+    const line = BILLING.agents?.agents[0];
+    assert.ok(line && BILLING.agents, "the plan's row names its agent");
+    const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
+    act(() => setPlans([{ ...BILLING, agents }, INVITES]));
+    const mark = rowNamed(page, "How is a failed email retried?").querySelector("[data-agent-ref]");
+    assert.ok(mark, "the row's mark is the agent's reference");
+    act(() => {
+      mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const words = document.querySelector(".tooltip-card [data-tab-card]")?.textContent;
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return words;
+  };
+
+  assert.match((await markCard(CHARLES)) ?? "", /Started by Charles Pan/u);
+  const own = await markCard(READER);
+  assert.match(own ?? "", /Alerts/u, "the reader's own agent still hangs its card");
+  assert.doesNotMatch(own ?? "", /Started by/u);
+});
+
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled; Needs you then lists only what still needs you until pressed again, and outlives a relaunch", async () => {
   let { page } = mount();
   await settle();

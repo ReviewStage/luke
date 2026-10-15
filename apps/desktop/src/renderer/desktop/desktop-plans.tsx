@@ -188,6 +188,7 @@ function PlanInboxTab({
         columns={columns.shown}
         head={undefined}
         models={plans.agents.models}
+        readerId={plans.me}
         note={
           inbox.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />

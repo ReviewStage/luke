@@ -14,6 +14,7 @@ import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
+import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import {
@@ -48,6 +49,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { planListAnswerSchema } from "@luke/features/plan-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -130,6 +132,8 @@ const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/inbox";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const PLAN = "/api/plans/plan";
+/** The account's plans, served by the plans group, each naming its agents in brief. */
+const PLANS = "/api/plans";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -335,11 +339,14 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), plans.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a plan's own path lands on the plans group. */
+    /** The response as the function answers it, for the one route that answers bytes; a plan's own path and the list land on the plans group. */
     const fetch = (request: Request) =>
-      Effect.promise(() =>
-        new URL(request.url).pathname === PLAN ? plans.handler(request) : agents.handler(request),
-      );
+      Effect.promise(() => {
+        const { pathname } = new URL(request.url);
+        return pathname === PLAN || pathname === PLANS
+          ? plans.handler(request)
+          : agents.handler(request);
+      });
     const ask = (request: Request) =>
       Effect.gen(function* () {
         const response = yield* fetch(request);
@@ -932,6 +939,32 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           lines: [SNAPSHOT, "Rename the subject line too."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
+      }),
+  );
+
+  it.effect(
+    "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, agent, ask } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        yield* joinWorkspace(plan.workspaceId, other);
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, owner)),
+        );
+
+        const listed = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, other)),
+        );
+        assert.deepEqual(
+          listed.plans
+            .find((each) => each.id === plan.id)
+            ?.agents?.agents.map((each) => [each.id, each.startedBy]),
+          [[agent.id, { userId: owner, name: "Charles Pan" }]],
+        );
       }),
   );
 
