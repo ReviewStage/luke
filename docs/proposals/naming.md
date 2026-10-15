@@ -1,10 +1,10 @@
 # Research: a better domain, or a better name
 
 Status: research for Dean's ask, written 2026-10-15 against main at
-`5ff5948d`. Four passes ran the same day, each on a new ask from Dean.
+`5ff5948d`. Five passes ran the same day, each on a new ask from Dean.
 §1–4 cover the domain and the first rename brainstorm, §5–6 the .com pass,
-§7 abstract devtool names, and §8 two-word compounds like Fernrail. **§8 is
-the current recommendation.** The later asks overruled the voice- and
+§7 abstract devtool names, §8 two-word compounds like Fernrail, and §9
+compounds with variety. **§9 is the current recommendation.** The later asks overruled the voice- and
 planning-themed names of §3 and §5. Nothing was registered, bought, or reserved,
 and no seller was contacted. Each domain below was checked from the sandbox
 on 2026-10-15: RDAP at the TLD's registry (WHOIS where a TLD has no RDAP),
@@ -17,12 +17,23 @@ tryluke.dev sucks." Then: "Look for .com URLs." And: the name "doesn't have
 to be a person's name". Then: "it can be any random devtool sounding domain
 and I don't want it to be tied to talking or speaking or even planning."
 Then: "I like the simple combo of two names like fernrail. Easy to
-pronounce and spell. Let's do more of those."
+pronounce and spell. Let's do more of those." Then: "Why are all the
+product names deck/rail? Let's get some more other names."
 
 ## TL;DR
 
-**Current (fourth pass, §8):** pick one of three two-word names. The
-teammate keeps the name Luke inside the product either way.
+**Current (fifth pass, §9):** **Zinclight**, **Tingrove**, or
+**Nickelway**.
+
+- **Domains:** each has its .com, .dev, and .app unregistered.
+- **Conflicts:** nothing uses any of them in software, on the App Store,
+  or in US trademarks.
+- **Variety:** the fifteen behind them use 30 different words, with no
+  deck, rail, or dock.
+- **What stays:** the teammate keeps the name Luke inside the product
+  either way.
+
+Fourth pass (§8), superseded: one of three two-word names.
 
 - **Flintdeck:** flintdeck.com is **$499** buy-now on Afternic, and .dev
   and .app are free. Nothing uses the name.
@@ -710,7 +721,7 @@ reads as lighting), and Elmrail, Cobaltford, Basaltmill, and Flintpine
 enough to need no `try` prefix. The app goes on registering and reading
 `tryluke:` for links already written.
 
-### 8.3 Recommendation (current)
+### 8.3 Recommendation (fourth pass, superseded by §9)
 
 1. **Flintdeck**
    - **Price:** at $499 it costs less than a year of most SaaS seats, and
@@ -745,6 +756,132 @@ Before buying: trademark clearance in classes 9 and 42 for the two-word
 form as well as the joined one, and the price confirmed through a
 registrar. Nothing was bought, offered on, or reserved, and no seller was
 contacted.
+
+## 9. Fifth pass: compounds with variety
+
+Dean's ask: the fourth pass leaned on -deck, -rail, and -dock. This pass
+keeps the shape (two simple everyday words, easy to say and spell) but
+spreads it:
+
+- no deck, rail, or dock;
+- no word more than twice in the final list (in the end, none appears
+  twice);
+- endings across -stone, -field, -light, -wood, -mark, -line, -post,
+  -well, -craft, -works, -forge, -bay, -bridge, -point, -path, -yard,
+  -gate, -fall, -spring, -wind, -fire, -hill, -lake, -grove, -glen, -way,
+  and more;
+- new starting words (oak, ash, elm, sage, coral, amber, slate, cobalt,
+  maple, aspen, juniper, willow, granite, zinc, nickel, onyx, jade, opal,
+  lilac, larch, walnut, reef, tide, snow, comet, orbit, pixel…), with a
+  few modern ones (pixel, orbit, comet, byte, nova).
+
+### 9.1 Method
+
+- **Generation and .com check:** 3,627 compounds (115 first words × 64
+  endings, 6–10 letters, no boundary double letter), checked with
+  Verisign RDAP and NS records. **605 unregistered**, and 843 parked at a
+  marketplace.
+- **Shortlist:** about 35 unregistered names that read and spell cleanly,
+  plus 20 Afternic listings priced.
+- **.dev and .app:** checked for the shortlist. All free except
+  ambercraft.dev (2026, an AI creator studio), ambermark.app (2026, a
+  web-design service), and orbitlake.
+- **Conflict pass:** 30 finalists checked on web, GitHub, npm, the App
+  Store, and Trademarkia. All 30 had 0 exact US marks in classes 9 and 42,
+  and a free npm name.
+
+Listed and priced (buy-now, Afternic):
+
+- **At or under ~$5k:** ambercraft.com $2,500, coralworks.com $3,973,
+  cometline.com $3,999, slatepoint.com $4,950, ambermark.com $4,988.
+- **Over budget:**
+  - opalworks.com, $6,100
+  - ironbrook.com, $7,500
+  - jadelight.com, $8,495
+  - ashlight.com, ashforge.com, slatecraft.com, and foxglen.com, $9,995
+    each
+  - onyxline.com, $15,000
+  - bytecraft.com, $17,880
+  - silverwind.com, $40,000
+  - foxwood.com, $42,795
+  - fernbrook.com, $48,888
+  - stormlight.com, $90,000
+
+Cut in the conflict pass:
+
+- **Cometline:** github.com/Cometline/cometline is a 2026 macOS AI
+  desktop app "with per-project memory, coding agents, and a native desktop
+  chat UI". It's on Product Hunt, with a Homebrew tap, and it's our
+  category on our platform.
+- **Ambercraft:** ambercraft.dev is "AmberCraft Studio", an AI creator
+  tool, and github.com/AmberCraft is held.
+- **Ambermark:** ambermark.app is a web-design service (2026).
+- **Cobaltwind:** Cobalt.io, and an echo of SolarWinds.
+- **Solarford:** reads as SolarWinds, and its GitHub name was taken in
+  2026.
+- **Pondforge:** Forge is crowded (Laravel, Atlassian, SourceForge), and
+  its GitHub org is held.
+- **Bisonlight:** a pending BISONLIGHT mark (class 11, headlights).
+- **Canyonfall:** "fall" reads as a crash.
+
+### 9.2 The fifteen
+
+Thirty different words; no deck, rail, or dock; no word twice.
+
+| # | Name | .com | Price | .dev / .app | Conflict | Feel | Scheme |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | **Zinclight** | unregistered | ~$11/yr | free / free | Low (ZincSearch and Scala's Zinc share a half) | Crisp, bright, modern | `zinclight://` |
+| 2 | **Tingrove** | unregistered | ~$11/yr | free / free | Low | Short and tidy: metal meets trees | `tingrove://` |
+| 3 | **Nickelway** | unregistered | ~$11/yr | free / free | Low | Smooth and coin-bright; easy to say | `nickelway://` |
+| 4 | Larchcraft | unregistered | ~$11/yr | free / free | Low | A woodworker's craft; "larch" is less familiar | `larchcraft://` |
+| 5 | Reefspring | unregistered | ~$11/yr | free / free | Low | Fresh, oceanic | `reefspring://` |
+| 6 | Jadeyard | unregistered | ~$11/yr | free / free | Low | A green workyard; a hard J, a clean ending | `jadeyard://` |
+| 7 | Pixelglen | unregistered | ~$11/yr | free / free | Low | Playful: digital meets valley | `pixelglen://` |
+| 8 | Tidelake | unregistered | ~$11/yr | free / free | Low | Calm, two plain words | `tidelake://` |
+| 9 | Lilacwell | unregistered | ~$11/yr | free / free | Low | Soft and friendly, less edge | `lilacwell://` |
+| 10 | Walnutpath | unregistered | ~$11/yr | free / free | Low | Warm and grounded, a little long | `walnutpath://` |
+| 11 | Snowcliff | unregistered | ~$11/yr | free / free | Low (GitHub name held) | Bold and cold | `snowcliff://` |
+| 12 | Coralworks | for sale | $3,973 (Afternic) | free / free | Medium ("Coralworks Innovations" sells two small App Store apps; GitHub org held) | A workshop name with a warm color | `coralworks://` |
+| 13 | Slatepoint | for sale | $4,950 (Afternic) | free / free | Medium (a tiny firm holds the GitHub name; Slate.js shares a half) | Sharp and solid | `slatepoint://` |
+| 14 | Orbithill | unregistered | ~$11/yr | free / free | Medium (Orbit is a crowded dev half) | Modern, with a little lift | `orbithill://` |
+| 15 | Cometwood | unregistered | ~$11/yr | free / free | Medium (Comet is crowded in AI) | Playful and bright | `cometwood://` |
+
+Close behind:
+
+- **Clean, but a weaker fit:** Zincgrove, Onyxspring, Heronfire (a
+  wildfire feel; its GitHub name is held), Sproutglen (soft; Sprout Social
+  shares a half), and Elmcliff (developers hear "Elm" first).
+- **Exact name clean, crowded half:** Cometbrook, Onyxbrook (Onyx is an AI
+  search tool), and Opalmill (Opal is Google's AI app builder).
+
+### 9.3 Recommendation (current)
+
+1. **Zinclight**
+   - **Domains:** .com, .dev, and .app all unregistered.
+   - **Conflicts:** none on the exact name. The only half that's in use is
+     Zinc, and its users (ZincSearch, Scala's incremental compiler) are
+     small.
+   - **Sound and look:** two hard consonants and a bright vowel, spelled
+     the way it's said. Reads modern in a title bar and in
+     `zinclight.com/acme/plan/…`.
+2. **Tingrove:** the cleanest name in the pass. Nothing uses either half,
+   all three TLDs are free, and at eight letters it's the shortest of the
+   three.
+3. **Nickelway:** smooth to say, nothing near it, all three TLDs free.
+
+All three are unregistered, so the cost is the registration fee. The move
+is still §7.4's:
+
+- Point the link host at the new domain, once.
+- Read tryluke.dev and `tryluke:` links forever.
+- Keep tryluke.dev serving the APIs for builds already in the field.
+- Migrate the app's state directory and Keychain entry.
+- Keep the bundle id and `@luke/*`.
+- Redraw the mark (two eyes over the new initial).
+
+Before committing: trademark clearance in classes 9 and 42 for the joined
+and the two-word form. Nothing was registered, bought, offered on, or
+reserved, and no seller was contacted.
 
 ## Sources
 
@@ -797,6 +934,10 @@ Conflicts come from [getluke.app](https://www.getluke.app),
 [Afternic: harbordeck.com](https://www.afternic.com/domain/harbordeck.com),
 [Frostrail (Gematsu)](https://www.gematsu.com/games/frostrail),
 [Fern (YC)](https://www.ycombinator.com/companies/fern), and
-[Rivet](https://www.rivet.dev). The mock page with each shortlisted
+[Rivet](https://www.rivet.dev),
+[Cometline](https://github.com/Cometline/cometline),
+[Afternic: coralworks.com](https://www.afternic.com/domain/coralworks.com),
+[Afternic: slatepoint.com](https://www.afternic.com/domain/slatepoint.com), and
+[Trademarkia: zinclight](https://www.trademarkia.com/search/trademarks?q=zinclight). The mock page with each shortlisted
 name in a title bar, link, and icon tile is served through `conductor
 preview` from a copy outside the repository.
