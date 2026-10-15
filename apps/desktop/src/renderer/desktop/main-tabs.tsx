@@ -4,12 +4,14 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useDraftedAgents } from "../composer-drafts";
+import { useCopyLinkItem } from "../copy-link-item";
 import { DraftMark } from "../draft-mark";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
@@ -447,6 +449,7 @@ export function MainTabStrip({
     close: undefined,
   };
   const strip = [planTab, ...own];
+  const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
@@ -457,6 +460,12 @@ export function MainTabStrip({
     };
   };
   const doorsOf = (entry: DrawnTab): TabDoors => {
+    const linked: LinkPlace | undefined =
+      entry.agent !== undefined
+        ? { kind: LINK_PLACE.AGENT, planId: plan.id, agentId: entry.agent.id }
+        : entry.tab === MAIN_TAB.PLAN
+          ? { kind: LINK_PLACE.TASK, planId: plan.id }
+          : undefined;
     const others = strip.flatMap((other) =>
       other === entry || other.close === undefined ? [] : [other.close],
     );
@@ -480,6 +489,7 @@ export function MainTabStrip({
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
       onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
+      copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
   return (

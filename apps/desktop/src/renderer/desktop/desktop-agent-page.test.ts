@@ -38,6 +38,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { newestToastSays } from "#testing/toast";
 import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../planning/coding-agent-model";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -132,6 +133,8 @@ let transcript: CodingAgentMessagesAnswerView | undefined;
 let told: Act[] = [];
 /** What a read of what the agent published answers; none refuses it. */
 let published: CodingAgentPullRequestAnswer | undefined;
+/** What the window copied, in order. */
+let copied: string[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -143,6 +146,7 @@ beforeEach(() => {
   told = [];
   published = undefined;
   openedOnGitHub = [];
+  copied = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -193,6 +197,10 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.GITHUB_OPEN) {
           openedOnGitHub.push(request.payload.url);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
@@ -689,4 +697,32 @@ test("an automation's agent the model has not named yet is titled by its automat
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Flaky-test sweep");
+});
+
+test("the page's ⋯ copies the agent's link, under its workspace, and says Link copied", async () => {
+  const page = mount(
+    plansControl({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Acme",
+          slug: "acme",
+          role: WORKSPACE_ROLE.MEMBER,
+          github: null,
+        },
+      ],
+    }),
+  );
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
+  assert.ok(more, "the page's toolbar has a ⋯");
+  act(() => more.click());
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link",
+  );
+  assert.ok(item, "the ⋯ offers Copy link");
+  await act(async () => item.click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
+  assert.equal(newestToastSays(), "Link copied");
 });

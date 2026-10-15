@@ -1261,12 +1261,19 @@ const TASK_ROW_ID = "task";
  * first row, from the words the agent's call carried, and the worker's own
  * turns after it. The service's first row is the same task, so the
  * developer's rows are left out rather than drawn twice; nothing else of
- * the developer's reaches a worker.
+ * the developer's reaches a worker. A worker opened by a link, which
+ * carries no words, takes its task from the service's first row, and is
+ * drawn as any other.
  */
 export function workerLines(
   task: string,
   messages: readonly CodingAgentMessage[],
 ): readonly CodingAgentMessage[] {
+  // A worker opened by its link carries no task's words, so the service's own first row's are the task.
+  if (task === "") {
+    const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    if (first !== undefined) return workerLines(messageWords(first), messages);
+  }
   return [
     { id: TASK_ROW_ID, role: MESSAGE_ROLE.USER, parts: [{ type: AGENT_PART.TEXT, text: task }] },
     ...messages.filter((message) => message.role !== MESSAGE_ROLE.USER),

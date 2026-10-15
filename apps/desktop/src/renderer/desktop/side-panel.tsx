@@ -45,9 +45,11 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { CallTabVideo } from "../call/panel-avatar";
+import { useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { drawnVisibly, focusSeek } from "../focus-seek";
+import { panelTabPlace } from "../links-at-hand";
 import { AgentChangesTab, ChangesCard, peopleOf } from "../planning/agent-changes-tab";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../planning/agent-tab";
@@ -775,6 +777,7 @@ function PanelTabs({
     shownAgent,
   });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
+  const copyLink = useCopyLinkItem();
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
   const chosen = strip.find((entry) => entry.look.selected);
@@ -789,6 +792,8 @@ function PanelTabs({
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
+    // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
+    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(planId, entry.tab) : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -801,6 +806,7 @@ function PanelTabs({
             },
       pin: pinOf(entry),
       onCopy: entry.copy,
+      copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
   return (
