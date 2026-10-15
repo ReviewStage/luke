@@ -47,6 +47,7 @@ import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { type CoderHost, coderHost } from "./host.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
@@ -68,6 +69,9 @@ import { CURSOR_START, transcriptPast } from "./transcript.js";
  */
 
 const NOW = 1_800_000_000_000;
+
+/** A sandbox door no call of notes alone opens: one that fails if it is. */
+const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
 const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
@@ -444,7 +448,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           ],
         });
 
-        const answer = yield* host.editPlan(admitted, input, 0);
+        const answer = yield* host.editPlan(admitted, input, 0, noSandbox);
 
         assert.deepEqual(answer, {
           status: ACTION_RESULT_STATUS.ACCEPTED,

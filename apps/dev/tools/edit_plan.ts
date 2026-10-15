@@ -21,7 +21,9 @@ import { planNotesTaken } from "../session-prompt.js";
  * awaits (`packages/service/src/agents/brain-host/pinned-state.ts`). Note that the call's
  * notes are reserved against the cap before the save goes out and settled
  * to what was taken once it answers, because calls one step makes run at
- * once, and each must see the other's reservation. It is offered at each
+ * once, and each must see the other's reservation. A picture's file is
+ * read from the session's sandbox through the same door eve hands every
+ * file tool, opened on first use, so notes alone open none. It is offered at each
  * turn's start only to an agent handed its plan (`planToolsOf`), so one on
  * no plan, or handed a prompt, is never offered a tool it would be refused.
  */
@@ -45,6 +47,7 @@ export default defineDynamic({
                 toolContext.session.id,
                 notes,
                 before,
+                () => toolContext.getSandbox(),
               );
               const saved = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? answer.taken : 0;
               taken.update((held) => settleNotes(held, turnId, requested, saved));

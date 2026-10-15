@@ -104,6 +104,27 @@ export function planAttachmentIdsIn(text: string, planId: string): readonly stri
   return [...named];
 }
 
+/** Words as one line, each run of whitespace a single space, since a picture's line breaks at none. */
+function oneLine(words: string): string {
+  return words.replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * A picture's line in a plan's text, `![alt](<address> "caption")`, the
+ * caption left out where there is none: the alt text's backslashes and
+ * brackets escaped, and the caption's backslashes and quotes, so neither
+ * closes its part of the line early.
+ */
+export function planPictureMarkdown(
+  address: string,
+  alt: string,
+  caption?: string | undefined,
+): string {
+  const altText = oneLine(alt).replace(/[\\[\]]/gu, "\\$&");
+  const title = caption === undefined ? "" : ` "${oneLine(caption).replace(/[\\"]/gu, "\\$&")}"`;
+  return `![${altText}](${address}${title})`;
+}
+
 /**
  * The address of every picture a text draws, `![alt](<address>`, of any
  * plan, in order, each copy apart; an address standing as a link or as

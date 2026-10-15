@@ -147,7 +147,11 @@ stores only when you did it and deletes nothing.
 **A plan's pictures.** When you paste, drop, or choose a picture into a
 task's plan, Luke re-encodes it on your Mac to at most 1.5 MB and sends it
 to our service, which keeps it in our database beside the task, under the
-task rather than your account, with which member added it. The plan's text
+task rather than your account, with which member added it. A coding agent on
+the task may add a picture too: a PNG, JPEG, or WebP file of at most 1.5 MB in
+its sandbox, such as a screenshot it took of what it built, which our service
+reads from the sandbox and keeps the same way, as added by the member the
+agent's turn runs for, with the plan's history naming the agent. The plan's text
 names the picture by an address on tryluke.dev; our service serves its bytes
 only to Luke signed in as a member of the task's workspace, and opening the
 address in a browser shows a page that opens the task in Luke and nothing of
