@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { PlanRevisionLine } from "@luke/features/plan-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { BackIcon, EllipsisIcon, WingFace } from "@luke/ui";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
@@ -37,6 +38,7 @@ import {
   type ViewedVersion,
 } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { memberPictures, useWorkspaceMembers } from "../planning/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
@@ -57,7 +59,8 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * back and forward and the Back row, which Escape presses too, then the
  * view's title, then the versions, newest first: who wrote each, drawn as
  * the rest of the window draws them (Luke's face as the Transcript wears
- * it, the reader's account picture as You, a coding agent's harness and
+ * it, the reader's account picture as You, a teammate's sign-in picture
+ * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
  * the moment itself on hover. The newest is the plan as it stands and the
  * one drawn when the view opens, wearing no tag of its own: its Restore says
@@ -114,6 +117,8 @@ export interface VersionSubject {
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
   /** Whether every person's revision is the reader's own, as the account's template's are; a plan's are its members'. */
   readonly own: boolean;
+  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
+  readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
 }
 
 /** What the page says while the subject has no revision yet. */
@@ -364,11 +369,16 @@ function SectionRow({
   );
 }
 
-/** The reader as their account names them, or nobody while no account is signed in. */
-function readerOf(account: AccountSnapshot): HistoryReader {
+/** The reader as their account names them, or nobody while no account is signed in, with the teammates' pictures beside. */
+function readerOf(account: AccountSnapshot, pictures: ReadonlyMap<string, string>): HistoryReader {
   return account.status === ACCOUNT_STATUS.SIGNED_IN
-    ? { id: account.id, name: account.name ?? account.email, pictureUrl: account.pictureUrl }
-    : { id: undefined, name: undefined, pictureUrl: undefined };
+    ? {
+        id: account.id,
+        name: account.name ?? account.email,
+        pictureUrl: account.pictureUrl,
+        pictures,
+      }
+    : { id: undefined, name: undefined, pictureUrl: undefined, pictures };
 }
 
 /** The versions as quiet rows while they are read, in a row's own type. */
@@ -580,6 +590,7 @@ export function planVersionSubject(plans: PlansControl): VersionSubject {
   const { region, boundFor } = plans;
   const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
   return {
+    workspace: plans.workspaces.find((each) => each.id === plan?.workspaceId),
     versions: plans.history,
     noun: "plan",
     title: plan?.name,
@@ -624,7 +635,8 @@ export function DesktopVersionHistory({
   const log = useRef<HTMLDivElement>(null);
   const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
-  const reader = readerOf(account);
+  const members = useWorkspaceMembers(subject.workspace);
+  const reader = readerOf(account, memberPictures(members));
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);

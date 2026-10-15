@@ -102,13 +102,16 @@ export interface HistoryReader {
   readonly id: string | undefined;
   readonly name: string | undefined;
   readonly pictureUrl: string | undefined;
+  /** The teammates' sign-in pictures by account id, as the workspace's members read lists them; none while unread. */
+  readonly pictures?: ReadonlyMap<string, string>;
 }
 
 /**
  * The member a person's revision names, as its row draws them: the reader,
  * by their own name and picture, where it is theirs or where every revision
  * is (`own`, the account's template); a teammate by the name the service
- * holds now; nobody the row can name where the service names nobody.
+ * holds now and the picture the members read lists for them; nobody the row
+ * can name where the service names nobody.
  */
 function personOf(
   by: PlanEditor | undefined,
@@ -123,7 +126,8 @@ function personOf(
       name: reader.name,
       pictureUrl: reader.pictureUrl,
     };
-  return { kind: REVISION_AUTHOR.PERSON, you: false, name: by?.name, pictureUrl: undefined };
+  const pictureUrl = by === undefined ? undefined : reader.pictures?.get(by.userId);
+  return { kind: REVISION_AUTHOR.PERSON, you: false, name: by?.name, pictureUrl };
 }
 
 /**

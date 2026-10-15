@@ -127,6 +127,20 @@ test("the crumb names the plan's workspace and repository, and how many can edit
   assert.equal(nav.querySelectorAll(".plan-crumb-faces .sidebar-avatar").length, 3);
 });
 
+test("a member's face is their sign-in picture where the members read lists one, and their letter where it lists none", async () => {
+  const picture = "https://lh3.googleusercontent.com/a/dana=s96-c";
+  const pictured = MEMBERS.map((member) =>
+    member.userId === "user-dana" ? { ...member, pictureUrl: picture } : member,
+  );
+  const { nav } = await crumb(ACME, "acme-corp/relay", pictured);
+
+  const faces = [...nav.querySelectorAll(".plan-crumb-faces .sidebar-avatar")];
+  assert.deepEqual(
+    faces.map((face) => (face instanceof HTMLImageElement ? face.src : face.textContent)),
+    [picture, "S", "L"],
+  );
+});
+
 test("a plan in a workspace of one says only you can edit it, and a plan with no repository names its workspace alone", async () => {
   const { nav } = await crumb({ ...ACME, memberCount: 1 }, null, [MEMBERS[0]!]);
 
