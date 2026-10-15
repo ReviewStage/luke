@@ -4789,6 +4789,12 @@ button.automation-run:hover {
   top: calc(var(--desktop-bar-height) + var(--space-8));
 }
 
+/* Home has no toolbar, so its bar stands at the page's top, clear of the
+   greeting and its New task. */
+.page-find:has(> .home) > .find-bar {
+  top: var(--space-8);
+}
+
 /* The bar floats as a menu does, on the menu's ground, edge, and entrance,
    and claims its presses back from any drag strip beneath it. */
 .find-bar {
