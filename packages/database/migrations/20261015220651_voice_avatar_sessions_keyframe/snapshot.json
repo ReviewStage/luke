@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7c087588-9e96-4ac5-a802-0e203de1ef2f",
-  "prevIds": ["44526a45-ccb5-4d9b-8eef-7b86a0d91562"],
+  "id": "2a19fa1e-f04e-4dd2-89bb-6105e6b07bc7",
+  "prevIds": ["dc97b863-34e0-44c1-a6c0-fdd2de602205"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -121,6 +121,12 @@
     {
       "isRlsEnabled": false,
       "name": "coding_agent_delegation",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "conversation_attachment",
       "entityType": "tables",
       "schema": "public"
     },
@@ -3352,6 +3358,136 @@
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent_delegation"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sha256",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "content_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "width",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "height",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "byte_count",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversation_attachment"
     },
     {
       "type": "text",
@@ -7120,6 +7256,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "sha256",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "conversation_attachment_conversation_sha256",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "user_id",
           "isExpression": false,
           "asc": true,
@@ -8289,6 +8453,32 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "conversation_attachment_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "conversation_attachment_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "conversation_attachment"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["admin_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -9164,6 +9354,14 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "conversation_attachment_pkey",
+      "schema": "public",
+      "table": "conversation_attachment",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "github_connect_intent_pkey",
       "schema": "public",
       "table": "github_connect_intent",
@@ -9445,6 +9643,13 @@
       "schema": "public",
       "table": "voice_sessions",
       "entityType": "uniques"
+    },
+    {
+      "value": "octet_length(\"bytes\") <= 4000000",
+      "name": "conversation_attachment_bytes_bound",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "conversation_attachment"
     },
     {
       "value": "octet_length(\"bytes\") <= 1500000",
