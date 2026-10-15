@@ -1,7 +1,7 @@
 # Proposal: more than one account per integration (two Notion workspaces)
 
 Status: **proposed, research and plan only; nothing is built.** Dean decides
-§7. A live probe (Appendix A, run on Dean's Mac) settles the one open
+§7. §8 answers Dean's follow-up on Instinct. A live probe (Appendix A, run on Dean's Mac) settles the one open
 provider-side question before PR 2 merges.
 
 The design show is `docs/proposals/multi-account-integrations/index.html`
@@ -9,7 +9,7 @@ The design show is `docs/proposals/multi-account-integrations/index.html`
 Notion workspaces). The research is in the same folder:
 `research-providers.md` (does a second sign-in give a second, independent
 token, per provider) and `research-industry.md` (Cursor, Claude, ChatGPT,
-Zapier, n8n, Raycast, Composio, Pipedream, Arcade).
+Zapier, n8n, Raycast, Instinct, Composio, Pipedream, Arcade).
 
 > Dean: "I would like to support connecting multiple accounts per MCP (e.g.,
 > two Notion workspaces). Can we see if this is possible with our setup?"
@@ -458,6 +458,9 @@ Cited in full in `research-industry.md`.
   ([users](https://pipedream.com/docs/connect/managed-auth/users)): accounts
   can be connected but only one is used per app.
 - **Arcade:** multi-account goes through support.
+- **Instinct** (§8): several accounts for Google Workspace, Outlook, Linear,
+  and Notion, each labeled by the provider's email, org, or workspace name,
+  with a Primary and "Make primary"; one account for the rest.
 
 Luke's design is Zapier's and Composio's account object, Claude-#27302's
 labeling, and ChatGPT's "all accounts in the conversation". Composio's
@@ -603,6 +606,98 @@ connector per account slot (§3.9 option 2), and direction B.
 9. **If Notion fails the probe:** stop at the flag (no multi-account Notion)
    or add a second Notion connector per slot (§3.9 option 2)?
    Recommended: decide after the probe; the flag ships either way.
+10. **A primary account per provider, as Instinct has (§8)?**
+    - The first account is the primary.
+    - "Make primary" moves the flag, and the descriptions say "use this
+      account unless the developer names another".
+    - Connection names never swap, so switches and mentions keep their
+      meaning.
+
+    Recommended: yes, as a flag on the row that changes only the description,
+    added in PR 3. The alternative is no primary, with every account equal and
+    the model asked to say which one it used.
+
+## 8. How Instinct does it (Dean's follow-up)
+
+> Dean: "How does Instinct support multiple Notion/Gmail accounts, for
+> example?"
+
+Instinct publishes no documentation on this. There is no help center or
+changelog on the subject, and its privacy policy and terms describe "Connected
+Services" in general and name only Google. No review, App Store page, or
+founder post that I could find mentions multiple accounts. What follows comes
+from the client code that `app.instinct.com` serves to anyone, without signing
+in: the Workspace page bundle (`/assets/WorkspacePage-*.js`), read on
+2026-10-15. Details and sources are in `research-industry.md` § Instinct. It
+can change without notice.
+
+- **Several accounts are allowed for four providers, and one account for the
+  rest.** The GraphQL schema has plural connections, each with a
+  `…SelectConnection` (make primary) and a `…DisconnectConnection(connectionId)`
+  mutation, for:
+  - Google Workspace;
+  - Outlook;
+  - Linear;
+  - Notion.
+
+  GitHub, Granola, Slack (`slackCanvasConnection`), Spotify, WHOOP, Shop Pay,
+  Stripe Link, and iMessage on a Mac are singular. Slack is single even though
+  a Slack grant reaches only one workspace.
+- **Labels come from the provider, and there is no rename.** Each account row
+  shows:
+  - Google: `email`, plus per-account `services` (Gmail, Calendar, Tasks,
+    Drive, Docs, Sheets, Slides);
+  - Outlook: `email` and `displayName`;
+  - Linear: `organizationName`, `displayName`, and `email`;
+  - Notion: `workspaceName`.
+
+  No label field is user-editable.
+- **Choosing an account works through a primary.** Each connection has
+  `isDefault`. A provider with more than one account shows a "Primary" badge
+  and a **Make primary** item on the others, beside **Remove**. Failures read
+  "Failed to change primary Notion workspace". How the agent uses the primary
+  is not visible in the client. The likely reading is that the primary is the
+  default and another account is used when asked; that is inference.
+- **Adding one:** a provider card's button reads "Connect", then "Add
+  account" once one is connected, and "At capacity" when the server says no
+  more are available. Connecting calls
+  `startWebConnect(integrationId, scopeProfile)` (e.g.
+  `integrationId: "google-workspace"`, `scopeProfile: "ONBOARDING"`), which
+  answers a URL the browser follows.
+- **What it is built on: not stated, but the evidence points to its own
+  OAuth clients.**
+  - The bundle names no Composio, Pipedream, Nango, Merge, Paragon, or Arcade.
+  - Its privacy policy commits to Google's API Services User Data Policy
+    "including the Limited Use requirements". That commitment is required of
+    an app that requests restricted Gmail scopes under its own verified Google
+    OAuth client, together with an annual CASA security assessment
+    ([Google](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification)).
+  - For everything else, Instinct leans on stored credentials (its Vault, and
+    a 1Password partnership Noah Shinn announced on 2026-09-04) and a browser
+    it drives.
+- **Google's side:** each Google account is a separate grant to the same
+  client. Google limits it to "100 refresh tokens per Google Account per OAuth
+  2.0 client ID", and the oldest is invalidated beyond that, so two different
+  Google accounts never collide. `prompt=select_account` and `login_hint` pick
+  the account
+  ([OAuth 2.0](https://developers.google.com/identity/protocols/oauth2),
+  [web server flow](https://developers.google.com/identity/protocols/oauth2/web-server)).
+  Gmail is not one of Luke's integrations today. Adding it through Connect
+  would need a Google connector whose OAuth client passed restricted-scope
+  verification.
+
+**What this means for the design.** Instinct is the closest shipped analogue,
+and it agrees with §3:
+- one connection object per account, keyed by an id;
+- a label read from the provider (email, workspace, org);
+- "Add account" on a connected provider, and Remove per account;
+- multiple accounts offered provider by provider, which is decision 7.2's
+  flag.
+
+It differs in two ways:
+- **No rename.** Luke keeps Rename for the providers whose grant gives no
+  name.
+- **An explicit primary.** That suggests decision 7.10.
 
 ## Appendix A: the probe (Dean's Mac)
 
