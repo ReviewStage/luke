@@ -54,8 +54,9 @@ import { Tooltip } from "./tooltip";
  * its card; a picture's address is masked by session replay as its text is.
  */
 
-/** How large an actor is drawn: a line's, a facepile's, a list row's, the sidebar's account, or a card head's and a Settings row's. */
+/** How large an actor is drawn: a sidebar task's creator at its time, a line's, a facepile's, a list row's, the sidebar's account, or a card head's and a Settings row's. */
 export const ACTOR_SIZE = {
+  MARK: "mark",
   INLINE: "inline",
   STACK: "stack",
   ROW: "row",

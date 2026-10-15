@@ -12,15 +12,16 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@luke/ui";
-import { accountActor, creatorActor } from "@luke/ui/actor-model";
+import { accountActor, actorName, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { ActorRef } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useCopyToast } from "../copy-feedback";
+import { useMemberDirectory } from "../member-directory";
 import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
 import { lastEditOf } from "../planning/plan-body";
 import {
@@ -396,8 +397,11 @@ export function PlanActions({
  * body's weight unless the plan is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
- * the first named in the row's card, which Pin and Archive stand in place of while
- * the row is hovered or reached from the keyboard.
+ * the first named in the row's card, and before that, on a task someone else
+ * created, its creator's face (`teammateCreator`), read against the members
+ * of the directory around the list; the reader's own tasks wear none. Pin
+ * and Archive stand in place of all of it while the row is hovered or
+ * reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
@@ -426,6 +430,7 @@ export function SidebarPlan({
     rename: rename.begin,
     drawn: true,
   });
+  const creator = teammateCreator(plan, useMemberDirectory());
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
@@ -469,7 +474,14 @@ export function SidebarPlan({
             <span className="sidebar-plan-line">
               <span className="sidebar-plan-name">{plan.name}</span>
               {unread ? <span className="visually-hidden">(unread)</span> : null}
+              {/* Note that the creator is said outside the time, because the time steps out while the row holds the keyboard. */}
+              {creator === undefined ? null : (
+                <span className="visually-hidden">{`(created by ${actorName(creator)})`}</span>
+              )}
               <span className="sidebar-plan-time">
+                {creator === undefined ? null : (
+                  <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+                )}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={plan.updatedAt} now={now} hint={false} />
               </span>

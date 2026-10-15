@@ -29,6 +29,7 @@ import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import { MemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NEEDS_YOU } from "../planning/inbox-model";
@@ -965,51 +966,54 @@ export function DesktopSidebar({
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned plans scroll away
-          with the rest rather than holding half the column. */}
-      <div className="sidebar-section">
-        {plans.signedIn && pinnedSection.length > 0 ? (
-          <PinnedSection
-            rows={pinnedSection}
-            folds={folds}
-            shown={pinnedShown}
-            context={context}
-            onOpenTab={chosen(openPinnedTab)}
-          />
-        ) : null}
-        {/* The rule above heads the list, so it carries no heading of its
-            own; its name is for a screen reader alone. */}
-        <nav className="sidebar-group" aria-label="Plans">
-          {plans.listFailed ? (
-            <div className="sidebar-note">
-              <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
-            </div>
-          ) : null}
-          {/* The list is empty before its first read lands, so that it
-              holds none says nothing until the service has answered. */}
-          {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
-            <ListSkeleton />
-          ) : null}
-          {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
-            <p className="sidebar-note">No tasks yet.</p>
-          ) : null}
-          {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
-          {groups.map((group) => (
-            <RepositorySection
-              key={group.repository ?? NO_REPOSITORY}
-              group={group}
-              label={
-                group.repository === null
-                  ? NO_REPOSITORY
-                  : repositoryLabel(group.repository, groups)
-              }
+          with the rest rather than holding half the column. The rows read a
+          teammate's task's creator against the listed workspace's members. */}
+      <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+        <div className="sidebar-section">
+          {plans.signedIn && pinnedSection.length > 0 ? (
+            <PinnedSection
+              rows={pinnedSection}
               folds={folds}
-              onNewPlanIn={chosen(newPlanIn)}
+              shown={pinnedShown}
               context={context}
+              onOpenTab={chosen(openPinnedTab)}
             />
-          ))}
-          {plans.signedIn ? <ArchivedPlans context={context} /> : null}
-        </nav>
-      </div>
+          ) : null}
+          {/* The rule above heads the list, so it carries no heading of its
+            own; its name is for a screen reader alone. */}
+          <nav className="sidebar-group" aria-label="Plans">
+            {plans.listFailed ? (
+              <div className="sidebar-note">
+                <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
+              </div>
+            ) : null}
+            {/* The list is empty before its first read lands, so that it
+              holds none says nothing until the service has answered. */}
+            {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
+              <ListSkeleton />
+            ) : null}
+            {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
+              <p className="sidebar-note">No tasks yet.</p>
+            ) : null}
+            {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
+            {groups.map((group) => (
+              <RepositorySection
+                key={group.repository ?? NO_REPOSITORY}
+                group={group}
+                label={
+                  group.repository === null
+                    ? NO_REPOSITORY
+                    : repositoryLabel(group.repository, groups)
+                }
+                folds={folds}
+                onNewPlanIn={chosen(newPlanIn)}
+                context={context}
+              />
+            ))}
+            {plans.signedIn ? <ArchivedPlans context={context} /> : null}
+          </nav>
+        </div>
+      </MemberDirectory>
 
       <ColumnFoot call={call}>
         <SidebarFoot

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { MemberDirectory } from "../member-directory";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -308,6 +309,38 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   const { asked } = openTab();
   rightClick(mountSidebarPlan(sharedTab(DEAN.userId), OTHER, asked), 40, 60);
   assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
+});
+
+test("a sidebar task someone else created wears its creator's face before its time, and the reader's own wears none", () => {
+  /** The faces each row wears, by the task's name, read as Dean sees them. */
+  const faces = (plan: PlanSummary) => {
+    const { plans, asked } = openTab();
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: sidebarPlan(plans, plan, asked),
+      }),
+    );
+    const marks = container.querySelectorAll(".sidebar-plan-time .actor-mark");
+    // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
+    const line = container.querySelector(".sidebar-plan-line");
+    const said = [...(line?.childNodes ?? [])]
+      .filter((part) => !(part instanceof Element && part.matches(".sidebar-plan-time")))
+      .map(heard)
+      .join("")
+      .match(/\(created by [^)]*\)/u)?.[0];
+    unmountAll();
+    return [[...marks].map((mark) => mark.textContent), said];
+  };
+
+  assert.deepEqual(faces(SHARED_PLAN), [["C"], "(created by Charles Pan)"]);
+  assert.deepEqual(faces({ ...SHARED_PLAN, ownerId: DEAN.userId, createdBy: DEAN }), [
+    [],
+    undefined,
+  ]);
+  // A task from a service that named no creator can't be told apart, so it wears nothing.
+  assert.deepEqual(faces(OTHER), [[], undefined]);
 });
 
 test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () => {
