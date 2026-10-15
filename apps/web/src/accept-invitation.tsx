@@ -1,10 +1,15 @@
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
+  INVITATION_OFFER_QUERY,
+  INVITATION_OFFER_REFUSAL,
   type InvitationAcceptQuery,
   invitationAcceptQuery,
+  invitationOfferAnswerSchema,
 } from "@luke/features/workspace-invitation-wire";
 import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
+import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { SignInChoices } from "./sign-in-choices";
@@ -14,26 +19,29 @@ import "./styles.css";
  * accept-invitation.tsx -- the page an invitee joins a workspace on, on the browser's own session.
  *
  * The invite page hands out this page's address with the invitation's id.
- * Signed in, the page reads the invitation through Better Auth's
- * organization plugin
- * (https://www.better-auth.com/docs/plugins/organization#accept-invitation)
- * and offers to accept it; the Mac picks the workspace up on its next
- * refresh. The plugin answers an invitation that expired, was used, or was
- * canceled as no invitation at all, so the page says plainly that the link
- * is spent rather than which of the three it was. An invitation is read and
- * accepted only by an account at the invited address its provider verified,
- * so a session at another address signs in again.
+ * Signed in, the page reads the invitation through Luke's own route, which
+ * makes the organization plugin's checks but holds an invitation to be the
+ * workspace's rather than its inviter's, so a link outlives whoever made it
+ * and names them only while they are still a member; it then accepts it
+ * through the plugin
+ * (https://www.better-auth.com/docs/plugins/organization#accept-invitation),
+ * and the Mac picks the workspace up on its next refresh. An invitation that
+ * expired, was used, or was canceled is no invitation at all, so the page
+ * says plainly that the link is spent rather than which of the three it
+ * was. An invitation is read and accepted only by an account at the invited
+ * address its provider verified, so a session at another address signs in
+ * again.
  */
 
 const authClient = createAuthClient({ plugins: [organizationClient()] });
 
-/** Better Auth's codes for an invitation the session may not read or accept. */
+/** Better Auth's codes for an invitation the session may not accept. */
 const INVITATION_ERROR = {
   NOT_RECIPIENT: "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION",
-  UNVERIFIED_READ: "EMAIL_VERIFICATION_REQUIRED_FOR_INVITATION",
   UNVERIFIED_ACCEPT: "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION",
-  INVITER_GONE: "INVITER_IS_NO_LONGER_A_MEMBER_OF_THE_ORGANIZATION",
 } as const;
+
+const decodeOffer = Schema.decodeUnknownOption(invitationOfferAnswerSchema);
 
 /** The HTTP status Better Auth answers an expired, used, canceled, or unknown invitation with. */
 const SPENT_STATUS = 400;
@@ -52,7 +60,8 @@ type View =
       readonly kind: typeof VIEW.OFFER;
       readonly id: string;
       readonly name: string;
-      readonly inviter: string;
+      /** Who invited them, while still a member of the workspace. */
+      readonly inviter: string | undefined;
       readonly role: string;
     };
 
@@ -96,44 +105,52 @@ function otherAddress({ invited, signedIn }: Addresses): View {
   );
 }
 
-/** A refusal of the plugin's in words: a sign-in where another account would do, else what went wrong. */
+/** The sign-in an address its provider has not verified needs. */
+function unverified(email: string): View {
+  return signIn(
+    "Your address isn't verified",
+    `Google or GitHub has not verified ${email}. Verify it there, or sign in with an account whose address is verified.`,
+  );
+}
+
+const UNREACHED: View = said("Luke could not be reached", "Reload this page to try again.");
+
+/** A refusal of the plugin's accept in words: a sign-in where another account would do, else what went wrong. */
 function refused(
   error: { readonly status: number; readonly code?: string | undefined },
   addresses: Addresses,
 ): View {
-  const email = addresses.signedIn;
   if (error.code === INVITATION_ERROR.NOT_RECIPIENT) return otherAddress(addresses);
-  if (
-    error.code === INVITATION_ERROR.UNVERIFIED_READ ||
-    error.code === INVITATION_ERROR.UNVERIFIED_ACCEPT
-  ) {
-    return signIn(
-      "Your address isn't verified",
-      `Google or GitHub has not verified ${email}. Verify it there, or sign in with an account whose address is verified.`,
-    );
-  }
-  if (error.code === INVITATION_ERROR.INVITER_GONE) {
-    return said(
-      "This invitation is no longer valid",
-      "Whoever invited you has left the workspace. Ask a member for a new link.",
-    );
-  }
+  if (error.code === INVITATION_ERROR.UNVERIFIED_ACCEPT) return unverified(addresses.signedIn);
   if (error.status === SPENT_STATUS) return SPENT;
-  return said("Luke could not be reached", "Reload this page to try again.");
+  return UNREACHED;
 }
 
-/** The invitation the address names, read on the signed-in session. */
+/** The invitation the address names, read on the signed-in session through Luke's own route. */
 async function readInvitation(query: InvitationAcceptQuery, signedIn: string): Promise<View> {
   const { id } = query;
   if (id === undefined) return said("Nothing to accept", "Open the invitation link you were sent.");
-  const read = await authClient.organization.getInvitation({ query: { id } });
-  if (read.error) return refused(read.error, { invited: query.email, signedIn });
+  const search = new URLSearchParams({ [INVITATION_OFFER_QUERY.ID]: id });
+  const response = await fetch(`${HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER}?${search}`, {
+    credentials: "same-origin",
+  }).catch(() => undefined);
+  if (response === undefined || !response.ok) return UNREACHED;
+  const read = decodeOffer(await response.json().catch(() => undefined));
+  if (Option.isNone(read)) return UNREACHED;
+  const answer = read.value;
+  if ("refused" in answer) {
+    if (answer.refused === INVITATION_OFFER_REFUSAL.NOT_RECIPIENT) {
+      return otherAddress({ invited: query.email, signedIn });
+    }
+    if (answer.refused === INVITATION_OFFER_REFUSAL.UNVERIFIED) return unverified(signedIn);
+    return SPENT;
+  }
   return {
     kind: VIEW.OFFER,
     id,
-    name: read.data.organizationName,
-    inviter: read.data.inviterEmail,
-    role: read.data.role,
+    name: answer.offer.workspaceName,
+    inviter: answer.offer.inviter?.name,
+    role: answer.offer.role,
   };
 }
 
@@ -189,7 +206,9 @@ function AcceptInvitation(): React.JSX.Element {
         {view.kind === VIEW.OFFER ? (
           <>
             <p className="m-0 text-muted-foreground">
-              {view.inviter} invited you to plan in {view.name} on Luke, as {view.role}.
+              {view.inviter === undefined
+                ? `You're invited to plan in ${view.name} on Luke, as ${view.role}.`
+                : `${view.inviter} invited you to plan in ${view.name} on Luke, as ${view.role}.`}
             </p>
             <div className="mt-8 grid">
               <button

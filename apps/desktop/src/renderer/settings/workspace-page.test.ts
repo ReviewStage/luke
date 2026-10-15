@@ -1023,6 +1023,29 @@ test("a members read sent before a role change and landing after it does not put
   assert.equal(rowNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
 });
 
+test("an admin's leave says the invitations they sent stay valid, and a member's, who sends none, says nothing of them", async () => {
+  /** The leave dialog's lines for a reader of `role`. */
+  const linesAs = async (role: Workspace["role"]) => {
+    const { page } = await mount({ ...ACME, role });
+    act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
+    await settle();
+    const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
+      (li) => li.textContent,
+    );
+    act(() => button(dialog(), "Cancel").click());
+    return lines;
+  };
+
+  const admin = await linesAs(WORKSPACE_ROLE.ADMIN);
+  const member = await linesAs(WORKSPACE_ROLE.MEMBER);
+
+  assert.equal(admin.includes("Invitations you sent stay valid: they're the workspace's."), true);
+  assert.equal(
+    member.some((line) => line?.startsWith("Invitations")),
+    false,
+  );
+});
+
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });

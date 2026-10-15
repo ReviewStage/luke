@@ -140,6 +140,7 @@ const LEAVE_WORDS = {
   AGENTS:
     "Agents you started stay in its history, named as a former member, and any still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
+  INVITATIONS: "Invitations you sent stay valid: they're the workspace's.",
   AUTOMATIONS_NAMED: (names: readonly string[]) =>
     names.length === 1
       ? `An automation you created stops running: ${names[0]}.`
@@ -503,6 +504,8 @@ function MemberLeave({
           <li>{LEAVE_WORDS.PLANS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
+          {/* An invitation is the workspace's, so one an admin sent outlives their leaving; a member sends none. */}
+          {workspace.role === WORKSPACE_ROLE.ADMIN ? <li>{LEAVE_WORDS.INVITATIONS}</li> : null}
           <li>{LEAVE_WORDS.OWN(ownName)}</li>
         </ul>
       </ConfirmDialog>

@@ -1715,6 +1715,164 @@ it.effect(
     }),
 );
 
+/** The accept page's read of the invitation `id`. */
+const offerAt = (id: string) =>
+  `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER}?${new URLSearchParams({ id })}`;
+
+/** The account's address marked verified, as a provider's sign-in marks it, and that address. */
+const verified = (userId: string) =>
+  Effect.gen(function* () {
+    yield* Database.use((db) =>
+      db.update(user).set({ emailVerified: true }).where(eq(user.id, userId)),
+    );
+    return `${userId}@luke.test`;
+  });
+
+/** The invitation accepted through the plugin's own call, under the account's session, as the accept page accepts it. */
+const accepting = (plugin: WorkspacePlugin, userId: string, invitationId: string) =>
+  Effect.gen(function* () {
+    const sessionBearer = yield* plugin.sessionBearerOf(userId);
+    return yield* Effect.promise(() =>
+      plugin.api
+        .acceptInvitation({
+          headers: new Headers({ authorization: `Bearer ${sessionBearer}` }),
+          body: { invitationId },
+        })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
+  });
+
+it.effect(
+  "an invitation whose inviter left is still offered to its recipient, naming nobody, and its recipient accepts it",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const alanAddress = yield* verified(alan);
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "admin" }]);
+        const made = readAs(
+          yield* inviting(plugin, grace, acme, alanAddress),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+
+        const whileIn = yield* readInSession(plugin, alan, offerAt(made.id));
+        yield* leaving(plugin, grace, acme);
+        const afterLeaving = yield* readInSession(plugin, alan, offerAt(made.id));
+        const accepted = yield* accepting(plugin, alan, made.id);
+
+        assert.deepEqual(whileIn, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            offer: {
+              id: made.id,
+              workspaceName: "Acme",
+              role: "member",
+              inviter: { name: "Grace Hopper", email: `${grace}@luke.test` },
+            },
+          },
+        });
+        assert.deepEqual(afterLeaving, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { offer: { id: made.id, workspaceName: "Acme", role: "member" } },
+        });
+        assert.equal(accepted, true);
+        assert.deepEqual(
+          (yield* membersOf(acme)).find((row) => row.userId === alan),
+          { userId: alan, role: "member" },
+        );
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "an invitation to an account's first workspace is offered under its owner's name as it stands now",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const alanAddress = yield* verified(alan);
+        const first = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
+        const made = readAs(
+          yield* inviting(plugin, ada, first, alanAddress),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Dr Ada Lovelace" }).where(eq(user.id, ada)),
+        );
+
+        const offered = yield* readInSession(plugin, alan, offerAt(made.id));
+
+        assert.deepEqual(offered.body, {
+          offer: {
+            id: made.id,
+            workspaceName: "Dr Ada Lovelace",
+            role: "member",
+            inviter: { name: "Dr Ada Lovelace", email: `${ada}@luke.test` },
+          },
+        });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "the accept page's read says an invitation canceled or expired is spent, one for another address or an unverified one is refused, and asks for a session",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const alanAddress = yield* verified(alan);
+        const kim = yield* openGithubAccount("Kim Lee");
+        yield* verified(kim);
+        const una = yield* openGithubAccount("Una Verified");
+        const acme = yield* openTeam(plugin.api, ada, []);
+        const invited = (email: string) =>
+          Effect.map(
+            inviting(plugin, ada, acme, email),
+            (answer) =>
+              readAs(answer, workspaceInvitationAnswerSchema, HOSTED_HTTP_STATUS.CREATED)
+                .invitation,
+          );
+        const canceled = yield* invited("someone@example.com");
+        yield* postedInSession(plugin, ada, HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL, {
+          workspaceId: acme,
+          invitationId: canceled.id,
+        });
+        const forAlan = yield* invited(alanAddress);
+        const forUna = yield* invited(`${una}@luke.test`);
+
+        const spentWhenCanceled = yield* readInSession(plugin, alan, offerAt(canceled.id));
+        const otherAddress = yield* readInSession(plugin, kim, offerAt(forAlan.id));
+        const unverifiedAddress = yield* readInSession(plugin, una, offerAt(forUna.id));
+        const noSession = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(offerAt(forAlan.id), undefined),
+          plugin,
+        );
+        yield* TestClock.setTime(Date.parse(forAlan.expiresAt) + 1);
+        const spentWhenExpired = yield* readInSession(plugin, alan, offerAt(forAlan.id));
+
+        assert.deepEqual(spentWhenCanceled.body, { refused: "spent" });
+        assert.deepEqual(otherAddress.body, { refused: "not-recipient" });
+        assert.deepEqual(unverifiedAddress.body, { refused: "unverified" });
+        assert.equal(noSession.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+        assert.deepEqual(spentWhenExpired.body, { refused: "spent" });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
 it.effect("an admin's invitation as an admin is refused, and the owner invites as an admin", () =>
   Effect.gen(function* () {
     const plugin = yield* openWorkspacePlugin;

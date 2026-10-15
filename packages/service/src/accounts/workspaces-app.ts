@@ -15,8 +15,10 @@ import {
 } from "@luke/database/models/workspace-store";
 import { workspaceIdSchema } from "@luke/features/plan-wire";
 import {
+  INVITATION_OFFER_QUERY,
   INVITATION_ROLE,
   invitationAcceptUrl,
+  invitationOfferQuerySchema,
   WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
@@ -61,6 +63,7 @@ import {
 } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { invitationOffer } from "./invitation-offers.js";
 import { listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
@@ -128,6 +131,7 @@ const TRANSFER_PATH = "/api/workspaces/transfer";
 const LEAVE_PATH = "/api/workspaces/leave";
 const RENAME_PATH = "/api/workspaces/rename";
 const INVITATIONS_PATH = "/api/workspaces/invitations";
+const INVITATION_OFFER_PATH = "/api/workspaces/invitations/offer";
 const INVITATIONS_CANCEL_PATH = "/api/workspaces/invitations/cancel";
 /** GET serves a workspace's photo; the rewrite moves the path's workspace id into the `id` query. */
 const PHOTO_PATH = "/api/workspaces/photo";
@@ -733,6 +737,31 @@ const invitationsEndpoint = Effect.fn("web/workspaceInvitationsEndpoint")(functi
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
 });
 
+/**
+ * GET: one invitation as its recipient is offered it on the accept page,
+ * under the browser's session (`invitation-offers.ts`): the workspace's
+ * name, the role, and the inviter while they are still a member, or why
+ * there is none to offer. An invitation outlives the member who made it.
+ */
+const invitationOfferEndpoint = Effect.fn("web/workspaceInvitationOfferEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId } = yield* sessionAccountOf(seams);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.getAll(INVITATION_OFFER_QUERY.ID);
+  const asked = readEither(invitationOfferQuerySchema)(unparsedWire({ id: named[0] }));
+  if (named.length !== 1 || Result.isFailure(asked)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const now = yield* Clock.currentTimeMillis;
+  const answer = yield* hostedStoreOrUnavailable(invitationOffer(userId, asked.success.id, now));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
 /** POST: a pending invitation canceled by an owner or an admin, answered with those still pending. */
 const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoint")(function* (
   seams: WorkspacesAppSeams,
@@ -776,6 +805,11 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, PHOTO_PATH, hostedRefusing(photoEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PHOTO_SET_PATH, hostedRefusing(photoSetEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INVITATIONS_PATH, hostedRefusing(invitationsEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      INVITATION_OFFER_PATH,
+      hostedRefusing(invitationOfferEndpoint(seams)),
+    ),
     HttpRouter.add(
       ANY_METHOD,
       INVITATIONS_CANCEL_PATH,
