@@ -872,20 +872,18 @@ export function mentionsIn(
 const TITLE_QUOTES: ReadonlySet<string> = new Set(['"', "'"]);
 
 /**
- * Where an inline link's destination ends, read from just after its `(`:
- * the destination, its parentheses balanced, perhaps a title in quotes
- * after a space, and the `)` that closes it; nothing where the words hold
- * no such link. Note that it reads no further than a page's address may
- * spell, so a run of unclosed links costs a reader no more than one pass.
+ * An inline link's destination read from just after its `(`: the
+ * destination, its parentheses balanced, perhaps a title in quotes after a
+ * space, and the `)` that closes it; or, where the words hold no such link,
+ * where the read stopped, which no link's destination can reach past.
  */
 function destinationEnd(
   words: string,
   open: number,
-): { readonly target: string; readonly end: number } | undefined {
-  const bound = Math.min(words.length, open + MENTION_BOUNDS.MAX_URL_CHARS + 1);
+): { readonly target: string; readonly end: number } | { readonly stop: number } {
   let depth = 0;
   let at = open;
-  for (; at < bound; at += 1) {
+  for (; at < words.length; at += 1) {
     const character = words[at] ?? "";
     if (character === "\\") at += 1;
     else if (character === "(") depth += 1;
@@ -893,13 +891,18 @@ function destinationEnd(
     else if (character === ")" || /\s/u.test(character)) break;
   }
   const target = words.slice(open, at);
+  if (depth > 0) return { stop: at };
   if (words[at] === ")") return { target, end: at };
   // A title in quotes may follow the destination, after a space, and before its `)`.
-  const space = /^[ \t]+/u.exec(words.slice(at, bound))?.[0].length ?? 0;
-  const quote = words[at + space] ?? "";
-  if (space === 0 || !TITLE_QUOTES.has(quote)) return undefined;
-  const closing = words.indexOf(quote, at + space + 1);
-  if (closing === -1 || closing >= bound || words[closing + 1] !== ")") return undefined;
+  let titleAt = at;
+  while (words[titleAt] === " " || words[titleAt] === "\t") titleAt += 1;
+  const quote = words[titleAt] ?? "";
+  // A quote no later one closes opens no title, said without reading on to the end.
+  if (titleAt === at || !TITLE_QUOTES.has(quote) || words.lastIndexOf(quote) <= titleAt) {
+    return { stop: at };
+  }
+  const closing = words.indexOf(quote, titleAt + 1);
+  if (words[closing + 1] !== ")") return { stop: at };
   return { target, end: closing + 1 };
 }
 
@@ -925,11 +928,14 @@ export function linkLabels(words: string): string {
     else if (character === "[") open = at;
     else if (character === "]" && open !== undefined) {
       const link = words[at + 1] === "(" ? destinationEnd(words, at + 2) : undefined;
-      if (link !== undefined) {
+      if (link !== undefined && "end" in link) {
         const label = words.slice(open + 1, at).replace(LABEL_ESCAPE, "$1");
         said += words.slice(from, open) + (linkMention(label, link.target, null)?.name ?? label);
         from = link.end + 1;
         at = link.end;
+      } else if (link !== undefined) {
+        // Note that the read goes on from where the destination's stopped, so no stretch of the words is read twice.
+        at = link.stop - 1;
       }
       open = undefined;
     }
