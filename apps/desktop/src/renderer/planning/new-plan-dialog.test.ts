@@ -304,6 +304,41 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   );
 });
 
+/** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace with a GitHub connected whose read finds none installed. */
+async function lapsedMenu(manages: boolean) {
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    workspaceName: "Acme",
+    connected: true,
+    manages,
+    read: NOWHERE_INSTALLED,
+  });
+  const buttons = await openChip();
+  return {
+    notes: [...document.querySelectorAll(".plan-compose-menu-note")].map(
+      (note) => note.textContent,
+    ),
+    settings: buttons.some((button) => button.textContent === "Open Settings"),
+  };
+}
+
+test("an owner or admin of a workspace whose GitHub was removed or suspended on GitHub is told so, not that none is connected, and offered Open Settings", async () => {
+  assert.deepEqual(await lapsedMenu(true), {
+    notes: ["Acme's GitHub connection was removed or suspended on GitHub."],
+    settings: true,
+  });
+});
+
+test("a member of a workspace whose GitHub was removed or suspended on GitHub is told so and to ask an owner or admin to reconnect it", async () => {
+  assert.deepEqual(await lapsedMenu(false), {
+    notes: [
+      "Acme's GitHub connection was removed or suspended on GitHub.",
+      "Ask an owner or admin to reconnect GitHub.",
+    ],
+    settings: false,
+  });
+});
+
 test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and Create starts the plan with none", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-personal",

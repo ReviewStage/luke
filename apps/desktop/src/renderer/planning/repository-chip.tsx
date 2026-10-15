@@ -30,10 +30,10 @@ import { useDisclosure } from "../use-disclosure";
  * a repository its workspace cannot work in; a pick the read finds out of
  * reach is handed back, and with nothing to offer the chip reads No
  * repository, which a plan can start with. With no
- * GitHub connected to the workspace, the menu says so in the list's place:
- * an owner or an admin is offered Open Settings at the workspace's GitHub
- * repositories, the one place they are set, and a member is told to ask
- * one. The list is read from the service when the chip mounts and again
+ * GitHub connected to the workspace, or one GitHub removed or suspended,
+ * the menu says which in the list's place: an owner or an admin is offered
+ * Open Settings at the workspace's GitHub repositories, the one place they
+ * are set, and a member is told to ask one. The list is read from the service when the chip mounts and again
  * whenever the window takes focus, so a developer back from connecting
  * GitHub in the browser sees the change on the next opening; nothing polls. The menu
  * closes on a choice, on Escape, and on focus leaving it; Escape stops
@@ -56,6 +56,13 @@ export interface RepositoryChooser {
   manages: boolean;
   /** The workspace's name, which a list with no GitHub connected says it of. */
   workspaceName?: string | undefined;
+  /**
+   * Whether the workspace has a GitHub connected, as its row last said: a read
+   * that then finds none installed means GitHub removed or suspended it, which
+   * the list says rather than that none is connected, whether or not the row
+   * has heard yet.
+   */
+  connected?: boolean | undefined;
   /** Where the repositories come from, as the list's heading says it: "acme-corp on GitHub · Acme"; none where no GitHub is connected. */
   source?: string | undefined;
 }
@@ -88,8 +95,29 @@ const MENU_NOTE = {
   ASK_TO_CONNECT: "Ask an owner or admin to connect GitHub.",
   ASK_TO_CONNECT_IN: (workspace: string) =>
     `Ask an owner or admin of ${workspace} to connect GitHub.`,
+  LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",
+  LAPSED_IN: (workspace: string) =>
+    `${workspace}'s GitHub connection was removed or suspended on GitHub.`,
+  ASK_TO_RECONNECT: "Ask an owner or admin to reconnect GitHub.",
   NO_MATCH: "No repositories match",
 } as const;
+
+/**
+ * What an empty list says where the workspace's GitHub reaches nothing: that
+ * it was removed or suspended on GitHub, or that none is connected, and for
+ * a member, whom to ask. A member of a lapsed workspace is told both.
+ */
+function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
+  const name = chooser.workspaceName;
+  if (chooser.connected === true) {
+    const lapsed = name === undefined ? MENU_NOTE.LAPSED : MENU_NOTE.LAPSED_IN(name);
+    return chooser.manages ? [lapsed] : [lapsed, MENU_NOTE.ASK_TO_RECONNECT];
+  }
+  if (chooser.manages) {
+    return [name === undefined ? MENU_NOTE.NOT_CONNECTED : MENU_NOTE.NOT_CONNECTED_IN(name)];
+  }
+  return [name === undefined ? MENU_NOTE.ASK_TO_CONNECT : MENU_NOTE.ASK_TO_CONNECT_IN(name)];
+}
 
 /** Whether the read's repositories hold one, as GitHub spells it or not. */
 function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
@@ -226,13 +254,13 @@ export function RepositoryChip(props: {
       </>
     ) : listed !== undefined && !listed.installed ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
-      chooser.manages ? (
-        <>
-          <p className="plan-compose-menu-note">
-            {chooser.workspaceName === undefined
-              ? MENU_NOTE.NOT_CONNECTED
-              : MENU_NOTE.NOT_CONNECTED_IN(chooser.workspaceName)}
+      <>
+        {unconnectedNotes(chooser).map((words) => (
+          <p key={words} className="plan-compose-menu-note">
+            {words}
           </p>
+        ))}
+        {chooser.manages ? (
           <button
             type="button"
             className="menu-item"
@@ -241,14 +269,8 @@ export function RepositoryChip(props: {
             <GearIcon />
             <span className="plan-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
           </button>
-        </>
-      ) : (
-        <p className="plan-compose-menu-note">
-          {chooser.workspaceName === undefined
-            ? MENU_NOTE.ASK_TO_CONNECT
-            : MENU_NOTE.ASK_TO_CONNECT_IN(chooser.workspaceName)}
-        </p>
-      )
+        ) : null}
+      </>
     ) : list === undefined ? (
       <div className="plan-compose-menu-note">
         <Spinner label="Loading repositories" />
