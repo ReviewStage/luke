@@ -62,6 +62,8 @@ export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER)[keyof typeof AUT
 export const GITHUB_TRIGGER_EVENT = {
   PULL_REQUEST_OPENED: "pull-request-opened",
   PULL_REQUEST_LABELED: "pull-request-labeled",
+  /** A pull request merged into its base. */
+  PULL_REQUEST_MERGED: "pull-request-merged",
   ISSUE_OPENED: "issue-opened",
   ISSUE_LABELED: "issue-labeled",
   /** A check suite on a branch completed without passing. */

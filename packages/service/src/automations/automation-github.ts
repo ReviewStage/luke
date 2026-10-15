@@ -16,7 +16,7 @@ import { Clock, Effect, Option, Result, Schema } from "effect";
  * automation-github.ts -- a GitHub delivery read as an automation's trigger: which event it is, the issue, pull request, or branch it names, and the runs it queues.
  *
  * The Luke GitHub App's webhook (`github-webhook-app.ts`) hands every signed
- * delivery here as well. A pull request opened or labelled, an issue opened
+ * delivery here as well. A pull request opened, labelled, or merged, an issue opened
  * or labelled, a check suite that completed without passing, and a push to
  * a branch are read; nothing else is. Only what the run's history shows is
  * read off the delivery: the repository, the number, title, and address of
@@ -46,6 +46,7 @@ const GITHUB_EVENT = {
 const GITHUB_ACTION = {
   OPENED: "opened",
   LABELED: "labeled",
+  CLOSED: "closed",
   COMPLETED: "completed",
 } as const;
 
@@ -79,6 +80,7 @@ const PullRequestSchema = Schema.Struct({
     html_url: Schema.String,
     labels: Schema.Array(LabelSchema),
     base: Schema.Struct({ ref: Schema.String }),
+    head: Schema.Struct({ ref: Schema.String }),
   }),
 });
 
@@ -156,6 +158,24 @@ function githubEventOf(event: string, payload: UnparsedWireValue): GitHubEventRe
       const read = readDelivery(PullRequestSchema, payload);
       if (Result.isFailure(read)) return undefined;
       const { pull_request: pull, label, repository } = read.success;
+      // A merge is a close: the pull request's merged branch is where a follow-up starts.
+      if (read.success.action === GITHUB_ACTION.CLOSED) {
+        return {
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_MERGED,
+          repository: repository.full_name,
+          labels: pull.labels.map((each) => each.name),
+          branch: pull.head.ref,
+          firing: {
+            kind: AUTOMATION_FIRING.GITHUB,
+            event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_MERGED,
+            repository: repository.full_name,
+            number: pull.number,
+            title: pull.title,
+            branch: pull.head.ref,
+            url: pull.html_url,
+          },
+        };
+      }
       const kind = itemEvent(
         read.success,
         {

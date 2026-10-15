@@ -99,6 +99,7 @@ export type EveForAccount = (
 const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: "a pull request was opened",
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request was labelled",
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_MERGED]: "a pull request was merged",
   [GITHUB_TRIGGER_EVENT.ISSUE_OPENED]: "an issue was opened",
   [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: "an issue was labelled",
   [GITHUB_TRIGGER_EVENT.CHECK_FAILED]: "a check suite failed",
