@@ -80,7 +80,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
       assert.deepEqual(yield* listWorkspaces(userId), [
         {
           id: first.value,
-          name: "Ada Lovelace",
+          name: "Personal",
           slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
@@ -116,7 +116,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
       assert.deepEqual(yield* listWorkspaces(userId), [
         {
           id: raced[0],
-          name: "Grace Hopper",
+          name: "Personal",
           slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
@@ -149,7 +149,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(userId), [
           {
             id: raced[0],
-            name: "Katherine Johnson",
+            name: "Personal",
             slug: `personal-${userId}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -182,7 +182,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(victim), [
           {
             id: ensured.value,
-            name: "Grace Hopper",
+            name: "Personal",
             slug: listed?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -208,7 +208,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(owner), [
           {
             id: ownerPersonal.value,
-            name: "Owner",
+            name: "Personal",
             slug: `personal-${owner}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -220,7 +220,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(teammate), [
           {
             id: teammatePersonal.value,
-            name: "Teammate",
+            name: "Personal",
             slug: `personal-${teammate}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -291,7 +291,7 @@ it.effect(
         assert.deepEqual(yield* listWorkspaces(grace), [
           {
             id: graces.value,
-            name: "Grace Hopper",
+            name: "Personal",
             slug: gracesSlug?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,

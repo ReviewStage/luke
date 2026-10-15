@@ -111,8 +111,8 @@ inside `client.withTransaction`: Better Auth writes over its own pool, outside
 the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
 member through the plugin over PGlite.
 
-Every account gets a first workspace made for it, named for the account,
-slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
+Every account gets a first workspace made for it, called "Personal" (one
+made before 2026-10-15 kept the account's name), slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
 (stored only; nothing reads it to behave differently), and named the
 account's by a `personal_workspace` row
 (`packages/database/src/schemas/personal-workspace.ts`; its generated migration
