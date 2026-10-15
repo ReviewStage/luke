@@ -130,6 +130,7 @@ const PLAN_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/inbox";
+const WORKSPACE_AGENTS = "/api/agents";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const PLAN = "/api/plans/plan";
 /** The account's plans, served by the plans group, each naming its agents in brief. */
@@ -487,6 +488,58 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.reset, [sessionId]);
+      }),
+  );
+
+  it.effect(
+    "a workspace's agents are listed newest first for a member, narrowed to a repository whatever its case, and refused for an account outside it or a list naming no workspace",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const start = () =>
+          Effect.map(
+            ask(
+              request(PLAN_AGENTS, owner, {
+                method: "POST",
+                id: plan.id,
+                body: { idempotencyKey: randomUUID() },
+              }),
+            ),
+            (started) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.id,
+          );
+        const first = yield* start();
+        yield* TestClock.adjust(Duration.seconds(1));
+        const second = yield* start();
+        const listed = (by: string, query: Readonly<Record<string, string>>) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
+          return ask(new Request(url, { headers: { authorization: `Bearer ${by}` } }));
+        };
+        const ids = (answered: Answer) =>
+          readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
+            (agent) => agent.id,
+          );
+
+        assert.deepEqual(ids(yield* listed(owner, { workspaceId: plan.workspaceId })), [
+          second,
+          first,
+        ]);
+        assert.deepEqual(
+          ids(yield* listed(owner, { workspaceId: plan.workspaceId, repository: "acme/relay" })),
+          [second, first],
+        );
+        assert.deepEqual(
+          ids(yield* listed(owner, { workspaceId: plan.workspaceId, repository: "acme/other" })),
+          [],
+        );
+        assert.deepEqual(
+          [
+            (yield* listed(other, { workspaceId: plan.workspaceId })).status,
+            (yield* listed(owner, {})).status,
+          ],
+          [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.BAD_REQUEST],
+        );
       }),
   );
 

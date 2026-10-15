@@ -659,6 +659,35 @@ const findAgentsOfPlan = SqlSchema.findAll({
     ),
 });
 
+const findAgentsOfWorkspace = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+    limit: Schema.Number,
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, organizationId, repository, limit }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(
+          and(
+            agentReachableBy(userId),
+            eq(AGENT_WORKSPACE, organizationId),
+            isNull(codingAgent.archivedAt),
+            // Note that a repository is matched as GitHub matches one, its case aside.
+            repository === null
+              ? undefined
+              : eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .limit(limit),
+    ),
+});
+
 const updateAgentPublished = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -848,6 +877,25 @@ export function listCodingAgents(
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+}
+
+/**
+ * The workspace's agents, on a plan or with none, by any member, newest
+ * started first, an archived one left out, only those on the repository
+ * named where one is, and at most `limit`; a workspace the account is not
+ * in has none.
+ */
+export function listWorkspaceCodingAgents(
+  userId: string,
+  organizationId: string,
+  options: { readonly repository?: string; readonly limit: number },
+): CodingAgentStoreEffect<readonly CodingAgent[]> {
+  return findAgentsOfWorkspace({
+    userId,
+    organizationId,
+    repository: options.repository ?? null,
+    limit: options.limit,
+  });
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */

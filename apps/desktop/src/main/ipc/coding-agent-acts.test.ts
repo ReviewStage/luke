@@ -98,6 +98,11 @@ function fixture() {
       },
     },
     host: {
+      codingAgentWorkspaceList: (params) =>
+        Effect.sync(() => {
+          asked.push(`workspace agents ${params.workspaceId}`);
+          return { agents: [] };
+        }),
       codingAgentModels: () =>
         Effect.sync(() => {
           asked.push("models");
@@ -333,5 +338,27 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel's ask for a workspace's agents reaches the host as asked, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const act = {
+        kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+        payload: { workspaceId: "workspace-1" },
+      } as const;
+
+      const refused = yield* router.performAct(act, VOICE);
+      const listed = yield* router.performAct(act, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_WORKSPACE_LIST].refusal,
+      });
+      assert.deepEqual(listed, { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
+      assert.deepEqual(asked, ["workspace agents workspace-1"]);
     }),
 );

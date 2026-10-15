@@ -183,6 +183,14 @@ export const codingAgentListParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 
+/** A workspace's agents asked for, narrowed to one repository where one is named: what an automation's Same agent is chosen from. */
+export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;
+
 /** One plan's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
 export const codingAgentListAnswerViewSchema = EffectSchema.Union([
   EffectSchema.Struct({ agents: EffectSchema.Array(codingAgentSummarySchema) }),

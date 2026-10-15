@@ -4,6 +4,7 @@ import {
   archiveCodingAgent,
   type CodingAgent,
   listCodingAgents,
+  listWorkspaceCodingAgents,
   readCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
@@ -11,7 +12,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readPlan } from "@luke/database/models/plan-store";
-import { readAccountNames } from "@luke/database/models/workspace-store";
+import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import {
   type ConversationTarget,
   type StoreWriter,
@@ -24,6 +25,7 @@ import {
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
+  CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
@@ -202,7 +204,12 @@ const AGENTS_PATH = {
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
   INBOX_ATTACHMENT: "/api/inbox/attachment",
+  /** GET lists a workspace's agents, newest started first, on one repository where the query names one. */
+  OF_WORKSPACE: "/api/agents",
 } as const;
+
+/** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
+const WORKSPACE_AGENTS_LIMIT = 50;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
@@ -404,6 +411,47 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, planId, { includeArchived: listsArchived(request) }),
+  );
+  const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
+  const names = yield* hostedStoreOrUnavailable(
+    readAccountNames(agents.map((agent) => agent.userId)),
+  );
+  const now = yield* Clock.currentTimeMillis;
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    agents: agents.map((agent) =>
+      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+    ),
+  });
+});
+
+/**
+ * GET lists a workspace's agents, on a plan or with none, newest started
+ * first, the archived ones left out, narrowed to one repository where the
+ * query names one, as the plan list answers them; a workspace the account
+ * is not in is not found, as a plan is.
+ */
+const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const query = new URL(request.url).searchParams;
+  const workspaceId = query.get(CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID) ?? "";
+  const repository = query.get(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY) ?? undefined;
+  if (workspaceId === "" || repository === "") {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const userId = yield* resolvedUserId(seams, request);
+  const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, workspaceId));
+  if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const agents = yield* hostedStoreOrUnavailable(
+    listWorkspaceCodingAgents(userId, workspaceId, {
+      ...(repository === undefined ? undefined : { repository }),
+      limit: WORKSPACE_AGENTS_LIMIT,
+    }),
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(
@@ -883,13 +931,18 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrUndefined(answered);
 });
 
-/** The group: the ten paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: its paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
     withPublishedCache((published) =>
       Layer.mergeAll(
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_PLAN, hostedRefusing(planAgentsEndpoint(seams))),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.OF_WORKSPACE,
+          hostedRefusing(workspaceAgentsEndpoint(seams)),
+        ),
         HttpRouter.add(
           ANY_METHOD,
           AGENTS_PATH.MESSAGES,

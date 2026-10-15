@@ -55,6 +55,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   INBOX: "/api/inbox",
   /**
+   * A workspace's agents, on a plan or with none, newest started first and
+   * the archived ones left out, narrowed to one repository where the query
+   * names one (GET), what an automation's Same agent is chosen from; the
+   * plan list's answer (`coding-agent-wire.ts`).
+   */
+  AGENTS: "/api/agents",
+  /**
    * The shell commands the account's agents asked to run on the developer's
    * Mac: the ones waiting, held open while none is, each claimed for the
    * Mac that read it (GET), and one's result (POST). `mac-command-wire.ts`

@@ -30,6 +30,7 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type PlanTemplateAnswerView,
@@ -77,6 +78,7 @@ export type CodingAgentClient = Pick<
   | "readDefault"
   | "writeDefault"
   | "list"
+  | "listWorkspace"
   | "start"
   | "messages"
   | "message"
@@ -247,6 +249,15 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.list(planId, includeArchived));
         return carried<CodingAgentListAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST]: (params) =>
+      Effect.gen(function* () {
+        const listed = yield* read(
+          codingAgentWorkspaceListParamsSchema,
+          params,
+          "listing a workspace's agents names one workspace",
+        );
+        return carried<CodingAgentListAnswer>(yield* asked(client.listWorkspace(listed)));
       }),
     [GATEWAY_METHOD.CODING_AGENTS_START]: (params) =>
       Effect.gen(function* () {

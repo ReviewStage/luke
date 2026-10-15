@@ -26,6 +26,7 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
@@ -71,6 +72,9 @@ export interface CodingAgentActsDependencies {
     codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
     codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
     codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
+    codingAgentWorkspaceList(
+      params: CodingAgentWorkspaceListParams,
+    ): Effect.Effect<CodingAgentListAnswer>;
     codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentMessages(
       params: CodingAgentMessagesParams,
@@ -134,6 +138,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_DEFAULT_READ
   | typeof ACT_KIND.CODING_AGENTS_DEFAULT_WRITE
   | typeof ACT_KIND.CODING_AGENTS_LIST
+  | typeof ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
   | typeof ACT_KIND.CODING_AGENTS_START
   | typeof ACT_KIND.CODING_AGENTS_MESSAGES
   | typeof ACT_KIND.CODING_AGENTS_MESSAGE
@@ -195,6 +200,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: (choice, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, sender);
       return host.codingAgentDefaultWrite(choice);
+    },
+    [ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, sender);
+      return host.codingAgentWorkspaceList(params);
     },
     [ACT_KIND.CODING_AGENTS_LIST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_LIST, sender);

@@ -31,6 +31,7 @@ import {
   type CodingAgentModelsAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
@@ -47,6 +48,7 @@ import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
+  CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
   type CodingAgentRenameRequest,
@@ -446,6 +448,22 @@ export class HostedCodingAgentClient {
     const path = includeArchived ? `${planAgentsPath(planId)}?${query}` : planAgentsPath(planId);
     return Effect.flatMap(this.#call.send({ method: HTTP_METHOD.GET, path }), (answer) =>
       readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** A workspace's agents, newest started first, narrowed to one repository where one is named. */
+  listWorkspace(
+    params: CodingAgentWorkspaceListParams,
+  ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: params.workspaceId,
+    });
+    if (params.repository !== undefined) {
+      query.set(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY, params.repository);
+    }
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}?${query}` }),
+      (answer) => readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
     );
   }
 
