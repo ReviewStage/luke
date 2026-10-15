@@ -314,6 +314,8 @@ export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
   /** An installation token limited to this one repository, good for an hour from its mint. */
   readonly token: Redacted.Redacted;
+  /** When GitHub stops honouring the token, as GitHub spells the instant. */
+  readonly expiresAt: string;
 }
 
 /** What the browser is sent to GitHub with to authorize the App once, so the installer is confirmed. */
@@ -535,8 +537,8 @@ const RefreshAnswerSchema = Schema.Union([RefreshedTokensSchema, TokenRefusalSch
 const ExchangedTokenSchema = Schema.Struct({ access_token: Schema.String });
 const ExchangeAnswerSchema = Schema.Union([ExchangedTokenSchema, TokenRefusalSchema]);
 
-/** GitHub's answer to a token mint, read for the token alone. */
-const InstallationTokenSchema = Schema.Struct({ token: Schema.String });
+/** GitHub's answer to a token mint, read for the token and the instant GitHub stops honouring it. */
+const InstallationTokenSchema = Schema.Struct({ token: Schema.String, expires_at: Schema.String });
 
 /** A user as GitHub records one, read as far as a commit identity goes; the name is null where the account set none. */
 const UserSchema = Schema.Struct({
@@ -1013,8 +1015,8 @@ function githubAppService(
       return Option.some(installationOf(record));
     }).pipe(Effect.scoped);
 
-  /** A token minted as the App on the installation, cut as asked. */
-  const mint = (installationId: number, request: InstallationTokenRequest) =>
+  /** A token minted as the App on the installation, cut as asked, with when it lapses. */
+  const mintExpiring = (installationId: number, request: InstallationTokenRequest) =>
     Effect.gen(function* () {
       const jwt = yield* appJwt;
       const minted = yield* Effect.scoped(
@@ -1023,8 +1025,12 @@ function githubAppService(
           (response) => readBody(response, InstallationTokenSchema),
         ),
       );
-      return Redacted.make(minted.token);
+      return { token: Redacted.make(minted.token), expiresAt: minted.expires_at };
     });
+
+  /** A token minted as the App on the installation, cut as asked. */
+  const mint = (installationId: number, request: InstallationTokenRequest) =>
+    Effect.map(mintExpiring(installationId, request), (minted) => minted.token);
 
   /**
    * The workspace's connected installation as GitHub holds it now, its
@@ -1167,11 +1173,11 @@ function githubAppService(
       const reached = yield* reachableRepository(organizationId, fullName);
       if (Option.isNone(reached)) return Option.none();
       const { installation: on, repository } = reached.value;
-      const token = yield* mint(on.id, {
+      const minted = yield* mintExpiring(on.id, {
         repositories: [repository.name],
         permissions: permissionsOn(on),
       });
-      return Option.some({ repository, token });
+      return Option.some({ repository, ...minted });
     });
 
   /**

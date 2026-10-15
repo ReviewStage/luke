@@ -102,6 +102,14 @@ export {
   type PlanMarks,
 } from "./plan-client.js";
 export {
+  HostedPrFetchClient,
+  type HostedPrFetchClientOptions,
+  PR_FETCH_REFUSAL,
+  type PrFetchGrant,
+  type PrFetchOutcome,
+  type PrFetchRefusal,
+} from "./pr-fetch-client.js";
+export {
   agentMessagesPath,
   agentPullRequestPath,
   agentStopPath,

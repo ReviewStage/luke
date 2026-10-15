@@ -97,6 +97,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORIES: "/api/github/repositories",
   /**
+   * A pull request's head as GitHub holds it now, with a contents-read token
+   * for its repository alone (POST), which the Mac fetches the pull request
+   * with to run it locally. `pr-fetch-wire.ts` declares the request and the
+   * answer; the answer is the host's alone.
+   */
+  GITHUB_PR_FETCH: "/api/github/pr-fetch",
+  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.

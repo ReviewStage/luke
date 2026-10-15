@@ -269,6 +269,10 @@
           "dest": "/api/default.js?route=github/installed/authorized"
         },
         {
+          "src": "/api/github/pr-fetch",
+          "dest": "/api/default.js?route=github/pr-fetch"
+        },
+        {
           "src": "/api/github/repositories",
           "dest": "/api/default.js?route=github/repositories"
         },
