@@ -28,7 +28,9 @@ import {
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
+  queuedAutomationRuns,
   readAutomation,
+  readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
   updateAutomation,
@@ -86,6 +88,57 @@ const nightly = (planId: string): NewAutomation => ({
 });
 
 it.layer(getTestDB())("the automation store", (it) => {
+  it.effect(
+    "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for the sweep alone",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        // Never due, so no other test's claim finds it.
+        const onPlan = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), nextRunAt: null }),
+        );
+        const workspace = onPlan.organizationId ?? "";
+        const hooked = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            ...nightly(planId),
+            planId: null,
+            organizationId: workspace,
+            repositories: ["acme/api"],
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            nextRunAt: null,
+            webhookSecretHash: "ab".repeat(32),
+          }),
+        );
+
+        const read = yield* readWebhookAutomation(hooked.id);
+        const scheduled = yield* readWebhookAutomation(onPlan.id);
+        yield* recordAutomationRun(hooked, {
+          dedupeKey: randomUUID(),
+          firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 5 },
+          payload: "hello",
+          firedAt: new Date(),
+        });
+        const queued = (yield* queuedAutomationRuns(new Date(0), 100)).filter(
+          (run) => run.automationId === hooked.id,
+        );
+        const db = yield* Database;
+        yield* db.delete(member).where(eq(member.userId, owner));
+        const departed = yield* readWebhookAutomation(hooked.id);
+
+        assert.deepEqual(
+          Option.map(read, (row) => row.webhookSecretHash),
+          Option.some("ab".repeat(32)),
+        );
+        assert.ok(Option.isNone(scheduled), "an automation that is no webhook reads as none");
+        assert.deepEqual(
+          queued.map((run) => run.payload),
+          ["hello"],
+        );
+        assert.ok(Option.isNone(departed), "a departed owner's webhook reads as none");
+      }),
+  );
+
   it.effect(
     "an automation made on a workspace with no plan takes the workspace and repositories named, lists under that workspace, and is made by no account outside it",
     () =>

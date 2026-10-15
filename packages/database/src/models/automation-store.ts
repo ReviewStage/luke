@@ -206,11 +206,27 @@ const RUN_COLUMNS = {
   settledAt: automationRun.settledAt,
 };
 
-/** A firing to record: its identity, what it was, and when it fired. */
+const QueuedRunSchema = Schema.Struct({
+  ...RunRowSchema.fields,
+  payload: Schema.NullOr(Schema.String),
+});
+
+/**
+ * One run as the act that starts it reads it: the run, with a webhook's
+ * body beside it. Note that only a run about to be acted on reads its body,
+ * because a history or a guard reads many runs and a body may run to 64 KiB.
+ */
+export type QueuedRun = typeof QueuedRunSchema.Type;
+
+const QUEUED_RUN_COLUMNS = { ...RUN_COLUMNS, payload: automationRun.payload };
+
+/** A firing to record: its identity, what it was, when it fired, and a webhook's body. */
 export interface NewAutomationRun {
   readonly dedupeKey: string;
   readonly firing: AutomationFiring;
   readonly firedAt: Date;
+  /** A webhook firing's body as its caller sent it, for the agent's task. */
+  readonly payload?: string;
 }
 
 /** How a run settled: started with its agent, or skipped or failed for a reason. */
@@ -477,16 +493,17 @@ const insertRun = SqlSchema.findAll({
     userId: Schema.String,
     dedupeKey: Schema.String,
     firing: automationFiringSchema,
+    payload: Schema.NullOr(Schema.String),
     firedAt: Schema.Date,
   }),
-  Result: RunRowSchema,
+  Result: QueuedRunSchema,
   execute: (row) =>
     Database.use((db) =>
       db
         .insert(automationRun)
         .values({ ...row, status: AUTOMATION_RUN_STATUS.QUEUED })
         .onConflictDoNothing({ target: [automationRun.automationId, automationRun.dedupeKey] })
-        .returning(RUN_COLUMNS),
+        .returning(QUEUED_RUN_COLUMNS),
     ),
 });
 
@@ -651,11 +668,11 @@ const findAutomationToRun = SqlSchema.findOneOption({
 
 const findQueuedRuns = SqlSchema.findAll({
   Request: Schema.Struct({ since: Schema.Date, limit: Schema.Int }),
-  Result: RunRowSchema,
+  Result: QueuedRunSchema,
   execute: ({ since, limit }) =>
     Database.use((db) =>
       db
-        .select(RUN_COLUMNS)
+        .select(QUEUED_RUN_COLUMNS)
         .from(automationRun)
         .where(
           and(
@@ -1067,10 +1084,16 @@ export function deleteAutomation(userId: string, id: string): PlanStoreEffect<bo
 export function recordAutomationRun(
   owner: Pick<Automation, "id" | "userId">,
   run: NewAutomationRun,
-): PlanStoreEffect<Option.Option<AutomationRun>> {
-  return Effect.map(insertRun({ ...run, automationId: owner.id, userId: owner.userId }), (rows) =>
-    Option.fromUndefinedOr(rows[0]),
-  );
+): PlanStoreEffect<Option.Option<QueuedRun>> {
+  const row = {
+    dedupeKey: run.dedupeKey,
+    firing: run.firing,
+    payload: run.payload ?? null,
+    firedAt: run.firedAt,
+    automationId: owner.id,
+    userId: owner.userId,
+  };
+  return Effect.map(insertRun(row), (rows) => Option.fromUndefinedOr(rows[0]));
 }
 
 /** Settles a queued run as it came out; false where it was settled already, so a run settles once. */
@@ -1162,7 +1185,7 @@ export function readAutomationToRun(id: string): PlanStoreEffect<Option.Option<A
 export function queuedAutomationRuns(
   since: Date,
   limit: number,
-): PlanStoreEffect<readonly AutomationRun[]> {
+): PlanStoreEffect<readonly QueuedRun[]> {
   return findQueuedRuns({ since, limit });
 }
 
@@ -1289,6 +1312,47 @@ export function strandedAutomationRuns(
   limit: number,
 ): PlanStoreEffect<readonly StrandedRun[]> {
   return findStranded({ before, limit });
+}
+
+const WebhookRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  enabled: Schema.Boolean,
+  webhookSecretHash: Schema.NullOr(Schema.String),
+});
+
+/** What a webhook call is checked against: the automation, its owner, whether it runs, and its secret's hash. */
+export type WebhookAutomation = typeof WebhookRowSchema.Type;
+
+const findWebhookAutomation = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: WebhookRowSchema,
+  execute: (id) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: automation.id,
+          userId: automation.userId,
+          enabled: automation.enabled,
+          webhookSecretHash: automation.webhookSecretHash,
+        })
+        .from(automation)
+        .where(
+          and(
+            eq(automation.id, id),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.WEBHOOK),
+            // A caller of a departed owner's address reaches no automation, as a delivery reaches none.
+            memberOfAutomationWorkspace(automation.userId),
+          ),
+        ),
+    ),
+});
+
+/** The webhook automation under this id, whoever owns it, of an owner still a member of its workspace, for a call to its address; nothing for any other id or trigger. */
+export function readWebhookAutomation(
+  id: string,
+): PlanStoreEffect<Option.Option<WebhookAutomation>> {
+  return findWebhookAutomation(id);
 }
 
 /**

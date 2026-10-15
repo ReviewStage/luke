@@ -417,8 +417,28 @@ export const automationCreateRequestSchema = EffectSchema.Struct({
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
-/** A change to an automation (PATCH): any of its fields, a field left out standing as it was. */
+/**
+ * How a webhook trigger's caller is admitted and deduplicated: the secret as
+ * the `Authorization: Bearer` value, never in the address; a retry carrying
+ * the same `Idempotency-Key` header is the same run. A body larger than the
+ * bound is refused, and one that is no UTF-8 text, or holds a NUL, too.
+ */
+export const AUTOMATION_WEBHOOK = {
+  IDEMPOTENCY_HEADER: "idempotency-key",
+  MAX_BODY_BYTES: 64 * 1024,
+} as const;
+
+/**
+ * A change to an automation (PATCH): any of its fields, a field left out
+ * standing as it was. `webhookSecretHash` replaces a webhook trigger's
+ * secret with one the caller minted, by its SHA-256 in hex, so the caller
+ * holds the secret before the one before stops admitting calls and the
+ * service never sees it.
+ */
 export const automationChangeRequestSchema = EffectSchema.Struct({
+  webhookSecretHash: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u)),
+  ),
   name: EffectSchema.optionalKey(nameSchema),
   repositories: EffectSchema.optionalKey(automationRepositoriesSchema),
   enabled: EffectSchema.optionalKey(EffectSchema.Boolean),
