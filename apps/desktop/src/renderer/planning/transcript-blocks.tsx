@@ -778,6 +778,9 @@ export function TranscriptSubagent({
   );
 }
 
+/** What the label of a fold's line adds where a call it holds failed. */
+const CALL_FAILED_WORDS = "a call failed";
+
 /**
  * A line that folds the rows beneath it: a run of calls, or a finished
  * turn's lead. Note that it stays in the muted ink, summary and all,
@@ -786,24 +789,33 @@ export function TranscriptSubagent({
  * fold's chevron in a row's icon column, as the plan's card does at its
  * head, because its count already says what it holds, so what is left to
  * say is whether it is open, and an icon of its own would read as one more
- * of the calls it opens onto.
+ * of the calls it opens onto. Where a call it holds failed, the line wears
+ * that call's failed mark after its count, open or closed, as an editor's
+ * tree marks a folder holding a file with problems either way, so a
+ * failure is never folded out of sight, and its label says a call failed.
  */
 function TurnFold({
   summary,
   running,
+  failed,
   open = false,
   children,
 }: {
   summary: string;
   running: boolean;
+  failed: boolean;
   open?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
     <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
-      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+      <FoldSummary
+        className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
+      >
         <FoldChevron />
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
+        {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
     </Fold>
@@ -830,7 +842,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.GROUP:
       return (
-        <TurnFold summary={row.summary} running={row.running} open={row.open}>
+        <TurnFold summary={row.summary} running={row.running} failed={row.failed} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
@@ -839,7 +851,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.FOLDED:
       return (
-        <TurnFold summary={row.summary} running={false}>
+        <TurnFold summary={row.summary} running={false} failed={row.failed}>
           <TranscriptRows rows={row.rows} trailer={trailer}>
             {children}
           </TranscriptRows>

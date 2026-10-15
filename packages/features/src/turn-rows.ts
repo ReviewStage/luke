@@ -18,7 +18,9 @@
  * are, never draws them as its answer: Luke's line after it is the answer,
  * so its words run with its calls, inside the group while it moves and
  * inside the fold once it has finished, which holds all of it and counts
- * no message, and a run with no call drops its words. That
+ * no message, and a run with no call drops its words. A group or a fold
+ * holding a call that failed says so on its line, so a failure is not
+ * folded out of sight. That
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
@@ -187,6 +189,8 @@ export interface RowReading<B> {
   readonly part: (block: B) => RowPart;
   /** Whether the block still moves, which a group of calls shimmers for. */
   readonly running: (block: B) => boolean;
+  /** Whether the block is a call that failed, which the line of a group or a fold holding it marks; none fails where unsaid. */
+  readonly failed?: (block: B) => boolean;
   /** Whether the block stays out of a finished turn's fold, drawn after it, because it is still worth reading unasked; none stays out where unsaid. */
   readonly kept?: (block: B) => boolean;
 }
@@ -209,12 +213,16 @@ export type TurnRow<B> =
       /** Open while it is the turn's latest work and the turn still moves. */
       readonly open: boolean;
       readonly running: boolean;
+      /** Whether a call it holds failed. */
+      readonly failed: boolean;
     }
   | {
       readonly kind: typeof TURN_ROW.FOLDED;
       readonly key: string;
       readonly summary: string;
       readonly rows: readonly TurnRow<B>[];
+      /** Whether a call it holds failed. */
+      readonly failed: boolean;
     };
 
 function plural(count: number, one: string, many: string): string {
@@ -260,6 +268,11 @@ function runsWithCalls(part: RowPart, said: boolean): boolean {
   return isWork(part) || part === ROW_PART.NOTE || (said && part === ROW_PART.WORDS);
 }
 
+/** Whether a call among the blocks failed. */
+function anyFailed<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): boolean {
+  return blocks.some((each) => read.failed?.(each.block) === true);
+}
+
 /** A block with the key its row is drawn under. */
 interface Keyed<B> {
   readonly key: string;
@@ -303,6 +316,7 @@ function groupedRows<B>(
         summary: groupSummary(held),
         open,
         running: group.some((each) => read.running(each.block)),
+        failed: anyFailed(group, read),
       });
     } else {
       rows.push(
@@ -382,6 +396,7 @@ export function turnRows<B>(
       key: `${turn.key}-folded`,
       summary: foldedSummary(held, said),
       rows: groupedRows(lead, read, false, false, said),
+      failed: anyFailed(lead, read),
     },
     ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said),
   ];
