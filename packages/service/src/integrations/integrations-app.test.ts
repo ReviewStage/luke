@@ -25,6 +25,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import {
+  firstIntegrationAccount,
   GRANTING_SIGN_IN_URL,
   GRANTING_SIGN_IN_VERIFIER,
   integrationConnectOver,
@@ -205,7 +206,7 @@ const standing = (
           const state = mintIntegrationState();
           yield* beginIntegrationSignIn(
             userId,
-            SLACK,
+            firstIntegrationAccount(userId, SLACK),
             state,
             Redacted.make(GRANTING_SIGN_IN_VERIFIER),
           );
@@ -275,7 +276,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const lapsed = yield* openAccount("jo@declined.example");
         yield* beginIntegrationSignIn(
           lapsed,
-          SLACK,
+          firstIntegrationAccount(lapsed, SLACK),
           "state-before",
           Redacted.make("connect-verifier"),
         );
@@ -308,7 +309,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const lapsed = yield* openAccount("lee@cancelled.example");
         yield* beginIntegrationSignIn(
           lapsed,
-          SLACK,
+          firstIntegrationAccount(lapsed, SLACK),
           "state-lapsed",
           Redacted.make("connect-verifier"),
         );
@@ -346,15 +347,15 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           { declines: true },
           {
             // A Reopen's Connect lands between the Cancel's read and its ending of the state it read.
-            endSignIn: (userId, provider, state) =>
+            endSignIn: (userId, connectionName, state) =>
               Effect.andThen(
                 beginIntegrationSignIn(
                   userId,
-                  provider,
+                  firstIntegrationAccount(userId, SLACK),
                   "state-reopened",
                   Redacted.make("connect-verifier"),
                 ),
-                endIntegrationSignIn(userId, provider, state),
+                endIntegrationSignIn(userId, connectionName, state),
               ),
           },
         );
@@ -403,7 +404,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const lapsed = yield* openAccount("bo@refused.example");
         yield* beginIntegrationSignIn(
           lapsed,
-          SLACK,
+          firstIntegrationAccount(lapsed, SLACK),
           "state-before",
           Redacted.make("connect-verifier"),
         );

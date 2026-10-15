@@ -107,6 +107,7 @@ import {
 } from "./integration-connect.js";
 import {
   INTEGRATION_ROW_STATUS,
+  type IntegrationAccountKey,
   type IntegrationConnectionRow,
   type IntegrationStoreEffect,
 } from "./integration-store.js";
@@ -177,28 +178,36 @@ const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 /** A browser is sent on with 303, so whatever Connect sends becomes the GET the page is. */
 const SEE_OTHER = 303;
 
+/** The account's first account at a provider, the one named after it, which every route without a `connection` means. */
+function firstAccount(
+  rows: readonly IntegrationConnectionRow[],
+  provider: IntegrationProvider,
+): IntegrationConnectionRow | undefined {
+  return rows.find((row) => row.connectionName === provider);
+}
+
 export interface IntegrationsAppSeams {
   resolveUserId: UserIdResolver;
   readConnections: (userId: string) => IntegrationStoreEffect<readonly IntegrationConnectionRow[]>;
   readSignIn: (state: string) => IntegrationStoreEffect<IntegrationConnectionRow | undefined>;
   beginSignIn: (
     userId: string,
-    provider: IntegrationProvider,
+    account: IntegrationAccountKey,
     state: string,
     verifier: Redacted.Redacted,
   ) => IntegrationStoreEffect<void>;
   completeSignIn: (
     userId: string,
-    provider: IntegrationProvider,
+    connectionName: string,
     state: string,
   ) => IntegrationStoreEffect<boolean>;
   /** Ends the sign-in begun under `state` without a grant: the browser came back without one. */
   endSignIn: (
     userId: string,
-    provider: IntegrationProvider,
+    connectionName: string,
     state: string,
   ) => IntegrationStoreEffect<void>;
-  deleteConnection: (userId: string, provider: IntegrationProvider) => IntegrationStoreEffect<void>;
+  deleteConnection: (userId: string, connectionName: string) => IntegrationStoreEffect<void>;
   /** A fresh sign-in state; random in production, fixed in a test. */
   mintState: () => string;
   /** Now, in milliseconds since the epoch. */
@@ -254,7 +263,7 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   row: IntegrationConnectionRow,
   state: string,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
-  const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
+  const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: true }));
   if (Result.isFailure(issued)) {
     if (issued.failure.reason !== INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
       yield* Effect.logWarning(
@@ -264,7 +273,9 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
     }
     return false;
   }
-  return yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider, state));
+  return yield* hostedStoreOrUnavailable(
+    seams.completeSignIn(row.userId, row.connectionName, state),
+  );
 });
 
 /** Why a sign-in ended without a grant, as the statuses read answers it: the provider aside. */
@@ -337,7 +348,7 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const failure = yield* connectSignInFailure(connector, row);
   if (failure === undefined) return { status: INTEGRATION_STATUS.PENDING };
-  yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.provider, underWay));
+  yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, underWay));
   return { status: standingWithoutSignIn(row), failure };
 });
 
@@ -368,11 +379,7 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
       INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
         ? Effect.map(githubIntegrationStatus(userId), (status): Standing => ({ status }))
         : connect[provider].configured
-          ? standingStatus(
-              seams,
-              connect[provider],
-              rows.find((row) => row.provider === provider),
-            )
+          ? standingStatus(seams, connect[provider], firstAccount(rows, provider))
           : Effect.succeed<Standing>({ status: INTEGRATION_STATUS.UNAVAILABLE }),
       (standing) => ({ provider, ...standing }),
     ),
@@ -406,9 +413,10 @@ function toolsProblem(failure: McpToolsFailure) {
 }
 
 /**
- * When the account's grant at one provider was made, which keys the tools
- * held for it; nothing for a grant that is the account's GitHub sign-in,
- * whose tools are never held. A
+ * The account's connected row at one provider, whose subject the tools are
+ * read under and whose grant's instant keys the tools held for it; nothing
+ * for a grant that is the account's GitHub sign-in, whose tools are never
+ * held. A
  * provider with no connector here or not offered to the account, and one the
  * account has not connected, are refused as unavailable.
  */
@@ -417,7 +425,7 @@ const standingGrant = /* @__PURE__ */ Effect.fnUntraced(function* (
   provider: IntegrationProvider,
   userId: string,
 ): Effect.fn.Return<
-  number | undefined,
+  IntegrationConnectionRow | undefined,
   HostedRefusal,
   DatabaseServices | IntegrationConnect | GitHubApp
 > {
@@ -428,11 +436,11 @@ const standingGrant = /* @__PURE__ */ Effect.fnUntraced(function* (
   const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
   if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-  const row = rows.find((each) => each.provider === provider);
+  const row = firstAccount(rows, provider);
   if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) {
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
-  return row.connectedAt?.getTime();
+  return row;
 });
 
 /** A grant the provider's token read says the account no longer holds. */
@@ -446,6 +454,7 @@ const GRANT_REFUSED = "grant-refused";
 const toolsToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   provider: IntegrationProvider,
   userId: string,
+  row: IntegrationConnectionRow | undefined,
 ): Effect.fn.Return<
   Result.Result<Redacted.Redacted, typeof GRANT_REFUSED>,
   HostedRefusal,
@@ -462,8 +471,9 @@ const toolsToken = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
+  if (row === undefined) return Result.fail(GRANT_REFUSED);
   const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
-  const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
+  const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
   if (Result.isSuccess(issued)) return Result.succeed(issued.success.token);
   if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
     return Result.fail(GRANT_REFUSED);
@@ -498,7 +508,8 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
   yield* hostedMethod(HTTP_METHOD.GET);
   const provider = yield* requestedProvider();
   const userId = yield* resolvedUserId(seams);
-  const grant = yield* standingGrant(seams, provider, userId);
+  const row = yield* standingGrant(seams, provider, userId);
+  const grant = row?.connectedAt?.getTime();
   // Note that GitHub's tools are never held, because its grant has no instant to tell a new one by.
   const holds = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.CONNECT;
   const held = holds ? cache.get(userId)?.get(provider) : undefined;
@@ -510,7 +521,7 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools: held.tools });
   }
   const name = INTEGRATION_NAME[provider];
-  const issued = yield* toolsToken(provider, userId);
+  const issued = yield* toolsToken(provider, userId, row);
   // A grant no longer held is a refusal the developer mends by connecting again, not an outage.
   if (Result.isFailure(issued)) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
@@ -566,9 +577,16 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
   if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  // The first account at a provider asks under the account's own user id, as every account did before a second was possible.
+  const account: IntegrationAccountKey = {
+    provider,
+    connectionName: provider,
+    connectSubject: firstAccount(rows, provider)?.connectSubject ?? userId,
+  };
   const state = seams.mintState();
   const { url, verifier } = yield* connector
-    .authorize(userId, callbackUrl(request.url, state))
+    .authorize(account.connectSubject, callbackUrl(request.url, state))
     .pipe(
       Effect.tapError((failure) =>
         Effect.logWarning(
@@ -578,7 +596,7 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
       ),
       Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
     );
-  yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, provider, state, verifier));
+  yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state, verifier));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url });
 });
 
@@ -619,15 +637,12 @@ const cancelEndpoint = /* @__PURE__ */ Effect.fn("web/integrationCancelEndpoint"
   const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[provider];
   if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-  const row = rows.find((each) => each.provider === provider);
+  const row = firstAccount(rows, provider);
   if (row?.state !== undefined) {
-    yield* hostedStoreOrUnavailable(seams.endSignIn(userId, provider, row.state));
+    yield* hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state));
   }
   const after = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-  const status = standingAfterCancel(
-    seams,
-    after.find((each) => each.provider === provider),
-  );
+  const status = standingAfterCancel(seams, firstAccount(after, provider));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status });
 });
 
@@ -654,8 +669,12 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
     if (INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
-    yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, provider));
-    yield* revokeIntegrationGrant(userId, provider);
+    const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+    const row = firstAccount(rows, provider);
+    if (row !== undefined) {
+      yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, row.connectionName));
+      yield* revokeIntegrationGrant(row);
+    }
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: INTEGRATION_STATUS.DISCONNECTED });
   },
 );
@@ -691,13 +710,13 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   ];
   // A provider no longer offered to the account completes nothing for it.
   if (!connector.configured) return landed(INTEGRATION_LANDING_STATUS.UNAVAILABLE);
-  const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
+  const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: true }));
   if (Result.isFailure(issued)) {
     // Back without a grant: the sign-in is over, so the window waiting on it hears so at its next read.
     if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
       // Note that one Connect says was cancelled or refused is left standing, because the statuses read says why as it ends it.
       if ((yield* connectSignInFailure(connector, row)) === undefined) {
-        yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.provider, state));
+        yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, state));
       }
       return landed(INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
     }
@@ -708,7 +727,7 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     return landed(INTEGRATION_LANDING_STATUS.UNAVAILABLE);
   }
   const completed = yield* hostedStoreOrUnavailable(
-    seams.completeSignIn(row.userId, row.provider, state),
+    seams.completeSignIn(row.userId, row.connectionName, state),
   );
   // A Disconnect pressed while the browser was away, or a sign-in begun again, wins: this one completes nothing.
   return landed(
