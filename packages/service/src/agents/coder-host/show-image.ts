@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import type { PlanStoreFailure } from "@luke/database/models/plan-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import {
   CONVERSATION_PICTURE_BOUNDS,
@@ -8,7 +9,8 @@ import {
 import { imageDimensions } from "@luke/features/image-signature";
 import { INBOX_BOUNDS } from "@luke/features/inbox-wire";
 import { describeWire, readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Data, Effect, Option, Result, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
@@ -27,7 +29,8 @@ import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
  * model is answered in words and ids alone: it made the files, and reads
  * one back with `read_file` when it wants to look. A call is shown whole or
  * not at all: the first file refused refuses the call in one sentence the
- * model can act on, naming the path, before anything is kept.
+ * model can act on, naming the path, before anything is kept, and a set
+ * the transcript has room for only part of keeps none of it.
  */
 
 /** Why a call showed nothing, in the words the model reads; a sentence ending in a colon is followed by the path. */
@@ -117,6 +120,35 @@ function readPicture(
   );
 }
 
+/** A set the transcript has no room for whole, which rolls back what of it was kept. */
+class SetPastBudget extends Data.TaggedError("SetPastBudget") {}
+
+/**
+ * Every picture kept, in order, in one transaction; nothing where the
+ * transcript has room for only part of the set. Note that a refusal fails
+ * the transaction rather than returning from it, because the pictures kept
+ * before it would otherwise stand, counted against the budget, named by no
+ * answer.
+ */
+function keepAll(
+  target: ConversationTarget,
+  pictures: readonly ReadPicture[],
+): Effect.Effect<Option.Option<readonly KeptPicture[]>, PlanStoreFailure, DatabaseServices> {
+  const all = Effect.gen(function* () {
+    const kept: KeptPicture[] = [];
+    for (const picture of pictures) {
+      const one = yield* keepConversationPicture(target, picture);
+      if (Option.isNone(one)) return yield* Effect.fail(new SetPastBudget());
+      kept.push(one.value);
+    }
+    return kept;
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(all)).pipe(
+    Effect.map(Option.some),
+    Effect.catchTag("SetPastBudget", () => Effect.succeed(Option.none())),
+  );
+}
+
 /**
  * One `show_image` call: every file read before any is kept, so a refused
  * file shows nothing; then each kept beside the transcript in the order
@@ -136,13 +168,12 @@ export function runShowImage(
       if (Result.isFailure(picture)) return showImageRejected(picture.failure);
       pictures.push(picture.success);
     }
-    const kept: KeptPicture[] = [];
-    for (const picture of pictures) {
-      const one = yield* keepConversationPicture(binding.target, picture);
-      if (Option.isNone(one)) return showImageRejected(SHOW_IMAGE_REFUSAL.FULL);
-      kept.push(one.value);
-    }
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, pictures: kept.map((each) => ({ ...each })) };
+    const kept = yield* keepAll(binding.target, pictures);
+    if (Option.isNone(kept)) return showImageRejected(SHOW_IMAGE_REFUSAL.FULL);
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      pictures: kept.value.map((each) => ({ ...each })),
+    };
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),

@@ -233,4 +233,48 @@ it.layer(getTestDB())("show_image", (it) => {
       );
     }),
   );
+
+  it.effect(
+    "a set the transcript has room for only part of keeps none of it, so a refused call costs the budget nothing",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const db = yield* Database;
+        // Note that the row leaves room for the first picture below and not the second, so the
+        // refusal falls between them.
+        yield* db.insert(conversationAttachment).values({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          sha256: "e".repeat(64),
+          contentType: INBOX_IMAGE_TYPE.PNG,
+          width: 1,
+          height: 1,
+          byteCount: CONVERSATION_PICTURE_BOUNDS.MAX_BYTES_PER_CONVERSATION - 40,
+          bytes: new Uint8Array([0]),
+          createdAt: new Date(),
+        });
+        const binding = {
+          target,
+          sandbox: sandboxWith({
+            [`${CHECKOUT}/first.png`]: png(10, 10, 1),
+            [`${CHECKOUT}/second.png`]: png(10, 10, 2),
+          }),
+          checkout: CHECKOUT,
+        };
+
+        const answer = yield* show(binding, {
+          images: [
+            { path: "first.png", caption: "Fits alone" },
+            { path: "second.png", caption: "Does not" },
+          ],
+        });
+
+        assert.deepEqual(answer, refused(SHOW_IMAGE_REFUSAL.FULL));
+        const kept = yield* db
+          .select({ sha256: conversationAttachment.sha256 })
+          .from(conversationAttachment)
+          .where(eq(conversationAttachment.conversationId, target.conversationId));
+        assert.deepEqual(kept, [{ sha256: "e".repeat(64) }], "the first picture was not kept");
+      }),
+  );
 });
