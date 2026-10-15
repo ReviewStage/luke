@@ -343,15 +343,10 @@ body,
   display: flex;
 }
 
-/* The Inbox's list stands on the sidebar's ground, so the folded sidebar's
-   buttons over its head do too, as they do over the floating sidebar. */
+/* The buttons over the open sidebar, or the floating one, stand on its ground. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(
-    .desktop-main > .inbox-view:not([data-columns="item"])
-  )
-  .title-bar-controls:not([data-edge]) {
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
@@ -3583,7 +3578,8 @@ body:has(.app-stage[data-capture="true"])
 /* Inbox ---------------------------------------------------------------------- */
 
 /* The window's Inbox, in the plan's place beside the sidebar, and a plan's
-   own Inbox tab: the items in a column on the sidebar's ground, under a bar
+   own Inbox tab: the items in a column on the Inbox's own ground, so the
+   list and the item read as one surface parted by a hairline, under a bar
    the work column's height, and the chosen item beside it, at the Inbox's
    own measure (`.desktop-inbox`). The column is as wide as it was last
    dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
@@ -3619,7 +3615,6 @@ body:has(.app-stage[data-capture="true"])
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--hairline);
-  background: var(--desktop-sidebar);
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle

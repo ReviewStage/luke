@@ -35,7 +35,7 @@ import { cardTitle } from "./tool-call-model";
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its plan's group header or in one run, with what the list shows and how at its head.
  *
- * The list is drawn from the sidebar's own pieces, so it reads as the
+ * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
  * sidebar does. A plan's items stand under the sidebar's own group header
  * (`sidebar-group-header.tsx`), the plan's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
