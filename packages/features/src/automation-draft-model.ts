@@ -369,7 +369,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     one.name.trim() === other.name.trim() &&
     one.prompt.trim() === other.prompt.trim() &&
     one.triggerKind === other.triggerKind &&
-    one.githubEvent === other.githubEvent &&
+    // A GitHub event chosen and left behind for another trigger kind is no change.
+    (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB || one.githubEvent === other.githubEvent) &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&

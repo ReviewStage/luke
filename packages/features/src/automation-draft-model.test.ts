@@ -281,6 +281,9 @@ test("a trigger written as a GitHub event or a webhook is made and changed as on
     },
   );
   assert.ok(!sameDraft(opened, { ...opened, githubEvent: GITHUB_TRIGGER_EVENT.PUSH }));
+  // An event chosen, then left for a schedule again, leaves the schedule's draft as it was.
+  const scheduled = automationDraft(SAVED, DEFAULTS);
+  assert.ok(sameDraft(scheduled, { ...scheduled, githubEvent: GITHUB_TRIGGER_EVENT.PUSH }));
 });
 
 test("two drafts are the same where every field the editor writes is, the words trimmed", () => {
