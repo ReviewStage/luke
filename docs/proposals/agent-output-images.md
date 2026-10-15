@@ -1,6 +1,8 @@
 # Proposal: images in agent output
 
-Status: **proposed, for Dean's decisions in §9.** Nothing is built.
+Status: **approved by Dean on 2026-10-15**, all twelve decisions as
+recommended, with the limits revised after benchmarking (§3, Limits) and
+several pictures in a row added as decision 13. PR 1 is being built.
 
 The show is `docs/proposals/agent-output-images/index.html`, one
 self-contained file that fetches nothing. Open it in a browser. Each frame
@@ -130,21 +132,23 @@ Five patterns hold:
 
 ### Where pictures come from in v1
 
-**1. An agent shows one: `show_image(path, caption)`.** It is a coding-agent
-and worker tool, beside `show_page` and `post_to_inbox`.
+**1. An agent shows pictures: `show_image(images)`.** It is a coding-agent
+and worker tool, beside `show_page` and `post_to_inbox`. `images` is a list
+of 1 to 20 `{path, caption}`, one call per set the agent means to show
+together (§3, Several pictures).
 
 - `path` names a file in the sandbox, read through `readInboxImage`'s
   intake: resolved from the checkout, streamed, sniffed, bounded.
 - `caption` is one line of up to 300 characters, the Inbox's bound for an
   image's words. It is the picture's alt text and its visible caption.
-- The service stores the file and answers
-  `{status: "shown", picture: {id, mediaType, width, height, byteCount}}`.
+- The service stores each file and answers
+  `{status: "shown", pictures: [{id, mediaType, width, height, byteCount}]}`.
   Width and height come from the file's header, read beside its type.
 - **The model is answered in words.** "Shown to the developer: <caption>."
   It never gets the picture back: it made the file, and `read_file` already
   lets it look. `show_image` is the agent's output, not its input.
 - A refusal is one sentence the model can act on: "artifacts/full-page.png
-  is 4.6 MB, and a picture is kept up to 3 MB. Save it smaller, as a JPEG or
+  is 4.6 MB, and a picture is kept up to 4 MB. Save it smaller, as a JPEG or
   a WebP, or as the part of the page that matters, and show it again."
 - **The instructions say when to use it:** after a change to anything
   visible, show what it looks like now. They say how to take a screenshot
@@ -197,13 +201,12 @@ Recommended: **a `conversation_attachment` table shaped like
 
 - `id` (uuid);
 - `conversation_id` (cascade);
-- `organization_id` (cascade);
 - `user_id`, the agent's owner (cascade, as the conversation's);
 - `sha256`, unique with `conversation_id`;
 - the sniffed `content_type`;
 - `width` and `height`;
 - `byte_count`;
-- `bytes` (`bytea`, held to 3 MB by a check);
+- `bytes` (`bytea`, held to 4 MB by a check);
 - `created_at`.
 
 Why the conversation, and not the agent or the plan:
@@ -238,17 +241,67 @@ changes the route, not the transcript, because the transcript names an id.
 What would change the answer: video (§8), or pictures piling up faster than
 the bounds below allow.
 
-**Limits.**
+**Limits.** Dean asked whether 3 MB and 300 per conversation were too
+restrictive. Benchmarked, with sources in `research.md` §Limits:
 
-- **3 MB per picture**, raw bytes, the composer's per-message bound.
-  - The service cannot re-encode, and an agent's full-page PNG is often 1
-    to 3 MB.
-  - 3 MB stays under Vercel's 4.5 MB response limit for the read.
-  - 1.5 MB, the Inbox's bound, is the alternative (D5).
-- **300 pictures per conversation.** A long run with a screenshotting MCP
-  could take hundreds. Past the count, a picture is not kept and says so.
+| | Per picture | Per message or call | Per conversation |
+| --- | --- | --- | --- |
+| Claude API | 10 MB base64 (~7.5 MB), 8000 px | 100 or 600, 32 MB a request | None (the context window) |
+| Claude.ai | 10 MB | 20 | Not documented |
+| ChatGPT | 20 MB | Not fixed | Not documented; 80 files per 3 hours; 25 GB per user |
+| OpenAI API | 2048 or 6000 px | 1,500, 512 MB a request | None |
+| GitHub | 10 MB | Not documented | Not documented |
+| Linear | 10 MB on Free, unlimited on paid | Not documented | Not documented |
+| Slack | 1 GB a file | 10 files | Unlimited (Free stops at 5 GB) |
+
+Nobody bounds a conversation by a count; they bound by context, upload
+rate, or account storage. And Vercel caps a function's response at 4.5 MB
+([limits](https://vercel.com/docs/functions/limitations#request-body-size)),
+which bounds one picture's read. So:
+
+- **4 MB per picture**, raw bytes, served raw by the read, under Vercel's
+  4.5 MB. The service cannot re-encode, and an agent's full-page PNG is
+  often 1 to 3 MB. Over it, a picture is "Not kept", with its size.
+- **200 MB per conversation, in bytes, not a count.** An agent that shows
+  many small screenshots is never cut off before one that shows a few large
+  ones. Past it, a picture is "Not kept".
+- **20 per `show_image` call**, claude.ai's per-message count.
 - **Deduplicated by SHA-256 within a conversation.** The wrapper and nested
   call carry one picture, and agents re-show the same screenshot.
+- Each bound is one constant in `CONVERSATION_PICTURE_BOUNDS`
+  (`features/conversation-picture-wire.ts`). The byte bound is also the
+  table's check, so moving it is that edit plus `pnpm db:generate`.
+
+### Several pictures
+
+Dean asked: "What if an agent wants to show multiple images in a row? Popular
+dev tools can put a bunch in one row."
+
+- **One call, one set.** `show_image` takes up to 20 images, and the set
+  draws as one block. The agent decides what belongs together.
+- **Calls in one step, nothing between them, draw as one set too.** Models
+  issue parallel tool calls, so two `show_image` calls the same step made
+  would otherwise draw as two blocks for what the agent meant as one.
+  `turn-rows.ts` already groups adjacent calls; a run of shown pictures
+  joins into one set there.
+- **Two or three pictures draw as one justified row.** Each keeps its own
+  shape, uncropped, and the row stretches to the column so they share a
+  height. Each is captioned under itself. A narrow column wraps the row
+  where the pictures would be too small to read.
+- **Four or more draw as thumbnails of one height that wrap.** Six are
+  drawn, the sixth reading "+N", with a line saying how many there are.
+  Their captions move to the viewer's header, so a long set does not
+  lengthen the turn.
+- **The viewer walks the whole set**, "3 of 8", the ones the turn did not
+  draw included. Add to plan is in its header, one picture at a time.
+- While the call runs, each picture's place waits at 16:10. Once it
+  answers, each place takes the picture's own shape.
+
+This is what ChatGPT, Claude.ai, GitHub, and Linear do with several images
+in one message: a row or grid of thumbnails into one viewer with arrows.
+Uncropped tiles are the one change, because a screenshot cropped to a square
+loses what it shows. The show draws two, three, and eight pictures, at full
+width and at 340 px, in both appearances.
 
 ### How the transcript names it
 
@@ -304,7 +357,7 @@ The routes are `GET /api/agents/:id/files/:file` and
 **PRIVACY.md** gains a paragraph, "Pictures a coding agent shows you":
 
 - what is kept: pictures an agent shows from its sandbox, and pictures an
-  integration answered, up to 3 MB each;
+  integration answered, up to 4 MB each and 200 MB a conversation;
 - where: in our database beside the agent's transcript;
 - who: every member of the workspace who can read the agent;
 - how long: they go with the transcript;
@@ -427,7 +480,7 @@ image note from a sandbox path), so no agent tool is added here.
 ## 7. Risks
 
 - **Database growth.** Agents that screenshot freely grow the database and
-  its backups faster than plans do. The 3 MB and 300-per-conversation bounds,
+  its backups faster than plans do. The 4 MB and 200-MB-per-conversation bounds,
   the hash dedupe, and the purge with the conversation hold it. A counted
   bucket on picture bytes per turn would show the trend before it matters.
 - **A picture can show a secret.** An agent may screenshot a page that
@@ -483,10 +536,10 @@ image note from a sandbox path), so no agent tool is added here.
 4. **How the transcript names a picture.** *Recommended:*
    `picture: {id, mediaType, width, height, byteCount}` in the stored output,
    with no bytes and no address.
-5. **Limits.** *Recommended:* 3 MB per picture, 300 per conversation, and
+5. **Limits.** *Approved, then revised:* 4 MB per picture, 200 MB per
+   conversation in bytes rather than a count, 20 per call, and
    deduplication by hash. Over a limit, the picture is "Not kept", with its
-   size. The alternative is the Inbox's 1.5 MB, which would refuse many
-   full-page PNGs the service can't shrink.
+   size (§3, Limits).
 6. **Does the model see what it showed?** *Recommended:* no. `show_image`
    answers in words, and the agent looks with `read_file` when it wants to.
 7. **Where pictures draw.** *Recommended:* a shown picture inline, kept out
@@ -506,6 +559,10 @@ image note from a sandbox path), so no agent tool is added here.
     size.
 12. **Order.** *Recommended:* PR 1 first. It stops the base64 in the message
     log, and it needs nothing of 318's.
+13. **Several pictures in a row.** *Recommended:* `show_image` takes 1 to
+    20 images, and calls in one step with nothing between them draw as one
+    set. Two or three draw as one justified row; four or more draw as
+    wrapping thumbnails, six shown with "+N"; the viewer walks the set.
 
 ## 10. PR plan
 

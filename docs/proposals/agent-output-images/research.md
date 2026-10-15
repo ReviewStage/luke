@@ -275,6 +275,36 @@ the transcript must never turn a model-written address into an image
 element. Pictures are drawn only from bytes Luke's service read itself,
 handed to the window as `data:` URLs.
 
+## Limits
+
+Gathered after Dean asked whether 3 MB and 300 pictures per conversation
+were too restrictive.
+
+| Tool | Per image | Per message or call | Per conversation | Source |
+| --- | --- | --- | --- | --- |
+| Claude API | 10 MB base64 (~7.5 MB raw); 8000 px, or 2000 px past 20 images | 100 or 600 images; 32 MB a request | None stated | [vision](https://platform.claude.com/docs/en/build-with-claude/vision) |
+| Anthropic Files API | 500 MB a file | n/a | 1 TB per organization | [files](https://platform.claude.com/docs/en/build-with-claude/files) |
+| Claude.ai | 10 MB; 8000 px | 20 | Not documented | [help](https://support.claude.com/en/articles/8241126) |
+| Claude Code | Resized to the model's limit; over 500 KB re-encoded as JPEG | MCP output 25,000 tokens by default, images included | Not documented | [MCP](https://code.claude.com/docs/en/mcp), [tools](https://code.claude.com/docs/en/tools-reference) |
+| OpenAI API | 2048 px (high) or 6000 px (original); no byte cap | 1,500 images; 512 MB a request | None | [images and vision](https://developers.openai.com/api/docs/guides/images-vision) |
+| ChatGPT | 20 MB | Not fixed | "Depends on various factors"; 80 files per 3 hours; 25 GB per user, 100 GB per organization | [help](https://help.openai.com/en/articles/8555545), [help](https://help.openai.com/en/articles/8400551) |
+| Codex | Resized to 2048 px (6000 original) | Not documented | Not documented | [utils/image](https://github.com/openai/codex/blob/main/codex-rs/utils/image/src/lib.rs) |
+| Cursor | Not documented (users report 5 MB) | Not documented (users report 20) | Not documented | [prompting](https://cursor.com/docs/agent/prompting) |
+| GitHub | 10 MB an image | Not documented | Not documented | [attaching files](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files) |
+| Linear | 10 MB on Free; unlimited on paid | Not documented | Not documented | [pricing](https://linear.app/pricing) |
+| Slack | 1 GB a file; previews under 25,000 px a side | 10 files by drag and drop | Unlimited; Free stops at 5 GB | [help](https://slack.com/help/articles/201330736) |
+| Notion | 5 MB on Free; 5 GB on paid | n/a | Unlimited | [help](https://www.notion.com/help/images-files-and-media) |
+| Discord | 20 MB free (was 10); 50 MB to 1 GB with Nitro | 25 MiB a message | Unlimited | [help](https://support.discord.com/hc/en-us/articles/25444343291031) |
+
+Vercel caps a function's request and response body at 4.5 MB
+([limits](https://vercel.com/docs/functions/limitations#request-body-size)),
+so a picture read whole through one function answer stays under it.
+
+What holds: per-image bounds run from 5 to 20 MB; nobody publishes a
+per-conversation count, and those that bound a conversation do it by
+context, upload rate, or storage. A per-conversation count of 300 was
+stricter than every tool here.
+
 ## Patterns that hold
 
 1. Store image bytes once, apart from the log, and name them by reference.
