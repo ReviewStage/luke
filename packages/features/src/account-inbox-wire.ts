@@ -60,11 +60,11 @@ export type AccountInboxPlan = typeof accountInboxPlanSchema.Type;
  * One open item of an agent with no plan, as the account's read carries it:
  * where a plan's item names its plan, this names the automation whose run
  * started the agent and the repository it works in, which together stand
- * in the plan's place. The automation is null for an agent no automation
- * started or once that automation is deleted, and its name with it; the
- * name is null too for a reader the automation's own rule does not let
- * read it, such as a member beside another's personal automation, whose
- * runs every member reads.
+ * in the plan's place. The automation, and its name with it, is null for
+ * an agent no automation started, once that automation is deleted, and for
+ * a reader the automation's own rule does not let read it, such as a
+ * member beside another's personal automation, whose runs every member
+ * reads.
  */
 export const accountPlanlessEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -82,7 +82,7 @@ export const accountPlanlessEntrySchema = EffectSchema.Struct({
 
 export type AccountPlanlessEntry = typeof accountPlanlessEntrySchema.Type;
 
-/** One automation the account's read lists as holding items of its runs' agents with no plan, as a plan is listed for its own: how many, open and settled alike, and when the latest changed; null groups the agents no standing automation names. */
+/** One automation the account's read lists as holding items of its runs' agents with no plan, as a plan is listed for its own: how many, open and settled alike, and when the latest changed; null groups the agents no standing automation the reader may read names. */
 export const accountInboxAutomationSchema = EffectSchema.Struct({
   automationId: EffectSchema.NullOr(wireUuidSchema),
   items: countedNumber,
