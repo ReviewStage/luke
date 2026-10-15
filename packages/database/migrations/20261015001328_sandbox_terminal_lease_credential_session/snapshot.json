@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ff524e21-b6cd-4502-9644-f57270c667a6",
-  "prevIds": ["7cc23920-d427-453c-8f13-f622c02ac8b8"],
+  "id": "28651665-50a0-47f1-b2a0-4765a3906c5e",
+  "prevIds": ["230ad9b3-9c33-4829-b4ce-ad78dd351ed3"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -3207,6 +3207,19 @@
       "generated": null,
       "identity": null,
       "name": "disabled_servers",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "mentioned_servers",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"

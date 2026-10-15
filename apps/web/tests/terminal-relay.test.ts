@@ -6,7 +6,17 @@ import {
   TERMINAL_RELAY_CLOSE,
   TERMINAL_RELAY_FRAME,
 } from "@luke/features/terminal-wire";
-import { type Cause, Duration, Effect, Fiber, Option, Queue, Redacted, Stream } from "effect";
+import {
+  type Cause,
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  Option,
+  Queue,
+  Redacted,
+  Stream,
+} from "effect";
 import { TestClock } from "effect/testing";
 import type { AgentSandboxService } from "../server/hosted/terminal/agent-sandbox";
 import {
@@ -69,8 +79,8 @@ function world(options: {
   readonly shellGone?: boolean;
   /** How many of the first mints GitHub refuses. */
   readonly tokensRefused?: number;
-  /** Whether GitHub never answers a mint. */
-  readonly tokensHang?: boolean;
+  /** What GitHub answers a mint only after; never, where it is never done. */
+  readonly tokensWait?: Deferred.Deferred<void>;
 }) {
   let heldUntil = 0;
   let credentialAt: number | undefined;
@@ -109,10 +119,13 @@ function world(options: {
     sessionId: "wrun_1",
     repositoryToken: Effect.suspend(() => {
       asked.tokens += 1;
-      if (options.tokensHang === true) return Effect.never;
-      return asked.tokens <= (options.tokensRefused ?? 0)
-        ? Effect.fail("GitHub refused the mint")
-        : Effect.succeed(Redacted.make("ghs_fixture"));
+      const answer =
+        asked.tokens <= (options.tokensRefused ?? 0)
+          ? Effect.fail("GitHub refused the mint")
+          : Effect.succeed(Redacted.make("ghs_fixture"));
+      return options.tokensWait === undefined
+        ? answer
+        : Effect.andThen(Deferred.await(options.tokensWait), answer);
     }),
   };
   const deps: RelayDependencies = {
@@ -429,7 +442,7 @@ it.effect("a renewal cut off by its connection closing gives its claim back", ()
   Effect.gen(function* () {
     const pty = yield* scriptedSocket;
     const device = yield* scriptedSocket;
-    const hanging = world({ pty, tokensHang: true });
+    const hanging = world({ pty, tokensWait: yield* Deferred.make<void>() });
 
     const relay = yield* Effect.forkChild(
       Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
@@ -449,17 +462,49 @@ it.effect(
     Effect.gen(function* () {
       const pty = yield* scriptedSocket;
       const device = yield* scriptedSocket;
-      const hanging = world({ pty, tokensHang: true });
+      const hanging = world({ pty, tokensWait: yield* Deferred.make<void>() });
 
       const relay = yield* Effect.forkChild(
         Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
       );
       yield* settle;
-      const attachedWhileMinting = texts(device.sent);
       yield* device.leave;
       yield* Fiber.join(relay);
 
-      assert.deepEqual(attachedWhileMinting, [{ type: TERMINAL_RELAY_FRAME.ATTACHED }]);
+      assert.deepEqual(texts(device.sent), [], "a shell with no token yet is never said attached");
+      assert.deepEqual(device.closed, [], "a desktop that left is sent no close");
       assert.equal(hanging.asked.released, 1);
+    }),
+);
+
+it.effect(
+  "a shell is said attached, and what was typed reaches it, only once its first GitHub token is set",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const device = yield* scriptedSocket;
+      const answered = yield* Deferred.make<void>();
+      const slow = world({ pty, tokensWait: answered });
+      const typed = () =>
+        pty.sent.flatMap((frame) =>
+          "bytes" in frame ? [new TextDecoder().decode(frame.bytes)] : [],
+        );
+
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(device.socket, ASK, slow.deps)),
+      );
+      yield* settle;
+      yield* device.push({ bytes: encode("git fetch\r") });
+      yield* settle;
+      const whileMinting = { attached: texts(device.sent), typed: typed() };
+      yield* Deferred.succeed(answered, undefined);
+      yield* settle;
+      yield* device.leave;
+      yield* Fiber.join(relay);
+
+      assert.deepEqual(whileMinting, { attached: [], typed: [] });
+      assert.deepEqual(texts(device.sent), [{ type: TERMINAL_RELAY_FRAME.ATTACHED }]);
+      assert.deepEqual(typed(), ["git fetch\r"]);
+      assert.deepEqual(slow.asked.policies, [SANDBOX_SESSION]);
     }),
 );
