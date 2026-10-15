@@ -177,6 +177,17 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
+test("Escape pressed while Settings is still loading leaves Settings for the plans, as it does once Settings stands", () => {
+  const tabs: PanelTab[] = [];
+  mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_SETTINGS), "Settings' way out is offered");
+  });
+
+  assert.deepEqual(tabs, [PANEL_TAB.PLANS]);
+});
+
 test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
   assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New plan"]);
   act(() => root?.unmount());

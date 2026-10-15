@@ -4,7 +4,7 @@ import type { Plan } from "@luke/features/plan-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
@@ -22,7 +22,6 @@ import { Tooltip } from "../tooltip";
 import { useColumnDock } from "./column-dock";
 import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
-import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
 import { PaneGlide } from "./pane-motion";
@@ -30,6 +29,28 @@ import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 import { useWindowTitle } from "./window-title";
+
+/**
+ * Settings, loaded as a chunk of its own the first time it opens rather than
+ * with the window, because the renderer bundle is parsed at every window
+ * open, the voice window's included, and Settings is opened seldom
+ * (`bundle-budget.json`). The chunk is a local file, so it stands a frame
+ * later, over nothing in the meantime.
+ */
+const DesktopSettings = lazy(() =>
+  import("./desktop-settings").then((loaded) => ({ default: loaded.DesktopSettings })),
+);
+
+/**
+ * What stands while Settings' chunk loads: nothing drawn, but Settings' own
+ * way out, so Escape pressed in that frame leaves Settings as it would once
+ * drawn, rather than falling through to the plan behind it. It is gone as
+ * Settings stands and offers the same command itself.
+ */
+function SettingsLoading({ onExit }: { onExit: () => void }): null {
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
+  return null;
+}
 
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
@@ -309,15 +330,18 @@ export function DesktopShell({
   }
   // Settings takes the whole window, its pages listed where the plans were.
   if (tab === PANEL_TAB.SETTINGS) {
+    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS);
     return (
       <div className="desktop-shell">
-        <DesktopSettings
-          sidebar={sidebar}
-          history={history}
-          settings={settings}
-          call={call}
-          onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
-        />
+        <Suspense fallback={<SettingsLoading onExit={exitSettings} />}>
+          <DesktopSettings
+            sidebar={sidebar}
+            history={history}
+            settings={settings}
+            call={call}
+            onExit={exitSettings}
+          />
+        </Suspense>
         <CaptionStrip {...captions} />
       </div>
     );
